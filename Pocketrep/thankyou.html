@@ -627,6 +627,16 @@ document.getElementById('acct-form').addEventListener('submit',function(e){
         var errDiv=document.getElementById('acct-err-user');
         if(errDiv){errDiv.textContent=d.error.message||'Signup failed. Try a different username or check your email.';errDiv.style.display='block';}
       } else {
+                    // Save username to public.users so app login works
+                    var userId=d.user&&d.user.id;
+                    var planVal=new URLSearchParams(location.search).get('plan')||'pro';
+                    if(userId){
+                                    fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/rest/v1/users',{
+                                                      method:'POST',
+                                                      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Prefer':'return=minimal'},
+                                                      body:JSON.stringify({id:userId,username:user.toLowerCase(),email:supaEmail,plan:planVal})
+                                    });
+                    }
         // Show success state
         document.getElementById('acct-form-wrap').style.display='none';
         document.getElementById('acct-success').style.display='block';
