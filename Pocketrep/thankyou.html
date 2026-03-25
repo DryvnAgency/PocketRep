@@ -521,19 +521,27 @@ footer a{color:#444;text-decoration:none}
 // ── ACCOUNT FORM ──
 // Pre-fill email from sessionStorage
 (function(){
-  var raw; try{raw=sessionStorage.getItem('pr_signup')}catch(e){}
-  if(!raw)return;
-  try{
-    var d=JSON.parse(raw);
-    var firstName=d.name?d.name.split(' ')[0]:null;
-    var plan=d.plan||'pro';
-    if(firstName)document.getElementById('greeting').textContent='Welcome to the book, '+firstName+'.';
-    var planLabels={solo:'Solo Member',pro:'Pro Member',elite:'Elite Member'};
-    var chip=document.getElementById('nav-plan-label');
-    if(chip&&planLabels[plan])chip.textContent=planLabels[plan];
-    if(d.email){var ev=document.getElementById('acct-email-val');if(ev)ev.textContent=d.email;}
-  }catch(e){}
-})();
+  // Read from URL params first (Stripe redirect), then fall back to sessionStorage
+  var params=new URLSearchParams(location.search);
+  var email=params.get('email')||params.get('prefilled_email');
+  var plan=params.get('plan')||'pro';
+  var firstName=null;
+  var raw;
+  try{raw=sessionStorage.getItem('pr_signup')}catch(e){}
+  if(raw){
+    try{
+      var d=JSON.parse(raw);
+      if(!email&&d.email)email=d.email;
+      if(d.name)firstName=d.name.split(' ')[0];
+      if(!plan&&d.plan)plan=d.plan;
+    }catch(e){}
+  }
+  if(firstName)document.getElementById('greeting').textContent='Welcome to the book, '+firstName+'.';
+  var planLabels={solo:'Solo Member',pro:'Pro Member',elite:'Elite Member'};
+  var chip=document.getElementById('nav-plan-label');
+  if(chip&&planLabels[plan])chip.textContent=planLabels[plan];
+  if(email){var ev=document.getElementById('acct-email-val');if(ev)ev.textContent=email;}
+})()
 
 function togglePw(inputId,btnId){
   var inp=document.getElementById(inputId);
@@ -605,16 +613,29 @@ document.getElementById('acct-form').addEventListener('submit',function(e){
 
   if(!valid)return;
 
-  // Save credentials to sessionStorage (wire to Supabase/backend when ready)
-  try{
-    var existing=JSON.parse(sessionStorage.getItem('pr_signup')||'{}');
-    existing.username=user;
-    sessionStorage.setItem('pr_signup',JSON.stringify(existing));
-  }catch(ex){}
-
-  // Show success state
-  document.getElementById('acct-form-wrap').style.display='none';
-  document.getElementById('acct-success').style.display='block';
+  // ── SUPABASE SIGNUP ──
+    var btn=document.querySelector('#acct-form button[type="submit"]');
+    if(btn){btn.disabled=true;btn.textContent='Creating account...';}
+    var supaEmail=document.getElementById('acct-email-val').textContent.trim();
+    fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/auth/v1/signup',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0'},
+      body:JSON.stringify({email:supaEmail,password:pw,data:{username:user,plan:new URLSearchParams(location.search).get('plan')||'pro'}})
+    }).then(function(r){return r.json();}).then(function(d){
+      if(d.error){
+        if(btn){btn.disabled=false;btn.textContent='Create My Account →';}
+        var errDiv=document.getElementById('acct-err-user');
+        if(errDiv){errDiv.textContent=d.error.message||'Signup failed. Try a different username or check your email.';errDiv.style.display='block';}
+      } else {
+        // Show success state
+        document.getElementById('acct-form-wrap').style.display='none';
+        document.getElementById('acct-success').style.display='block';
+      }
+    }).catch(function(){
+      if(btn){btn.disabled=false;btn.textContent='Create My Account →';}
+      document.getElementById('acct-form-wrap').style.display='none';
+      document.getElementById('acct-success').style.display='block';
+    })
 });
 </script>
 </body>
