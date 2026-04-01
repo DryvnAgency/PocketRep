@@ -8,26 +8,35 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 
+function usernameToEmail(username: string) {
+  return `${username.trim().toLowerCase()}@pocketrep.app`;
+}
+
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
-    if (!email || !password) {
+    if (!username || !password) {
       Alert.alert('Fill in both fields');
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const email = usernameToEmail(username);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-    if (error) Alert.alert('Login failed', error.message);
+    if (error) Alert.alert('Login failed', 'Username or password is incorrect.');
   }
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        keyboardShouldPersistTaps="handled"
+        style={s.scrollBg}
+      >
         {/* Logo mark */}
         <View style={s.logoWrap}>
           <View style={s.logoMark}>
@@ -40,16 +49,16 @@ export default function LoginScreen() {
         <Text style={s.sub}>Sign in to your book.</Text>
 
         <View style={s.form}>
-          <Text style={s.label}>Email</Text>
+          <Text style={s.label}>Username</Text>
           <TextInput
             style={s.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@email.com"
+            value={username}
+            onChangeText={setUsername}
+            placeholder="your username"
             placeholderTextColor={colors.grey}
             autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
+            autoCorrect={false}
+            autoComplete="username"
           />
 
           <Text style={s.label}>Password</Text>
@@ -77,6 +86,11 @@ export default function LoginScreen() {
             <Text style={s.footerLink}>Start free trial</Text>
           </TouchableOpacity>
         </View>
+
+        {/* pocketrep.pro link */}
+        <TouchableOpacity style={s.siteLink} onPress={() => router.push('/(auth)/signup')}>
+          <Text style={s.siteLinkText}>pocketrep.pro</Text>
+        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -84,7 +98,8 @@ export default function LoginScreen() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.ink },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: spacing.xl },
+  scrollBg: { backgroundColor: colors.ink },
+  scroll: { flexGrow: 1, justifyContent: 'center', padding: spacing.xl, backgroundColor: colors.ink },
   logoWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.xxl },
   logoMark: {
     width: 38, height: 38, borderRadius: radius.sm,
@@ -115,4 +130,6 @@ const s = StyleSheet.create({
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.xl },
   footerText: { color: colors.grey2, fontSize: 14 },
   footerLink: { color: colors.gold, fontWeight: '600', fontSize: 14 },
+  siteLink: { alignItems: 'center', marginTop: spacing.lg, paddingVertical: 8 },
+  siteLinkText: { color: colors.grey, fontSize: 13, backgroundColor: colors.surface2, paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.full },
 });
