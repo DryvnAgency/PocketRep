@@ -1113,13 +1113,16 @@ function scrollToForm(plan){
 }
 
 // ── CAROUSEL ──
-var carouselIndex=0; // start on Pro
+var carouselIndex=0;
 var SLIDE_W=84; // matches min-width in CSS
 function carouselRender(){
   var track=document.getElementById('carousel-track');
-  if(!track)return;
-  if(window.innerWidth>=780){return}
-  track.style.transform='translateX(-'+(carouselIndex*SLIDE_W)+'%)';
+  var outer=document.querySelector('.carousel-track-outer');
+  if(!track||!outer)return;
+  if(window.innerWidth>=780){track.style.transform='';return}
+  // use pixels so translate is relative to container, not the track itself
+  var slideW=outer.offsetWidth*0.84;
+  track.style.transform='translateX(-'+(carouselIndex*slideW)+'px)';
   document.querySelectorAll('.carousel-dot').forEach(function(d,i){
     d.classList.toggle('active',i===carouselIndex);
   });
