@@ -227,7 +227,7 @@ export default function ContactsScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
 
-    const payload = {
+    const payload: any = {
       user_id: user.id,
       first_name: form.first_name.trim(),
       last_name: form.last_name.trim(),
@@ -242,6 +242,7 @@ export default function ContactsScreen() {
       lease_end_date: form.lease_end_date.trim() || null,
       purchase_date: form.purchase_date.trim() || null,
     };
+    if (form.stage) payload.stage = form.stage;
 
     if (editing) {
       await supabase.from('contacts').update(payload).eq('id', editing.id);
@@ -265,6 +266,56 @@ export default function ContactsScreen() {
         },
       },
     ]);
+  }
+
+  async function sendMassText() {
+    if (!massTextMsg.trim()) { Alert.alert('Enter a message'); return; }
+    const recipients = filtered.slice(0, MASS_TEXT_LIMIT).filter(c => c.phone);
+    if (recipients.length === 0) { Alert.alert('No recipients with phone numbers.'); return; }
+    const phones = recipients.map(c => c.phone).join(',');
+    const sep = Platform.OS === 'ios' ? '&' : '?';
+    const smsUrl = `sms:${phones}${sep}body=${encodeURIComponent(massTextMsg)}`;
+    try { await Linking.openURL(smsUrl); } catch { Alert.alert('Could not open SMS app'); }
+    const record = { id: Date.now().toString(), message: massTextMsg, recipient_count: recipients.length, sent_at: new Date().toISOString() };
+    if (AsyncStorage) {
+      try {
+        const raw = await AsyncStorage.getItem(MASS_TEXT_KEY);
+        const existing = raw ? JSON.parse(raw) : [];
+        await AsyncStorage.setItem(MASS_TEXT_KEY, JSON.stringify([...existing, record]));
+      } catch {}
+    }
+    setShowMassText(false);
+    setMassTextMsg('');
+  }
+
+  async function requestPhoneImport() {
+    if (!ExpoContacts) { Alert.alert('Not available', 'expo-contacts is not installed in this build.'); return; }
+    try {
+      const { status } = await ExpoContacts.requestPermissionsAsync();
+      if (status !== 'granted') { Alert.alert('Permission denied', 'Allow contacts access in device settings.'); return; }
+      const { data } = await ExpoContacts.getContactsAsync({
+        fields: [ExpoContacts.Fields.Name, ExpoContacts.Fields.PhoneNumbers, ExpoContacts.Fields.Emails],
+      });
+      setDeviceContacts(data ?? []);
+      setSelectedImport(new Set());
+      setShowImport(true);
+    } catch (e: any) { Alert.alert('Error', e?.message ?? 'Could not load contacts'); }
+  }
+
+  async function importSelected() {
+    if (selectedImport.size === 0) { Alert.alert('Select at least one contact'); return; }
+    setImporting(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setImporting(false); return; }
+    const toInsert = deviceContacts
+      .filter(dc => selectedImport.has(dc.id))
+      .map(dc => {
+        const parts = (dc.name ?? '').trim().split(' ');
+        return { user_id: user.id, first_name: parts[0] ?? '', last_name: parts.slice(1).join(' ') || '', phone: dc.phoneNumbers?.[0]?.number ?? '', email: dc.emails?.[0]?.email ?? null, stage: 'prospect' };
+      });
+    try { await supabase.from('contacts').insert(toInsert); await load(); } catch { Alert.alert('Some contacts may not have imported'); }
+    setImporting(false);
+    setShowImport(false);
   }
 
   return (
@@ -299,6 +350,13 @@ export default function ContactsScreen() {
           placeholder="Search by name or number…"
           placeholderTextColor={colors.grey}
         />
+      </View>
+
+      {/* Import from phone */}
+      <View style={s.importRow}>
+        <TouchableOpacity style={s.importBtn} onPress={requestPhoneImport} activeOpacity={0.8}>
+          <Text style={s.importBtnText}>📥 Import from Phone</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Stage filter pills */}
@@ -373,12 +431,7 @@ export default function ContactsScreen() {
             <TouchableOpacity
               style={[m.saveBtn, !massTextMsg.trim() && { opacity: 0.4 }]}
               disabled={!massTextMsg.trim()}
-              onPress={() => {
-                Alert.alert('Send Mass Text', `Send to ${massTextCount} contacts?`, [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Send', onPress: () => { setShowMassText(false); setMassTextMsg(''); Alert.alert('Queued!', `${massTextCount} messages queued.`); } },
-                ]);
-              }}
+              onPress={sendMassText}
               activeOpacity={0.85}
             >
               <Text style={m.saveBtnText}>Send to {massTextCount} contacts →</Text>

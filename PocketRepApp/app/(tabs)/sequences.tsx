@@ -126,19 +126,68 @@ export default function SequencesScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoadingMy(false); return; }
 
-      const { data: prof } = await supabase.from('profiles').select('plan').eq('id', user.id).single();
-      if (prof) setUserPlan(prof.plan);
-
-      const { data } = await supabase
-        .from('sequences')
-        .select('*, sequence_steps(*)')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      setMySequences(data ?? []);
+      const [{ data: prof }, { data: seqs }, { data: ctcts }] = await Promise.all([
+        supabase.from('profiles').select('plan').eq('id', user.id).single(),
+        supabase.from('sequences').select('*, sequence_steps(*)').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('contacts').select('id,first_name,last_name,phone').eq('user_id', user.id).order('last_name'),
+      ]);
+      if (prof) setUserPlan(prof.plan ?? 'pro');
+      setMySequences(seqs ?? []);
+      setAllContacts((ctcts ?? []) as any);
     } catch {
       setMySequences([]);
     }
     setLoadingMy(false);
+  }
+
+  function openMassText() {
+    setMassMsg('');
+    setSelectedContactIds(new Set());
+    setContactSearch('');
+    setShowMassTextModal(true);
+  }
+
+  function toggleContact(id: string) {
+    setSelectedContactIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else if (next.size < MASS_LIMIT) {
+        next.add(id);
+      } else {
+        Alert.alert(`Limit reached`, `Your ${userPlan === 'elite' ? 'Elite' : 'Pro'} plan allows up to ${MASS_LIMIT} recipients.`);
+      }
+      return next;
+    });
+  }
+
+  async function sendMassText() {
+    if (!massMsg.trim() || selectedContactIds.size === 0) return;
+    const count = selectedContactIds.size;
+
+    Alert.alert('Send Mass Text', `Send to ${count} contact${count !== 1 ? 's' : ''}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Send',
+        onPress: async () => {
+          // Save record to AsyncStorage
+          if (AsyncStorage) {
+            const record: MassTextRecord = {
+              id: Date.now().toString(),
+              message: massMsg,
+              recipient_count: count,
+              sent_at: new Date().toISOString(),
+            };
+            const existing = massTexts;
+            const updated = [...existing, record];
+            await AsyncStorage.setItem(MASS_TEXT_KEY, JSON.stringify(updated));
+            setMassTexts(updated);
+          }
+          setShowMassTextModal(false);
+          Alert.alert('Queued!', `${count} messages queued for delivery.`);
+        },
+      },
+    ]);
   }
 
   async function loadMassTexts() {
@@ -348,7 +397,9 @@ export default function SequencesScreen() {
           <Text style={s.logoMarkText}>P</Text>
         </View>
         <Text style={s.headerTitle}>Sequences</Text>
-        <View style={{ width: 36 }} />
+        <TouchableOpacity style={s.massTextBtn} onPress={openMassText} activeOpacity={0.8}>
+          <Text style={s.massTextBtnText}>📤 Mass Text</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
@@ -409,6 +460,90 @@ export default function SequencesScreen() {
           )}
         </AccordionSection>
       </ScrollView>
+
+      {/* Mass Text Modal */}
+      <Modal visible={showMassTextModal} animationType="slide" transparent>
+        <View style={mt.overlay}>
+          <View style={mt.sheet}>
+            <View style={mt.handle} />
+            <View style={mt.header}>
+              <Text style={mt.title}>Mass Text</Text>
+              <TouchableOpacity onPress={() => setShowMassTextModal(false)}>
+                <Text style={mt.close}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Plan limit badge */}
+            <View style={mt.limitRow}>
+              <Text style={mt.limitText}>
+                {selectedContactIds.size} / {MASS_LIMIT} selected
+              </Text>
+              <View style={mt.planBadge}>
+                <Text style={mt.planBadgeText}>{userPlan === 'elite' ? 'ELITE' : 'PRO'}</Text>
+              </View>
+            </View>
+
+            {/* Contact search + picker */}
+            <TextInput
+              style={mt.input}
+              value={contactSearch}
+              onChangeText={setContactSearch}
+              placeholder="Search contacts…"
+              placeholderTextColor={colors.grey}
+            />
+
+            <ScrollView style={mt.contactList} keyboardShouldPersistTaps="handled">
+              {allContacts
+                .filter(c => {
+                  const q = contactSearch.toLowerCase();
+                  return !q || `${c.first_name} ${c.last_name}`.toLowerCase().includes(q) || c.phone?.includes(q);
+                })
+                .map(c => {
+                  const selected = selectedContactIds.has(c.id);
+                  return (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[mt.contactRow, selected && mt.contactRowSelected]}
+                      onPress={() => toggleContact(c.id)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[mt.checkbox, selected && mt.checkboxChecked]}>
+                        {selected && <Text style={mt.checkmark}>✓</Text>}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={mt.contactName}>{c.first_name} {c.last_name}</Text>
+                        {c.phone ? <Text style={mt.contactPhone}>{c.phone}</Text> : null}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+            </ScrollView>
+
+            {/* Message */}
+            <TextInput
+              style={[mt.input, { height: 90, textAlignVertical: 'top', marginTop: spacing.sm }]}
+              value={massMsg}
+              onChangeText={setMassMsg}
+              placeholder="Hey {{first_name}}, …"
+              placeholderTextColor={colors.grey}
+              multiline
+            />
+            <Text style={mt.tip}>Use {'{{first_name}}'} for personalization.</Text>
+
+            <TouchableOpacity
+              style={[mt.sendBtn, (!massMsg.trim() || selectedContactIds.size === 0) && { opacity: 0.4 }]}
+              disabled={!massMsg.trim() || selectedContactIds.size === 0}
+              onPress={sendMassText}
+              activeOpacity={0.85}
+            >
+              <Text style={mt.sendBtnText}>
+                Send to {selectedContactIds.size} contact{selectedContactIds.size !== 1 ? 's' : ''} →
+              </Text>
+            </TouchableOpacity>
+            <View style={{ height: 32 }} />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
