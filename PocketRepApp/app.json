@@ -40,6 +40,11 @@
         { "icon": "./assets/icon.png" }
       ]
     ],
+    "web": {
+      "bundler": "metro",
+      "output": "single-page",
+      "favicon": "./assets/icon.png"
+    },
     "experiments": {
       "typedRoutes": true
     }
