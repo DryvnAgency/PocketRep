@@ -440,10 +440,9 @@ body.modal-open{overflow:hidden}
   <div class="hero">
     <div class="hero-glow"></div>
     <div class="trial-pill">✦ 7-Day Free Trial — Card Required, Cancel Anytime</div>
-    <h1>Your biggest competitor<br>isn't another rep.<br><span class="dim">It's the yellow legal pad.</span></h1>
+    <h1>The CRM You <span class="gold">Talk To.</span><br><span class="dim">The Assistant That Closes.</span></h1>
     <p class="hero-sub">
-      You're running your business on memory, sticky notes, and whatever fits on a napkin.
-      <b>PocketRep replaces all of it</b> — Heat Sheet, AI rebuttals, and a book that follows you from store to store.
+      Stop losing deals in the parking lot. PocketRep captures every detail from your voice, predicts who's ready to buy, and builds a book of business that stays with you — <b>not the dealership.</b>
     </p>
     <div class="hero-cta-wrap">
       <a href="#signup" onclick="scrollToForm();return false;" class="btn-gold">Start Your Free 7-Day Trial →</a>
@@ -480,118 +479,149 @@ body.modal-open{overflow:hidden}
     <div class="cd-colon">:</div>
     <div class="cd-unit"><div class="cd-num" id="cd-s">--</div><div class="cd-lbl">Sec</div></div>
   </div>
-  <div class="cd-note">After Apr 15 — prices jump <b>40–68%</b>. Trial converts at your locked founding rate.</div>
+  <div class="cd-note">After Apr 30 — prices jump <b>40–68%</b>. Trial converts at your locked founding rate.</div>
 </div>
 
-<!-- TOOLS + AI DEMO -->
+<!-- REX WORKFLOW -->
 <div class="combined-bg">
   <div class="wrap">
-    <div class="eyebrow">What's In Your Pocket</div>
-    <h2 class="sec-h">Four tools. One unfair advantage.</h2>
-    <p class="sec-p">The legal pad doesn't tell you who's ready to buy this week. PocketRep does — built for the rep, not the store.</p>
+    <div class="eyebrow">The Rex Workflow</div>
+    <h2 class="sec-h">How you close more — starting today.</h2>
+    <p class="sec-p">Three steps. In your truck, at your desk, or on the floor. No manual entry. No forgotten names. No missed commissions.</p>
 
-    <div class="tool-tabs">
-      <button class="tool-tab active" onclick="switchTab('heat')" id="tab-heat"><span class="ti">🔥</span> Heat Sheet</button>
-      <button class="tool-tab" onclick="switchTab('text')" id="tab-text"><span class="ti">💬</span> Mass Text</button>
-      <button class="tool-tab" onclick="switchTab('data')" id="tab-data"><span class="ti">🔒</span> Your Data</button>
-      <button class="tool-tab" onclick="switchTab('ai')" id="tab-ai"><span class="ti">🧠</span> AI Rebuttals — try it live</button>
-    </div>
 
-    <div class="tool-panel active" id="panel-heat">
-      <div class="tool-info">
-        <div>
-          <div class="ti-label">Heat Sheet</div>
-          <h3>Who's ready to buy right now</h3>
-          <p class="desc">Every morning the Heat Sheet shows you the <b>five people in your book most likely to move this month</b> — based on mileage patterns, lease windows, and timing signals, not random reminders.</p>
-          <ul class="tbullets">
+    <style>
+    .workflow{display:flex;flex-direction:column;gap:1.5rem;margin-top:2rem}
+    .wf-step{
+      display:grid;grid-template-columns:56px 1fr;gap:1.25rem;align-items:start;
+      background:var(--ink2);border:1px solid rgba(255,255,255,0.06);
+      border-radius:14px;padding:1.75rem;
+    }
+    .wf-num{
+      width:52px;height:52px;border-radius:12px;
+      background:var(--gold-bg);border:1px solid var(--gold-border);
+      display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    }
+    .wf-num span{font-size:1.1rem;font-weight:800;color:var(--gold);font-family:'Bricolage Grotesque',sans-serif}
+    .wf-body{}
+    .wf-tag{font-size:0.62rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.35rem}
+    .wf-h{font-size:1.25rem;font-weight:800;color:var(--white);margin-bottom:0.5rem;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-0.02em}
+    .wf-p{font-size:0.87rem;color:var(--grey2);line-height:1.65;margin-bottom:0.75rem}
+    .wf-bullets{list-style:none;display:flex;flex-direction:column;gap:0.3rem}
+    .wf-bullets li{font-size:0.82rem;color:var(--grey3);display:flex;align-items:baseline;gap:7px}
+    .wf-bullets li::before{content:'→';color:var(--gold);font-size:0.75rem;flex-shrink:0}
+    .elite-perk{
+      display:inline-flex;align-items:center;gap:6px;
+      background:var(--gold-bg);border:1px solid var(--gold-border);
+      border-radius:100px;padding:0.2rem 0.75rem;
+      font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--gold2);
+      margin-top:0.75rem;
+    }
+    @media(min-width:780px){.workflow{gap:1rem}}
+    </style>
+
+    <div class="workflow">
+      <!-- Step 01 -->
+      <div class="wf-step">
+        <div class="wf-num"><span>01</span></div>
+        <div class="wf-body">
+          <div class="wf-tag">Zero-Entry Logging</div>
+          <div class="wf-h">Throw away the legal pad.</div>
+          <p class="wf-p">After every meeting, tap the mic and talk. Rex's AI listens, extracts the dog's name, the trade-in value, and the budget timeline — and files it into your book perfectly. No typing. No forgetting. No losing a deal to a sticky note.</p>
+          <ul class="wf-bullets">
+            <li>Works in your truck, in the parking lot, walking to your car</li>
+            <li>Captures names, objections, vehicle specs, and follow-up timing</li>
+            <li>Syncs instantly — pull it up before the next call</li>
+          </ul>
+          <div class="elite-perk">⚡ Elite: Rex remembers context across all your deals to spot patterns you missed</div>
+        </div>
+      </div>
+
+      <!-- Step 02 -->
+      <div class="wf-step">
+        <div class="wf-num"><span>02</span></div>
+        <div class="wf-body">
+          <div class="wf-tag">Predictive Commissions</div>
+          <div class="wf-h">Wake up to a roadmap, not a to-do list.</div>
+          <p class="wf-p">Every morning your 3-Tier Heat Sheet shows exactly 5 people who are statistically peaking right now — based on lease windows, mileage patterns, and timing signals. Red. Orange. Blue. You know exactly who to call before you finish your coffee.</p>
+          <ul class="wf-bullets">
             <li>Surfaces customers due for a trade-up before they start shopping elsewhere</li>
-            <li>Flags lease customers approaching mileage or term limits</li>
-            <li>No setup — works off the notes you're already keeping</li>
+            <li>Flags lease customers hitting mileage or term limits this month</li>
+            <li>One deal from the Heat Sheet covers your Pro sub for over two years</li>
           </ul>
-        </div>
-        <div class="t-stats">
-          <div class="t-stat"><div class="t-stat-n">1</div><div class="t-stat-l"><b>Deal from the Heat Sheet</b> covers your Pro sub for over two years</div></div>
-          <div class="t-stat"><div class="t-stat-n">~5 min</div><div class="t-stat-l"><b>Every morning</b> — check the list, make the call, book the appointment</div></div>
-          <div class="t-stat"><div class="t-stat-n">Your book</div><div class="t-stat-l"><b>Not cold leads.</b> People who already bought from you and trust you.</div></div>
+          <div class="elite-perk">🗺 Elite: Map View — Heat-scored pins of your city. See which hot lead is 5 minutes away at lunch.</div>
         </div>
       </div>
-    </div>
 
-    <div class="tool-panel" id="panel-text">
-      <div class="tool-info">
-        <div>
-          <div class="ti-label">Personalized Mass Text</div>
-          <h3>50–100 people. Looks like one text.</h3>
-          <p class="desc">Send to 50 contacts on Pro, 100 on Elite. Every message delivers <b>individually from your number</b> — no opt-out language, no blast formatting, no burned trust.</p>
-          <ul class="tbullets">
-            <li>Pulls the customer's name and your notes automatically</li>
-            <li>Sends from your actual phone number — not a shortcode</li>
-            <li>Perfect for monthly check-ins, rate changes, re-engagement</li>
+      <!-- Step 03 -->
+      <div class="wf-step">
+        <div class="wf-num"><span>03</span></div>
+        <div class="wf-body">
+          <div class="wf-tag">The Pre-Call Strike</div>
+          <div class="wf-h">Walk in like you own the room.</div>
+          <p class="wf-p">60 seconds before your follow-up, Rex sends a Pre-Call Brief. One tap shows you the rapport notes, the last objection, and the Closer's Angle. One more tap dials. You already know everything before they pick up.</p>
+          <ul class="wf-bullets">
+            <li>Rex reads your notes and builds the brief — you don't write a word</li>
+            <li>Shows what stalled last time and the exact angle to open with</li>
+            <li>Context-Switching: Rex knows if you're chasing a client or vetting a candidate</li>
           </ul>
-        </div>
-        <div class="t-stats">
-          <div class="t-stat"><div class="t-stat-n">50–100</div><div class="t-stat-l"><b>Contacts per send</b> — same time it takes to text one person manually</div></div>
-          <div class="t-stat"><div class="t-stat-n">1-to-1</div><div class="t-stat-l"><b>How every text lands.</b> No one knows it wasn't written just for them.</div></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="tool-panel" id="panel-data">
-      <div class="tool-info">
-        <div>
-          <div class="ti-label">Data Portability</div>
-          <h3>Your book leaves when you do</h3>
-          <p class="desc">The dealership's CRM belongs to the dealership. When you leave, <b>you walk out with nothing.</b> PocketRep fixes that permanently — every contact, note, and deal history belongs to you.</p>
-          <ul class="tbullets">
-            <li>Export your full book anytime with one tap</li>
-            <li>Moves with you from auto to mortgages to B2B</li>
-            <li>Every deal you log makes the next one easier to close</li>
-          </ul>
-        </div>
-        <div class="t-stats">
-          <div class="t-stat"><div class="t-stat-n">$0</div><div class="t-stat-l"><b>What you keep from the dealership CRM</b> when you leave. PocketRep changes that.</div></div>
-          <div class="t-stat"><div class="t-stat-n">Day 1</div><div class="t-stat-l"><b>At a new store</b> — full history, contacts, and notes already in your pocket</div></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="tool-panel" id="panel-ai">
-      <div class="rebuttal-panel">
-        <div class="rp-topbar">
-          <div class="mac-dots"><span class="md1"></span><span class="md2"></span><span class="md3"></span></div>
-          <div class="rp-title"><span class="rp-dot"></span> AI Rebuttal Engine — pick an objection</div>
-          <div style="width:50px"></div>
-        </div>
-        <div class="rp-body">
-          <div class="rp-left">
-            <div class="rp-left-lbl">Customer said…</div>
-            <button class="obj-btn" data-id="payment" onclick="pickObj(this)"><span class="obj-icon">💰</span><span class="obj-txt">"The payment is too high."</span></button>
-            <button class="obj-btn" data-id="spouse" onclick="pickObj(this)"><span class="obj-icon">👫</span><span class="obj-txt">"Need to run it by my spouse."</span></button>
-            <button class="obj-btn" data-id="think" onclick="pickObj(this)"><span class="obj-icon">🤔</span><span class="obj-txt">"Let me think on it."</span></button>
-            <button class="obj-btn" data-id="online" onclick="pickObj(this)"><span class="obj-icon">📱</span><span class="obj-txt">"Saw it cheaper online."</span></button>
-            <button class="obj-btn" data-id="trade" onclick="pickObj(this)"><span class="obj-icon">🚗</span><span class="obj-txt">"You're low-balling my trade."</span></button>
-          </div>
-          <div class="rp-right">
-            <div class="rp-right-lbl">PocketRep responds using your notes…</div>
-            <div class="rp-empty" id="rp-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.74 1.41 3.15 3.15 3.15H18a3 3 0 003-3V6.75A3 3 0 0018 3.75H5.25A3.75 3.75 0 001.5 7.5v5.25z"/></svg><span>Select an objection</span></div>
-            <div class="r-card" id="r-payment"><div class="cust-bubble"><b>Customer:</b> "The payment's just higher than I was expecting. I was thinking more like $450."</div><div class="ai-row"><div class="ai-tag">AI Rebuttal</div><div class="notes-used">🔒 mileage notes, warranty status</div></div><div class="ai-bubble">"Yeah, $80 a month is real money — I get it. Here's the thing though: you told me earlier you're putting about 28,000 miles a year on that truck. At that pace you're out of powertrain coverage by next spring, and if anything goes sideways you're paying out of pocket. One transmission job runs $3,500–$5,000 — that's more than 12 months of the difference right there.<br><br>What I can do is bump the term to 72 months — <b>lands you right around $448 and you keep full bumper-to-bumper.</b> Want me to run that before we write anything up?"</div><div class="r-footer">Built from your notes on this customer — not a generic script</div></div>
-            <div class="r-card" id="r-spouse"><div class="cust-bubble"><b>Customer:</b> "Everything looks good, honestly. I just want to talk to my wife tonight before I sign."</div><div class="ai-row"><div class="ai-tag">AI Rebuttal</div><div class="notes-used">🔒 previous visit notes, family context</div></div><div class="ai-bubble">"That's fair — and I'd expect nothing less. Quick thing though: from when we talked last time, wasn't she the one pushing for the upgrade after the road trip? You mentioned she was done with the back seat space.<br><br>The question she's going to ask tonight is 'did you get a good deal?' — I want to make sure you can say yes. <b>Let me put together a quick one-pager</b> with the numbers and trade value so the conversation's easy. If she's good, you're already done."</div><div class="r-footer">Built from your notes on this customer — not a generic script</div></div>
-            <div class="r-card" id="r-think"><div class="cust-bubble"><b>Customer:</b> "I appreciate everything, I'm just not ready to pull the trigger today."</div><div class="ai-row"><div class="ai-tag">AI Rebuttal</div><div class="notes-used">🔒 visit history, time on lot</div></div><div class="ai-bubble">"I respect that — you've been in twice and spent real time on this, so I know you're not messing around. Can I ask you something straight? Is there a specific thing that's still off, or does it just feel like a big decision right now?<br><br>Because if there's something I haven't answered right, I'd rather know now. <b>What's the one thing still sitting wrong?</b> If it's the number, I might have one more move."</div><div class="r-footer">Built from your notes on this customer — not a generic script</div></div>
-            <div class="r-card" id="r-online"><div class="cust-bubble"><b>Customer:</b> "I saw basically the same truck online for $2,200 less. Can you match that?"</div><div class="ai-row"><div class="ai-tag">AI Rebuttal</div><div class="notes-used">🔒 trim notes, doc fee history</div></div><div class="ai-bubble">"Send me the link right now and I'll look at it with you. Seriously — pull it up.<br><br>Nine times out of ten the difference is destination charges, dealer adds, or doc fees not in the advertised number. <b>If it's truly apples-to-apples and they're legitimately cheaper, I'll either match it or tell you straight to go get it.</b> I'm not going to play games over something I can check in two minutes."</div><div class="r-footer">Built from your notes on this customer — not a generic script</div></div>
-            <div class="r-card" id="r-trade"><div class="cust-bubble"><b>Customer:</b> "I don't know, $17,500 on my trade just feels really low. I was expecting at least $21k."</div><div class="ai-row"><div class="ai-tag">AI Rebuttal</div><div class="notes-used">🔒 trade details, Carfax flags</div></div><div class="ai-bubble">"Your frustration makes sense — $3,500 is not nothing and I'm not going to talk you out of that feeling. But straight up: the number we pulled is based on live auction data for your year, trim, and mileage — and there's a prior accident on the Carfax that's hitting the value hard. That's not us lowballing you, that's what buyers at auction are paying right now.<br><br><b>Here, let me show you the report line by line.</b> If after that you think we're still off, I'll go back to the desk and push harder."</div><div class="r-footer">Built from your notes on this customer — not a generic script</div></div>
-          </div>
+          <div class="elite-perk">📍 Elite: Proximity Alerts — phone vibrates when you're within 500ft of a Red Hot lead. Never drive past a commission.</div>
         </div>
       </div>
     </div>
   </div>
 </div>
 
+<!-- ELITE EDGE -->
+<div class="wrap-sm">
+  <style>
+  .elite-edge-section{margin-top:0}
+  .elite-edge-header{
+    background:linear-gradient(135deg,var(--ink2) 0%,rgba(212,168,67,0.06) 100%);
+    border:1px solid var(--gold-border);border-radius:14px 14px 0 0;
+    padding:1.75rem 1.75rem 1.25rem;
+  }
+  .elite-edge-header .eyebrow{margin-bottom:0.4rem}
+  .elite-edge-header h3{font-size:1.5rem;font-weight:800;color:var(--white);letter-spacing:-0.025em;margin-bottom:0.4rem}
+  .elite-edge-header p{font-size:0.86rem;color:var(--grey2);max-width:460px;line-height:1.6}
+  .elite-table{width:100%;border-collapse:collapse;background:var(--ink2);border:1px solid var(--gold-border);border-top:none;border-radius:0 0 14px 14px;overflow:hidden}
+  .elite-table th{text-align:left;padding:0.75rem 1.25rem;font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--grey);border-bottom:1px solid rgba(255,255,255,0.06)}
+  .elite-table td{padding:0.9rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:top}
+  .elite-table tr:last-child td{border-bottom:none}
+  .elite-table td:first-child{color:var(--gold2);font-weight:700;font-size:0.85rem;white-space:nowrap;width:38%}
+  .elite-table td:last-child{color:var(--grey3);font-size:0.83rem;line-height:1.5}
+  @media(max-width:600px){
+    .elite-table td:first-child{width:auto;display:block;margin-bottom:0.2rem}
+    .elite-table td:last-child{display:block;padding-top:0}
+    .elite-table td{padding:0.65rem 1rem}
+  }
+  </style>
+  <div class="elite-edge-section">
+    <div class="elite-edge-header">
+      <div class="eyebrow">Elite Only</div>
+      <h3>The Market Leader's Edge</h3>
+      <p>For reps who treat this like a business, not a job. Every feature below is built to make you untouchable in your market.</p>
+    </div>
+    <table class="elite-table">
+      <thead><tr><th>Feature</th><th>The Elite Advantage</th></tr></thead>
+      <tbody>
+        <tr><td>Proximity Alerts</td><td>Your phone vibrates when you're within 500ft of a Red Hot lead. Never drive past a commission again.</td></tr>
+        <tr><td>Rapport Vault + AI Vision</td><td>Snap a photo of a trade-in, competitor quote, or VIN. Rex reads the photo and auto-tags specs and equipment.</td></tr>
+        <tr><td>Context-Switching</td><td>Rex automatically shifts his coaching style between Client mode (the close) and Candidate mode (the placement).</td></tr>
+        <tr><td>Cross-Deal Memory</td><td>Rex builds a profile of your selling patterns across all conversations — spots opportunities you'd miss on a busy floor.</td></tr>
+        <tr><td>Custom Onboarding</td><td>Rex interviews you about your industry on day one and builds your personal system prompt. It's not generic. It's yours.</td></tr>
+        <tr><td>Weekly Pipeline Digest</td><td>Every Monday, Rex reviews your week — deals logged, Heat Sheet calls made, and one sharp coaching note to start the week right.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <!-- PRICING CAROUSEL -->
-<div class="pricing-bg" id="pricing">
+<div class="pricing-bg" id="pricing" style="margin-top:3rem">
   <div class="wrap-sm">
-    <div class="eyebrow">Founding Pricing — Ends April 15</div>
+    <div class="eyebrow">Founding Pricing — Ends April 30</div>
     <h2 class="sec-h">Try free for 7 days.<br>Lock your rate forever.</h2>
-    <p class="sec-p">Start your trial today. If you stay, you keep the founding rate permanently — even after prices increase.</p>
+    <p class="sec-p">Start your trial today. If you stay, you keep the founding rate permanently — even after prices increase on April 30.</p>
 
     <style>
     .carousel-wrap{position:relative;margin-top:2rem}
@@ -637,7 +667,7 @@ body.modal-open{overflow:hidden}
     }
     @media(min-width:780px){
       .carousel-track-outer{overflow:visible}
-      .carousel-track{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;transform:none!important}
+      .carousel-track{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem;transform:none!important}
       .carousel-slide{min-width:unset;padding:0}
       .carousel-arrows,.carousel-dots,.carousel-label{display:none}
     }
@@ -648,60 +678,47 @@ body.modal-open{overflow:hidden}
         <div class="carousel-track" id="carousel-track">
 
           <div class="carousel-slide">
-            <div class="carousel-plan">
-              <div class="pname">Solo</div>
-              <div class="pdesc">For the lone wolf rep</div>
-              <div class="pprice"><span class="amt">$19</span><span class="per">/mo</span></div>
-              <div class="ptrial">7 days free, then $19/mo</div>
-              <div class="pwas">After Apr 15: <s>$29/mo</s> — <b>Save $120/yr</b></div>
-              <hr class="pdiv">
-              <ul class="plist">
-                <li><span class="ck">✓</span> Heat Sheet — top 5 ready-to-buy contacts</li>
-                <li><span class="ck">✓</span> Deal notes and activity tracking</li>
-                <li><span class="ck">✓</span> Fully portable — your data, always</li>
-                <li><span class="xk">✗</span> <span style="color:#252530">AI Rebuttals</span></li>
-                <li><span class="xk">✗</span> <span style="color:#252530">Live Closer Help</span></li>
-              </ul>
-              <a href="#signup" onclick="scrollToForm('solo');return false;" class="plan-btn btn-out">Start Free Trial →</a>
-            </div>
-          </div>
-
-          <div class="carousel-slide">
             <div class="carousel-plan feat">
-              <div class="plan-badge">Sweet Spot</div>
+              <div class="plan-badge">The Closer</div>
               <div class="pname">Pro</div>
-              <div class="pdesc">The closer's unfair advantage</div>
+              <div class="pdesc">Every tool you need to close more</div>
               <div class="pprice"><span class="amt">$29</span><span class="per">/mo</span></div>
               <div class="ptrial">7 days free, then $29/mo</div>
-              <div class="pwas">After Apr 15: <s>$49/mo</s> — <b>Save $240/yr</b></div>
+              <div class="pwas">After Apr 30: <s>$49/mo</s> — <b>Save $240/yr</b></div>
               <hr class="pdiv">
               <ul class="plist">
-                <li><span class="ck">✓</span> Everything in Solo</li>
-                <li><span class="ck">✓</span> AI Rebuttals — customer-specific responses</li>
-                <li><span class="ck">✓</span> Personalized mass text (50 contacts)</li>
-                <li><span class="ck">✓</span> Full contact history export</li>
-                <li><span class="xk">✗</span> <span style="color:#252530">Live Closer Help</span></li>
+                <li><span class="ck">✓</span> Zero-Entry Logging — voice-to-CRM, no typing</li>
+                <li><span class="ck">✓</span> Predictive Commissions — 3-tier Heat Sheet, 5-at-a-time</li>
+                <li><span class="ck">✓</span> Pre-Call Briefs + one-tap dial</li>
+                <li><span class="ck">✓</span> Context-Switching (Client / Candidate mode)</li>
+                <li><span class="ck">✓</span> Rex AI Rebuttals — built from your notes</li>
+                <li><span class="ck">✓</span> Personalized mass text — 50 contacts</li>
+                <li><span class="ck">✓</span> Full data portability — your book, always</li>
               </ul>
               <a href="#signup" onclick="scrollToForm('pro');return false;" class="plan-btn btn-solid">Start Free Trial →</a>
             </div>
           </div>
 
           <div class="carousel-slide">
-            <div class="carousel-plan">
+            <div class="carousel-plan" style="border:1.5px solid rgba(212,168,67,0.4);background:linear-gradient(155deg,rgba(212,168,67,0.05) 0%,var(--ink2) 55%)">
+              <div class="plan-badge" style="background:var(--gold);color:var(--ink)">Market Leader</div>
               <div class="pname">Elite</div>
-              <div class="pdesc">AI in your ear during live deals</div>
+              <div class="pdesc">For reps who treat this like a business</div>
               <div class="pprice"><span class="amt">$47</span><span class="per">/mo</span></div>
               <div class="ptrial">7 days free, then $47/mo</div>
-              <div class="pwas">After Apr 15: <s>$79/mo</s> — <b>Save $384/yr</b></div>
+              <div class="pwas">After Apr 30: <s>$79/mo</s> — <b>Save $384/yr</b></div>
               <hr class="pdiv">
               <ul class="plist">
-                <li><span class="ck">✓</span> Everything in Pro</li>
-                <li><span class="ck">✓</span> Mass text up to <b style="color:var(--gold2)">100 contacts</b></li>
-                <li><span class="ck">✓</span> Live Closer Help — AI coaching mid-deal</li>
-                <li><span class="ck">✓</span> Priority support &amp; onboarding</li>
-                <li><span class="ck">✓</span> Early access to all new features</li>
+                <li><span class="ck">✓</span> <b>Everything in Pro</b></li>
+                <li><span class="ck" style="color:var(--gold)">✦</span> Proximity Alerts — 500ft trigger on hot leads</li>
+                <li><span class="ck" style="color:var(--gold)">✦</span> Map View with Heat-Scored Pins</li>
+                <li><span class="ck" style="color:var(--gold)">✦</span> Rapport Vault + AI Photo Vision</li>
+                <li><span class="ck" style="color:var(--gold)">✦</span> Cross-Deal Rex Memory</li>
+                <li><span class="ck" style="color:var(--gold)">✦</span> Weekly Pipeline Digest</li>
+                <li><span class="ck" style="color:var(--gold)">✦</span> Mass text up to <b style="color:var(--gold2)">100 contacts</b></li>
+                <li><span class="ck" style="color:var(--gold)">✦</span> Priority Rex speed + custom onboarding</li>
               </ul>
-              <a href="#signup" onclick="scrollToForm('elite');return false;" class="plan-btn btn-out">Start Free Trial →</a>
+              <a href="#signup" onclick="scrollToForm('elite');return false;" class="plan-btn btn-solid" style="background:var(--gold)">Start Free Trial →</a>
             </div>
           </div>
 
@@ -715,9 +732,8 @@ body.modal-open{overflow:hidden}
       <div class="carousel-dots">
         <button class="carousel-dot active" onclick="carouselGo(0)"></button>
         <button class="carousel-dot" onclick="carouselGo(1)"></button>
-        <button class="carousel-dot" onclick="carouselGo(2)"></button>
       </div>
-      <div class="carousel-label">Swipe or use arrows to compare plans</div>
+      <div class="carousel-label">Swipe to compare plans</div>
     </div>
 
     <p class="p-note"><b>Cancel anytime during your 7-day trial — you won't be charged.</b> After day 7, your founding rate locks in and never increases.</p>
@@ -728,7 +744,7 @@ body.modal-open{overflow:hidden}
 <div class="signup-section" id="signup">
   <div class="signup-inner">
     <div class="signup-pitch">
-      <div class="deadline-chip"><span class="blink" style="background:var(--red)"></span> Founding rate ends April 15</div>
+      <div class="deadline-chip"><span class="blink" style="background:var(--red)"></span> Founding rate ends April 30</div>
       <h2>7 days free.<br>Then yours forever.</h2>
       <p class="pitch-sub">Start the trial today. Find one deal from the Heat Sheet and your subscription is paid for <b>two years.</b> Cancel before day 7 — zero charge, no questions.</p>
       <div class="trial-timeline">
@@ -749,9 +765,8 @@ body.modal-open{overflow:hidden}
         <div class="sfb-top-sub">Select your plan, fill in your details, and you're in.</div>
       </div>
       <div class="sf-plans">
-        <div class="sfp" id="sfp-solo" onclick="sfSelectPlan('solo')"><div class="sfp-name">Solo</div><div class="sfp-price">$19/mo</div></div>
-        <div class="sfp active" id="sfp-pro" onclick="sfSelectPlan('pro')"><div class="sfp-badge">Sweet Spot</div><div class="sfp-name">Pro</div><div class="sfp-price">$29/mo</div></div>
-        <div class="sfp" id="sfp-elite" onclick="sfSelectPlan('elite')"><div class="sfp-name">Elite</div><div class="sfp-price">$47/mo</div></div>
+        <div class="sfp active" id="sfp-pro" onclick="sfSelectPlan('pro')"><div class="sfp-badge">The Closer</div><div class="sfp-name">Pro</div><div class="sfp-price">$29/mo</div></div>
+        <div class="sfp" id="sfp-elite" onclick="sfSelectPlan('elite')"><div class="sfp-badge" style="background:var(--gold);color:var(--ink)">Market Leader</div><div class="sfp-name">Elite</div><div class="sfp-price">$47/mo</div></div>
       </div>
       <form class="sf-body" id="signup-form" novalidate>
         <div class="sf-row" style="margin-top:0.85rem">
@@ -826,12 +841,12 @@ body.modal-open{overflow:hidden}
   <div class="eyebrow">Why PocketRep Wins</div>
   <h2 class="sec-h">Built for closers. Not the company.</h2>
   <div class="str-grid">
-    <div class="str"><div class="str-n">01</div><h4>You own the data</h4><p>Switch stores, change industries, go independent. Your book moves with you every time.</p></div>
-    <div class="str"><div class="str-n">02</div><h4>Timing beats hustle</h4><p>The Heat Sheet tells you who is statistically ready this week — not just "follow up more."</p></div>
-    <div class="str"><div class="str-n">03</div><h4>AI that knows your customer</h4><p>Reads your notes before it responds. Specific to that customer's situation, not a Google script.</p></div>
-    <div class="str"><div class="str-n">04</div><h4>Texts that land personal</h4><p>100 contacts on Elite, all from your number. No opt-out language. No burned trust.</p></div>
+    <div class="str"><div class="str-n">01</div><h4>Zero-Entry Logging</h4><p>Talk after every meeting. Rex files the notes. No typing, no forgetting, no losing a deal to a legal pad.</p></div>
+    <div class="str"><div class="str-n">02</div><h4>Predictive Commissions</h4><p>Wake up to the 5 people statistically ready to buy right now — not a random "follow up today" reminder.</p></div>
+    <div class="str"><div class="str-n">03</div><h4>Context-Switching</h4><p>Rex knows if you're closing a client or vetting a candidate. His coaching shifts automatically. You never have to explain the situation.</p></div>
+    <div class="str"><div class="str-n">04</div><h4>You own the data</h4><p>Switch stores, change industries, go independent. Your book moves with you every single time.</p></div>
     <div class="str"><div class="str-n">05</div><h4>One tool, every career chapter</h4><p>Auto → mortgages → B2B. Your book compounds. The longer you use it, the more it's worth.</p></div>
-    <div class="str"><div class="str-n">06</div><h4>ROI in the first deal</h4><p>One Heat Sheet deal covers Pro for two years. The trial alone will find you that customer.</p></div>
+    <div class="str"><div class="str-n">06</div><h4>ROI in the first deal</h4><p>One Heat Sheet deal covers your Pro sub for over two years. The trial alone will surface that customer.</p></div>
   </div>
 </div>
 
@@ -861,11 +876,11 @@ body.modal-open{overflow:hidden}
       </div>
       <div class="faq-item">
         <button class="faq-q" onclick="toggleFaq(this)">What happens after the 7 days? <span class="faq-arrow">▼</span></button>
-        <div class="faq-a">Your card is charged at your founding rate — <b>the price you locked in during signup</b>. That rate stays with you permanently, even after public pricing increases on April 15. Most reps make that back in the first deal they find through the Heat Sheet.</div>
+        <div class="faq-a">Your card is charged at your founding rate — <b>the price you locked in during signup</b>. That rate stays with you permanently, even after public pricing increases on April 30. Most reps make that back in the first deal they find through the Heat Sheet.</div>
       </div>
       <div class="faq-item">
         <button class="faq-q" onclick="toggleFaq(this)">What does "founding rate" mean exactly? <span class="faq-arrow">▼</span></button>
-        <div class="faq-a">After April 15, public pricing goes to $29/$49/$79. <b>Anyone who signs up before the deadline keeps their founding rate forever</b> — $19/$29/$47 — even as we add features and raise prices for new users. It's our way of rewarding early adopters.</div>
+        <div class="faq-a">After April 30, public pricing goes to $49/$79. <b>Anyone who signs up before the deadline keeps their founding rate forever</b> — $29/$47 — even as we add features and raise prices for new users. It's our way of rewarding early adopters.</div>
       </div>
       <div class="faq-item">
         <button class="faq-q" onclick="toggleFaq(this)">Does my data actually stay with me if I leave a dealership? <span class="faq-arrow">▼</span></button>
@@ -1028,7 +1043,7 @@ select.sf-input option{background:var(--ink3);color:var(--white)}
 
 <script>
 // ── COUNTDOWN ──
-function getDeadline(){return new Date(Date.UTC(2026,3,16,4,59,59))}
+function getDeadline(){return new Date(Date.UTC(2026,4,1,4,59,59))}
 function pad(n){return String(Math.max(0,n)).padStart(2,'0')}
 function tick(){
   var diff=getDeadline().getTime()-Date.now();
@@ -1068,7 +1083,7 @@ var STRIPE_LINKS = {
 };
 
 // ── COUNTDOWN ──
-function getDeadline(){return new Date(Date.UTC(2026,3,16,4,59,59))}
+function getDeadline(){return new Date(Date.UTC(2026,4,1,4,59,59))}
 function pad(n){return String(Math.max(0,n)).padStart(2,'0')}
 function tick(){
   var diff=getDeadline().getTime()-Date.now();
