@@ -49,6 +49,7 @@ function calcHeatScore(c: Contact): { score: number; tier: 'hot' | 'warm' | 'wat
 
 export default function HeatSheetScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [followUpContacts, setFollowUpContacts] = useState<Contact[]>([]);
   const [hotContacts, setHotContacts] = useState<Contact[]>([]);
   const [warmContacts, setWarmContacts] = useState<Contact[]>([]);
   const [watchContacts, setWatchContacts] = useState<Contact[]>([]);
@@ -69,6 +70,14 @@ export default function HeatSheetScreen() {
     if (prof) setProfile(prof);
 
     if (contacts) {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Follow-ups set by Hey Rex (due today or overdue)
+      const followUps = contacts
+        .filter(c => c.follow_up_date && c.follow_up_date <= today)
+        .sort((a, b) => (a.follow_up_date ?? '').localeCompare(b.follow_up_date ?? ''));
+      setFollowUpContacts(followUps);
+
       // Score every contact, then partition by tier
       const scored = contacts.map((c) => {
         const { score, tier, reason } = calcHeatScore(c);
@@ -170,6 +179,29 @@ export default function HeatSheetScreen() {
           </View>
         ) : (
           <>
+            {/* Follow-ups set by Hey Rex */}
+            {followUpContacts.length > 0 && (
+              <View style={fu.section}>
+                <View style={fu.header}>
+                  <Text style={fu.icon}>📅</Text>
+                  <Text style={fu.title}>FOLLOW UP TODAY</Text>
+                  <View style={fu.pill}>
+                    <Text style={fu.pillText}>{followUpContacts.length}</Text>
+                  </View>
+                </View>
+                {followUpContacts.map(c => (
+                  <TouchableOpacity key={c.id} style={fu.card} onPress={() => openBrief(c)} activeOpacity={0.8}>
+                    <View style={fu.cardLeft}>
+                      <Text style={fu.name}>{c.first_name} {c.last_name}</Text>
+                      {c.notes ? <Text style={fu.note} numberOfLines={2}>{c.notes}</Text> : null}
+                    </View>
+                    <View style={fu.briefBtn}>
+                      <Text style={fu.briefBtnText}>Brief</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
             <TierSection title="HOT" tier="hot" contacts={hotContacts} onBrief={openBrief} />
             <TierSection title="WARM" tier="warm" contacts={warmContacts} onBrief={openBrief} />
             <TierSection title="WATCH" tier="watch" contacts={watchContacts} onBrief={openBrief} />
@@ -323,6 +355,37 @@ const ts = StyleSheet.create({
   tierLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8 },
   tierPill: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 1 },
   tierPillText: { fontSize: 10, fontWeight: '700' },
+});
+
+const fu = StyleSheet.create({
+  section: { marginBottom: spacing.xl },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.sm },
+  icon: { fontSize: 14 },
+  title: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, color: colors.gold, flex: 1 },
+  pill: {
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 1,
+  },
+  pillText: { fontSize: 10, fontWeight: '700', color: colors.gold },
+  card: {
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.gold,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cardLeft: { flex: 1 },
+  name: { fontSize: 15, fontWeight: '700', color: colors.white },
+  note: { fontSize: 12, color: colors.grey2, marginTop: 2 },
+  briefBtn: {
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 4,
+  },
+  briefBtnText: { color: colors.gold, fontSize: 11, fontWeight: '700' },
 });
 
 const hc = StyleSheet.create({

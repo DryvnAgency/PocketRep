@@ -15,45 +15,46 @@ function TabIcon({ icon, label, focused }: { icon: string; label: string; focuse
 export default function TabLayout() {
   return (
     <View style={{ flex: 1 }}>
-    <HeyRex />
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: colors.ink2,
-          borderTopColor: 'rgba(255,255,255,0.05)',
-          borderTopWidth: 1,
-          height: 72,
-          paddingBottom: 10,
-        },
-        tabBarShowLabel: false,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="🔥" label="Heat Sheet" focused={focused} />,
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: {
+            backgroundColor: colors.ink2,
+            borderTopColor: 'rgba(255,255,255,0.05)',
+            borderTopWidth: 1,
+            height: 72,
+            paddingBottom: 10,
+          },
+          tabBarShowLabel: false,
         }}
-      />
-      <Tabs.Screen
-        name="contacts"
-        options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="👥" label="Book" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="rex"
-        options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="🧠" label="Rex" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="more"
-        options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="⚙️" label="More" focused={focused} />,
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            tabBarIcon: ({ focused }) => <TabIcon icon="🔥" label="Heat Sheet" focused={focused} />,
+          }}
+        />
+        <Tabs.Screen
+          name="contacts"
+          options={{
+            tabBarIcon: ({ focused }) => <TabIcon icon="👥" label="Book" focused={focused} />,
+          }}
+        />
+        <Tabs.Screen
+          name="rex"
+          options={{
+            tabBarIcon: ({ focused }) => <TabIcon icon="🧠" label="Rex" focused={focused} />,
+          }}
+        />
+        <Tabs.Screen
+          name="more"
+          options={{
+            tabBarIcon: ({ focused }) => <TabIcon icon="⚙️" label="More" focused={focused} />,
+          }}
+        />
+      </Tabs>
+      {/* HeyRex must be AFTER Tabs so it renders on top in z-order */}
+      <HeyRex />
     </View>
   );
 }

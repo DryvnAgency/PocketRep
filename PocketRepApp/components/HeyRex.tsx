@@ -8,7 +8,6 @@ import { Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
-import type { Contact } from '@/lib/types';
 
 // ── Hey Rex — Voice Intake Engine ────────────────────────────────────────────
 // Workflow:
@@ -66,23 +65,32 @@ export default function HeyRex() {
   }, [stage]);
 
   async function startListening() {
-    const { granted } = await Audio.requestPermissionsAsync();
-    if (!granted) { Alert.alert('Mic needed', 'Allow microphone access to use Hey Rex.'); return; }
+    try {
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted) {
+        Alert.alert('Mic needed', 'Allow microphone access to use Hey Rex.');
+        return;
+      }
 
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-    const rec = new Audio.Recording();
-    await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-    await rec.startAsync();
-    recording.current = rec;
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
 
-    setStage('listening');
-    setShowSheet(true);
-    setTranscript('');
-    setParsed(null);
-    setSaved(false);
+      const rec = new Audio.Recording();
+      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await rec.startAsync();
+      recording.current = rec;
 
-    // Hard stop at 30 seconds
-    setTimeout(() => { if (recording.current) stopListening(); }, 30000);
+      setStage('listening');
+      setShowSheet(true);
+      setTranscript('');
+      setParsed(null);
+      setSaved(false);
+
+      // Auto-stop at 30 seconds
+      setTimeout(() => { if (recording.current) stopListening(); }, 30000);
+    } catch (e) {
+      console.warn('Hey Rex start error:', e);
+      Alert.alert('Hey Rex', "Couldn't start recording. Check mic permissions in Settings.");
+    }
   }
 
   async function stopListening() {
@@ -93,13 +101,23 @@ export default function HeyRex() {
       await recording.current.stopAndUnloadAsync();
       const uri = recording.current.getURI();
       recording.current = null;
+
+      // Always restore audio mode so the rest of the app works normally
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: false,
+      });
+
       if (!uri) { setStage('idle'); return; }
 
-      // ── Step 1: Transcribe ─────────────────────────────────────────────────
+      // ── Step 1: Transcribe via Whisper ─────────────────────────────────────
       let voiceText = '';
       if (OPENAI_KEY) {
+        // Fetch the file as a blob — more reliable than object literal on both
+        // iOS (file://) and Android (content://) URIs
+        const audioBlob = await fetch(uri).then(r => r.blob());
         const form = new FormData();
-        form.append('file', { uri, type: 'audio/m4a', name: 'intake.m4a' } as any);
+        form.append('file', audioBlob, 'intake.m4a');
         form.append('model', 'whisper-1');
         const wr = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
@@ -109,8 +127,7 @@ export default function HeyRex() {
         const wj = await wr.json();
         voiceText = wj.text ?? '';
       } else {
-        // Fallback: no Whisper key — ask for manual text
-        voiceText = '[Voice transcript unavailable — add EXPO_PUBLIC_OPENAI_KEY to .env]';
+        voiceText = '[No OPENAI_KEY — add EXPO_PUBLIC_OPENAI_KEY to .env for transcription]';
       }
 
       setTranscript(voiceText);
