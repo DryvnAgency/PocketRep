@@ -8,27 +8,34 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 
+// Supabase requires an email — we derive one from the username transparently
+function usernameToEmail(username: string) {
+  return `${username.trim().toLowerCase()}@pocketrep.app`;
+}
+
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
-    if (!email || !password) {
+    if (!username || !password) {
       Alert.alert('Fill in both fields');
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: usernameToEmail(username),
+      password,
+    });
     setLoading(false);
-    if (error) Alert.alert('Login failed', error.message);
+    if (error) Alert.alert('Sign in failed', 'Username or password is incorrect.');
   }
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-        {/* Logo mark */}
         <View style={s.logoWrap}>
           <View style={s.logoMark}>
             <Text style={s.logoMarkText}>P</Text>
@@ -40,16 +47,16 @@ export default function LoginScreen() {
         <Text style={s.sub}>Sign in to your book.</Text>
 
         <View style={s.form}>
-          <Text style={s.label}>Email</Text>
+          <Text style={s.label}>Username</Text>
           <TextInput
             style={s.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@email.com"
+            value={username}
+            onChangeText={setUsername}
+            placeholder="Your username"
             placeholderTextColor={colors.grey}
             autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
+            autoCorrect={false}
+            autoComplete="username"
           />
 
           <Text style={s.label}>Password</Text>
