@@ -128,5 +128,9 @@ create table if not exists rex_memory (
 );
 
 alter table rex_memory enable row level security;
+
+-- ── HEY REX: follow-up date on contacts ──────────────────────────────────────
+-- Run this if you already applied the initial schema:
+alter table contacts add column if not exists follow_up_date date;
 create policy "Users manage own rex_memory"
   on rex_memory for all using (auth.uid() = user_id);

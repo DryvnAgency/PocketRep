@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '@/constants/theme';
+import HeyRex from '@/components/HeyRex';
 
 function TabIcon({ icon, label, focused }: { icon: string; label: string; focused: boolean }) {
   return (
@@ -13,6 +14,8 @@ function TabIcon({ icon, label, focused }: { icon: string; label: string; focuse
 
 export default function TabLayout() {
   return (
+    <View style={{ flex: 1 }}>
+    <HeyRex />
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -51,6 +54,7 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </View>
   );
 }
 

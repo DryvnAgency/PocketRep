@@ -37,6 +37,7 @@ export interface Contact {
   lng: number | null;
   rapport_notes: string | null;
   rapport_image_url: string | null;
+  follow_up_date: string | null;
   created_at: string;
   updated_at: string;
 }
