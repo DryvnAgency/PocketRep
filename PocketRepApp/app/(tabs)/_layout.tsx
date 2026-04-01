@@ -31,13 +31,25 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon icon="🔥" label="Heat Sheet" focused={focused} />,
+            tabBarIcon: ({ focused }) => <TabIcon icon="🔥" label="Heat" focused={focused} />,
           }}
         />
         <Tabs.Screen
           name="contacts"
           options={{
             tabBarIcon: ({ focused }) => <TabIcon icon="👥" label="Book" focused={focused} />,
+          }}
+        />
+        <Tabs.Screen
+          name="deals"
+          options={{
+            tabBarIcon: ({ focused }) => <TabIcon icon="💰" label="Deals" focused={focused} />,
+          }}
+        />
+        <Tabs.Screen
+          name="sequences"
+          options={{
+            tabBarIcon: ({ focused }) => <TabIcon icon="📋" label="Sequences" focused={focused} />,
           }}
         />
         <Tabs.Screen
@@ -60,9 +72,9 @@ export default function TabLayout() {
 }
 
 const s = StyleSheet.create({
-  tabIcon: { alignItems: 'center', gap: 3, paddingTop: 6, opacity: 0.45 },
+  tabIcon: { alignItems: 'center', gap: 2, paddingTop: 5, opacity: 0.45 },
   tabIconActive: { opacity: 1 },
-  tabEmoji: { fontSize: 20 },
-  tabLabel: { fontSize: 10, color: colors.grey2, fontWeight: '500' },
+  tabEmoji: { fontSize: 18 },
+  tabLabel: { fontSize: 9, color: colors.grey2, fontWeight: '500' },
   tabLabelActive: { color: colors.gold, fontWeight: '700' },
 });

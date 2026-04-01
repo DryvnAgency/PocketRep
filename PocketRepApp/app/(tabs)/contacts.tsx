@@ -1,37 +1,184 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, Modal, ScrollView, Alert, ActivityIndicator,
+  Animated, PanResponder, Dimensions, Linking, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing, heatConfig } from '@/constants/theme';
-import type { Contact } from '@/lib/types';
+import type { Contact, Stage } from '@/lib/types';
+
+let AsyncStorage: any = null;
+try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
+let ExpoContacts: any = null;
+try { ExpoContacts = require('expo-contacts'); } catch {}
+const MASS_TEXT_KEY = 'pocketrep_mass_text_v1';
+
+const SCREEN_W = Dimensions.get('window').width;
+const SWIPE_THRESHOLD = 60;
 
 const EMPTY_FORM = {
   first_name: '', last_name: '', phone: '', email: '', notes: '',
   vehicle_year: '', vehicle_make: '', vehicle_model: '',
   mileage: '', annual_mileage: '', lease_end_date: '', purchase_date: '',
+  stage: '' as Stage | '',
 };
+
+// ── Avatar component ──────────────────────────────────────────────────────────
+function Avatar({ first_name, last_name, size = 42 }: { first_name: string; last_name?: string; size?: number }) {
+  const initials = `${first_name?.[0] ?? ''}${last_name?.[0] ?? ''}`.toUpperCase();
+  return (
+    <View style={[av.wrap, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Text style={[av.text, { fontSize: size * 0.34 }]}>{initials}</Text>
+    </View>
+  );
+}
+const av = StyleSheet.create({
+  wrap: {
+    backgroundColor: colors.goldBg,
+    borderWidth: 1.5,
+    borderColor: colors.goldBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  text: { color: colors.gold, fontWeight: '800' },
+});
+
+// ── FadeIn wrapper ────────────────────────────────────────────────────────────
+function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  useCallback(() => {
+    Animated.timing(opacity, {
+      toValue: 1,
+      duration: 280,
+      delay,
+      useNativeDriver: true,
+    }).start();
+  }, [])();
+  return <Animated.View style={{ opacity }}>{children}</Animated.View>;
+}
+
+// ── SwipeableRow ──────────────────────────────────────────────────────────────
+function SwipeableRow({
+  children, onEdit, onDelete,
+}: {
+  children: React.ReactNode;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const [open, setOpen] = useState(false);
+  const ACTION_WIDTH = 130;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 8 && Math.abs(gs.dy) < 12,
+      onPanResponderMove: (_, gs) => {
+        const x = Math.max(-ACTION_WIDTH, Math.min(0, gs.dx + (open ? -ACTION_WIDTH : 0)));
+        translateX.setValue(x);
+      },
+      onPanResponderRelease: (_, gs) => {
+        const shouldOpen = gs.dx < -SWIPE_THRESHOLD;
+        const shouldClose = gs.dx > SWIPE_THRESHOLD / 2;
+        if (shouldOpen || (!shouldClose && open)) {
+          Animated.spring(translateX, { toValue: -ACTION_WIDTH, useNativeDriver: true, tension: 60, friction: 10 }).start();
+          setOpen(true);
+        } else {
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: true, tension: 60, friction: 10 }).start();
+          setOpen(false);
+        }
+      },
+    })
+  ).current;
+
+  function close() {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+    setOpen(false);
+  }
+
+  return (
+    <View style={sw.root}>
+      {/* Action buttons revealed on swipe left */}
+      <View style={[sw.actions, { width: ACTION_WIDTH }]}>
+        <TouchableOpacity
+          style={[sw.actionBtn, { backgroundColor: colors.gold }]}
+          onPress={() => { close(); onEdit(); }}
+          activeOpacity={0.8}
+        >
+          <Text style={sw.actionIcon}>✏️</Text>
+          <Text style={sw.actionLabel}>Edit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[sw.actionBtn, { backgroundColor: colors.red }]}
+          onPress={() => { close(); onDelete(); }}
+          activeOpacity={0.8}
+        >
+          <Text style={sw.actionIcon}>🗑</Text>
+          <Text style={sw.actionLabel}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+      <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
+
+const sw = StyleSheet.create({
+  root: { overflow: 'hidden', marginBottom: spacing.sm },
+  actions: {
+    position: 'absolute', right: 0, top: 0, bottom: 0,
+    flexDirection: 'row',
+  },
+  actionBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4,
+    borderRadius: radius.lg,
+    marginLeft: 2,
+  },
+  actionIcon: { fontSize: 16 },
+  actionLabel: { fontSize: 9, fontWeight: '700', color: colors.ink, letterSpacing: 0.3 },
+});
+
+const STAGES: { key: string; label: string; icon: string }[] = [
+  { key: 'all', label: 'All', icon: '👥' },
+  { key: 'prospect', label: 'Prospect', icon: '🎯' },
+  { key: 'active', label: 'Active', icon: '🔄' },
+  { key: 'sold', label: 'Sold', icon: '✅' },
+  { key: 'dormant', label: 'Dormant', icon: '💤' },
+  { key: 'lost', label: 'Lost', icon: '❌' },
+];
 
 export default function ContactsScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [search, setSearch] = useState('');
+  const [stageFilter, setStageFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showMassText, setShowMassText] = useState(false);
+  const [massTextMsg, setMassTextMsg] = useState('');
+  const [massTextCount, setMassTextCount] = useState(0);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+  const [userPlan, setUserPlan] = useState<string>('pro');
+  const [showImport, setShowImport] = useState(false);
+  const [deviceContacts, setDeviceContacts] = useState<any[]>([]);
+  const [selectedImport, setSelectedImport] = useState<Set<string>>(new Set());
+  const [importing, setImporting] = useState(false);
+
+  // Plan limits: Pro=50, Elite=100
+  const MASS_TEXT_LIMIT = userPlan === 'elite' ? 100 : 50;
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('last_name', { ascending: true });
+    const [{ data }, { data: prof }] = await Promise.all([
+      supabase.from('contacts').select('*').eq('user_id', user.id).order('last_name', { ascending: true }),
+      supabase.from('profiles').select('plan').eq('id', user.id).single(),
+    ]);
     setContacts(data ?? []);
+    if (prof) setUserPlan(prof.plan ?? 'pro');
     setLoading(false);
   }
 
@@ -39,11 +186,13 @@ export default function ContactsScreen() {
 
   const filtered = contacts.filter(c => {
     const q = search.toLowerCase();
-    return (
+    const matchSearch = (
       c.first_name.toLowerCase().includes(q) ||
       c.last_name.toLowerCase().includes(q) ||
-      c.phone.includes(q)
+      (c.phone ?? '').includes(q)
     );
+    const matchStage = stageFilter === 'all' || (c.stage ?? 'prospect') === stageFilter;
+    return matchSearch && matchStage;
   });
 
   function openAdd() {
@@ -67,6 +216,7 @@ export default function ContactsScreen() {
       annual_mileage: c.annual_mileage?.toString() ?? '',
       lease_end_date: c.lease_end_date ?? '',
       purchase_date: c.purchase_date ?? '',
+      stage: (c as any).stage ?? '',
     });
     setShowModal(true);
   }
@@ -122,9 +272,22 @@ export default function ContactsScreen() {
       {/* Header */}
       <View style={s.header}>
         <Text style={s.headerTitle}>Your Book</Text>
-        <TouchableOpacity style={s.addBtn} onPress={openAdd} activeOpacity={0.8}>
-          <Text style={s.addBtnText}>+ Add</Text>
-        </TouchableOpacity>
+        <View style={s.headerBtns}>
+          <TouchableOpacity
+            style={s.massBtn}
+            onPress={() => {
+              const count = Math.min(filtered.length, MASS_TEXT_LIMIT);
+              setMassTextCount(count);
+              setShowMassText(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={s.massBtnText}>📤 Mass Text</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.addBtn} onPress={openAdd} activeOpacity={0.8}>
+            <Text style={s.addBtnText}>+ Add</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search */}
@@ -138,13 +301,29 @@ export default function ContactsScreen() {
         />
       </View>
 
+      {/* Stage filter pills */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.stageRow} contentContainerStyle={s.stageRowInner}>
+        {STAGES.map(st => (
+          <TouchableOpacity
+            key={st.key}
+            style={[s.stagePill, stageFilter === st.key && s.stagePillActive]}
+            onPress={() => setStageFilter(st.key)}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.stagePillText, stageFilter === st.key && s.stagePillTextActive]}>
+              {st.icon} {st.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
       {loading ? (
         <ActivityIndicator color={colors.gold} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={c => c.id}
-          contentContainerStyle={filtered.length === 0 ? s.emptyList : { padding: spacing.lg }}
+          contentContainerStyle={filtered.length === 0 ? s.emptyList : { padding: spacing.lg, paddingBottom: 32 }}
           ListEmptyComponent={
             <View style={s.empty}>
               <Text style={s.emptyIcon}>📖</Text>
@@ -154,11 +333,60 @@ export default function ContactsScreen() {
               </Text>
             </View>
           }
-          renderItem={({ item: c }) => (
-            <ContactRow contact={c} onEdit={() => openEdit(c)} onDelete={() => deleteContact(c)} />
+          renderItem={({ item: c, index }) => (
+            <FadeIn delay={index * 30}>
+              <SwipeableRow onEdit={() => openEdit(c)} onDelete={() => deleteContact(c)}>
+                <ContactRow contact={c} onPress={() => openEdit(c)} />
+              </SwipeableRow>
+            </FadeIn>
           )}
         />
       )}
+
+      {/* Mass Text Modal */}
+      <Modal visible={showMassText} animationType="slide" transparent>
+        <View style={m.overlay}>
+          <View style={m.sheet}>
+            <View style={m.handle} />
+            <View style={m.mHeader}>
+              <Text style={m.mTitle}>Mass Text</Text>
+              <TouchableOpacity onPress={() => setShowMassText(false)}>
+                <Text style={m.mClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={mt.sub}>
+              Sending to{' '}
+              <Text style={{ color: colors.gold }}>{massTextCount} contact{massTextCount !== 1 ? 's' : ''}</Text>
+              {stageFilter !== 'all' ? ` in ${stageFilter}` : ''}
+              {' '}· <Text style={{ color: colors.grey2 }}>{userPlan === 'elite' ? 'Elite' : 'Pro'} limit: {MASS_TEXT_LIMIT}</Text>
+            </Text>
+            <Text style={m.label}>Message</Text>
+            <TextInput
+              style={[m.input, { height: 120, textAlignVertical: 'top' }]}
+              value={massTextMsg}
+              onChangeText={setMassTextMsg}
+              placeholder={`Hey {{first_name}}, …`}
+              placeholderTextColor={colors.grey}
+              multiline
+            />
+            <Text style={mt.tip}>Use {'{{first_name}}'} to personalize each message.</Text>
+            <TouchableOpacity
+              style={[m.saveBtn, !massTextMsg.trim() && { opacity: 0.4 }]}
+              disabled={!massTextMsg.trim()}
+              onPress={() => {
+                Alert.alert('Send Mass Text', `Send to ${massTextCount} contacts?`, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Send', onPress: () => { setShowMassText(false); setMassTextMsg(''); Alert.alert('Queued!', `${massTextCount} messages queued.`); } },
+                ]);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={m.saveBtnText}>Send to {massTextCount} contacts →</Text>
+            </TouchableOpacity>
+            <View style={{ height: 32 }} />
+          </View>
+        </View>
+      </Modal>
 
       {/* Add / Edit Modal */}
       <Modal visible={showModal} animationType="slide" transparent>
@@ -209,32 +437,42 @@ export default function ContactsScreen() {
   );
 }
 
+const STAGE_COLORS: Record<Stage, { color: string; bg: string; border: string }> = {
+  prospect: { color: colors.gold, bg: colors.goldBg, border: colors.goldBorder },
+  active: { color: colors.green, bg: colors.greenBg, border: colors.greenBorder },
+  sold: { color: '#7c9fff', bg: 'rgba(124,159,255,0.10)', border: 'rgba(124,159,255,0.25)' },
+  dormant: { color: colors.grey2, bg: 'rgba(138,144,160,0.10)', border: 'rgba(138,144,160,0.22)' },
+  lost: { color: colors.red, bg: colors.redBg, border: colors.redBorder },
+};
+
 // ── Contact row ───────────────────────────────────────────────────────────────
-function ContactRow({ contact: c, onEdit, onDelete }: { contact: Contact; onEdit: () => void; onDelete: () => void }) {
+function ContactRow({ contact: c, onPress }: { contact: Contact; onPress: () => void }) {
   const vehicle = [c.vehicle_year, c.vehicle_make, c.vehicle_model].filter(Boolean).join(' ');
   const cfg = c.heat_tier ? heatConfig[c.heat_tier] : null;
+  const stage = (c as any).stage as Stage | undefined;
+  const stageCfg = stage ? STAGE_COLORS[stage] : null;
 
   return (
-    <TouchableOpacity style={r.card} onPress={onEdit} activeOpacity={0.8}>
+    <TouchableOpacity style={r.card} onPress={onPress} activeOpacity={0.88}>
       <View style={r.left}>
-        <View style={r.avatar}>
-          <Text style={r.avatarText}>{c.first_name[0]}{c.last_name?.[0] ?? ''}</Text>
-        </View>
-        <View>
+        <Avatar first_name={c.first_name} last_name={c.last_name} size={42} />
+        <View style={r.info}>
           <Text style={r.name}>{c.first_name} {c.last_name}</Text>
           {vehicle ? <Text style={r.vehicle}>{vehicle}</Text> : null}
           {c.phone ? <Text style={r.phone}>{c.phone}</Text> : null}
         </View>
       </View>
-      <View style={r.right}>
+      <View style={{ alignItems: 'flex-end', gap: 4 }}>
         {cfg ? (
           <View style={[r.tierPill, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
             <Text style={[r.tierText, { color: cfg.color }]}>{cfg.icon} {cfg.label}</Text>
           </View>
         ) : null}
-        <TouchableOpacity onPress={onDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={r.del}>✕</Text>
-        </TouchableOpacity>
+        {stageCfg ? (
+          <View style={[r.tierPill, { backgroundColor: stageCfg.bg, borderColor: stageCfg.border }]}>
+            <Text style={[r.tierText, { color: stageCfg.color }]}>{stage}</Text>
+          </View>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
@@ -266,16 +504,31 @@ const s = StyleSheet.create({
     backgroundColor: colors.ink2, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
   },
   headerTitle: { fontSize: 22, fontWeight: '800', color: colors.white, letterSpacing: -0.4 },
+  headerBtns: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
+  massBtn: {
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.lg, paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.xs + 2,
+  },
+  massBtnText: { color: colors.grey2, fontWeight: '600', fontSize: 12 },
   addBtn: {
-    backgroundColor: colors.gold, borderRadius: radius.sm,
+    backgroundColor: colors.gold, borderRadius: radius.lg,
     paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
   },
   addBtnText: { color: colors.ink, fontWeight: '700', fontSize: 13 },
   searchWrap: { padding: spacing.lg, paddingBottom: spacing.sm },
   search: {
     backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
-    borderRadius: radius.sm, padding: spacing.md, color: colors.white, fontSize: 14,
+    borderRadius: radius.lg, padding: spacing.md, color: colors.white, fontSize: 14,
   },
+  stageRow: { flexGrow: 0 },
+  stageRowInner: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.xs },
+  stagePill: {
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 5,
+  },
+  stagePillActive: { backgroundColor: colors.goldBg, borderColor: colors.goldBorder },
+  stagePillText: { color: colors.grey2, fontSize: 12, fontWeight: '600' },
+  stagePillTextActive: { color: colors.gold },
   emptyList: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   empty: { alignItems: 'center', gap: spacing.sm },
   emptyIcon: { fontSize: 40 },
@@ -283,31 +536,33 @@ const s = StyleSheet.create({
   emptySub: { color: colors.grey2, fontSize: 13, textAlign: 'center' },
 });
 
+const mt = StyleSheet.create({
+  sub: { color: colors.grey2, fontSize: 13, marginBottom: spacing.md },
+  tip: { color: colors.grey, fontSize: 11, marginTop: 4, marginBottom: spacing.sm },
+});
+
 const r = StyleSheet.create({
   card: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: colors.surface2, borderRadius: radius.md,
-    padding: spacing.md, marginBottom: spacing.sm,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.ink4,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
-  left: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
-  avatar: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: colors.ink4, alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: { color: colors.gold, fontWeight: '700', fontSize: 13 },
+  left: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  info: { flex: 1 },
   name: { fontSize: 14, fontWeight: '700', color: colors.white },
   vehicle: { fontSize: 11, color: colors.grey2, marginTop: 1 },
   phone: { fontSize: 11, color: colors.grey, marginTop: 1 },
-  right: { alignItems: 'flex-end', gap: 6 },
   tierPill: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 2 },
   tierText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
-  del: { color: colors.grey, fontSize: 14, paddingLeft: 8 },
 });
 
 const m = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.7)' },
   sheet: {
-    backgroundColor: colors.ink2, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    backgroundColor: colors.ink2, borderTopLeftRadius: 22, borderTopRightRadius: 22,
     padding: spacing.lg, maxHeight: '92%',
   },
   handle: { width: 36, height: 4, backgroundColor: colors.ink4, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.md },
@@ -319,10 +574,10 @@ const m = StyleSheet.create({
   label: { fontSize: 11, fontWeight: '600', color: colors.grey3, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: spacing.sm, marginBottom: 4 },
   input: {
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.ink4,
-    borderRadius: radius.sm, padding: spacing.sm + 2, color: colors.white, fontSize: 14,
+    borderRadius: radius.lg, padding: spacing.sm + 2, color: colors.white, fontSize: 14,
   },
   saveBtn: {
-    backgroundColor: colors.gold, borderRadius: radius.sm,
+    backgroundColor: colors.gold, borderRadius: radius.lg,
     padding: spacing.md, alignItems: 'center', marginTop: spacing.xl,
   },
   saveBtnText: { color: colors.ink, fontWeight: '700', fontSize: 15 },

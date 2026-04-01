@@ -107,7 +107,9 @@ export default function MoreScreen() {
     setDigestLoading(false);
   }
 
+  // Treat any non-elite as 'pro'
   const isElite = profile?.plan === 'elite';
+  const planLabel = isElite ? 'Elite' : 'Pro';
 
   return (
     <ScrollView style={s.root} contentContainerStyle={s.content}>
@@ -125,7 +127,7 @@ export default function MoreScreen() {
           <Text style={s.profileName}>{profile?.full_name || 'Your Name'}</Text>
           <Text style={s.profileEmail}>{profile?.email}</Text>
           <View style={s.planBadge}>
-            <Text style={s.planBadgeText}>{(profile?.plan ?? 'pro').toUpperCase()} PLAN</Text>
+            <Text style={s.planBadgeText}>{planLabel.toUpperCase()} PLAN</Text>
           </View>
         </View>
       </View>
