@@ -442,7 +442,7 @@ body.modal-open{overflow:hidden}
     <div class="trial-pill">✦ 7-Day Free Trial — Card Required, Cancel Anytime</div>
     <h1>The Assistant You <span class="gold">Talk To.</span><br><span class="dim">The Closer That Never Sleeps.</span></h1>
     <p class="hero-sub">
-      Stop losing deals in the parking lot. PocketRep captures every detail from your voice, predicts who's ready to buy, and builds a book of business that stays with you — <b>not the dealership.</b>
+      Stop losing deals in the parking lot. PocketRep captures every detail from your voice, predicts who's ready to buy, and builds a book of business that moves with your career — deal after deal, store after store.
     </p>
     <div class="hero-cta-wrap">
       <a href="#signup" onclick="scrollToForm();return false;" class="btn-gold">Start Your Free 7-Day Trial →</a>
@@ -591,9 +591,12 @@ body.modal-open{overflow:hidden}
   .elite-table td:first-child{color:var(--gold2);font-weight:700;font-size:0.85rem;white-space:nowrap;width:38%}
   .elite-table td:last-child{color:var(--grey3);font-size:0.83rem;line-height:1.5}
   @media(max-width:600px){
-    .elite-table td:first-child{width:auto;display:block;margin-bottom:0.2rem}
-    .elite-table td:last-child{display:block;padding-top:0}
-    .elite-table td{padding:0.65rem 1rem}
+    .elite-table thead{display:none}
+    .elite-table tr{display:block;padding:0.85rem 1rem;border-bottom:1px solid rgba(255,255,255,0.06)}
+    .elite-table tr:last-child{border-bottom:none}
+    .elite-table td{display:block;padding:0;border:none;width:100%}
+    .elite-table td:first-child{color:var(--gold2);font-weight:700;font-size:0.85rem;margin-bottom:0.3rem;white-space:normal}
+    .elite-table td:last-child{color:var(--grey3);font-size:0.82rem;line-height:1.55}
   }
   </style>
   <div class="elite-edge-section">
@@ -631,7 +634,7 @@ body.modal-open{overflow:hidden}
       will-change:transform;
     }
     .carousel-slide{
-      min-width:100%;padding:0 0.25rem;
+      min-width:84%;padding:0 0.4rem;padding-top:14px;flex-shrink:0;
     }
     .carousel-plan{
       background:var(--ink2);border:1px solid rgba(255,255,255,0.07);
@@ -668,7 +671,7 @@ body.modal-open{overflow:hidden}
     @media(min-width:780px){
       .carousel-track-outer{overflow:visible}
       .carousel-track{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem;transform:none!important}
-      .carousel-slide{min-width:unset;padding:0}
+      .carousel-slide{min-width:unset;padding:0;padding-top:14px;}
       .carousel-arrows,.carousel-dots,.carousel-label{display:none}
     }
     </style>
@@ -1082,39 +1085,6 @@ var STRIPE_LINKS = {
   elite: 'https://buy.stripe.com/14A8wQdUv3gccMJ2oicbC03'
 };
 
-// ── COUNTDOWN ──
-function getDeadline(){return new Date(Date.UTC(2026,4,1,4,59,59))}
-function pad(n){return String(Math.max(0,n)).padStart(2,'0')}
-function tick(){
-  var diff=getDeadline().getTime()-Date.now();
-  if(diff<=0){['cd-d','cd-h','cd-m','cd-s'].forEach(function(id){document.getElementById(id).textContent='00'});return}
-  var ts=Math.floor(diff/1000),s=ts%60,tm=Math.floor(ts/60),m=tm%60,th=Math.floor(tm/60),h=th%24,d=Math.floor(th/24);
-  document.getElementById('cd-d').textContent=pad(d);
-  document.getElementById('cd-h').textContent=pad(h);
-  document.getElementById('cd-m').textContent=pad(m);
-  document.getElementById('cd-s').textContent=pad(s);
-}
-tick();setInterval(tick,1000);
-
-// ── TABS ──
-function switchTab(id){
-  document.querySelectorAll('.tool-tab').forEach(function(t){t.classList.remove('active')});
-  document.querySelectorAll('.tool-panel').forEach(function(p){p.classList.remove('active')});
-  document.getElementById('tab-'+id).classList.add('active');
-  document.getElementById('panel-'+id).classList.add('active');
-}
-
-// ── OBJECTIONS ──
-function pickObj(btn){
-  document.querySelectorAll('.obj-btn').forEach(function(b){b.classList.remove('active')});
-  btn.classList.add('active');
-  var id=btn.getAttribute('data-id');
-  document.getElementById('rp-empty').style.display='none';
-  document.querySelectorAll('.r-card').forEach(function(c){c.classList.remove('show')});
-  var card=document.getElementById('r-'+id);
-  if(card)card.classList.add('show');
-}
-
 // ── FAQ ──
 function toggleFaq(btn){
   var item=btn.closest('.faq-item');
@@ -1127,8 +1097,9 @@ function toggleFaq(btn){
 var sfPlan='pro';
 function sfSelectPlan(plan){
   sfPlan=plan;
-  ['solo','pro','elite'].forEach(function(p){
-    document.getElementById('sfp-'+p).classList.toggle('active',p===plan);
+  ['pro','elite'].forEach(function(p){
+    var el=document.getElementById('sfp-'+p);
+    if(el) el.classList.toggle('active',p===plan);
   });
 }
 
@@ -1142,19 +1113,19 @@ function scrollToForm(plan){
 }
 
 // ── CAROUSEL ──
-var carouselIndex=1; // start on Pro (middle)
+var carouselIndex=0; // start on Pro
+var SLIDE_W=84; // matches min-width in CSS
 function carouselRender(){
   var track=document.getElementById('carousel-track');
   if(!track)return;
-  // only animate on mobile (carousel-track-outer has overflow:hidden)
   if(window.innerWidth>=780){return}
-  track.style.transform='translateX(-'+carouselIndex+'00%)';
+  track.style.transform='translateX(-'+(carouselIndex*SLIDE_W)+'%)';
   document.querySelectorAll('.carousel-dot').forEach(function(d,i){
     d.classList.toggle('active',i===carouselIndex);
   });
 }
 function carouselMove(dir){
-  carouselIndex=Math.max(0,Math.min(2,carouselIndex+dir));
+  carouselIndex=Math.max(0,Math.min(1,carouselIndex+dir));
   carouselRender();
 }
 function carouselGo(i){carouselIndex=i;carouselRender();}
