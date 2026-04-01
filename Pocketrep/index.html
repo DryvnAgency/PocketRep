@@ -74,6 +74,15 @@ nav{
   transition:background .15s,transform .12s;
 }
 .nav-cta:hover{background:var(--gold2);transform:translateY(-1px)}
+.nav-login{
+  background:transparent;color:var(--grey3);
+  border:1px solid rgba(255,255,255,0.1);padding:0.45rem 1.1rem;border-radius:7px;
+  font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:0.78rem;
+  cursor:pointer;text-decoration:none;white-space:nowrap;
+  transition:border-color .15s,color .15s;
+}
+.nav-login:hover{border-color:rgba(255,255,255,0.25);color:var(--white)}
+.nav-actions{display:flex;align-items:center;gap:0.5rem}
 
 /* ── HERO ── */
 .hero{
@@ -432,7 +441,10 @@ body.modal-open{overflow:hidden}
     <span class="blink"></span>
     <b>7 days free</b> — then from $29/mo. Cancel anytime.
   </div>
-  <a class="nav-cta" href="#" onclick="openModal('pro');return false;">Start Free Trial →</a>
+  <div class="nav-actions">
+    <a class="nav-login" href="https://app.pocketrep.pro">Log In</a>
+    <a class="nav-cta" href="#" onclick="openModal('pro');return false;">Start Free Trial →</a>
+  </div>
 </nav>
 
 <!-- HERO -->
