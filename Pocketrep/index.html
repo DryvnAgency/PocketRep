@@ -628,13 +628,12 @@ body.modal-open{overflow:hidden}
 
     <style>
     .carousel-wrap{position:relative;margin-top:2rem}
-    .carousel-track-outer{overflow:hidden;border-radius:14px}
+    .carousel-track-outer{overflow:visible}
     .carousel-track{
-      display:flex;transition:transform .35s cubic-bezier(.4,0,.2,1);
-      will-change:transform;
+      display:flex;flex-direction:column;gap:1.25rem;
     }
     .carousel-slide{
-      min-width:84%;padding:0 0.4rem;padding-top:14px;flex-shrink:0;
+      width:100%;padding-top:14px;flex-shrink:0;
     }
     .carousel-plan{
       background:var(--ink2);border:1px solid rgba(255,255,255,0.07);
@@ -645,34 +644,10 @@ body.modal-open{overflow:hidden}
       border:1.5px solid var(--gold);
       background:linear-gradient(155deg,rgba(212,168,67,0.07) 0%,var(--ink2) 55%);
     }
-    .carousel-dots{
-      display:flex;justify-content:center;gap:8px;margin-top:1.25rem;
-    }
-    .carousel-dot{
-      width:8px;height:8px;border-radius:50%;
-      background:rgba(255,255,255,0.15);
-      cursor:pointer;transition:background .2s,transform .2s;border:none;padding:0;
-    }
-    .carousel-dot.active{background:var(--gold);transform:scale(1.2)}
-    .carousel-arrows{
-      display:flex;justify-content:center;gap:0.75rem;margin-top:0.85rem;
-    }
-    .carousel-arrow{
-      width:38px;height:38px;border-radius:50%;
-      background:var(--ink3);border:1px solid rgba(255,255,255,0.08);
-      color:var(--grey3);font-size:1rem;
-      display:flex;align-items:center;justify-content:center;
-      cursor:pointer;transition:all .15s;
-    }
-    .carousel-arrow:hover{background:var(--ink4);border-color:var(--gold-border);color:var(--gold)}
-    .carousel-label{
-      text-align:center;font-size:0.72rem;color:var(--grey);margin-top:0.5rem;letter-spacing:0.04em;
-    }
+    .carousel-dots,.carousel-arrows,.carousel-label{display:none}
     @media(min-width:780px){
-      .carousel-track-outer{overflow:visible}
-      .carousel-track{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem;transform:none!important}
-      .carousel-slide{min-width:unset;padding:0;padding-top:14px;}
-      .carousel-arrows,.carousel-dots,.carousel-label{display:none}
+      .carousel-track{flex-direction:row;gap:1.25rem;}
+      .carousel-slide{flex:1;min-width:0;}
     }
     </style>
 
@@ -728,15 +703,6 @@ body.modal-open{overflow:hidden}
         </div>
       </div>
 
-      <div class="carousel-arrows">
-        <button class="carousel-arrow" onclick="carouselMove(-1)">←</button>
-        <button class="carousel-arrow" onclick="carouselMove(1)">→</button>
-      </div>
-      <div class="carousel-dots">
-        <button class="carousel-dot active" onclick="carouselGo(0)"></button>
-        <button class="carousel-dot" onclick="carouselGo(1)"></button>
-      </div>
-      <div class="carousel-label">Swipe to compare plans</div>
     </div>
 
     <p class="p-note"><b>Cancel anytime during your 7-day trial — you won't be charged.</b> After day 7, your founding rate locks in and never increases.</p>
@@ -1113,38 +1079,7 @@ function scrollToForm(plan){
 }
 
 // ── CAROUSEL ──
-var carouselIndex=0;
-var SLIDE_W=84; // matches min-width in CSS
-function carouselRender(){
-  var track=document.getElementById('carousel-track');
-  var outer=document.querySelector('.carousel-track-outer');
-  if(!track||!outer)return;
-  if(window.innerWidth>=780){track.style.transform='';return}
-  // use pixels so translate is relative to container, not the track itself
-  var slideW=outer.offsetWidth*0.84;
-  track.style.transform='translateX(-'+(carouselIndex*slideW)+'px)';
-  document.querySelectorAll('.carousel-dot').forEach(function(d,i){
-    d.classList.toggle('active',i===carouselIndex);
-  });
-}
-function carouselMove(dir){
-  carouselIndex=Math.max(0,Math.min(1,carouselIndex+dir));
-  carouselRender();
-}
-function carouselGo(i){carouselIndex=i;carouselRender();}
-// touch swipe support
-(function(){
-  var el=document.getElementById('carousel-track');
-  if(!el)return;
-  var startX=0;
-  el.addEventListener('touchstart',function(e){startX=e.touches[0].clientX},{passive:true});
-  el.addEventListener('touchend',function(e){
-    var dx=e.changedTouches[0].clientX-startX;
-    if(Math.abs(dx)>40){carouselMove(dx<0?1:-1)}
-  },{passive:true});
-})();
-// init carousel on Pro
-window.addEventListener('DOMContentLoaded',function(){carouselRender()});
+// pricing layout is CSS-only (column on mobile, row on desktop)
 
 // clear errors on input
 ['sf-name','sf-phone','sf-email','sf-industry'].forEach(function(id){
