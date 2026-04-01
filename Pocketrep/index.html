@@ -74,6 +74,15 @@ nav{
   transition:background .15s,transform .12s;
 }
 .nav-cta:hover{background:var(--gold2);transform:translateY(-1px)}
+.nav-login{
+  background:transparent;color:var(--grey3);
+  border:1px solid rgba(255,255,255,0.12);padding:0.45rem 1.1rem;border-radius:7px;
+  font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:0.78rem;
+  cursor:pointer;text-decoration:none;white-space:nowrap;
+  transition:border-color .15s,color .15s;
+}
+.nav-login:hover{border-color:rgba(255,255,255,0.28);color:var(--white)}
+.nav-actions{display:flex;align-items:center;gap:0.5rem}
 
 /* ── HERO ── */
 .hero{
@@ -432,7 +441,10 @@ body.modal-open{overflow:hidden}
     <span class="blink"></span>
     <b>7 days free</b> — then from $29/mo. Cancel anytime.
   </div>
-  <a class="nav-cta" href="#" onclick="openModal('pro');return false;">Start Free Trial →</a>
+  <div class="nav-actions">
+    <a class="nav-login" href="https://app.pocketrep.pro">Log In</a>
+    <a class="nav-cta" href="#" onclick="scrollToForm();return false;">Start Free Trial →</a>
+  </div>
 </nav>
 
 <!-- HERO -->
@@ -442,7 +454,7 @@ body.modal-open{overflow:hidden}
     <div class="trial-pill">✦ 7-Day Free Trial — Card Required, Cancel Anytime</div>
     <h1>The Assistant You <span class="gold">Talk To.</span><br><span class="dim">The Closer That Never Sleeps.</span></h1>
     <p class="hero-sub">
-      Stop losing deals in the parking lot. PocketRep captures every detail from your voice, predicts who's ready to buy, and builds a book of business that stays with you — <b>not the dealership.</b>
+      Stop losing deals in the parking lot. PocketRep captures every detail from your voice, predicts who's ready to buy, and builds a book of business that moves with your career — deal after deal, store after store.
     </p>
     <div class="hero-cta-wrap">
       <a href="#signup" onclick="scrollToForm();return false;" class="btn-gold">Start Your Free 7-Day Trial →</a>
@@ -527,7 +539,7 @@ body.modal-open{overflow:hidden}
         <div class="wf-body">
           <div class="wf-tag">Zero-Entry Logging</div>
           <div class="wf-h">Throw away the legal pad.</div>
-          <p class="wf-p">After every meeting, tap the mic and talk. Rex's AI listens, extracts the dog's name, the trade-in value, and the budget timeline — and files it into your book perfectly. No typing. No forgetting. No losing a deal to a sticky note.</p>
+          <p class="wf-p">After every meeting, tap the mic and talk. Rex's AI listens, extracts the customer's name, the trade-in value, and the budget timeline — and files it into your book perfectly. No typing. No forgetting. No losing a deal to a sticky note.</p>
           <ul class="wf-bullets">
             <li>Works in your truck, in the parking lot, walking to your car</li>
             <li>Captures names, objections, vehicle specs, and follow-up timing</li>
@@ -591,9 +603,12 @@ body.modal-open{overflow:hidden}
   .elite-table td:first-child{color:var(--gold2);font-weight:700;font-size:0.85rem;white-space:nowrap;width:38%}
   .elite-table td:last-child{color:var(--grey3);font-size:0.83rem;line-height:1.5}
   @media(max-width:600px){
-    .elite-table td:first-child{width:auto;display:block;margin-bottom:0.2rem}
-    .elite-table td:last-child{display:block;padding-top:0}
-    .elite-table td{padding:0.65rem 1rem}
+    .elite-table thead{display:none}
+    .elite-table tr{display:block;padding:0.85rem 1rem;border-bottom:1px solid rgba(255,255,255,0.06)}
+    .elite-table tr:last-child{border-bottom:none}
+    .elite-table td{display:block;padding:0;border:none;width:100%}
+    .elite-table td:first-child{color:var(--gold2);font-weight:700;font-size:0.85rem;margin-bottom:0.3rem;white-space:normal}
+    .elite-table td:last-child{color:var(--grey3);font-size:0.82rem;line-height:1.55}
   }
   </style>
   <div class="elite-edge-section">
@@ -625,13 +640,12 @@ body.modal-open{overflow:hidden}
 
     <style>
     .carousel-wrap{position:relative;margin-top:2rem}
-    .carousel-track-outer{overflow:hidden;border-radius:14px}
+    .carousel-track-outer{overflow:visible}
     .carousel-track{
-      display:flex;transition:transform .35s cubic-bezier(.4,0,.2,1);
-      will-change:transform;
+      display:flex;flex-direction:column;gap:1.25rem;
     }
     .carousel-slide{
-      min-width:100%;padding:0 0.25rem;
+      width:100%;padding-top:14px;flex-shrink:0;
     }
     .carousel-plan{
       background:var(--ink2);border:1px solid rgba(255,255,255,0.07);
@@ -642,34 +656,10 @@ body.modal-open{overflow:hidden}
       border:1.5px solid var(--gold);
       background:linear-gradient(155deg,rgba(212,168,67,0.07) 0%,var(--ink2) 55%);
     }
-    .carousel-dots{
-      display:flex;justify-content:center;gap:8px;margin-top:1.25rem;
-    }
-    .carousel-dot{
-      width:8px;height:8px;border-radius:50%;
-      background:rgba(255,255,255,0.15);
-      cursor:pointer;transition:background .2s,transform .2s;border:none;padding:0;
-    }
-    .carousel-dot.active{background:var(--gold);transform:scale(1.2)}
-    .carousel-arrows{
-      display:flex;justify-content:center;gap:0.75rem;margin-top:0.85rem;
-    }
-    .carousel-arrow{
-      width:38px;height:38px;border-radius:50%;
-      background:var(--ink3);border:1px solid rgba(255,255,255,0.08);
-      color:var(--grey3);font-size:1rem;
-      display:flex;align-items:center;justify-content:center;
-      cursor:pointer;transition:all .15s;
-    }
-    .carousel-arrow:hover{background:var(--ink4);border-color:var(--gold-border);color:var(--gold)}
-    .carousel-label{
-      text-align:center;font-size:0.72rem;color:var(--grey);margin-top:0.5rem;letter-spacing:0.04em;
-    }
+    .carousel-dots,.carousel-arrows,.carousel-label{display:none}
     @media(min-width:780px){
-      .carousel-track-outer{overflow:visible}
-      .carousel-track{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem;transform:none!important}
-      .carousel-slide{min-width:unset;padding:0}
-      .carousel-arrows,.carousel-dots,.carousel-label{display:none}
+      .carousel-track{flex-direction:row;gap:1.25rem;}
+      .carousel-slide{flex:1;min-width:0;}
     }
     </style>
 
@@ -725,15 +715,6 @@ body.modal-open{overflow:hidden}
         </div>
       </div>
 
-      <div class="carousel-arrows">
-        <button class="carousel-arrow" onclick="carouselMove(-1)">←</button>
-        <button class="carousel-arrow" onclick="carouselMove(1)">→</button>
-      </div>
-      <div class="carousel-dots">
-        <button class="carousel-dot active" onclick="carouselGo(0)"></button>
-        <button class="carousel-dot" onclick="carouselGo(1)"></button>
-      </div>
-      <div class="carousel-label">Swipe to compare plans</div>
     </div>
 
     <p class="p-note"><b>Cancel anytime during your 7-day trial — you won't be charged.</b> After day 7, your founding rate locks in and never increases.</p>
@@ -1080,39 +1061,6 @@ var STRIPE_LINKS = {
   pro:   'https://buy.stripe.com/5kQeVedUv3gc2857ICcbC02',
   elite: 'https://buy.stripe.com/14A8wQdUv3gccMJ2oicbC03'
 };
-
-// ── COUNTDOWN ──
-function getDeadline(){return new Date(Date.UTC(2026,4,1,4,59,59))}
-function pad(n){return String(Math.max(0,n)).padStart(2,'0')}
-function tick(){
-  var diff=getDeadline().getTime()-Date.now();
-  if(diff<=0){['cd-d','cd-h','cd-m','cd-s'].forEach(function(id){document.getElementById(id).textContent='00'});return}
-  var ts=Math.floor(diff/1000),s=ts%60,tm=Math.floor(ts/60),m=tm%60,th=Math.floor(tm/60),h=th%24,d=Math.floor(th/24);
-  document.getElementById('cd-d').textContent=pad(d);
-  document.getElementById('cd-h').textContent=pad(h);
-  document.getElementById('cd-m').textContent=pad(m);
-  document.getElementById('cd-s').textContent=pad(s);
-}
-tick();setInterval(tick,1000);
-
-// ── TABS ──
-function switchTab(id){
-  document.querySelectorAll('.tool-tab').forEach(function(t){t.classList.remove('active')});
-  document.querySelectorAll('.tool-panel').forEach(function(p){p.classList.remove('active')});
-  document.getElementById('tab-'+id).classList.add('active');
-  document.getElementById('panel-'+id).classList.add('active');
-}
-
-// ── OBJECTIONS ──
-function pickObj(btn){
-  document.querySelectorAll('.obj-btn').forEach(function(b){b.classList.remove('active')});
-  btn.classList.add('active');
-  var id=btn.getAttribute('data-id');
-  document.getElementById('rp-empty').style.display='none';
-  document.querySelectorAll('.r-card').forEach(function(c){c.classList.remove('show')});
-  var card=document.getElementById('r-'+id);
-  if(card)card.classList.add('show');
-}
 
 // ── FAQ ──
 function toggleFaq(btn){
