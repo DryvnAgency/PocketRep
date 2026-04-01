@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Modal, Pressable, ScrollView,
+  Modal, Pressable, ScrollView, Share,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -70,6 +70,8 @@ export default function RexScreen() {
   const [segment, setSegment] = useState<'chat' | 'rebuttals'>('chat');
   const [rebuttalIndustry, setRebuttalIndustry] = useState('Auto');
   const [expandedRebuttal, setExpandedRebuttal] = useState<string | null>(null);
+  const [aiRebuttals, setAiRebuttals] = useState<Record<string, string>>({});
+  const [aiLoading, setAiLoading] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [messages, setMessages] = useState<RexMessage[]>([]);
   const [memory, setMemory] = useState<RexMemory | null>(null);
@@ -225,6 +227,32 @@ export default function RexScreen() {
 
   const isElite = profile?.plan === 'elite';
 
+  async function fetchAiRebuttal(key: string, objection: string, fallback: string, newAngle = false) {
+    if (!ANTHROPIC_KEY) { setAiRebuttals(prev => ({ ...prev, [key]: fallback })); return; }
+    setAiLoading(key);
+    try {
+      const prompt = newAngle
+        ? `Give me a DIFFERENT fresh angle for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences.\n\nObjection: "${objection}"`
+        : `Give me a sharp, specific rebuttal for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences.\n\nObjection: "${objection}"`;
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': ANTHROPIC_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({ model: REX_MODEL, max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
+      });
+      const json = await res.json();
+      const text = json.content?.[0]?.text ?? fallback;
+      setAiRebuttals(prev => ({ ...prev, [key]: text }));
+    } catch {
+      setAiRebuttals(prev => ({ ...prev, [key]: fallback }));
+    }
+    setAiLoading(null);
+  }
+
   return (
     <KeyboardAvoidingView
       style={s.root}
@@ -285,25 +313,55 @@ export default function RexScreen() {
           </ScrollView>
 
           {/* Objection cards */}
-          {(REBUTTALS[rebuttalIndustry] ?? []).map((item, i) => (
-            <TouchableOpacity
-              key={i}
-              style={[s.rebCard, expandedRebuttal === `${rebuttalIndustry}-${i}` && s.rebCardExpanded]}
-              onPress={() => setExpandedRebuttal(expandedRebuttal === `${rebuttalIndustry}-${i}` ? null : `${rebuttalIndustry}-${i}`)}
-              activeOpacity={0.85}
-            >
-              <View style={s.rebCardHeader}>
-                <Text style={s.objectionText}>"{item.objection}"</Text>
-                <Text style={s.rebChevron}>{expandedRebuttal === `${rebuttalIndustry}-${i}` ? '▲' : '▼'}</Text>
-              </View>
-              {expandedRebuttal === `${rebuttalIndustry}-${i}` ? (
-                <View style={s.rebResponse}>
-                  <Text style={s.rebLabel}>SAY THIS:</Text>
-                  <Text style={s.rebResponseText}>{item.response}</Text>
+          {(REBUTTALS[rebuttalIndustry] ?? []).map((item, i) => {
+            const cardKey = `${rebuttalIndustry}-${i}`;
+            const isExpanded = expandedRebuttal === cardKey;
+            const isLoadingThis = aiLoading === cardKey;
+            const displayText = aiRebuttals[cardKey] ?? item.response;
+            return (
+              <TouchableOpacity
+                key={i}
+                style={[s.rebCard, isExpanded && s.rebCardExpanded]}
+                onPress={() => {
+                  if (isExpanded) { setExpandedRebuttal(null); return; }
+                  setExpandedRebuttal(cardKey);
+                  if (!aiRebuttals[cardKey]) fetchAiRebuttal(cardKey, item.objection, item.response);
+                }}
+                activeOpacity={0.85}
+              >
+                <View style={s.rebCardHeader}>
+                  <Text style={s.objectionText}>"{item.objection}"</Text>
+                  <Text style={s.rebChevron}>{isExpanded ? '▲' : '▼'}</Text>
                 </View>
-              ) : null}
-            </TouchableOpacity>
-          ))}
+                {isExpanded ? (
+                  <View style={s.rebResponse}>
+                    <Text style={s.rebLabel}>SAY THIS:</Text>
+                    {isLoadingThis ? (
+                      <ActivityIndicator color={colors.gold} style={{ marginVertical: 8 }} />
+                    ) : (
+                      <Text style={s.rebResponseText}>{displayText}</Text>
+                    )}
+                    {!isLoadingThis && (
+                      <View style={s.rebActions}>
+                        <TouchableOpacity
+                          style={s.rebActionBtn}
+                          onPress={() => Share.share({ message: displayText })}
+                        >
+                          <Text style={s.rebActionText}>Copy</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={s.rebActionBtn}
+                          onPress={() => fetchAiRebuttal(cardKey, item.objection, item.response, true)}
+                        >
+                          <Text style={s.rebActionText}>New Angle</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       ) : (
         <>
@@ -501,4 +559,10 @@ const s = StyleSheet.create({
   rebResponse: { marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.ink4 },
   rebLabel: { fontSize: 9, fontWeight: '800', color: colors.gold, letterSpacing: 1, marginBottom: 6 },
   rebResponseText: { color: colors.grey2, fontSize: 13, lineHeight: 20 },
+  rebActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  rebActionBtn: {
+    backgroundColor: colors.ink4, borderRadius: radius.full,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+  },
+  rebActionText: { color: colors.gold, fontSize: 11, fontWeight: '700' },
 });

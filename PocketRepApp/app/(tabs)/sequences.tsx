@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Dimensions, Alert, ActivityIndicator, Switch,
+  StyleSheet, Dimensions, Alert, ActivityIndicator, Switch, Modal,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -70,7 +70,7 @@ const TEMPLATES: Sequence[] = [
   },
 ];
 
-type View = 'list' | 'detail' | 'create';
+type ScreenView = 'list' | 'detail' | 'create';
 
 interface MassTextRecord {
   id: string;
@@ -88,7 +88,7 @@ const EMPTY_STEP = (): Omit<SequenceStep, 'id' | 'sequence_id'> => ({
 });
 
 export default function SequencesScreen() {
-  const [view, setView] = useState<View>('list');
+  const [view, setView] = useState<ScreenView>('list');
   const [openSection, setOpenSection] = useState<number | null>(0);
 
   const [mySequences, setMySequences] = useState<Sequence[]>([]);
@@ -639,6 +639,11 @@ const s = StyleSheet.create({
   logoMarkText: { color: colors.ink, fontWeight: '900', fontSize: 16 },
   headerTitle: { fontSize: 22, fontWeight: '800', color: colors.white, letterSpacing: -0.4 },
   backArrow: { color: colors.gold, fontSize: 14, fontWeight: '600' },
+  massTextBtn: {
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: 6,
+  },
+  massTextBtnText: { color: colors.gold, fontSize: 11, fontWeight: '700' },
 
   section: {
     marginHorizontal: spacing.lg,
@@ -775,4 +780,48 @@ const s = StyleSheet.create({
     padding: spacing.md, alignItems: 'center',
   },
   saveBtnText: { color: colors.ink, fontWeight: '700', fontSize: 15 },
+});
+
+const mt = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.72)' },
+  sheet: {
+    backgroundColor: colors.ink2, borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    padding: spacing.lg, paddingBottom: 36, maxHeight: '88%',
+  },
+  handle: { width: 36, height: 4, backgroundColor: colors.ink4, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.md },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  title: { fontSize: 17, fontWeight: '800', color: colors.white },
+  close: { color: colors.grey2, fontSize: 18 },
+  limitRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  limitText: { fontSize: 12, color: colors.grey3, fontWeight: '600' },
+  planBadge: {
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2,
+  },
+  planBadgeText: { color: colors.gold, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
+  input: {
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.lg, padding: spacing.sm + 2, color: colors.white, fontSize: 14,
+    marginBottom: 4,
+  },
+  contactList: { maxHeight: 200, marginBottom: spacing.sm },
+  contactRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    padding: spacing.sm, borderRadius: radius.md, marginBottom: 2,
+  },
+  contactRowSelected: { backgroundColor: colors.goldBg },
+  checkbox: {
+    width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, borderColor: colors.ink4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxChecked: { backgroundColor: colors.gold, borderColor: colors.gold },
+  checkmark: { color: colors.ink, fontSize: 11, fontWeight: '800' },
+  contactName: { fontSize: 13, fontWeight: '600', color: colors.white },
+  contactPhone: { fontSize: 11, color: colors.grey2 },
+  tip: { fontSize: 11, color: colors.grey, marginBottom: spacing.md },
+  sendBtn: {
+    backgroundColor: colors.gold, borderRadius: radius.lg,
+    padding: spacing.md, alignItems: 'center', marginTop: spacing.sm,
+  },
+  sendBtnText: { color: colors.ink, fontWeight: '700', fontSize: 14 },
 });

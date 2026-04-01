@@ -441,6 +441,46 @@ export default function ContactsScreen() {
         </View>
       </Modal>
 
+      {/* Phone Import Modal */}
+      <Modal visible={showImport} animationType="slide">
+        <View style={imp.root}>
+          <View style={imp.header}>
+            <Text style={imp.title}>Import from Phone</Text>
+            <TouchableOpacity onPress={() => setShowImport(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={imp.close}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={imp.sub}>{selectedImport.size} selected · Added as Prospect</Text>
+          <FlatList
+            data={deviceContacts}
+            keyExtractor={dc => dc.id}
+            contentContainerStyle={{ padding: spacing.lg }}
+            renderItem={({ item: dc }) => {
+              const selected = selectedImport.has(dc.id);
+              return (
+                <TouchableOpacity
+                  style={[imp.row, selected && imp.rowSelected]}
+                  onPress={() => setSelectedImport(prev => { const n = new Set(prev); n.has(dc.id) ? n.delete(dc.id) : n.add(dc.id); return n; })}
+                >
+                  <View style={[imp.check, selected && imp.checkSelected]}>
+                    {selected && <Text style={imp.checkMark}>✓</Text>}
+                  </View>
+                  <View>
+                    <Text style={imp.rowName}>{dc.name}</Text>
+                    <Text style={imp.rowPhone}>{dc.phoneNumbers?.[0]?.number ?? 'No phone'}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            }}
+          />
+          <View style={imp.footer}>
+            <TouchableOpacity style={imp.importBtn} onPress={importSelected} disabled={importing}>
+              {importing ? <ActivityIndicator color={colors.ink} /> : <Text style={imp.importBtnText}>Import {selectedImport.size} Contacts</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Add / Edit Modal */}
       <Modal visible={showModal} animationType="slide" transparent>
         <View style={m.overlay}>
@@ -458,6 +498,23 @@ export default function ContactsScreen() {
               <Field label="Last Name" value={form.last_name} onChangeText={v => setForm(f => ({ ...f, last_name: v }))} placeholder="Webb" />
               <Field label="Phone" value={form.phone} onChangeText={v => setForm(f => ({ ...f, phone: v }))} placeholder="555-867-5309" keyboardType="phone-pad" />
               <Field label="Email" value={form.email} onChangeText={v => setForm(f => ({ ...f, email: v }))} placeholder="marcus@email.com" keyboardType="email-address" autoCapitalize="none" />
+
+              <Text style={m.section}>Stage</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={{ flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.sm }}>
+                  {STAGES.filter(st => st.key !== 'all').map(st => (
+                    <TouchableOpacity
+                      key={st.key}
+                      style={[s.stagePill, form.stage === st.key && s.stagePillActive]}
+                      onPress={() => setForm(f => ({ ...f, stage: f.stage === st.key ? '' : st.key as Stage }))}
+                    >
+                      <Text style={[s.stagePillText, form.stage === st.key && s.stagePillTextActive]}>
+                        {st.icon} {st.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
 
               <Text style={m.section}>Vehicle</Text>
               <Field label="Year" value={form.vehicle_year} onChangeText={v => setForm(f => ({ ...f, vehicle_year: v }))} placeholder="2021" keyboardType="numeric" />
@@ -573,6 +630,12 @@ const s = StyleSheet.create({
     backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.lg, padding: spacing.md, color: colors.white, fontSize: 14,
   },
+  importRow: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
+  importBtn: {
+    alignSelf: 'flex-start', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+  },
+  importBtnText: { fontSize: 11, color: colors.grey3, fontWeight: '600' },
   stageRow: { flexGrow: 0 },
   stageRowInner: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.xs },
   stagePill: {
@@ -634,4 +697,30 @@ const m = StyleSheet.create({
     padding: spacing.md, alignItems: 'center', marginTop: spacing.xl,
   },
   saveBtnText: { color: colors.ink, fontWeight: '700', fontSize: 15 },
+});
+
+const imp = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.ink },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg, paddingTop: 56, paddingBottom: spacing.md,
+    backgroundColor: colors.ink2, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  title: { fontSize: 20, fontWeight: '800', color: colors.white },
+  close: { color: colors.grey2, fontSize: 22 },
+  sub: { fontSize: 12, color: colors.grey2, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xs },
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    backgroundColor: colors.surface2, borderRadius: radius.lg,
+    padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.ink4,
+  },
+  rowSelected: { borderColor: colors.goldBorder, backgroundColor: colors.goldBg },
+  rowName: { fontSize: 14, fontWeight: '600', color: colors.white },
+  rowPhone: { fontSize: 11, color: colors.grey2, marginTop: 2 },
+  check: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.ink4, alignItems: 'center', justifyContent: 'center' },
+  checkSelected: { backgroundColor: colors.gold, borderColor: colors.gold },
+  checkMark: { color: colors.ink, fontSize: 12, fontWeight: '800' },
+  footer: { padding: spacing.lg, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)', backgroundColor: colors.ink2 },
+  importBtn: { backgroundColor: colors.gold, borderRadius: radius.lg, padding: spacing.md, alignItems: 'center' },
+  importBtnText: { color: colors.ink, fontWeight: '700', fontSize: 15 },
 });

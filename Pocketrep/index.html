@@ -1126,8 +1126,9 @@ function toggleFaq(btn){
 var sfPlan='pro';
 function sfSelectPlan(plan){
   sfPlan=plan;
-  ['solo','pro','elite'].forEach(function(p){
-    document.getElementById('sfp-'+p).classList.toggle('active',p===plan);
+  ['pro','elite'].forEach(function(p){
+    var el=document.getElementById('sfp-'+p);
+    if(el)el.classList.toggle('active',p===plan);
   });
 }
 
@@ -1141,7 +1142,7 @@ function scrollToForm(plan){
 }
 
 // ── CAROUSEL ──
-var carouselIndex=1; // start on Pro (middle)
+var carouselIndex=0; // start on Pro
 function carouselRender(){
   var track=document.getElementById('carousel-track');
   if(!track)return;
@@ -1153,7 +1154,7 @@ function carouselRender(){
   });
 }
 function carouselMove(dir){
-  carouselIndex=Math.max(0,Math.min(2,carouselIndex+dir));
+  carouselIndex=Math.max(0,Math.min(1,carouselIndex+dir));
   carouselRender();
 }
 function carouselGo(i){carouselIndex=i;carouselRender();}
