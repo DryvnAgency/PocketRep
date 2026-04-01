@@ -28,6 +28,8 @@ export interface Contact {
   mileage: number | null;
   lease_end_date: string | null;
   annual_mileage: number | null;
+  // Stage
+  stage: 'prospect' | 'active' | 'sold' | 'dormant' | 'lost' | null;
   // Heat Sheet
   heat_tier: HeatTier | null;
   heat_score: number | null;
@@ -78,4 +80,39 @@ export interface DigestEntry {
   deals_logged: number;
   heat_sheet_calls: number;
   top_deal_amount: number | null;
+}
+
+export type Stage = 'prospect' | 'active' | 'sold' | 'dormant' | 'lost';
+
+export interface Sequence {
+  id: string;
+  name: string;
+  industry: string;
+  description: string;
+  user_id: string | null;
+  is_template: boolean;
+  is_custom: boolean;
+  created_at: string;
+  sequence_steps: SequenceStep[];
+}
+
+export interface SequenceStep {
+  id: string;
+  sequence_id: string | null;
+  step_number: number;
+  delay_days: number;
+  channel: 'text' | 'call' | 'email';
+  message_template: string;
+  ai_personalize: boolean;
+}
+
+export interface Interaction {
+  id: string;
+  user_id: string;
+  contact_id: string;
+  type: 'call' | 'text' | 'email' | 'visit' | 'note';
+  outcome: string | null;
+  notes: string | null;
+  interaction_date: string;
+  created_at: string;
 }

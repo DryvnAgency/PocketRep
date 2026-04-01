@@ -5,7 +5,7 @@ import {
   Pressable, Alert,
 } from 'react-native';
 import { Audio } from 'expo-av';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 
@@ -49,6 +49,9 @@ export default function HeyRex() {
   const recording = useRef<Audio.Recording | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const router = useRouter();
+  const segments = useSegments();
+  // Hide the orb when already on the Rex tab
+  const onRexTab = segments[segments.length - 1] === 'rex';
 
   useEffect(() => {
     if (stage === 'listening') {
@@ -191,6 +194,7 @@ Return this exact JSON shape:
           'x-api-key': ANTHROPIC_KEY,
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
+          'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
           model: REX_MODEL,
@@ -290,9 +294,11 @@ Return this exact JSON shape:
 
   const orbIcon = stage === 'listening' ? '⏹' : stage === 'processing' ? '…' : stage === 'done' ? '✓' : '🎙';
 
+  if (onRexTab) return null;
+
   return (
     <>
-      {/* Persistent gold mic orb — floats above tab bar */}
+      {/* Persistent gold mic orb — floats above tab bar, left side */}
       <Animated.View style={[s.orbWrap, { transform: [{ scale: pulseAnim }] }]}>
         <TouchableOpacity
           style={[s.orb, { backgroundColor: orbBg }]}
@@ -419,7 +425,7 @@ Return this exact JSON shape:
 
 const s = StyleSheet.create({
   orbWrap: {
-    position: 'absolute', bottom: 90, right: 20, zIndex: 999,
+    position: 'absolute', bottom: 90, left: 20, zIndex: 999,
     alignItems: 'center',
   },
   orb: {
