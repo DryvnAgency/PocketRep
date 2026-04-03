@@ -1,11 +1,14 @@
 export type Plan = 'pro' | 'elite';
 export type HeatTier = 'hot' | 'warm' | 'watch';
 
+export type IndustryKey = 'auto' | 'mortgage' | 'realestate' | 'hvac' | 'staffing' | 'd2d' | 'roofing' | 'fence' | 'insurance' | 'solar' | 'b2b' | 'other';
+
 export interface Profile {
   id: string;
   email: string;
   full_name: string;
   plan: Plan;
+  industry: IndustryKey;
   trial_ends_at: string | null;
   stripe_customer_id: string | null;
   created_at: string;

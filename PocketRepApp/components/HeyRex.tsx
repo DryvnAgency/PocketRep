@@ -2,13 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Animated, Modal, ScrollView, ActivityIndicator,
-  Pressable, Alert,
+  Pressable, Alert, Platform, TextInput,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 import { scheduleContactReminders, requestNotificationPermission, type PersonalEvent } from '@/lib/notifications';
+import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 
 // ── Hey Rex — Voice Intake Engine ────────────────────────────────────────────
 // Workflow:
@@ -53,11 +54,15 @@ interface GeneratedStep {
   message: string;
 }
 
+const isWeb = Platform.OS === 'web';
+
 export default function HeyRex() {
   const [stage, setStage] = useState<Stage>('idle');
   const [transcript, setTranscript] = useState('');
   const [parsed, setParsed] = useState<ParsedIntake | null>(null);
   const [showSheet, setShowSheet] = useState(false);
+  const [webInput, setWebInput] = useState('');
+  const [userIndustry, setUserIndustry] = useState<string>('auto');
   const [saved, setSaved] = useState(false);
   const [generatedSteps, setGeneratedSteps] = useState<GeneratedStep[]>([]);
   const [sequenceExpanded, setSequenceExpanded] = useState(false);
@@ -69,6 +74,15 @@ export default function HeyRex() {
   const segments = useSegments();
   // Hide the orb when already on the Rex tab
   const onRexTab = segments[segments.length - 1] === 'rex';
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase.from('profiles').select('industry').eq('id', user.id).single().then(({ data }) => {
+        if (data?.industry) setUserIndustry(data.industry);
+      });
+    });
+  }, []);
 
   useEffect(() => {
     if (stage === 'listening') {
@@ -185,11 +199,13 @@ export default function HeyRex() {
       }
 
       const today = new Date().toISOString().split('T')[0];
+      const industryLabel = INDUSTRY_CONFIG[userIndustry]?.label ?? 'Sales';
       const systemPrompt = `
-You are Rex, a sales intake AI. The rep just gave you a voice memo after a customer meeting.
+You are Rex, a sales intake AI for a ${industryLabel} rep. The rep just gave you a voice memo after a customer meeting.
 Your job: extract ALL key info and return a JSON object ONLY — no other text, no markdown.
 
 Today's date: ${today}
+Industry: ${industryLabel} — tailor the game_plan and follow-up language to this industry.
 Contacts in their book: ${contactList}
 
 Return this exact JSON shape:
@@ -256,6 +272,67 @@ Return this exact JSON shape:
     }
   }
 
+  // Web fallback: process typed text instead of voice
+  async function processWebInput() {
+    const text = webInput.trim();
+    if (!text) { Alert.alert('Type your notes first'); return; }
+    setStage('processing');
+    setShowSheet(true);
+    setTranscript(text);
+    setParsed(null);
+    setSaved(false);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setStage('idle'); return; }
+
+    const { data: contacts } = await supabase
+      .from('contacts')
+      .select('id,first_name,last_name,notes,phone,vehicle_make,vehicle_model')
+      .eq('user_id', user.id);
+
+    const contactList = (contacts ?? [])
+      .map((c: any) => `${c.first_name} ${c.last_name} (id:${c.id})`)
+      .join(', ') || 'No contacts yet';
+
+    if (!ANTHROPIC_KEY) {
+      setParsed({
+        customer_name: 'Add ANTHROPIC_KEY to activate',
+        contact_id: null, phone: null,
+        interests: text, objections: '',
+        follow_up_in_days: null, follow_up_note: '',
+        updated_notes: text,
+        game_plan: 'Add your Anthropic API key to .env to get Rex\'s full game plan.',
+        vehicle_interest: null, lease_end_date: null,
+        personal_events: [], buying_urgency: 'medium',
+      });
+      setStage('done');
+      return;
+    }
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const industryLabel = INDUSTRY_CONFIG[userIndustry]?.label ?? 'Sales';
+      const systemPrompt = `You are Rex, a sales intake AI for a ${industryLabel} rep.\nYour job: extract ALL key info and return a JSON object ONLY — no other text, no markdown.\n\nToday's date: ${today}\nIndustry: ${industryLabel}\nContacts in their book: ${contactList}\n\nReturn this exact JSON shape:\n{\n  "customer_name": "Full name mentioned",\n  "contact_id": "the id from the contacts list if name matches, or null",\n  "phone": "phone number mentioned or null",\n  "interests": "what they want / are interested in",\n  "objections": "objections or hesitations mentioned",\n  "follow_up_in_days": number or null,\n  "follow_up_note": "brief reminder of what to say/do on follow-up",\n  "updated_notes": "2-4 sentences of clean notes, present tense, no filler",\n  "game_plan": "2-3 sentence game plan — specific angle, what to lead with next call, one risk to avoid",\n  "vehicle_interest": "specific item/product they are interested in, or null",\n  "lease_end_date": "YYYY-MM-DD if a contract/lease end date is mentioned, or null",\n  "personal_events": [{ "type": "baby_due|anniversary|birthday|other", "date": "YYYY-MM-DD" }],\n  "buying_urgency": "low|medium|high based on timeline and intent signals"\n}`;
+
+      const rr = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model: REX_MODEL, max_tokens: 600, system: systemPrompt, messages: [{ role: 'user', content: text }] }),
+      });
+      const rj = await rr.json();
+      const raw = rj.content?.[0]?.text ?? '{}';
+      let intake: ParsedIntake;
+      try { intake = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? '{}'); }
+      catch { intake = { customer_name: 'Unknown', contact_id: null, phone: null, interests: text, objections: '', follow_up_in_days: null, follow_up_note: '', updated_notes: text, game_plan: "Rex couldn't fully parse that.", vehicle_interest: null, lease_end_date: null, personal_events: [], buying_urgency: 'medium' }; }
+      setParsed(intake);
+      setStage('done');
+    } catch (e) {
+      console.warn('Hey Rex web error:', e);
+      setStage('idle');
+      Alert.alert('Hey Rex', 'Something went wrong. Try again.');
+    }
+  }
+
   async function saveToContact() {
     if (!parsed) return;
     const { data: { user } } = await supabase.auth.getUser();
@@ -284,6 +361,8 @@ Return this exact JSON shape:
         last_contact_date: new Date().toISOString().split('T')[0],
         follow_up_date: followUpDate,
         ...(parsed.lease_end_date ? { lease_end_date: parsed.lease_end_date } : {}),
+        personal_events: parsed.personal_events ?? [],
+        buying_urgency: parsed.buying_urgency ?? null,
       }).eq('id', parsed.contact_id);
     } else {
       // Create new contact from voice intake
@@ -297,6 +376,8 @@ Return this exact JSON shape:
         last_contact_date: new Date().toISOString().split('T')[0],
         follow_up_date: followUpDate,
         lease_end_date: parsed.lease_end_date ?? null,
+        personal_events: parsed.personal_events ?? [],
+        buying_urgency: parsed.buying_urgency ?? null,
         stage: 'prospect',
       }).select('id').single();
       savedContactId = newContact?.id ?? null;
@@ -444,17 +525,35 @@ Return format (JSON array):
 
   return (
     <>
-      {/* Persistent gold mic orb — floats above tab bar, left side */}
-      <Animated.View style={[s.orbWrap, { transform: [{ scale: pulseAnim }] }]}>
-        <TouchableOpacity
-          style={[s.orb, { backgroundColor: orbBg }]}
-          onPress={stage === 'idle' ? startListening : stage === 'listening' ? stopListening : () => setShowSheet(true)}
-          activeOpacity={0.85}
-        >
-          <Text style={s.orbIcon}>{orbIcon}</Text>
-        </TouchableOpacity>
-        {stage === 'idle' && <Text style={s.orbLabel}>Hey Rex</Text>}
-      </Animated.View>
+      {/* Web: text input + Process button instead of mic orb */}
+      {isWeb ? (
+        <View style={s.webInputRow}>
+          <TextInput
+            style={s.webInput}
+            value={webInput}
+            onChangeText={setWebInput}
+            placeholder="Type your post-meeting notes here… (name, vehicle, follow-up, etc.)"
+            placeholderTextColor={colors.grey}
+            multiline
+            numberOfLines={2}
+          />
+          <TouchableOpacity style={s.webBtn} onPress={stage === 'idle' || stage === 'done' ? processWebInput : () => setShowSheet(true)} activeOpacity={0.85}>
+            {stage === 'processing' ? <ActivityIndicator color={colors.ink} size="small" /> : <Text style={s.webBtnText}>{stage === 'done' ? 'View →' : 'Process →'}</Text>}
+          </TouchableOpacity>
+        </View>
+      ) : (
+        /* Native: persistent gold mic orb — floats above tab bar, left side */
+        <Animated.View style={[s.orbWrap, { transform: [{ scale: pulseAnim }] }]}>
+          <TouchableOpacity
+            style={[s.orb, { backgroundColor: orbBg }]}
+            onPress={stage === 'idle' ? startListening : stage === 'listening' ? stopListening : () => setShowSheet(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={s.orbIcon}>{orbIcon}</Text>
+          </TouchableOpacity>
+          {stage === 'idle' && <Text style={s.orbLabel}>Hey Rex</Text>}
+        </Animated.View>
+      )}
 
       {/* Bottom sheet */}
       <Modal visible={showSheet} animationType="slide" transparent>
@@ -617,6 +716,23 @@ const s = StyleSheet.create({
   },
   orbIcon: { fontSize: 22 },
   orbLabel: { fontSize: 9, fontWeight: '700', color: colors.gold, letterSpacing: 0.5, marginTop: 4, textTransform: 'uppercase' },
+  // Web text input fallback
+  webInputRow: {
+    flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm,
+    paddingHorizontal: spacing.lg, paddingBottom: spacing.sm,
+    backgroundColor: colors.ink2, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  webInput: {
+    flex: 1, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.sm, padding: spacing.sm, color: colors.white, fontSize: 13,
+    minHeight: 44, maxHeight: 88,
+  },
+  webBtn: {
+    backgroundColor: colors.gold, borderRadius: radius.sm,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2,
+    alignItems: 'center', justifyContent: 'center', minWidth: 80,
+  },
+  webBtnText: { color: colors.ink, fontWeight: '700', fontSize: 13 },
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' },
   sheet: {
     backgroundColor: colors.ink2, borderTopLeftRadius: 22, borderTopRightRadius: 22,

@@ -16,6 +16,24 @@ try { AsyncStorage = require('@react-native-async-storage/async-storage').defaul
 const QUEUE_KEY = 'pocketrep_queue_v2';
 const SENT_KEY = 'pocketrep_sent_v1';
 
+// ── Cross-platform storage (AsyncStorage on native, localStorage on web) ──────
+
+async function storageGet(key: string): Promise<string | null> {
+  if (AsyncStorage) return AsyncStorage.getItem(key);
+  if (typeof localStorage !== 'undefined') return localStorage.getItem(key);
+  return null;
+}
+
+async function storageSet(key: string, value: string): Promise<void> {
+  if (AsyncStorage) return AsyncStorage.setItem(key, value);
+  if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+}
+
+async function storageRemove(key: string): Promise<void> {
+  if (AsyncStorage) return AsyncStorage.removeItem(key);
+  if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
+}
+
 export interface QueueItem {
   sequence_id: string;
   step_number: number;
@@ -55,40 +73,35 @@ function personalizeMessage(template: string, contact: any): string {
 // ── Sent tracking ─────────────────────────────────────────────────────────────
 
 async function loadSentSet(): Promise<Set<string>> {
-  if (!AsyncStorage) return new Set();
   try {
-    const raw = await AsyncStorage.getItem(SENT_KEY);
+    const raw = await storageGet(SENT_KEY);
     return new Set(raw ? JSON.parse(raw) : []);
   } catch { return new Set(); }
 }
 
 export async function markSent(sequenceId: string, stepNumber: number): Promise<void> {
-  if (!AsyncStorage) return;
   try {
     const set = await loadSentSet();
     set.add(`${sequenceId}_step${stepNumber}`);
-    await AsyncStorage.setItem(SENT_KEY, JSON.stringify([...set]));
+    await storageSet(SENT_KEY, JSON.stringify([...set]));
   } catch {}
 }
 
 // ── Queue persistence ─────────────────────────────────────────────────────────
 
 export async function loadQueueState(): Promise<QueueState | null> {
-  if (!AsyncStorage) return null;
   try {
-    const raw = await AsyncStorage.getItem(QUEUE_KEY);
+    const raw = await storageGet(QUEUE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
 }
 
 export async function saveQueueState(state: QueueState): Promise<void> {
-  if (!AsyncStorage) return;
-  try { await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(state)); } catch {}
+  try { await storageSet(QUEUE_KEY, JSON.stringify(state)); } catch {}
 }
 
 export async function clearQueueState(): Promise<void> {
-  if (!AsyncStorage) return;
-  try { await AsyncStorage.removeItem(QUEUE_KEY); } catch {}
+  try { await storageRemove(QUEUE_KEY); } catch {}
 }
 
 // ── Main: generate a fresh queue ─────────────────────────────────────────────

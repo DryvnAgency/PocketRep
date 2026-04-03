@@ -7,6 +7,7 @@ import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 import type { Sequence, SequenceStep } from '@/lib/types';
+import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import {
   generateQueue, loadQueueState, saveQueueState, clearQueueState,
   markSent, type QueueItem,
@@ -21,8 +22,8 @@ const MASS_TEXT_KEY = 'pocketrep_mass_text_v1';
 const { width: screenWidth } = Dimensions.get('window');
 
 const CHANNEL_ICON: Record<string, string> = { text: '💬', call: '📞', email: '📧' };
-const INDUSTRIES = ['auto', 'mortgage', 'realestate', 'insurance', 'solar', 'b2b', 'hvac', 'prospect'];
-const TEMPLATE_FILTERS = ['all', 'auto', 'mortgage', 'realestate', 'hvac', 'prospect'] as const;
+const INDUSTRIES = ['auto', 'mortgage', 'realestate', 'insurance', 'solar', 'b2b', 'hvac', 'staffing', 'd2d', 'roofing', 'fence', 'prospect', 'other'];
+const TEMPLATE_FILTERS = ['all', 'auto', 'mortgage', 'realestate', 'hvac', 'staffing', 'd2d', 'roofing', 'insurance', 'solar', 'prospect'] as const;
 type TemplateFilter = typeof TEMPLATE_FILTERS[number];
 
 const TEMPLATES: Sequence[] = [
@@ -153,6 +154,97 @@ const TEMPLATES: Sequence[] = [
       { id: 't8s8', sequence_id: 'tpl_8', step_number: 8, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, last reach out for a while — I respect your time and I don\'t want to be that person. When you\'re ready, I\'m here. I\'ll make it worth it for you. 🤝', ai_personalize: false },
     ],
   },
+  // ── STAFFING ─────────────────────────────────────────────────────────────
+  {
+    id: 'tpl_9',
+    name: 'Post-Placement Follow-Up',
+    industry: 'staffing',
+    description: 'Keep candidates and clients happy through the first 6 months. Drives retention, referrals, and repeat placements.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't9s1', sequence_id: 'tpl_9', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, congrats on the new role — hope day one was everything you expected! I\'m here if you have any questions getting settled. Reach out anytime.', ai_personalize: false },
+      { id: 't9s2', sequence_id: 'tpl_9', step_number: 2, delay_days: 3, channel: 'call', message_template: 'Quick check-in call with the hiring manager. Ask: How is the new placement settling in? Any gaps or surprises? Make sure both sides are happy early.', ai_personalize: false },
+      { id: 't9s3', sequence_id: 'tpl_9', step_number: 3, delay_days: 7, channel: 'text', message_template: 'Hey {{first_name}}, one week in! How are you feeling about the role? Team good? Anything I can help clarify or smooth out on my end?', ai_personalize: false },
+      { id: 't9s4', sequence_id: 'tpl_9', step_number: 4, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, two weeks in — hope you\'re getting into your groove! If anything feels off about the fit, better to surface it now than later. I\'m in your corner.', ai_personalize: false },
+      { id: 't9s5', sequence_id: 'tpl_9', step_number: 5, delay_days: 30, channel: 'call', message_template: '30-day satisfaction call. Ask: How\'s the role matching expectations? Would you refer a colleague to work with me? Any positions opening up on their team we could help fill?', ai_personalize: false },
+      { id: 't9s6', sequence_id: 'tpl_9', step_number: 6, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, 3 months in — you\'re officially past the honeymoon phase! Hope the role is delivering for you. If you know anyone in your network looking for their next move, I\'d love the intro.', ai_personalize: false },
+      { id: 't9s7', sequence_id: 'tpl_9', step_number: 7, delay_days: 180, channel: 'text', message_template: 'Hey {{first_name}}, 6 months already! How are things going? If you\'re thinking about the next chapter — more money, better title, different culture — let\'s talk before you even start browsing. I find better fits faster.', ai_personalize: false },
+    ],
+  },
+  // ── DOOR-TO-DOOR ─────────────────────────────────────────────────────────
+  {
+    id: 'tpl_10',
+    name: 'Post-Knock Follow-Up',
+    industry: 'd2d',
+    description: 'Keep the conversation alive after the door. Most D2D closes happen on the 2nd or 3rd contact.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't10s1', sequence_id: 'tpl_10', step_number: 1, delay_days: 0, channel: 'text', message_template: 'Hey {{first_name}}, great meeting you today! I\'m [rep] — I stopped by to share something that could genuinely save you money. No pressure. Just reach out when you want that conversation.', ai_personalize: false },
+      { id: 't10s2', sequence_id: 'tpl_10', step_number: 2, delay_days: 2, channel: 'text', message_template: 'Hey {{first_name}}, quick follow-up from Tuesday. I know you were in the middle of your day when I stopped by — totally fine. The offer I mentioned is still on the table. 5 minutes on a call could put money back in your pocket.', ai_personalize: false },
+      { id: 't10s3', sequence_id: 'tpl_10', step_number: 3, delay_days: 5, channel: 'text', message_template: 'Hey {{first_name}}, last thing I\'ll send before I give you space — your neighbors at [nearby address] just moved forward and are thrilled. If you want in on the same deal, I can make it happen this week. Just say the word.', ai_personalize: false },
+      { id: 't10s4', sequence_id: 'tpl_10', step_number: 4, delay_days: 10, channel: 'call', message_template: 'Final follow-up call. Keep it short — "Hey {{first_name}}, just checking if there\'s anything I can answer for you before I close out this area." If no, thank them and move on gracefully.', ai_personalize: false },
+      { id: 't10s5', sequence_id: 'tpl_10', step_number: 5, delay_days: 21, channel: 'text', message_template: 'Hey {{first_name}}, I know I said I\'d give you space and I have — but we just launched a new promotion in your area and I\'d feel bad if I didn\'t let you know. This one has a deadline. Want the details?', ai_personalize: false },
+    ],
+  },
+  // ── ROOFING ──────────────────────────────────────────────────────────────
+  {
+    id: 'tpl_11',
+    name: 'Post-Estimate Follow-Up',
+    industry: 'roofing',
+    description: 'Keep the lead warm after the inspection and estimate. Most roofing closes need 2-3 follow-ups.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't11s1', sequence_id: 'tpl_11', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, great meeting you for the inspection! Your estimate should be in your inbox now. Happy to walk through it on a quick call if anything looks unclear. What questions do you have?', ai_personalize: false },
+      { id: 't11s2', sequence_id: 'tpl_11', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, just following up on the estimate. One thing worth knowing — if you have any storm damage from last year\'s season, your insurance may cover a significant portion of the cost. I can walk you through the claims process. It\'s easier than most people think.', ai_personalize: false },
+      { id: 't11s3', sequence_id: 'tpl_11', step_number: 3, delay_days: 7, channel: 'call', message_template: 'One-week follow-up call. Ask: Did they review the estimate? Any concerns? If insurance is in play, ask if they\'ve contacted their adjuster yet. Offer to be on the call with them.', ai_personalize: false },
+      { id: 't11s4', sequence_id: 'tpl_11', step_number: 4, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, just checking in — storm season is ramping up and our schedule fills fast once the rush starts. If you want to lock in a slot before the backlog hits, this week is the time. Want me to pencil you in?', ai_personalize: false },
+      { id: 't11s5', sequence_id: 'tpl_11', step_number: 5, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, I know it\'s been a few weeks. If you went with another company, I genuinely hope the job went well. If you\'re still deciding or the other quote fell through, I\'m still here and the estimate stands. Just let me know.', ai_personalize: false },
+    ],
+  },
+  {
+    id: 'tpl_12',
+    name: 'Post-Install Retention',
+    industry: 'roofing',
+    description: 'Post-install sequence to drive referrals, reviews, and repeat business for maintenance.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't12s1', sequence_id: 'tpl_12', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, job\'s done! Hope everything looks great from the curb. We clean up after ourselves, but do a quick walk around — if anything looks off, send me a photo and I\'ll take care of it. Thank you for the business!', ai_personalize: false },
+      { id: 't12s2', sequence_id: 'tpl_12', step_number: 2, delay_days: 7, channel: 'text', message_template: 'Hey {{first_name}}, one week post-install check-in. Everything holding up? Any concerns? Also — if the experience was great, a quick Google review goes a long way for a small business like ours. No pressure, just means a lot.', ai_personalize: false },
+      { id: 't12s3', sequence_id: 'tpl_12', step_number: 3, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, one month in on the new roof! Hope it\'s given you peace of mind already. Quick reminder — your warranty docs were emailed to you. Keep them somewhere safe. And if you know any neighbors who\'ve been putting off their roof, I\'d love the intro.', ai_personalize: false },
+      { id: 't12s4', sequence_id: 'tpl_12', step_number: 4, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, just checking in as the seasons change. Roofs can take a beating during the transition — gutters, flashing, and vents are the usual suspects. If you want a quick seasonal inspection (on us), just say the word.', ai_personalize: false },
+      { id: 't12s5', sequence_id: 'tpl_12', step_number: 5, delay_days: 365, channel: 'text', message_template: 'Hey {{first_name}}, one year on your new roof! 🏠 Hope it\'s been leak-free and worry-free. Annual inspection keeps the warranty valid — want me to schedule a quick one? And as always, any referrals are the biggest compliment you can give me.', ai_personalize: false },
+    ],
+  },
+  // ── INSURANCE ────────────────────────────────────────────────────────────
+  {
+    id: 'tpl_13',
+    name: 'New Policy Welcome',
+    industry: 'insurance',
+    description: 'Post-close retention sequence: onboard the client, prep for renewal, drive referrals.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't13s1', sequence_id: 'tpl_13', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, welcome to the policy! Your documents should be in your inbox. Take a look when you get a chance — key info: your policy number, deductible, and claims contact. Any questions, I\'m your person.', ai_personalize: false },
+      { id: 't13s2', sequence_id: 'tpl_13', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, one thing most people don\'t know — you should review your policy whenever there\'s a major life change: new car, new home, new baby, major income shift. I\'ll remind you at renewal, but feel free to flag anything sooner.', ai_personalize: false },
+      { id: 't13s3', sequence_id: 'tpl_13', step_number: 3, delay_days: 30, channel: 'call', message_template: '30-day satisfaction call. Ask: Has there been any confusion about the policy? Any changes in their situation? Check if there are gaps (home, auto, life, umbrella) and mention a quick coverage review.', ai_personalize: false },
+      { id: 't13s4', sequence_id: 'tpl_13', step_number: 4, delay_days: 180, channel: 'text', message_template: 'Hey {{first_name}}, 6-month check-in! Quick question — has anything changed in the last 6 months that might affect your coverage? New vehicle, renovation, anyone new in the household? Let\'s make sure you\'re fully protected.', ai_personalize: false },
+      { id: 't13s5', sequence_id: 'tpl_13', step_number: 5, delay_days: 335, channel: 'text', message_template: 'Hey {{first_name}}, your renewal is coming up in about 30 days. I\'m reviewing your policy now and will have any changes or savings opportunities for you before then. Also — if you know friends or family who could use a second opinion on their coverage, I\'d love to help them.', ai_personalize: false },
+    ],
+  },
+  // ── SOLAR ─────────────────────────────────────────────────────────────────
+  {
+    id: 'tpl_14',
+    name: 'Post-Proposal Follow-Up',
+    industry: 'solar',
+    description: 'Keep the proposal alive through the typical 2-4 week solar decision cycle.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't14s1', sequence_id: 'tpl_14', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, great meeting today! Your proposal should be in your inbox — it shows your current usage vs. what solar covers, the 30% federal tax credit, and the 25-year savings projection. Walk through it and let me know your questions.', ai_personalize: false },
+      { id: 't14s2', sequence_id: 'tpl_14', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, the most common question I get: "What if I move?" Solar adds $15K–$25K in home value on average and homes with solar sell faster. Buyers pay a premium for locked-in energy costs. Just wanted to address that before you ask!', ai_personalize: false },
+      { id: 't14s3', sequence_id: 'tpl_14', step_number: 3, delay_days: 7, channel: 'call', message_template: 'One-week follow-up call. Ask: Did they review the proposal? Do they have questions about financing, the tax credit, or the installation process? If they\'re comparing quotes, ask what the other company offered — you can usually match or beat it.', ai_personalize: false },
+      { id: 't14s4', sequence_id: 'tpl_14', step_number: 4, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, utility rates just went up again — did you see the news? Every month you wait is another month of paying the utility company instead of locking in your rate. I can still honor the proposal numbers we put together. Want to move forward?', ai_personalize: false },
+      { id: 't14s5', sequence_id: 'tpl_14', step_number: 5, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, last follow-up — I don\'t want to be in your inbox if the timing isn\'t right. If you\'re still interested, the 30% federal tax credit is available now and I can still lock in your current roof conditions for installation. Just let me know either way.', ai_personalize: false },
+    ],
+  },
 ];
 
 type ScreenView = 'list' | 'detail' | 'create';
@@ -220,11 +312,17 @@ export default function SequencesScreen() {
       if (!user) { setLoadingMy(false); return; }
 
       const [{ data: prof }, { data: seqs }, { data: ctcts }] = await Promise.all([
-        supabase.from('profiles').select('plan').eq('id', user.id).single(),
+        supabase.from('profiles').select('plan,industry').eq('id', user.id).single(),
         supabase.from('sequences').select('*, sequence_steps(*)').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('contacts').select('id,first_name,last_name,phone').eq('user_id', user.id).order('last_name'),
       ]);
-      if (prof) setUserPlan(prof.plan ?? 'pro');
+      if (prof) {
+        setUserPlan(prof.plan ?? 'pro');
+        const ind = prof.industry as TemplateFilter;
+        if (ind && (TEMPLATE_FILTERS as readonly string[]).includes(ind)) {
+          setTemplateFilter(ind);
+        }
+      }
       setMySequences(seqs ?? []);
       setAllContacts((ctcts ?? []) as any);
     } catch {
@@ -613,7 +711,7 @@ export default function SequencesScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={[s.filterPillText, templateFilter === f && s.filterPillTextActive]}>
-                  {f === 'all' ? '⭐ All' : f === 'prospect' ? '🎯 Prospects' : f === 'hvac' ? '🔧 HVAC' : f === 'realestate' ? '🏡 Real Estate' : f.charAt(0).toUpperCase() + f.slice(1)}
+                  {f === 'all' ? '⭐ All' : INDUSTRY_CONFIG[f] ? `${INDUSTRY_CONFIG[f].icon} ${INDUSTRY_CONFIG[f].label}` : f}
                 </Text>
               </TouchableOpacity>
             ))}

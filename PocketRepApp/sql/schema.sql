@@ -7,6 +7,7 @@ create table if not exists profiles (
   email        text not null,
   full_name    text not null default '',
   plan         text not null default 'pro' check (plan in ('pro','elite')),
+  industry     text not null default 'auto',
   trial_ends_at timestamptz,
   stripe_customer_id text,
   created_at   timestamptz default now()
@@ -128,6 +129,9 @@ create table if not exists rex_memory (
 );
 
 alter table rex_memory enable row level security;
+
+-- ── INDUSTRY: rep's industry on profiles ─────────────────────────────────────
+alter table profiles add column if not exists industry text not null default 'auto';
 
 -- ── HEY REX: follow-up date on contacts ──────────────────────────────────────
 -- Run this if you already applied the initial schema:

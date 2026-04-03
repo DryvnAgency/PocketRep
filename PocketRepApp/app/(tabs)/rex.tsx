@@ -8,6 +8,7 @@ import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 import type { Contact, RexMessage, RexMemory, Profile } from '@/lib/types';
+import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 
 // ── Model: Haiku for speed + cost on every Rex call ──────────────────────────
 const REX_MODEL = 'claude-haiku-4-5-20251001';
@@ -32,8 +33,8 @@ function stripActionTag(text: string): string {
   return text.replace(/<action>[\s\S]*?<\/action>/g, '').trim();
 }
 
-const REX_SYSTEM = (repName: string, memory: string, contact: Contact | null) => `
-You are Rex — a sharp, no-BS AI sales assistant and command center for PocketRep. You speak directly to ${repName || 'the rep'} like a trusted closer who can also take action in their app.
+const REX_SYSTEM = (repName: string, memory: string, contact: Contact | null, industry = 'auto') => `
+You are Rex — a sharp, no-BS AI sales assistant and command center for PocketRep. You speak directly to ${repName || 'the rep'}, a ${INDUSTRY_CONFIG[industry]?.label ?? 'sales'} rep, like a trusted closer who can also take action in their app.
 
 ${memory ? `What you know about this rep:\n${memory}\n` : ''}
 ${contact ? `Active customer context:\nName: ${contact.first_name} ${contact.last_name}\nVehicle: ${[contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ') || 'not logged'}\nMileage: ${contact.mileage ?? 'unknown'} | Annual: ${contact.annual_mileage ?? 'unknown'}\nLease end: ${contact.lease_end_date ?? 'N/A'}\nNotes: ${contact.notes ?? 'none'}\n` : ''}
@@ -132,7 +133,15 @@ export default function RexScreen() {
       supabase.from('contacts').select('id,first_name,last_name,vehicle_year,vehicle_make,vehicle_model,mileage,annual_mileage,lease_end_date,notes,heat_tier').eq('user_id', user.id).order('last_name'),
     ]);
 
-    if (prof) setProfile(prof);
+    if (prof) {
+      setProfile(prof);
+      // Default rebuttals tab to user's industry
+      if (prof.industry) {
+        const industryLabel = INDUSTRY_CONFIG[prof.industry]?.label ?? '';
+        const match = REBUTTAL_INDUSTRIES.find(r => r.toLowerCase() === industryLabel.toLowerCase() || r.toLowerCase().includes(prof.industry.toLowerCase()));
+        if (match) setRebuttalIndustry(match);
+      }
+    }
     if (msgs) setMessages(msgs);
     if (mem) setMemory(mem);
     if (ctcts) setContacts(ctcts as Contact[]);
@@ -190,7 +199,7 @@ export default function RexScreen() {
         body: JSON.stringify({
           model: REX_MODEL,
           max_tokens: 600,
-          system: REX_SYSTEM(profile?.full_name ?? '', memory?.summary ?? '', activeContact),
+          system: REX_SYSTEM(profile?.full_name ?? '', memory?.summary ?? '', activeContact, profile?.industry ?? 'auto'),
           messages: history,
         }),
       });
@@ -278,8 +287,10 @@ export default function RexScreen() {
         body: JSON.stringify({ model: REX_MODEL, max_tokens: 150, messages: [{ role: 'user', content: prompt }] }),
       });
       const rj = await res.json();
-      setProactiveCoach(rj.content?.[0]?.text ?? null);
-    } catch {}
+      setProactiveCoach(rj.content?.[0]?.text ?? '');
+    } catch {
+      setProactiveCoach(''); // clear loading state on error
+    }
   }
 
   // Execute an action Rex proposed
