@@ -22,12 +22,6 @@
         <button id="login-btn" class="btn-primary">Sign In</button>
         <p id="login-error" class="error-text" style="display:none"></p>
       </div>
-
-      <div id="api-key-form" class="card" style="display:none">
-        <p class="hint">Enter your Anthropic API key to enable AI features.</p>
-        <input type="password" id="api-key-input" placeholder="sk-ant-..." />
-        <button id="save-key-btn" class="btn-primary">Save Key</button>
-      </div>
     </div>
 
     <!-- Locked Screen (non-Elite) -->
@@ -53,7 +47,6 @@
           <span id="status-badge" class="badge badge-idle">Idle</span>
         </div>
         <div class="header-right">
-          <button id="settings-btn" class="btn-icon" title="Settings">⚙</button>
           <button id="logout-btn" class="btn-icon" title="Sign Out">⏻</button>
         </div>
       </div>
@@ -141,16 +134,6 @@
         </div>
       </div>
 
-      <!-- Settings Panel (hidden by default) -->
-      <div id="settings-panel" class="card" style="display:none">
-        <div class="card-header">
-          <span class="card-icon">⚙</span>
-          <span class="card-title">Settings</span>
-        </div>
-        <label class="settings-label">Anthropic API Key</label>
-        <input type="password" id="settings-api-key" placeholder="sk-ant-..." />
-        <button id="settings-save-key-btn" class="btn-secondary btn-sm">Update Key</button>
-      </div>
     </div>
   </div>
 

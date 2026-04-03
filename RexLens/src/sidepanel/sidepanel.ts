@@ -13,9 +13,6 @@ const emailInput = $<HTMLInputElement>('email-input');
 const passwordInput = $<HTMLInputElement>('password-input');
 const loginBtn = $<HTMLButtonElement>('login-btn');
 const loginError = $('login-error');
-const apiKeyForm = $('api-key-form');
-const apiKeyInput = $<HTMLInputElement>('api-key-input');
-const saveKeyBtn = $<HTMLButtonElement>('save-key-btn');
 
 // Main
 const statusBadge = $('status-badge');
@@ -45,12 +42,6 @@ const insertConfirmBtn = $<HTMLButtonElement>('insert-confirm-btn');
 const chatMessages = $('chat-messages');
 const chatInput = $<HTMLInputElement>('chat-input');
 const chatSendBtn = $<HTMLButtonElement>('chat-send-btn');
-
-// Settings
-const settingsBtn = $<HTMLButtonElement>('settings-btn');
-const settingsPanel = $('settings-panel');
-const settingsApiKey = $<HTMLInputElement>('settings-api-key');
-const settingsSaveKeyBtn = $<HTMLButtonElement>('settings-save-key-btn');
 
 // Logout
 const logoutBtn = $<HTMLButtonElement>('logout-btn');
@@ -130,31 +121,6 @@ function showError(msg: string) {
   loginError.style.display = 'block';
 }
 
-// API Key setup (shown after first login if no key stored)
-saveKeyBtn.addEventListener('click', async () => {
-  const key = apiKeyInput.value.trim();
-  if (!key.startsWith('sk-ant-')) {
-    alert('Key should start with sk-ant-');
-    return;
-  }
-  await chrome.runtime.sendMessage({ type: 'SET_API_KEY', payload: { key } });
-  apiKeyForm.style.display = 'none';
-  showScreen('main');
-});
-
-// Settings API key
-settingsSaveKeyBtn.addEventListener('click', async () => {
-  const key = settingsApiKey.value.trim();
-  if (!key) return;
-  await chrome.runtime.sendMessage({ type: 'SET_API_KEY', payload: { key } });
-  settingsApiKey.value = '';
-  alert('API key updated.');
-});
-
-settingsBtn.addEventListener('click', () => {
-  settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'flex' : 'none';
-});
-
 // Logout
 logoutBtn.addEventListener('click', async () => {
   await chrome.runtime.sendMessage({ type: 'AUTH_LOGOUT' });
@@ -178,17 +144,7 @@ function handleAuthState(state: AuthState) {
     return;
   }
 
-  // Check if API key is configured
-  chrome.storage.local.get(['anthropic_key'], (result) => {
-    if (!result.anthropic_key) {
-      apiKeyForm.style.display = 'flex';
-      showScreen('auth');
-      // Hide login form, show API key form
-      $('login-form').style.display = 'none';
-    } else {
-      showScreen('main');
-    }
-  });
+  showScreen('main');
 }
 
 // ── Scan ──────────────────────────────────────────────────────────────────────

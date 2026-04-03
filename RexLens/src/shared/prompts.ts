@@ -1,7 +1,7 @@
 import type { Contact, PageContent } from './types';
 
 export const REX_MODEL = 'claude-haiku-4-5-20251001';
-export const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+export const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/anthropic';
 
 export function buildScreenAnalysisPrompt(
   repName: string,

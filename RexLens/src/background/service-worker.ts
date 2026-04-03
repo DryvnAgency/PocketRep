@@ -1,5 +1,5 @@
 import { getSupabase } from '../shared/supabase';
-import { buildScreenAnalysisPrompt, buildChatPrompt, REX_MODEL, ANTHROPIC_API_URL, stripSensitiveData } from '../shared/prompts';
+import { buildScreenAnalysisPrompt, buildChatPrompt, REX_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
 import type { Contact, Profile, PageContent, RexSuggestion, AuthState } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
 
@@ -12,15 +12,10 @@ let lastSuggestions: RexSuggestion | null = null;
 let chatHistory: { role: string; content: string }[] = [];
 let lastScanTime = 0;
 const SCAN_COOLDOWN_MS = 10_000; // 10 second minimum between scans
-let anthropicKey = '';
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 async function init() {
-  // Load API key from storage
-  const stored = await chrome.storage.local.get(['anthropic_key']);
-  anthropicKey = stored.anthropic_key || '';
-
   // Try to restore auth session
   const supabase = getSupabase();
   const { data: { session } } = await supabase.auth.getSession();
@@ -126,14 +121,9 @@ async function analyzePageWithAI(page: PageContent): Promise<RexSuggestion> {
     matchedContacts,
   );
 
-  const res = await fetch(ANTHROPIC_API_URL, {
+  const res = await fetch(AI_PROXY_URL, {
     method: 'POST',
-    headers: {
-      'x-api-key': anthropicKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model: REX_MODEL,
       max_tokens: 600,
@@ -186,14 +176,9 @@ async function chatWithRex(userMessage: string): Promise<string> {
   // Keep last 10 messages for context
   const recentHistory = chatHistory.slice(-10);
 
-  const res = await fetch(ANTHROPIC_API_URL, {
+  const res = await fetch(AI_PROXY_URL, {
     method: 'POST',
-    headers: {
-      'x-api-key': anthropicKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model: REX_MODEL,
       max_tokens: 600,
@@ -203,7 +188,7 @@ async function chatWithRex(userMessage: string): Promise<string> {
   });
 
   const json = await res.json();
-  const reply = json.content?.[0]?.text ?? 'Rex hit an error. Check your API key.';
+  const reply = json.content?.[0]?.text ?? 'Rex hit an error. Try again.';
 
   chatHistory.push({ role: 'assistant', content: reply });
 
@@ -251,12 +236,6 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       return authState;
     }
 
-    case 'SET_API_KEY': {
-      anthropicKey = message.payload.key;
-      await chrome.storage.local.set({ anthropic_key: anthropicKey });
-      return { success: true };
-    }
-
     case 'ANALYZE_PAGE': {
       // Rate limiting
       const now = Date.now();
@@ -267,10 +246,6 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 
       if (!authState.hasAccess) {
         return { error: 'Rex Lens requires an Elite plan with Rex Lens add-on.' };
-      }
-
-      if (!anthropicKey) {
-        return { error: 'API key not configured. Set it in Rex Lens settings.' };
       }
 
       // Get active tab
@@ -316,7 +291,6 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 
     case 'CHAT_MESSAGE': {
       if (!authState.hasAccess) return { error: 'Rex Lens requires Elite plan.' };
-      if (!anthropicKey) return { error: 'API key not configured.' };
 
       try {
         const reply = await chatWithRex(message.payload.content);
