@@ -22,6 +22,12 @@ export interface PersonalEvent {
   date: string;   // ISO date string 'YYYY-MM-DD'
 }
 
+// ── Parse a YYYY-MM-DD string as LOCAL date (avoids UTC midnight timezone trap)
+export function parseLocalDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d || 1);
+}
+
 // ── Setup handler (call once at app root) ────────────────────────────────────
 export function setupNotificationHandler() {
   if (!Notifications || Platform.OS === 'web') return;
@@ -34,9 +40,16 @@ export function setupNotificationHandler() {
   });
 }
 
-// ── Request permission ────────────────────────────────────────────────────────
+// ── Request permission + Android channel ─────────────────────────────────────
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!Notifications || Platform.OS === 'web') return false;
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync?.('pocketrep', {
+      name: 'PocketRep',
+      importance: 4, // HIGH
+      sound: 'default',
+    }).catch(() => {});
+  }
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
 }
@@ -84,8 +97,8 @@ export async function scheduleContactReminders(opts: {
 
   // 1. Follow-up date reminder
   if (followUpDate) {
-    const d = new Date(followUpDate);
-    d.setHours(9, 0, 0, 0); // 9 AM
+    const d = parseLocalDate(followUpDate);
+    d.setHours(9, 0, 0, 0);
     await schedule(
       `📞 Follow up with ${contactName}`,
       `Rex says: "This is the day you said you'd reach out. Don't let them go cold."`,
@@ -96,7 +109,7 @@ export async function scheduleContactReminders(opts: {
 
   // 2. Lease end date milestones
   if (leaseEndDate) {
-    const leaseDate = new Date(leaseEndDate);
+    const leaseDate = parseLocalDate(leaseEndDate);
 
     const milestones = [
       { daysBeforeMs: 180 * 86400000, label: '6 months', tag: '⏰' },
@@ -119,7 +132,7 @@ export async function scheduleContactReminders(opts: {
   // 3. Personal events
   for (const ev of personalEvents) {
     if (!ev.date) continue;
-    const d = new Date(ev.date);
+    const d = parseLocalDate(ev.date);
     d.setHours(9, 0, 0, 0);
 
     const labels: Record<string, { title: string; body: string }> = {

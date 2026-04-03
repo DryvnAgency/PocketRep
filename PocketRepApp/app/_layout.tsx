@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/constants/theme';
+import { setupNotificationHandler } from '@/lib/notifications';
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
@@ -12,6 +14,9 @@ export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
+    // Set up push notification display handler (must run before any scheduling)
+    setupNotificationHandler();
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setReady(true);

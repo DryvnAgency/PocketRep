@@ -157,9 +157,14 @@ const LEASE_FILTERS: { key: string; label: string }[] = [
   { key: '18to24', label: '18–24 mo' },
 ];
 
+function parseLocalDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d || 1);
+}
+
 function leaseMonthsAway(lease_end_date: string | null): number | null {
   if (!lease_end_date) return null;
-  const end = new Date(lease_end_date);
+  const end = parseLocalDate(lease_end_date);
   const now = new Date();
   return (end.getFullYear() - now.getFullYear()) * 12 + (end.getMonth() - now.getMonth());
 }
