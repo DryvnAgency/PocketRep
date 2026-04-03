@@ -60,7 +60,7 @@ ${contact ? `\nSince a contact is selected, proactively give the rep a 1-2 sente
 `.trim();
 
 // ── Rebuttals data ────────────────────────────────────────────────────────────
-const REBUTTAL_INDUSTRIES = ['Auto', 'Mortgage', 'Real Estate', 'Insurance', 'Solar', 'B2B'];
+const REBUTTAL_INDUSTRIES = ['Auto', 'Mortgage', 'Real Estate', 'HVAC', 'Staffing', 'Roofing', 'Door-to-Door', 'Insurance', 'Solar', 'B2B'];
 
 const REBUTTALS: Record<string, { objection: string; response: string }[]> = {
   'Auto': [
@@ -97,6 +97,34 @@ const REBUTTALS: Record<string, { objection: string; response: string }[]> = {
     { objection: 'The budget isn\'t there right now', response: '"What\'s the cost of the problem I\'m solving? If it\'s more than my price, budget\'s not the issue — it\'s priority. What would need to change for this to be a priority?"' },
     { objection: 'Send me some information', response: '"I could, but 80% of the time it goes to the wrong folder. What specific problem are you hoping the information solves? Let me just address that directly."' },
     { objection: 'We need to involve procurement', response: '"Totally normal. What do they need to see to approve this category of spend? I\'ll build the deck around exactly that."' },
+  ],
+  'HVAC': [
+    { objection: 'That\'s too expensive', response: '"Let me break down what you\'re actually paying right now — an inefficient system that\'s about to fail costs you in energy bills every month plus an emergency call at the worst possible time. What we\'re doing is replacing that risk with a known number. What part of the cost is the concern?"' },
+    { objection: 'I want to get other quotes', response: '"Absolutely — you should. When you do, make sure you\'re comparing the same equipment tier and warranty. A lot of low bids use builder-grade equipment. I\'ll send you exactly what\'s in my quote so you can compare apples to apples."' },
+    { objection: 'I need to talk to my spouse', response: '"Of course. What would help most — should I put together a one-page summary you can hand them, or would it be easier to do a quick call together so they can ask questions directly?"' },
+    { objection: 'My system is still working', response: '"It is — for now. The question is whether you want to plan this on your schedule or wait until it goes out on the hottest day of the year when you\'re competing with 50 other emergency calls. I can\'t promise availability then. I can promise it now."' },
+    { objection: 'Can you do better on the price?', response: '"What I can do is make sure you\'re getting the right system for your house — not the cheapest one. But let me look at the quote again and see if there\'s any flexibility on the install timing that might help."' },
+  ],
+  'Staffing': [
+    { objection: 'We\'re not hiring right now', response: '"I hear you — but the best time to build the pipeline is before you need it. If you had a role open tomorrow, what would it be? I\'d rather have three people ready than be starting from zero when you\'re under pressure."' },
+    { objection: 'We use another agency', response: '"That\'s fine — most companies we work with use more than one. What I\'d ask is: what\'s the one thing your current agency isn\'t delivering on? Speed, quality, fit? That\'s where I focus."' },
+    { objection: 'Your rates are too high', response: '"Compare it to the cost of a bad hire — turnover, retraining, lost productivity. Our fill rate and retention at 90 days is [X]%. The math usually works out. Want me to send you the numbers?"' },
+    { objection: 'We handle recruiting internally', response: '"A lot of our best clients do too. We\'re not a replacement — we handle overflow, specialized roles, or positions you need filled fast. What\'s the role that always takes the longest to fill?"' },
+    { objection: 'We had a bad experience with a staffing agency', response: '"Tell me what happened. I\'m not going to tell you we\'re different without knowing what went wrong — but I\'d like to understand it so I can either tell you honestly if it\'d be different with us, or admit it wouldn\'t."' },
+  ],
+  'Roofing': [
+    { objection: 'That\'s more than I expected to spend', response: '"I get it — it\'s not a fun expense. Here\'s what I\'d tell my own family: a roof that\'s done right lasts 25–30 years. Done cheap, you\'re looking at problems in 5–7. The difference in cost is a lot less than a second replacement. What part of the quote is the biggest concern?"' },
+    { objection: 'I want to get other quotes', response: '"You should — 2 or 3 is smart. Just make sure they\'re using comparable shingles and the same underlayment. Ask each one about their warranty on labor, not just materials. That\'s where the difference shows up."' },
+    { objection: 'Can my insurance cover it?', response: '"It might — especially if you\'ve had any hail or wind in the last year. I can do a quick storm damage inspection and if there\'s cause for a claim, I\'ll help you document it. A lot of our jobs come out at zero out-of-pocket for the homeowner. Worth checking."' },
+    { objection: 'I\'m not sure I\'m ready to commit', response: '"That\'s fair. What would help you feel more comfortable — seeing examples of our work in your neighborhood, talking to a past customer, or getting more detail on the warranty? I\'d rather take the extra time now than have you unsure."' },
+    { objection: 'I heard you use subcontractors', response: '"Our crews are trained and vetted — they work our jobs exclusively. I can introduce you to the crew lead before we start if that helps. Accountability runs through me regardless."' },
+  ],
+  'Door-to-Door': [
+    { objection: 'I\'m not interested', response: '"Totally respect that. Can I ask — is it this specifically, or is it just not a good time? I\'m not trying to change your mind right now, I just want to make sure I\'m not leaving before answering something that would\'ve mattered."' },
+    { objection: 'I already have something like this', response: '"Good — then you know what it\'s supposed to do. What I\'d ask is: when\'s the last time someone actually reviewed what you have to make sure it\'s still the right fit? Things change. That\'s all I\'m here for."' },
+    { objection: 'How do I know you\'re legit?', response: '"Fair question. Here\'s my ID badge, here\'s the company card with a number you can call right now, and I can show you a few neighbors on this street who\'ve already signed up. What would make you feel comfortable?"' },
+    { objection: 'I need to talk to my spouse', response: '"Of course — I\'d expect that. What I can do is leave you with everything in writing so you\'re both looking at the same information. When would be a good time to come back when you\'re both home?"' },
+    { objection: 'Just leave me your information', response: '"I will. And I\'ll be honest — most people who say that don\'t call, and I get it. So before I go, is there one question I can answer right now that would make this worth a 5-minute conversation?"' },
   ],
 };
 
@@ -137,8 +165,13 @@ export default function RexScreen() {
       setProfile(prof);
       // Default rebuttals tab to user's industry
       if (prof.industry) {
-        const industryLabel = INDUSTRY_CONFIG[prof.industry]?.label ?? '';
-        const match = REBUTTAL_INDUSTRIES.find(r => r.toLowerCase() === industryLabel.toLowerCase() || r.toLowerCase().includes(prof.industry.toLowerCase()));
+        const industryToRebuttal: Record<string, string> = {
+          auto: 'Auto', mortgage: 'Mortgage', realestate: 'Real Estate',
+          hvac: 'HVAC', staffing: 'Staffing', roofing: 'Roofing',
+          d2d: 'Door-to-Door', insurance: 'Insurance', solar: 'Solar',
+          b2b: 'B2B',
+        };
+        const match = industryToRebuttal[prof.industry];
         if (match) setRebuttalIndustry(match);
       }
     }
