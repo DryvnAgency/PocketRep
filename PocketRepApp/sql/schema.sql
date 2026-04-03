@@ -6,7 +6,7 @@ create table if not exists profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
   email        text not null,
   full_name    text not null default '',
-  plan         text not null default 'pro' check (plan in ('pro','elite')),
+  plan         text not null default 'pro' check (plan in ('pro','elite','rex_lens_standalone','elite_bundle')),
   trial_ends_at timestamptz,
   stripe_customer_id text,
   created_at   timestamptz default now()

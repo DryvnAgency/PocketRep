@@ -17,23 +17,25 @@
       </div>
 
       <div id="login-form" class="card">
-        <input type="email" id="email-input" placeholder="Email" autocomplete="email" />
+        <input type="text" id="username-input" placeholder="Username" autocomplete="username" />
         <input type="password" id="password-input" placeholder="Password" autocomplete="current-password" />
         <button id="login-btn" class="btn-primary">Sign In</button>
         <p id="login-error" class="error-text" style="display:none"></p>
       </div>
     </div>
 
-    <!-- Locked Screen (non-Elite) -->
+    <!-- Locked Screen -->
     <div id="locked-screen" class="screen" style="display:none">
       <div class="logo-section">
         <div class="logo">🔒</div>
         <h1>Rex Lens</h1>
-        <p class="subtitle">Elite Add-on Required</p>
+        <p class="subtitle">Upgrade Required</p>
       </div>
       <div class="card">
-        <p>Rex Lens is a <strong>$19/mo add-on</strong> for PocketRep Elite subscribers.</p>
-        <p>Upgrade in the PocketRep app to unlock AI-powered screen reading, response suggestions, and auto-fill.</p>
+        <p><strong>Rex Lens Standalone</strong> — <strong>$49/mo</strong><br>Chrome extension only, works with any CRM</p>
+        <p><strong>Elite Standalone</strong> — <strong>$79/mo</strong><br>Full PocketRep CRM app</p>
+        <p><strong>Elite + Rex Lens Bundle</strong> — <strong>$99/mo</strong> (save $29/mo)<br>Best value — full CRM + AI screen coach</p>
+        <p style="margin-top:8px">Visit <a href="https://pocketrep.pro#rex-lens" target="_blank" style="color:#4F46E5">pocketrep.pro</a> to upgrade</p>
         <button id="logout-locked-btn" class="btn-secondary">Sign Out</button>
       </div>
     </div>

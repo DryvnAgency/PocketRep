@@ -40,6 +40,29 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
       'Weekly Pipeline Digest',
     ],
   },
+  {
+    id: 'rex_lens_standalone',
+    name: 'Rex Lens — AI Screen Coach',
+    price: '$49',
+    after: 'Chrome extension only',
+    features: [
+      'Reads your CRM, email, LinkedIn in real-time',
+      'Deep Scan — action plans for 30 contacts at once',
+      'Draft texts, emails, call scripts — ready to send',
+      'Works with VinSolutions, DealerSocket, Salesforce, HubSpot',
+    ],
+  },
+  {
+    id: 'elite_bundle',
+    name: 'Elite + Rex Lens Bundle',
+    price: '$99',
+    after: 'Save $29/mo vs separate',
+    features: [
+      'Everything in Elite',
+      'Rex Lens Chrome extension included',
+      'Best value — full CRM + AI screen coach',
+    ],
+  },
 ];
 
 export default function SignupScreen() {

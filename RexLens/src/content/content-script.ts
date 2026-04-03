@@ -23,9 +23,11 @@ function detectPageType(): PageType {
     return 'crm';
   }
 
-  // Chat platforms
+  // Chat / texting platforms
   if (host.includes('messenger') || host.includes('web.whatsapp') ||
-      host.includes('slack.com') || host.includes('teams.microsoft')) {
+      host.includes('slack.com') || host.includes('teams.microsoft') ||
+      host.includes('podium.com') || host.includes('kenect.com') ||
+      host.includes('matador.ai')) {
     return 'chat';
   }
 
@@ -243,7 +245,7 @@ function buildUniqueSelector(el: HTMLElement, index: number): string {
 
 // ── Deep Scan: Find Clickable Contacts ──────────────────────────────────────
 
-const PLATFORM_CONTACT_SELECTORS = [
+const CRM_CONTACT_SELECTORS = [
   // VinSolutions
   'a.customer-name', 'table a[href*="contact"]', 'table a[href*="customer"]',
   // DealerSocket
@@ -252,23 +254,47 @@ const PLATFORM_CONTACT_SELECTORS = [
   'a[data-refid]', '.slds-truncate a',
   // HubSpot
   'a.private-link', '.contact-name-link',
-  // Gmail
-  '.yP', '.gD',
   // LinkedIn
   '.msg-conversation-card__participant-names a',
 ];
 
+// Platform-specific conversation selectors for email/texting Deep Scan
+const CONVERSATION_SELECTORS: Record<string, string[]> = {
+  'mail.google.com': ['.zA', 'tr[role="row"]'],
+  'outlook.live.com': ['[role="option"]', '[role="listitem"]'],
+  'outlook.office365.com': ['[role="option"]', '[role="listitem"]'],
+  'outlook.office.com': ['[role="option"]', '[role="listitem"]'],
+  'app.podium.com': ['[data-testid*="conversation"]', '[class*="conversation"]', '[class*="inbox"] li', '[class*="thread"]'],
+  'app.kenect.com': ['[data-testid*="conversation"]', '[class*="conversation"]', '[class*="inbox"] li', '[class*="thread"]'],
+  'app.matador.ai': ['[data-testid*="conversation"]', '[class*="conversation"]', '[class*="inbox"] li', '[class*="thread"]'],
+};
+
 // Supports: John Smith, O'Brien, McDonald, Jean-Pierre, De La Cruz
 const NAME_PATTERN = /^[A-Z][a-zA-Z'-]+(?:\s(?:[A-Z][a-zA-Z'-]+|[a-z]{1,3})){1,3}$/;
+const PHONE_PATTERN = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
+const EMAIL_PATTERN = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 
 function findClickableContacts(): ClickableContact[] {
+  const pageType = detectPageType();
+
+  // For email/chat pages, try conversation detection first
+  if (pageType === 'email' || pageType === 'chat') {
+    const convResults = findClickableConversations();
+    if (convResults.length > 0) return convResults;
+  }
+
+  // For CRM/generic/linkedin pages (or fallback), use name-link detection
+  return findClickableCRMContacts();
+}
+
+// ── CRM name-link detection (original approach) ────────────────────────────
+
+function findClickableCRMContacts(): ClickableContact[] {
   const results: ClickableContact[] = [];
   const seen = new Set<string>();
-
   let contactIndex = 0;
 
-  // Try platform-specific selectors first
-  for (const sel of PLATFORM_CONTACT_SELECTORS) {
+  for (const sel of CRM_CONTACT_SELECTORS) {
     const elements = document.querySelectorAll<HTMLElement>(sel);
     for (const el of elements) {
       const contact = extractClickableContact(el, contactIndex);
@@ -280,7 +306,6 @@ function findClickableContacts(): ClickableContact[] {
     }
   }
 
-  // Generic: <a> inside <table> or [role="row"] with name-like text
   const genericLinks = document.querySelectorAll<HTMLAnchorElement>(
     'table a, [role="row"] a, [role="listitem"] a, .list-item a'
   );
@@ -299,11 +324,9 @@ function findClickableContacts(): ClickableContact[] {
 function extractClickableContact(el: HTMLElement, index: number): ClickableContact | null {
   const text = (el.textContent || '').trim();
 
-  // Must look like a person's name: 2-3 capitalized words, 3-50 chars
   if (text.length < 3 || text.length > 50) return null;
   if (!NAME_PATTERN.test(text)) return null;
 
-  // Must be clickable (link or has click handler)
   const isLink = el.tagName === 'A' && (el as HTMLAnchorElement).href;
   const isClickable = el.getAttribute('role') === 'link' || el.style.cursor === 'pointer'
     || el.onclick !== null || isLink;
@@ -314,6 +337,106 @@ function extractClickableContact(el: HTMLElement, index: number): ClickableConta
   const href = isLink ? (el as HTMLAnchorElement).href : '';
 
   return { name: text, selector, href };
+}
+
+// ── Conversation/thread detection (email + texting platforms) ───────────────
+
+function findClickableConversations(): ClickableContact[] {
+  const host = window.location.hostname;
+  const results: ClickableContact[] = [];
+  const seen = new Set<string>();
+  let index = 0;
+
+  // Try platform-specific selectors
+  for (const [domain, selectors] of Object.entries(CONVERSATION_SELECTORS)) {
+    if (!host.includes(domain)) continue;
+    for (const sel of selectors) {
+      const items = document.querySelectorAll<HTMLElement>(sel);
+      for (const item of items) {
+        const contact = extractConversationItem(item, index);
+        if (contact && !seen.has(contact.name)) {
+          seen.add(contact.name);
+          results.push(contact);
+          index++;
+        }
+      }
+    }
+  }
+
+  // Generic fallback: repeated clickable items in a list/sidebar
+  if (results.length === 0) {
+    const listItems = document.querySelectorAll<HTMLElement>(
+      '[role="listitem"], [role="option"], [class*="inbox"] li, ' +
+      '[class*="conversation"], [class*="thread-item"], [class*="message-item"]'
+    );
+    for (const item of listItems) {
+      const contact = extractConversationItem(item, index);
+      if (contact && !seen.has(contact.name)) {
+        seen.add(contact.name);
+        results.push(contact);
+        index++;
+      }
+    }
+  }
+
+  return results.slice(0, 30);
+}
+
+function extractConversationItem(el: HTMLElement, index: number): ClickableContact | null {
+  const text = (el.textContent || '').trim();
+  if (text.length < 3 || text.length > 500) return null;
+
+  // Gmail sender extraction: look for .yP or .bqe inside the element
+  const gmailSender = el.querySelector('.yP, .zF');
+  if (gmailSender) {
+    const senderName = (gmailSender.getAttribute('name') || gmailSender.textContent || '').trim();
+    if (senderName) {
+      return { name: senderName, selector: buildUniqueSelector(el, index), href: '' };
+    }
+  }
+
+  // Try to find a name, phone number, or email in the element's text
+  let identifier = '';
+
+  // Check for a name pattern
+  const nameMatch = text.match(/([A-Z][a-zA-Z'-]+(?:\s(?:[A-Z][a-zA-Z'-]+|[a-z]{1,3})){1,3})/);
+  if (nameMatch) {
+    identifier = nameMatch[1];
+  }
+
+  // Check for phone number
+  if (!identifier) {
+    const phoneMatch = text.match(PHONE_PATTERN);
+    if (phoneMatch) identifier = phoneMatch[0];
+  }
+
+  // Check for email
+  if (!identifier) {
+    const emailMatch = text.match(EMAIL_PATTERN);
+    if (emailMatch) identifier = emailMatch[0];
+  }
+
+  if (!identifier) return null;
+
+  // Element must be clickable
+  const isClickable = el.tagName === 'A' || el.tagName === 'TR' || el.tagName === 'LI'
+    || el.getAttribute('role') === 'option' || el.getAttribute('role') === 'listitem'
+    || el.getAttribute('role') === 'row' || el.getAttribute('role') === 'link'
+    || el.style.cursor === 'pointer' || el.onclick !== null
+    || el.closest('[role="list"]') !== null;
+
+  if (!isClickable) return null;
+
+  return { name: identifier, selector: buildUniqueSelector(el, index), href: '' };
+}
+
+// ── Deep Scan: Detect if page is SPA conversation view ─────────────────────
+
+function isSPAConversationView(): boolean {
+  const host = window.location.hostname;
+  // Email and texting platforms are SPAs — clicking loads content in a panel
+  return Object.keys(CONVERSATION_SELECTORS).some(domain => host.includes(domain))
+    || host.includes('linkedin.com');
 }
 
 // ── Deep Scan: Click and Extract ────────────────────────────────────────────
@@ -398,6 +521,24 @@ async function clickAndExtract(selector: string): Promise<PageContent> {
   }
 
   return content;
+}
+
+// ── Deep Scan: SPA Click and Extract (no back-navigation) ──────────────────
+
+async function clickAndExtractSPA(selector: string): Promise<PageContent> {
+  const el = document.querySelector(selector) as HTMLElement | null;
+  if (!el) throw new Error(`Element not found: ${selector}`);
+
+  el.click();
+
+  // Wait for conversation/message pane to update
+  await waitForPageChange(3000);
+  await new Promise(r => setTimeout(r, 300));
+
+  // Extract from the reading/message pane
+  // The conversation list stays visible — no back-navigation needed
+  tagFields();
+  return extractPageContent();
 }
 
 // ── Text Insertion ───────────────────────────────────────────────────────────
@@ -520,7 +661,8 @@ chrome.runtime.onMessage.addListener(
 
       case 'CLICK_AND_EXTRACT': {
         const { selector } = message.payload;
-        clickAndExtract(selector)
+        const extractFn = isSPAConversationView() ? clickAndExtractSPA : clickAndExtract;
+        extractFn(selector)
           .then(content => sendResponse({ success: true, content }))
           .catch(err => sendResponse({ success: false, error: err.message }));
         break;

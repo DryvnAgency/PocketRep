@@ -9,7 +9,7 @@ const lockedScreen = $('locked-screen');
 const mainScreen = $('main-screen');
 
 // Auth
-const emailInput = $<HTMLInputElement>('email-input');
+const usernameInput = $<HTMLInputElement>('username-input');
 const passwordInput = $<HTMLInputElement>('password-input');
 const loginBtn = $<HTMLButtonElement>('login-btn');
 const loginError = $('login-error');
@@ -95,12 +95,16 @@ function setStatus(status: 'idle' | 'scanning' | 'analyzing' | 'ready' | 'error'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
+function usernameToEmail(username: string): string {
+  return `${username.trim().toLowerCase()}@pocketrep.app`;
+}
+
 loginBtn.addEventListener('click', async () => {
-  const email = emailInput.value.trim();
+  const username = usernameInput.value.trim();
   const password = passwordInput.value;
 
-  if (!email || !password) {
-    showError('Enter your email and password.');
+  if (!username || !password) {
+    showError('Enter your username and password.');
     return;
   }
 
@@ -110,7 +114,7 @@ loginBtn.addEventListener('click', async () => {
 
   const result = await chrome.runtime.sendMessage({
     type: 'AUTH_LOGIN',
-    payload: { email, password },
+    payload: { email: usernameToEmail(username), password },
   });
 
   loginBtn.disabled = false;
@@ -124,9 +128,12 @@ loginBtn.addEventListener('click', async () => {
   handleAuthState(result.authState);
 });
 
-// Handle Enter key on password field
+// Handle Enter key on login fields
 passwordInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') loginBtn.click();
+});
+usernameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') passwordInput.focus();
 });
 
 function showError(msg: string) {

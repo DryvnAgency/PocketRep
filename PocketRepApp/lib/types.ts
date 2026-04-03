@@ -1,4 +1,4 @@
-export type Plan = 'pro' | 'elite';
+export type Plan = 'pro' | 'elite' | 'rex_lens_standalone' | 'elite_bundle';
 export type HeatTier = 'hot' | 'warm' | 'watch';
 
 export interface Profile {

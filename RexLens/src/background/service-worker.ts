@@ -51,7 +51,10 @@ async function loadProfile(userId: string) {
   const profile = profileRes.data as Profile | null;
   contacts = (contactsRes.data as Contact[]) || [];
 
-  const hasAccess = profile?.plan === 'elite' && (profile?.rex_lens_active !== false);
+  const hasAccess =
+    profile?.plan === 'rex_lens_standalone' ||
+    profile?.plan === 'elite_bundle' ||
+    (profile?.plan === 'elite' && profile?.rex_lens_active !== false);
 
   authState = {
     authenticated: true,

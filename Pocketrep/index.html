@@ -720,8 +720,30 @@ body.modal-open{overflow:hidden}
                 <li><span class="ck" style="color:var(--gold)">✦</span> Weekly Pipeline Digest</li>
                 <li><span class="ck" style="color:var(--gold)">✦</span> Mass text up to <b style="color:var(--gold2)">100 contacts</b></li>
                 <li><span class="ck" style="color:var(--gold)">✦</span> Priority Rex speed + custom onboarding</li>
+                <li><span class="ck" style="color:var(--gold)">✦</span> Rex Lens eligible — <b style="color:var(--gold2)">bundle both for $99/mo</b></li>
               </ul>
               <a href="#signup" onclick="scrollToForm('elite');return false;" class="plan-btn btn-solid" style="background:var(--gold)">Start Free Trial →</a>
+            </div>
+          </div>
+
+          <div class="carousel-slide">
+            <div class="carousel-plan" style="border:1.5px solid rgba(99,102,241,0.4);background:linear-gradient(155deg,rgba(99,102,241,0.05) 0%,var(--ink2) 55%)">
+              <div class="plan-badge" style="background:#4F46E5;color:white">AI Screen Coach</div>
+              <div class="pname">Rex Lens</div>
+              <div class="pdesc">AI that reads your screen and coaches in real-time</div>
+              <div class="pprice"><span class="amt">$49</span><span class="per">/mo</span></div>
+              <div class="ptrial">Chrome extension — works with any CRM</div>
+              <div class="pwas">Or <b>bundle with Elite for $99/mo</b></div>
+              <hr class="pdiv">
+              <ul class="plist">
+                <li><span class="ck" style="color:#4F46E5">✦</span> Screen Reading — Rex reads your CRM, email, LinkedIn</li>
+                <li><span class="ck" style="color:#4F46E5">✦</span> Deep Scan — click into 30 contacts, get action plans for each</li>
+                <li><span class="ck" style="color:#4F46E5">✦</span> Draft texts, emails, and call scripts — ready to send</li>
+                <li><span class="ck" style="color:#4F46E5">✦</span> Auto-Insert — paste Rex's draft into any field, one click</li>
+                <li><span class="ck" style="color:#4F46E5">✦</span> Works with VinSolutions, DealerSocket, Salesforce, HubSpot</li>
+                <li><span class="ck" style="color:#4F46E5">✦</span> Gmail, Outlook, Podium, Kenect, Matador.ai</li>
+              </ul>
+              <a href="#signup" onclick="scrollToForm('rex_lens_standalone');return false;" class="plan-btn btn-solid" style="background:#4F46E5">Get Rex Lens →</a>
             </div>
           </div>
 
@@ -761,6 +783,8 @@ body.modal-open{overflow:hidden}
       <div class="sf-plans">
         <div class="sfp active" id="sfp-pro" onclick="sfSelectPlan('pro')"><div class="sfp-badge">The Closer</div><div class="sfp-name">Pro</div><div class="sfp-price">$29/mo</div></div>
         <div class="sfp" id="sfp-elite" onclick="sfSelectPlan('elite')"><div class="sfp-badge" style="background:var(--gold);color:var(--ink)">Market Leader</div><div class="sfp-name">Elite</div><div class="sfp-price">$47/mo</div></div>
+        <div class="sfp" id="sfp-rex_lens_standalone" onclick="sfSelectPlan('rex_lens_standalone')"><div class="sfp-badge" style="background:#4F46E5;color:white">AI Screen Coach</div><div class="sfp-name">Rex Lens</div><div class="sfp-price">$49/mo</div></div>
+        <div class="sfp" id="sfp-elite_bundle" onclick="sfSelectPlan('elite_bundle')"><div class="sfp-badge" style="background:var(--gold);color:var(--ink)">Best Value</div><div class="sfp-name">Elite + Rex Lens</div><div class="sfp-price">$99/mo</div></div>
       </div>
       <form class="sf-body" id="signup-form" novalidate>
         <div class="sf-row" style="margin-top:0.85rem">
@@ -883,6 +907,10 @@ body.modal-open{overflow:hidden}
       <div class="faq-item">
         <button class="faq-q" onclick="toggleFaq(this)">Does it work outside auto sales? <span class="faq-arrow">▼</span></button>
         <div class="faq-a">Yes — it was built for any high-ticket, relationship-driven sale. <b>Mortgage, real estate, insurance, solar, B2B</b> — if you have a book of customers you sell to repeatedly, PocketRep works. Several founding members use it to bridge auto → mortgage, keeping years of customer relationships active through the transition.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">What is Rex Lens? <span class="faq-arrow">▼</span></button>
+        <div class="faq-a">Rex Lens is a <b>Chrome extension</b> that reads your screen in real-time — your CRM queue, emails, LinkedIn, Podium, Kenect, Matador — and tells you exactly what to say, who to call, and when to follow up. <b>Deep Scan</b> lets it click into 30 contacts at once and generate ready-to-send texts, emails, and call scripts for each one. Get it standalone for <b>$49/mo</b> or bundled with Elite for <b>$99/mo</b>.</div>
       </div>
     </div>
   </div>
@@ -1072,7 +1100,9 @@ function pickObj(btn){
 // ── STRIPE PAYMENT LINKS ──
 var STRIPE_LINKS = {
   pro:   'https://buy.stripe.com/5kQeVedUv3gc2857ICcbC02',
-  elite: 'https://buy.stripe.com/14A8wQdUv3gccMJ2oicbC03'
+  elite: 'https://buy.stripe.com/14A8wQdUv3gccMJ2oicbC03',
+  rex_lens_standalone: 'PLACEHOLDER_REX_LENS_STRIPE_LINK',
+  elite_bundle: 'PLACEHOLDER_ELITE_BUNDLE_STRIPE_LINK'
 };
 
 // ── FAQ ──
@@ -1087,7 +1117,7 @@ function toggleFaq(btn){
 var sfPlan='pro';
 function sfSelectPlan(plan){
   sfPlan=plan;
-  ['pro','elite'].forEach(function(p){
+  ['pro','elite','rex_lens_standalone','elite_bundle'].forEach(function(p){
     var el=document.getElementById('sfp-'+p);
     if(el)el.classList.toggle('active',p===plan);
   });
