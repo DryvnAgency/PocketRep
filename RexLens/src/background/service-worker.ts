@@ -1,4 +1,4 @@
-import { getSupabase } from '../shared/supabase';
+import { getSupabase, SUPABASE_ANON_KEY } from '../shared/supabase';
 import { buildScreenAnalysisPrompt, buildChatPrompt, buildMiniSummaryPrompt, buildDeepScanAnalysisPrompt, REX_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
 import type { Contact, Profile, PageContent, RexSuggestion, AuthState, ContactSummary, ContactActionPlan, DeepScanResult } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
@@ -132,7 +132,10 @@ async function ensureContentScript(tabId: number): Promise<void> {
 // ── AI Auth Header Helper ───────────────────────────────────────────────────
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'apikey': SUPABASE_ANON_KEY,
+  };
   const supabase = getSupabase();
   const { data: { session } } = await supabase.auth.getSession();
   if (session?.access_token) {
