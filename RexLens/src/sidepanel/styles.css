@@ -496,6 +496,36 @@ input:focus {
   transform: rotate(90deg);
 }
 
+.action-card-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.task-phone { background: rgba(79,70,229,0.15); color: #818CF8; }
+.task-email { background: rgba(245,158,11,0.15); color: #FBBF24; }
+.task-text { background: rgba(16,185,129,0.15); color: #34D399; }
+.task-sold_followup { background: rgba(139,92,246,0.15); color: #A78BFA; }
+.task-service_opportunity { background: rgba(6,182,212,0.15); color: #22D3EE; }
+.task-notification { background: rgba(100,116,139,0.15); color: #94A3B8; }
+.task-unknown { background: rgba(100,116,139,0.15); color: #94A3B8; }
+
+.action-card-vehicle {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.action-card.dismiss {
+  opacity: 0.6;
+}
+.action-card.dismiss .action-card-header {
+  background: rgba(100,116,139,0.08);
+}
+
 .action-card-body {
   display: none;
   padding: 0 12px 12px;

@@ -70,10 +70,11 @@ Rules:
 // ── Deep Scan Prompts ───────────────────────────────────────────────────────
 
 export function buildMiniSummaryPrompt(pageContent: string): string {
-  return `Summarize this contact record in exactly 3 lines:
-1. Name and basic info (phone, email)
-2. Current situation (vehicle, deal stage, last contact, logged calls, emails sent)
-3. Key opportunity or risk
+  return `Summarize this contact/task record in exactly 4 lines:
+1. Customer name, phone, email
+2. Vehicle of interest (or trade-in), lead source, age of lead, current status
+3. Task type — one of: PHONE, EMAIL, TEXT, SOLD/DELIVERED FOLLOW-UP, SERVICE OPPORTUNITY, or NOTIFICATION-ONLY (price change, "prospect viewed email", rep change, etc.)
+4. Key opportunity, risk, or reason this task matters
 
 Page content:
 ${pageContent.slice(0, 6000)}`;
@@ -86,38 +87,65 @@ export function buildDeepScanAnalysisPrompt(
     .map((s, i) => `[${i + 1}] ${s.name}: ${s.summary}`)
     .join('\n');
 
-  return `You are Rex Lens — an AI sales coach. The rep just deep-scanned their CRM.
-Below are summaries of each contact, in the order they appeared on the screen.
+  return `You are Rex Lens — an AI sales coach reading a rep's CRM worklist. Below are overdue tasks in the order they appeared on screen.
 
-For EACH contact, in order, provide:
-1. TEXT: A ready-to-send text message (actual words, conversational, under 160 chars)
-2. EMAIL: A brief follow-up email (subject line + 2-3 sentence body)
-3. CALL SCRIPT: A 2-sentence callback opener if they answer the phone
-4. BOOK: Whether to book a follow-up and when (e.g. "Book callback: tomorrow 10am" or "Skip — already sold")
+For EACH contact, identify the task type and generate the right script:
+
+TASK TYPE RULES:
+
+1. PHONE tasks — Write a one-liner phone opener that includes their first name, references their specific vehicle or trade, and gives a reason to buy sooner (expiring incentives, trade value dropping, limited inventory, lease ending, loyalty pricing ending, etc.). Just the script — don't call.
+
+2. EMAIL tasks — Write a ready-to-paste email with a short personalized subject line and body. Reference their vehicle or trade, include urgency (spring deals ending, trade values peaking, inventory moving, month-end pricing, etc.), and end with a soft CTA to connect. Under 5 sentences.
+
+3. TEXT tasks — Write a short, casual text message (2-3 sentences max) with their first name, their vehicle, and a reason to act now. Friendly, not salesy.
+
+4. SOLD/DELIVERED follow-up tasks — Write a phone opener thanking them, checking in on the vehicle, and asking for referrals.
+
+5. SERVICE OPPORTUNITY tasks — Write a phone opener that mentions their service visit and pitches a trade appraisal while they're in, no pressure.
+
+6. NOTIFICATION-ONLY tasks (price changes, "prospect viewed email", rep changes) — Mark as dismiss. No script needed.
 
 Respond in this exact JSON format (no markdown, no code fences):
 {
   "contacts": [
     {
       "name": "John Smith",
-      "summary": "Hot lead, 2024 Accord, lease ends May...",
-      "text": "Hey John, just checking in on that Accord...",
-      "email": { "subject": "Quick follow-up on your visit", "body": "Hi John, ..." },
-      "callScript": "Hey John, this is [rep] from [dealer]. I wanted to follow up on...",
-      "book": "Book callback: today 2pm — lease expires soon, high urgency"
+      "summary": "2024 Accord, lease ends May, overdue phone task",
+      "taskType": "phone",
+      "vehicle": "2024 Honda Accord",
+      "text": "",
+      "email": { "subject": "", "body": "" },
+      "callScript": "Hey John, it's [rep] at [dealer] — I wanted to catch you before the month-end pricing on the Accord wraps up. Your lease is coming due and we've got loyalty cash that disappears Friday.",
+      "book": "Book callback: today 2pm — lease expires soon, high urgency",
+      "dismiss": false
+    },
+    {
+      "name": "Jane Doe",
+      "summary": "Prospect viewed email, notification only",
+      "taskType": "notification",
+      "vehicle": "",
+      "text": "",
+      "email": { "subject": "", "body": "" },
+      "callScript": "",
+      "book": "Dismiss — notification only, no action needed",
+      "dismiss": true
     }
   ]
 }
 
-Contact summaries (in scan order):
+Contact/task summaries (in worklist order):
 ${summaryText}
 
 Rules:
-- Keep texts under 160 characters. Conversational, not salesy.
-- Emails should be 2-3 sentences max. No corporate filler.
-- Call scripts: assume they answer — get to the point in 2 sentences.
-- Booking: be specific on timing based on their situation (lease end, last contact date, heat level).
-- If a contact is already sold or lost, say "Skip" with reason instead of drafting outreach.`;
+- Only populate the script field that matches the task type. Leave others as empty strings (or empty subject/body for email).
+- For PHONE tasks: one-liner opener only — include name, vehicle, and urgency angle.
+- For EMAIL tasks: under 5 sentences, personalized subject line, soft CTA.
+- For TEXT tasks: 2-3 sentences max, casual, first name + vehicle + reason to act.
+- For SOLD/DELIVERED: thank them, check in on the vehicle, ask for referrals.
+- For SERVICE: mention service visit, pitch trade appraisal, zero pressure.
+- For NOTIFICATION-ONLY: set dismiss to true, no scripts. Just list them.
+- Be specific with urgency — reference actual incentives, market conditions, timing.
+- Never be generic. Every script should feel like it was written for that one customer.`;
 }
 
 // Sensitive data patterns to strip before sending to AI

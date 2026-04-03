@@ -285,37 +285,39 @@ function displayDeepScanResults(result: DeepScanResult) {
 
 function createActionCard(contact: ContactActionPlan, expanded: boolean): HTMLElement {
   const card = document.createElement('div');
-  card.className = `action-card${expanded ? ' expanded' : ''}`;
+  card.className = `action-card${expanded ? ' expanded' : ''}${contact.dismiss ? ' dismiss' : ''}`;
 
-  const isSkip = (contact.book || '').toLowerCase().startsWith('skip');
+  const isSkip = contact.dismiss || (contact.book || '').toLowerCase().startsWith('skip') || (contact.book || '').toLowerCase().startsWith('dismiss');
+
+  const taskIcons: Record<string, string> = {
+    phone: '📞', email: '📧', text: '📱',
+    sold_followup: '🤝', service_opportunity: '🔧',
+    notification: '🔔', unknown: '👤',
+  };
+  const taskLabels: Record<string, string> = {
+    phone: 'Phone', email: 'Email', text: 'Text',
+    sold_followup: 'Sold Follow-up', service_opportunity: 'Service Opp',
+    notification: 'Dismiss', unknown: 'Task',
+  };
+  const taskType = contact.taskType || 'unknown';
+  const icon = taskIcons[taskType] || '👤';
+  const label = taskLabels[taskType] || 'Task';
 
   card.innerHTML = `
     <div class="action-card-header">
-      <span>👤</span>
+      <span>${icon}</span>
       <span class="action-card-name">${escapeHtml(contact.name)}</span>
+      <span class="action-card-badge task-${taskType}">${label}</span>
+      ${contact.vehicle ? `<span class="action-card-vehicle">${escapeHtml(contact.vehicle)}</span>` : ''}
       <span class="action-card-toggle">▶</span>
     </div>
     <div class="action-card-summary">${escapeHtml(contact.summary)}</div>
     <div class="action-card-body">
-      ${contact.text ? `
-      <div class="action-section">
-        <div class="action-section-header">
-          <span class="action-section-label">📱 Text</span>
-          <button class="btn-copy-sm" data-copy="text">Copy</button>
-        </div>
-        <div class="action-section-text">${escapeHtml(contact.text)}</div>
-      </div>` : ''}
-
-      ${contact.email.subject ? `
-      <div class="action-section">
-        <div class="action-section-header">
-          <span class="action-section-label">📧 Email</span>
-          <button class="btn-copy-sm" data-copy="email">Copy</button>
-        </div>
-        <div class="action-section-subject">Subject: ${escapeHtml(contact.email.subject)}</div>
-        <div class="action-section-text">${escapeHtml(contact.email.body)}</div>
-      </div>` : ''}
-
+      ${contact.dismiss ? `
+      <div class="action-book skip">
+        <span>🔔</span>
+        <span>${escapeHtml(contact.book || 'Notification only — dismiss this task')}</span>
+      </div>` : `
       ${contact.callScript ? `
       <div class="action-section">
         <div class="action-section-header">
@@ -325,10 +327,30 @@ function createActionCard(contact: ContactActionPlan, expanded: boolean): HTMLEl
         <div class="action-section-text">${escapeHtml(contact.callScript)}</div>
       </div>` : ''}
 
+      ${contact.email && contact.email.subject ? `
+      <div class="action-section">
+        <div class="action-section-header">
+          <span class="action-section-label">📧 Email</span>
+          <button class="btn-copy-sm" data-copy="email">Copy</button>
+        </div>
+        <div class="action-section-subject">Subject: ${escapeHtml(contact.email.subject)}</div>
+        <div class="action-section-text">${escapeHtml(contact.email.body)}</div>
+      </div>` : ''}
+
+      ${contact.text ? `
+      <div class="action-section">
+        <div class="action-section-header">
+          <span class="action-section-label">📱 Text</span>
+          <button class="btn-copy-sm" data-copy="text">Copy</button>
+        </div>
+        <div class="action-section-text">${escapeHtml(contact.text)}</div>
+      </div>` : ''}
+
       <div class="action-book${isSkip ? ' skip' : ''}">
         <span>📅</span>
         <span>${escapeHtml(contact.book || 'No booking suggestion')}</span>
       </div>
+      `}
     </div>
   `;
 

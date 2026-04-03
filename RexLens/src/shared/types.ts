@@ -105,10 +105,13 @@ export interface ContactSummary {
 export interface ContactActionPlan {
   name: string;
   summary: string;
+  taskType: 'phone' | 'email' | 'text' | 'sold_followup' | 'service_opportunity' | 'notification' | 'unknown';
+  vehicle: string;
   text: string;
   email: { subject: string; body: string };
   callScript: string;
   book: string;
+  dismiss: boolean;
 }
 
 export interface DeepScanResult {
