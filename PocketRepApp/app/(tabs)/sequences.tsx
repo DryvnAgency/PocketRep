@@ -23,7 +23,7 @@ const { width: screenWidth } = Dimensions.get('window');
 
 const CHANNEL_ICON: Record<string, string> = { text: '💬', call: '📞', email: '📧' };
 const INDUSTRIES = ['auto', 'mortgage', 'realestate', 'insurance', 'solar', 'b2b', 'hvac', 'staffing', 'd2d', 'roofing', 'fence', 'prospect', 'other'];
-const TEMPLATE_FILTERS = ['all', 'auto', 'mortgage', 'realestate', 'hvac', 'staffing', 'd2d', 'roofing', 'insurance', 'solar', 'prospect'] as const;
+const TEMPLATE_FILTERS = ['all', 'auto', 'mortgage', 'realestate', 'hvac', 'staffing', 'd2d', 'roofing', 'fence', 'insurance', 'solar', 'b2b', 'prospect', 'other'] as const;
 type TemplateFilter = typeof TEMPLATE_FILTERS[number];
 
 const TEMPLATES: Sequence[] = [

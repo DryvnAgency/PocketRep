@@ -60,7 +60,7 @@ ${contact ? `\nSince a contact is selected, proactively give the rep a 1-2 sente
 `.trim();
 
 // ── Rebuttals data ────────────────────────────────────────────────────────────
-const REBUTTAL_INDUSTRIES = ['Auto', 'Mortgage', 'Real Estate', 'HVAC', 'Staffing', 'Roofing', 'Door-to-Door', 'Insurance', 'Solar', 'B2B'];
+const REBUTTAL_INDUSTRIES = ['Auto', 'Mortgage', 'Real Estate', 'HVAC', 'Staffing', 'Roofing', 'Fence', 'Door-to-Door', 'Insurance', 'Solar', 'B2B'];
 
 const REBUTTALS: Record<string, { objection: string; response: string }[]> = {
   'Auto': [
@@ -119,6 +119,13 @@ const REBUTTALS: Record<string, { objection: string; response: string }[]> = {
     { objection: 'I\'m not sure I\'m ready to commit', response: '"That\'s fair. What would help you feel more comfortable — seeing examples of our work in your neighborhood, talking to a past customer, or getting more detail on the warranty? I\'d rather take the extra time now than have you unsure."' },
     { objection: 'I heard you use subcontractors', response: '"Our crews are trained and vetted — they work our jobs exclusively. I can introduce you to the crew lead before we start if that helps. Accountability runs through me regardless."' },
   ],
+  'Fence': [
+    { objection: 'That\'s more than I expected to spend', response: '"I hear that a lot. Here\'s the thing — a cheap fence either falls apart in 3–5 years or you\'re replacing boards constantly. The difference in cost between what we\'re quoting and a budget job pays for itself in maintenance alone. What part of the number is the biggest concern?"' },
+    { objection: 'I want to get other quotes', response: '"You should — that\'s smart. When you compare, make sure they\'re using the same post depth, concrete footage, and material grade. That\'s where low bids cut corners. I\'ll put everything in writing so you can compare line by line."' },
+    { objection: 'I need to talk to my spouse', response: '"Of course. Would it help if I put together a one-pager with the design, materials, and timeline so you\'re both looking at the same thing? Makes the conversation a lot easier."' },
+    { objection: 'My neighbor said they got it cheaper', response: '"Possible — what did they get? Size, material, gate hardware all affect price. If we\'re comparing the same job, I\'ll match or tell you exactly why I can\'t. I\'d rather be honest than cheap."' },
+    { objection: 'I\'m not sure about the design yet', response: '"No rush on that. I can show you 3–4 styles that work well with your yard type, and we can sit on it for a week. The price I\'m quoting today is locked in for 30 days — just wanted you to have it in hand while you\'re thinking."' },
+  ],
   'Door-to-Door': [
     { objection: 'I\'m not interested', response: '"Totally respect that. Can I ask — is it this specifically, or is it just not a good time? I\'m not trying to change your mind right now, I just want to make sure I\'m not leaving before answering something that would\'ve mattered."' },
     { objection: 'I already have something like this', response: '"Good — then you know what it\'s supposed to do. What I\'d ask is: when\'s the last time someone actually reviewed what you have to make sure it\'s still the right fit? Things change. That\'s all I\'m here for."' },
@@ -168,8 +175,8 @@ export default function RexScreen() {
         const industryToRebuttal: Record<string, string> = {
           auto: 'Auto', mortgage: 'Mortgage', realestate: 'Real Estate',
           hvac: 'HVAC', staffing: 'Staffing', roofing: 'Roofing',
-          d2d: 'Door-to-Door', insurance: 'Insurance', solar: 'Solar',
-          b2b: 'B2B',
+          fence: 'Fence', d2d: 'Door-to-Door', insurance: 'Insurance',
+          solar: 'Solar', b2b: 'B2B',
         };
         const match = industryToRebuttal[prof.industry];
         if (match) setRebuttalIndustry(match);

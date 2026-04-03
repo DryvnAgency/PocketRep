@@ -339,6 +339,9 @@ export default function ContactsScreen() {
     if (form.stage) payload.stage = form.stage;
 
     if (editing) {
+      // Preserve AI-generated fields that aren't in the manual edit form
+      if ((editing as any).personal_events !== undefined) payload.personal_events = (editing as any).personal_events;
+      if ((editing as any).buying_urgency !== undefined) payload.buying_urgency = (editing as any).buying_urgency;
       await supabase.from('contacts').update(payload).eq('id', editing.id);
     } else {
       await supabase.from('contacts').insert(payload);
