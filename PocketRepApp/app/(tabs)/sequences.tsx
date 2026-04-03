@@ -1,12 +1,16 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Dimensions, Alert, ActivityIndicator, Switch, Modal,
+  StyleSheet, Dimensions, Alert, ActivityIndicator, Switch, Modal, Linking, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 import type { Sequence, SequenceStep } from '@/lib/types';
+import {
+  generateQueue, loadQueueState, saveQueueState, clearQueueState,
+  markSent, type QueueItem,
+} from '@/lib/messageQueue';
 
 let AsyncStorage: any = null;
 try {
@@ -17,18 +21,18 @@ const MASS_TEXT_KEY = 'pocketrep_mass_text_v1';
 const { width: screenWidth } = Dimensions.get('window');
 
 const CHANNEL_ICON: Record<string, string> = { text: '💬', call: '📞', email: '📧' };
-const INDUSTRIES = ['auto', 'mortgage', 'realestate', 'insurance', 'solar', 'b2b'];
+const INDUSTRIES = ['auto', 'mortgage', 'realestate', 'insurance', 'solar', 'b2b', 'hvac', 'prospect'];
+const TEMPLATE_FILTERS = ['all', 'auto', 'mortgage', 'realestate', 'hvac', 'prospect'] as const;
+type TemplateFilter = typeof TEMPLATE_FILTERS[number];
 
 const TEMPLATES: Sequence[] = [
+  // ── AUTO ─────────────────────────────────────────────────────────────────
   {
     id: 'tpl_1',
     name: 'Last Month Sold Customer',
     industry: 'auto',
     description: 'Re-engage customers sold in the past 30 days.',
-    user_id: null,
-    is_template: true,
-    is_custom: false,
-    created_at: '',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
     sequence_steps: [
       { id: 's1', sequence_id: 'tpl_1', step_number: 1, delay_days: 0, channel: 'text', message_template: 'Hey {{first_name}}, just checking in — how are you loving your new ride?', ai_personalize: false },
       { id: 's2', sequence_id: 'tpl_1', step_number: 2, delay_days: 7, channel: 'text', message_template: 'Hi {{first_name}}! Any questions about your vehicle so far? I\'m here if you need anything.', ai_personalize: false },
@@ -38,14 +42,30 @@ const TEMPLATES: Sequence[] = [
     ],
   },
   {
+    id: 'tpl_4',
+    name: 'Sold Customer Retention',
+    industry: 'auto',
+    description: 'CSI survey prep, referral asks, and annual anniversary. The complete post-delivery sequence.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't4s1', sequence_id: 'tpl_4', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, congratulations again on your new {{vehicle}}! Hope the drive home put a huge smile on your face 😊 Reach out anytime if you have questions about any of the features!', ai_personalize: false },
+      { id: 't4s2', sequence_id: 'tpl_4', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, how are you loving the {{vehicle}} so far? I\'d love to set up a quick secondary delivery — 15 minutes to walk you through Bluetooth, remote start, lane assist, all of it. When works for you?', ai_personalize: false },
+      { id: 't4s3', sequence_id: 'tpl_4', step_number: 3, delay_days: 5, channel: 'text', message_template: 'Hey {{first_name}}, heads up — you should be getting a short survey from the manufacturer in the next day or two about your experience. If I took great care of you, a top rating means the world to me and helps me keep doing what I do. Any questions before then, I\'m here.', ai_personalize: false },
+      { id: 't4s4', sequence_id: 'tpl_4', step_number: 4, delay_days: 10, channel: 'text', message_template: 'Hey {{first_name}}, coming up on about a week with the {{vehicle}} — how\'s everything feeling? First oil change isn\'t until 3,000–5,000 miles but I\'m always here if anything comes up!', ai_personalize: false },
+      { id: 't4s5', sequence_id: 'tpl_4', step_number: 5, delay_days: 17, channel: 'call', message_template: 'Two-week check-in call. Ask how they\'re loving it, answer any lingering questions. Warm up the relationship before the referral ask. Don\'t pitch — just be genuinely helpful.', ai_personalize: false },
+      { id: 't4s6', sequence_id: 'tpl_4', step_number: 6, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, one month in! 🎉 Hope the {{vehicle}} is everything you wanted. Quick question — do you know anyone who might be in the market for a vehicle? I love referrals and I always take great care of them. Just thought I\'d ask!', ai_personalize: false },
+      { id: 't4s7', sequence_id: 'tpl_4', step_number: 7, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, 3 months with the {{vehicle}} already — time flies! Hope you\'re still loving every drive. If you know anyone looking, send them my way. I reward my people. 🙌', ai_personalize: false },
+      { id: 't4s8', sequence_id: 'tpl_4', step_number: 8, delay_days: 180, channel: 'text', message_template: 'Hey {{first_name}}, 6 months in — the {{vehicle}} treating you well? Any service coming up, I can point you in the right direction. Also, when your friends or family are ready for their next vehicle, I hope you think of me first.', ai_personalize: false },
+      { id: 't4s9', sequence_id: 'tpl_4', step_number: 9, delay_days: 365, channel: 'text', message_template: 'Happy 1-year anniversary with your {{vehicle}}, {{first_name}}! 🎉 It\'s been a genuine pleasure being your rep. Thank you for trusting me. If you ever need anything — trade-up, second vehicle, or want to send someone my way — I\'m always here.', ai_personalize: false },
+    ],
+  },
+  // ── MORTGAGE ─────────────────────────────────────────────────────────────
+  {
     id: 'tpl_2',
     name: 'Rate Drop Alert',
     industry: 'mortgage',
     description: 'Notify leads when rates drop to re-engage fence-sitters.',
-    user_id: null,
-    is_template: true,
-    is_custom: false,
-    created_at: '',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
     sequence_steps: [
       { id: 's6', sequence_id: 'tpl_2', step_number: 1, delay_days: 0, channel: 'text', message_template: 'Hey {{first_name}}, rates just dropped — this could save you significantly on your monthly payment. Want to run numbers?', ai_personalize: false },
       { id: 's7', sequence_id: 'tpl_2', step_number: 2, delay_days: 2, channel: 'call', message_template: 'Follow-up call to discuss rate drop impact on their specific scenario.', ai_personalize: false },
@@ -53,19 +73,84 @@ const TEMPLATES: Sequence[] = [
     ],
   },
   {
+    id: 'tpl_5',
+    name: 'Closed Loan Follow-Up',
+    industry: 'mortgage',
+    description: 'Post-closing retention: first payment, refi alerts, referrals, and 1-year check-in.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't5s1', sequence_id: 'tpl_5', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, congratulations on closing! 🏡 What a day. Thank you for trusting me with one of the biggest financial moves of your life — honored to have been your loan officer.', ai_personalize: false },
+      { id: 't5s2', sequence_id: 'tpl_5', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, just checking in as you\'re getting settled. Any questions about your first payment, escrow account, or anything about the loan? No question too small — that\'s what I\'m here for.', ai_personalize: false },
+      { id: 't5s3', sequence_id: 'tpl_5', step_number: 3, delay_days: 7, channel: 'call', message_template: 'One-week call. Confirm they received closing documents, answer questions, remind them of the NPS survey coming. Make sure they feel completely taken care of.', ai_personalize: false },
+      { id: 't5s4', sequence_id: 'tpl_5', step_number: 4, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, hope the new home is feeling more like home every day! Let me know if you need any contractor or service recommendations — I have a great network.', ai_personalize: false },
+      { id: 't5s5', sequence_id: 'tpl_5', step_number: 5, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, first full month in the books! Just wanted to check in and make sure everything went smoothly with your first payment. Any issues, I can help connect you with the right people.', ai_personalize: false },
+      { id: 't5s6', sequence_id: 'tpl_5', step_number: 6, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, rates have been shifting — if they drop meaningfully I\'ll let you know right away because a refi could save you real money. For now, hoping the home is treating you great!', ai_personalize: false },
+      { id: 't5s7', sequence_id: 'tpl_5', step_number: 7, delay_days: 180, channel: 'text', message_template: 'Hey {{first_name}}, 6 months in! Your equity is building. If you know anyone looking to buy, refi, or pull equity for a renovation, I\'d love to help them the way I helped you. Referrals mean everything in this business.', ai_personalize: false },
+      { id: 't5s8', sequence_id: 'tpl_5', step_number: 8, delay_days: 365, channel: 'text', message_template: 'Happy 1-year in your home, {{first_name}}! 🥂 What a journey it\'s been. Thank you for being a client — hope the home has given you everything you hoped for. I\'m always here if you need anything.', ai_personalize: false },
+    ],
+  },
+  // ── REAL ESTATE ──────────────────────────────────────────────────────────
+  {
     id: 'tpl_3',
     name: 'Homeowner Equity Check',
     industry: 'realestate',
     description: 'Touch base with homeowners about their equity position.',
-    user_id: null,
-    is_template: true,
-    is_custom: false,
-    created_at: '',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
     sequence_steps: [
       { id: 's9', sequence_id: 'tpl_3', step_number: 1, delay_days: 0, channel: 'text', message_template: 'Hey {{first_name}}, homes in your area are selling fast. Have you thought about what your equity looks like right now?', ai_personalize: false },
       { id: 's10', sequence_id: 'tpl_3', step_number: 2, delay_days: 3, channel: 'call', message_template: 'Call to discuss current market conditions and equity estimate.', ai_personalize: false },
       { id: 's11', sequence_id: 'tpl_3', step_number: 3, delay_days: 10, channel: 'email', message_template: 'Hi {{first_name}}, I ran a quick market analysis on homes near yours — attached is what I found. Happy to chat!', ai_personalize: false },
       { id: 's12', sequence_id: 'tpl_3', step_number: 4, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, just checking back in. The market\'s still moving — let me know if you want an updated number.', ai_personalize: false },
+    ],
+  },
+  {
+    id: 'tpl_6',
+    name: 'Closed Sale Follow-Up',
+    industry: 'realestate',
+    description: 'Keys-to-anniversary sequence: settlement help, market updates, and referral asks.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't6s1', sequence_id: 'tpl_6', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, CONGRATULATIONS! 🔑 Keys are yours! Thank you for letting me be your agent — this one meant a lot to me. Go enjoy your new home!', ai_personalize: false },
+      { id: 't6s2', sequence_id: 'tpl_6', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, hope the move is going smoothly! If you need any recommendations — movers, contractors, painters, plumbers — I have a great list of trusted people. Just ask!', ai_personalize: false },
+      { id: 't6s3', sequence_id: 'tpl_6', step_number: 3, delay_days: 7, channel: 'call', message_template: 'One-week call. See how they\'re settling in, answer any HOA or utility questions, ask if they know anyone looking to buy or sell. Low pressure, high value.', ai_personalize: false },
+      { id: 't6s4', sequence_id: 'tpl_6', step_number: 4, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, hope you\'re getting all settled in! Quick reminder — keep your closing docs and insurance info somewhere accessible. Let me know if you need anything.', ai_personalize: false },
+      { id: 't6s5', sequence_id: 'tpl_6', step_number: 5, delay_days: 30, channel: 'text', message_template: 'One month homeowner! 🎉 Hey {{first_name}}, how\'s the neighborhood treating you? If friends or family are ever looking to buy or sell in this market, I\'d be honored to help them.', ai_personalize: false },
+      { id: 't6s6', sequence_id: 'tpl_6', step_number: 6, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, market\'s always moving. Your home is already building equity. If you ever want a quick valuation update or know someone ready to make a move, I\'m your person.', ai_personalize: false },
+      { id: 't6s7', sequence_id: 'tpl_6', step_number: 7, delay_days: 365, channel: 'text', message_template: 'Happy 1-year in your home, {{first_name}}! 🏡 I still remember the day we got those keys. Thank you for trusting me. If you ever need me — or know someone who does — I\'m always a text away.', ai_personalize: false },
+    ],
+  },
+  // ── HVAC ─────────────────────────────────────────────────────────────────
+  {
+    id: 'tpl_7',
+    name: 'After Service Follow-Up',
+    industry: 'hvac',
+    description: '30-day satisfaction check, filter reminder, seasonal tune-up, and referral ask.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't7s1', sequence_id: 'tpl_7', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, thank you for letting us take care of your system today! Means a lot. Everything running comfortably? Let me know if anything feels off.', ai_personalize: false },
+      { id: 't7s2', sequence_id: 'tpl_7', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, just checking in — is the system running smoothly since the service? Any unusual sounds, temps not right, anything at all — reach out and I\'ll make it right.', ai_personalize: false },
+      { id: 't7s3', sequence_id: 'tpl_7', step_number: 3, delay_days: 7, channel: 'text', message_template: 'Hey {{first_name}}, one week out and hoping everything\'s perfect! Quick tip: put a filter change reminder in your phone for 90 days. Small habit, big difference in efficiency.', ai_personalize: false },
+      { id: 't7s4', sequence_id: 'tpl_7', step_number: 4, delay_days: 30, channel: 'call', message_template: '30-day quality check call. Ask about comfort level, any issues, and gently mention the seasonal tune-up program. Ask if they know anyone who needs HVAC service.', ai_personalize: false },
+      { id: 't7s5', sequence_id: 'tpl_7', step_number: 5, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, 3-month filter reminder! 🔧 Also, if you\'re heading into a hot or cold season, a quick tune-up now prevents emergency calls later. Want me to get you on the schedule?', ai_personalize: false },
+      { id: 't7s6', sequence_id: 'tpl_7', step_number: 6, delay_days: 180, channel: 'text', message_template: 'Hey {{first_name}}, 6-month check-in! Hope the system\'s been reliable all season. If you know anyone with HVAC needs — new system, repair, tune-up — send them my way. I\'ll take great care of them.', ai_personalize: false },
+    ],
+  },
+  // ── PROSPECT NURTURE ─────────────────────────────────────────────────────
+  {
+    id: 'tpl_8',
+    name: 'New Prospect Nurture',
+    industry: 'prospect',
+    description: 'Daily value-first messages for new leads. Different message every day — no pressure, no repetition.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't8s1', sequence_id: 'tpl_8', step_number: 1, delay_days: 0, channel: 'text', message_template: 'Hey {{first_name}}, great connecting with you! I\'m here to make this as easy as possible whenever you\'re ready. No pressure, no rush. Just here when you need me.', ai_personalize: false },
+      { id: 't8s2', sequence_id: 'tpl_8', step_number: 2, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, most people I work with say the thing they wish they\'d done sooner was just get the conversation started. No commitment, no paperwork. Just a 10-minute call whenever you\'re ready.', ai_personalize: false },
+      { id: 't8s3', sequence_id: 'tpl_8', step_number: 3, delay_days: 2, channel: 'text', message_template: 'Hey {{first_name}}, thought you\'d find this useful — inventory on the model you were looking at moves fast. I\'d hate for you to miss the right one while it\'s there. Just keeping you in the loop!', ai_personalize: false },
+      { id: 't8s4', sequence_id: 'tpl_8', step_number: 4, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, quick question — what\'s the #1 thing that would make this a no-brainer for you? If I can answer that one thing, we\'re usually done in 20 minutes.', ai_personalize: false },
+      { id: 't8s5', sequence_id: 'tpl_8', step_number: 5, delay_days: 5, channel: 'text', message_template: 'Hey {{first_name}}, just so you know — you\'re not the only one looking. I\'m not saying this to pressure you, but I\'d hate for you to miss out when I could have held it for you.', ai_personalize: false },
+      { id: 't8s6', sequence_id: 'tpl_8', step_number: 6, delay_days: 7, channel: 'call', message_template: 'One-week follow-up call. Reference your notes from the first conversation. Show you remember the details. Ask one open-ended question about their timeline.', ai_personalize: false },
+      { id: 't8s7', sequence_id: 'tpl_8', step_number: 7, delay_days: 10, channel: 'text', message_template: 'Hey {{first_name}}, still thinking about you and what we talked about. If the timing\'s just not right, totally understand — but I want to be your person when it IS right. Just stay in touch.', ai_personalize: false },
+      { id: 't8s8', sequence_id: 'tpl_8', step_number: 8, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, last reach out for a while — I respect your time and I don\'t want to be that person. When you\'re ready, I\'m here. I\'ll make it worth it for you. 🤝', ai_personalize: false },
     ],
   },
 ];
@@ -106,6 +191,13 @@ export default function SequencesScreen() {
   ]);
   const [saving, setSaving] = useState(false);
   const [userPlan, setUserPlan] = useState<string>('pro');
+  const [templateFilter, setTemplateFilter] = useState<TemplateFilter>('all');
+  // Message queue
+  const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [showQueueModal, setShowQueueModal] = useState(false);
+  const [queuePos, setQueuePos] = useState(0);
+  const [editingMessage, setEditingMessage] = useState<string | null>(null);
   const [showMassTextModal, setShowMassTextModal] = useState(false);
   const [massMsg, setMassMsg] = useState('');
   const [allContacts, setAllContacts] = useState<{id: string; first_name: string; last_name: string; phone: string}[]>([]);
@@ -118,6 +210,7 @@ export default function SequencesScreen() {
   useFocusEffect(useCallback(() => {
     loadMySequences();
     loadMassTexts();
+    loadQueue();
   }, []));
 
   async function loadMySequences() {
@@ -138,6 +231,74 @@ export default function SequencesScreen() {
       setMySequences([]);
     }
     setLoadingMy(false);
+  }
+
+  async function loadQueue() {
+    setQueueLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setQueueLoading(false); return; }
+      // Check for a saved queue first; if fresh, generate
+      const saved = await loadQueueState();
+      const today = new Date().toISOString().split('T')[0];
+      if (saved && saved.generated_at.startsWith(today)) {
+        const pending = saved.items.filter(i => i.status === 'pending' || i.status === 'saved');
+        setQueueItems(pending);
+        setQueuePos(saved.saved_position);
+      } else {
+        const { data: prof } = await supabase.from('profiles').select('plan').eq('id', user.id).single();
+        const items = await generateQueue(user.id, prof?.plan ?? 'pro');
+        setQueueItems(items);
+        setQueuePos(0);
+        if (items.length > 0) {
+          await saveQueueState({ generated_at: new Date().toISOString(), items, saved_position: 0 });
+        }
+      }
+    } catch { setQueueItems([]); }
+    setQueueLoading(false);
+  }
+
+  async function handleSendItem(item: QueueItem) {
+    if (item.channel === 'text' && item.phone) {
+      const url = `sms:${item.phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(editingMessage ?? item.message)}`;
+      await Linking.openURL(url).catch(() => {});
+    }
+    await markSent(item.sequence_id, item.step_number);
+    const next = queuePos + 1;
+    const updatedItems = queueItems.map((q, i) =>
+      i === queuePos ? { ...q, status: 'sent' as const } : q
+    );
+    setQueueItems(updatedItems);
+    setEditingMessage(null);
+    if (next >= updatedItems.length) {
+      await clearQueueState();
+      setShowQueueModal(false);
+      Alert.alert('All done! 🎉', `Sent ${updatedItems.filter(i => i.status === 'sent').length} messages today.`);
+    } else {
+      setQueuePos(next);
+      await saveQueueState({ generated_at: new Date().toISOString(), items: updatedItems, saved_position: next });
+    }
+  }
+
+  async function handleSkipItem() {
+    const updatedItems = queueItems.map((q, i) =>
+      i === queuePos ? { ...q, status: 'skipped' as const } : q
+    );
+    const next = queuePos + 1;
+    setQueueItems(updatedItems);
+    setEditingMessage(null);
+    if (next >= updatedItems.length) {
+      await saveQueueState({ generated_at: new Date().toISOString(), items: updatedItems, saved_position: next });
+      setShowQueueModal(false);
+    } else {
+      setQueuePos(next);
+      await saveQueueState({ generated_at: new Date().toISOString(), items: updatedItems, saved_position: next });
+    }
+  }
+
+  async function handleSaveAndExit() {
+    await saveQueueState({ generated_at: new Date().toISOString(), items: queueItems, saved_position: queuePos });
+    setShowQueueModal(false);
   }
 
   function openMassText() {
@@ -403,14 +564,62 @@ export default function SequencesScreen() {
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
+        {/* Section: Ready to Send */}
+        <AccordionSection
+          title={`📤 Ready to Send${queueItems.length > 0 ? `  •  ${queueItems.length}` : ''}`}
+          open={openSection === 3}
+          onToggle={() => toggleSection(3)}
+        >
+          {queueLoading ? (
+            <ActivityIndicator color={colors.gold} style={{ margin: spacing.lg }} />
+          ) : queueItems.length === 0 ? (
+            <View style={s.emptySection}>
+              <Text style={s.emptySectionText}>You're all caught up ✅</Text>
+            </View>
+          ) : (
+            <View style={sq.card}>
+              <View style={sq.cardTop}>
+                <Text style={sq.cardCount}>{queueItems.length} message{queueItems.length !== 1 ? 's' : ''} ready</Text>
+                <Text style={sq.cardSub}>Oldest due: {queueItems[0]?.due_date} · Est. {Math.ceil(queueItems.length * 0.5)} min</Text>
+              </View>
+              {userPlan === 'pro' && queueItems.length === 50 && (
+                <Text style={sq.limitNote}>Showing 50 (Pro limit) · Upgrade to Elite for 100/batch</Text>
+              )}
+              <View style={sq.cardBtns}>
+                <TouchableOpacity style={sq.startBtn} onPress={() => { setQueuePos(0); setShowQueueModal(true); }} activeOpacity={0.85}>
+                  <Text style={sq.startBtnText}>▶ Start Sending</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={sq.saveBtn} onPress={handleSaveAndExit} activeOpacity={0.8}>
+                  <Text style={sq.saveBtnText}>💾 Save for Later</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </AccordionSection>
+
         {/* Section: Templates */}
         <AccordionSection
           title="📋 Templates"
           open={openSection === 0}
           onToggle={() => toggleSection(0)}
         >
+          {/* Industry filter pills */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
+            {TEMPLATE_FILTERS.map(f => (
+              <TouchableOpacity
+                key={f}
+                style={[s.filterPill, templateFilter === f && s.filterPillActive]}
+                onPress={() => setTemplateFilter(f)}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.filterPillText, templateFilter === f && s.filterPillTextActive]}>
+                  {f === 'all' ? '⭐ All' : f === 'prospect' ? '🎯 Prospects' : f === 'hvac' ? '🔧 HVAC' : f === 'realestate' ? '🏡 Real Estate' : f.charAt(0).toUpperCase() + f.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.bubbleScroll}>
-            {TEMPLATES.map(seq => (
+            {TEMPLATES.filter(t => templateFilter === 'all' || t.industry === templateFilter).map(seq => (
               <SequenceBubble key={seq.id} seq={seq} onPress={() => openDetail(seq)} />
             ))}
           </ScrollView>
@@ -460,6 +669,85 @@ export default function SequencesScreen() {
           )}
         </AccordionSection>
       </ScrollView>
+
+      {/* Send Queue Modal */}
+      <Modal visible={showQueueModal} animationType="slide">
+        <View style={sq.modal}>
+          {/* Header */}
+          <View style={sq.modalHeader}>
+            <TouchableOpacity onPress={handleSaveAndExit} activeOpacity={0.8}>
+              <Text style={sq.exitBtn}>← Save & Exit</Text>
+            </TouchableOpacity>
+            <Text style={sq.posLabel}>{queuePos + 1} of {queueItems.length}</Text>
+          </View>
+          {/* Progress bar */}
+          <View style={sq.progressTrack}>
+            <View style={[sq.progressFill, { width: `${((queuePos + 1) / Math.max(queueItems.length, 1)) * 100}%` as any }]} />
+          </View>
+
+          {queueItems[queuePos] ? (() => {
+            const item = queueItems[queuePos];
+            const initials = item.contact_name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+            return (
+              <ScrollView contentContainerStyle={sq.modalBody} keyboardShouldPersistTaps="handled">
+                {/* Contact info */}
+                <View style={sq.contactRow}>
+                  <View style={sq.avatar}><Text style={sq.avatarText}>{initials}</Text></View>
+                  <View>
+                    <Text style={sq.contactName}>{item.contact_name}</Text>
+                    <Text style={sq.contactPhone}>{item.phone || 'No phone'}</Text>
+                    <Text style={sq.dueDate}>Due: {item.due_date} · {CHANNEL_ICON[item.channel]}</Text>
+                  </View>
+                </View>
+
+                {/* Message preview / edit */}
+                <TextInput
+                  style={sq.msgBox}
+                  value={editingMessage ?? item.message}
+                  onChangeText={setEditingMessage}
+                  multiline
+                  numberOfLines={5}
+                  textAlignVertical="top"
+                />
+
+                {/* Actions */}
+                {item.channel === 'text' ? (
+                  <TouchableOpacity
+                    style={[sq.openSmsBtn, !item.phone && { opacity: 0.4 }]}
+                    onPress={() => handleSendItem(item)}
+                    disabled={!item.phone}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={sq.openSmsBtnText}>📱 Open in Messages →</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={sq.openSmsBtn} onPress={() => handleSendItem(item)} activeOpacity={0.85}>
+                    <Text style={sq.openSmsBtnText}>{item.channel === 'call' ? '📞 Mark Call Done →' : '📧 Mark Email Done →'}</Text>
+                  </TouchableOpacity>
+                )}
+
+                <View style={sq.secondaryBtns}>
+                  <TouchableOpacity style={sq.editBtn} onPress={() => setEditingMessage(editingMessage === null ? item.message : null)} activeOpacity={0.8}>
+                    <Text style={sq.editBtnText}>{editingMessage !== null ? '↩ Reset' : '✏️ Edit'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={sq.skipBtn} onPress={handleSkipItem} activeOpacity={0.8}>
+                    <Text style={sq.skipBtnText}>⏭ Skip</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            );
+          })() : (
+            <View style={sq.allDone}>
+              <Text style={sq.allDoneIcon}>🎉</Text>
+              <Text style={sq.allDoneTitle}>All done!</Text>
+              <Text style={sq.allDoneSub}>Queue complete. Great work.</Text>
+              <TouchableOpacity style={sq.openSmsBtn} onPress={() => setShowQueueModal(false)} activeOpacity={0.85}>
+                <Text style={sq.openSmsBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </Modal>
 
       {/* Mass Text Modal */}
       <Modal visible={showMassTextModal} animationType="slide" transparent>
@@ -824,4 +1112,74 @@ const mt = StyleSheet.create({
     padding: spacing.md, alignItems: 'center', marginTop: spacing.sm,
   },
   sendBtnText: { color: colors.ink, fontWeight: '700', fontSize: 14 },
+  // Template filter pills
+  filterRow: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.xs },
+  filterPill: {
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 5,
+  },
+  filterPillActive: { backgroundColor: colors.goldBg, borderColor: colors.goldBorder },
+  filterPillText: { color: colors.grey2, fontSize: 12, fontWeight: '600' },
+  filterPillTextActive: { color: colors.gold },
+});
+
+// ── Queue / Ready-to-Send styles ─────────────────────────────────────────────
+const sq = StyleSheet.create({
+  // Queue status card
+  card: {
+    margin: spacing.lg, marginTop: 0,
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.lg, padding: spacing.md,
+  },
+  cardTop: { marginBottom: spacing.sm },
+  cardCount: { fontSize: 15, fontWeight: '800', color: colors.white },
+  cardSub: { fontSize: 12, color: colors.grey2, marginTop: 2 },
+  limitNote: { fontSize: 11, color: colors.orange, marginBottom: spacing.sm },
+  cardBtns: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  startBtn: { flex: 2, backgroundColor: colors.gold, borderRadius: radius.lg, padding: spacing.md, alignItems: 'center' },
+  startBtnText: { color: colors.ink, fontWeight: '700', fontSize: 14 },
+  saveBtn: { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.lg, padding: spacing.md, alignItems: 'center' },
+  saveBtnText: { color: colors.grey2, fontWeight: '600', fontSize: 12 },
+  // Full-screen modal
+  modal: { flex: 1, backgroundColor: colors.ink },
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: spacing.lg, paddingTop: 56, paddingBottom: spacing.md,
+    backgroundColor: colors.ink2, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  exitBtn: { color: colors.grey2, fontSize: 14, fontWeight: '600' },
+  posLabel: { color: colors.grey, fontSize: 13 },
+  progressTrack: { height: 3, backgroundColor: colors.ink4 },
+  progressFill: { height: 3, backgroundColor: colors.gold },
+  modalBody: { padding: spacing.lg, gap: spacing.md, paddingBottom: 60 },
+  // Contact info
+  contactRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  avatar: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: colors.goldBg, borderWidth: 1.5, borderColor: colors.goldBorder,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarText: { color: colors.gold, fontWeight: '800', fontSize: 16 },
+  contactName: { fontSize: 16, fontWeight: '800', color: colors.white },
+  contactPhone: { fontSize: 13, color: colors.grey2, marginTop: 2 },
+  dueDate: { fontSize: 11, color: colors.grey, marginTop: 2 },
+  // Message box
+  msgBox: {
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.lg, padding: spacing.md, color: colors.white,
+    fontSize: 14, lineHeight: 22, minHeight: 120,
+  },
+  // Buttons
+  openSmsBtn: { backgroundColor: colors.gold, borderRadius: radius.lg, padding: spacing.md + 2, alignItems: 'center' },
+  openSmsBtnText: { color: colors.ink, fontWeight: '800', fontSize: 15 },
+  secondaryBtns: { flexDirection: 'row', gap: spacing.sm },
+  editBtn: { flex: 1, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.lg, padding: spacing.md, alignItems: 'center' },
+  editBtnText: { color: colors.grey2, fontWeight: '600', fontSize: 13 },
+  skipBtn: { flex: 1, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.lg, padding: spacing.md, alignItems: 'center' },
+  skipBtnText: { color: colors.grey2, fontWeight: '600', fontSize: 13 },
+  // All done
+  allDone: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
+  allDoneIcon: { fontSize: 56 },
+  allDoneTitle: { fontSize: 24, fontWeight: '800', color: colors.white },
+  allDoneSub: { fontSize: 14, color: colors.grey2 },
 });
