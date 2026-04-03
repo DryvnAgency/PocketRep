@@ -203,7 +203,10 @@ async function chatWithRex(userMessage: string): Promise<string> {
 // ── Deep Scan AI ────────────────────────────────────────────────────────────
 
 async function miniSummarize(pageContent: PageContent): Promise<string> {
-  const cleanedText = stripSensitiveData(pageContent.mainText);
+  const cleanedText = stripSensitiveData(pageContent.mainText) +
+    (pageContent.conversations.length > 0
+      ? '\n\nConversations:\n' + pageContent.conversations.map(stripSensitiveData).join('\n---\n')
+      : '');
   const prompt = buildMiniSummaryPrompt(cleanedText);
 
   const res = await fetch(AI_PROXY_URL, {
@@ -268,71 +271,84 @@ async function analyzeDeepScan(summaries: ContactSummary[]): Promise<DeepScanRes
   }
 }
 
+const DEEP_SCAN_TIMEOUT_MS = 60_000; // 60-second total timeout
+
 async function runDeepScan(tabId: number): Promise<DeepScanResult> {
   isDeepScanning = true;
   deepScanCancelled = false;
   deepScanResults = [];
+  const scanStart = Date.now();
 
-  // Step 1: Find clickable contacts on the page
-  const clickableContacts = await chrome.tabs.sendMessage(tabId, { type: 'FIND_CLICKABLE' });
-  if (!Array.isArray(clickableContacts) || clickableContacts.length === 0) {
-    isDeepScanning = false;
-    throw new Error('No clickable contacts found on this page.');
-  }
+  try {
+    // Step 1: Find clickable contacts on the page
+    const clickableContacts = await chrome.tabs.sendMessage(tabId, { type: 'FIND_CLICKABLE' });
+    if (!Array.isArray(clickableContacts) || clickableContacts.length === 0) {
+      throw new Error('No clickable contacts found on this page.');
+    }
 
-  const total = clickableContacts.length;
+    const total = clickableContacts.length;
 
-  // Broadcast found count
-  broadcast({ type: 'DEEP_SCAN_PROGRESS', payload: { current: 0, total, name: 'Starting...' } });
+    // Broadcast found count
+    broadcast({ type: 'DEEP_SCAN_PROGRESS', payload: { current: 0, total, name: 'Starting...' } });
 
-  // Step 2: Click into each contact, extract, and mini-summarize
-  for (let i = 0; i < total; i++) {
-    if (deepScanCancelled) break;
+    // Step 2: Click into each contact, extract, and mini-summarize
+    for (let i = 0; i < total; i++) {
+      if (deepScanCancelled) break;
+      if (Date.now() - scanStart > DEEP_SCAN_TIMEOUT_MS) {
+        broadcast({ type: 'DEEP_SCAN_PROGRESS', payload: { current: i, total, name: 'Timeout — analyzing what we have...' } });
+        break;
+      }
 
-    const contact = clickableContacts[i];
-    broadcast({ type: 'DEEP_SCAN_PROGRESS', payload: { current: i + 1, total, name: contact.name } });
+      const contact = clickableContacts[i];
+      broadcast({ type: 'DEEP_SCAN_PROGRESS', payload: { current: i + 1, total, name: contact.name } });
 
-    try {
-      const result = await chrome.tabs.sendMessage(tabId, {
-        type: 'CLICK_AND_EXTRACT',
-        payload: { selector: contact.selector },
-      });
-
-      if (result.success && result.content) {
-        const summary = await miniSummarize(result.content);
-        deepScanResults.push({
-          name: contact.name,
-          summary,
-          sourceUrl: result.content.url || '',
+      try {
+        const result = await chrome.tabs.sendMessage(tabId, {
+          type: 'CLICK_AND_EXTRACT',
+          payload: { selector: contact.selector },
         });
-      } else {
+
+        if (result.success && result.content) {
+          const summary = await miniSummarize(result.content);
+          deepScanResults.push({
+            name: contact.name,
+            summary,
+            sourceUrl: result.content.url || '',
+          });
+        } else {
+          deepScanResults.push({
+            name: contact.name,
+            summary: 'Could not extract — page may require manual navigation.',
+            sourceUrl: '',
+          });
+        }
+      } catch {
         deepScanResults.push({
           name: contact.name,
-          summary: 'Could not extract — page may require manual navigation.',
+          summary: 'Extraction failed — contact may not have a detail page.',
           sourceUrl: '',
         });
       }
-    } catch {
-      deepScanResults.push({
-        name: contact.name,
-        summary: 'Extraction failed — contact may not have a detail page.',
-        sourceUrl: '',
-      });
+
+      // 500ms pause between navigations
+      if (i < total - 1 && !deepScanCancelled) {
+        await new Promise(r => setTimeout(r, 500));
+      }
     }
 
-    // 500ms pause between navigations
-    if (i < total - 1 && !deepScanCancelled) {
-      await new Promise(r => setTimeout(r, 500));
+    // Step 3: Analyze all summaries with final AI call (skip if nothing gathered)
+    if (deepScanResults.length === 0) {
+      return { contacts: [], scannedCount: 0, totalFound: total };
     }
+
+    broadcast({ type: 'STATUS', payload: { status: 'analyzing', message: 'Generating action plans...' } });
+    const result = await analyzeDeepScan(deepScanResults);
+    result.totalFound = total;
+
+    return result;
+  } finally {
+    isDeepScanning = false;
   }
-
-  // Step 3: Analyze all summaries with final AI call
-  broadcast({ type: 'STATUS', payload: { status: 'analyzing', message: 'Generating action plans...' } });
-  const result = await analyzeDeepScan(deepScanResults);
-  result.totalFound = total;
-
-  isDeepScanning = false;
-  return result;
 }
 
 function broadcast(message: any) {
@@ -454,7 +470,6 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 
         return { success: true, deepScan: deepResult };
       } catch (err: any) {
-        isDeepScanning = false;
         broadcast({ type: 'STATUS', payload: { status: 'error', message: err.message } });
         return { error: `Deep scan failed: ${err.message}` };
       }

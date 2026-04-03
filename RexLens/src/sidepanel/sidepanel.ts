@@ -85,8 +85,10 @@ function setStatus(status: 'idle' | 'scanning' | 'analyzing' | 'ready' | 'error'
   statusBadge.textContent = labels[status] || status;
   statusBadge.className = `badge badge-${status}`;
 
-  scanBtn.disabled = status === 'scanning' || status === 'analyzing';
-  scanBtnText.textContent = status === 'scanning' || status === 'analyzing'
+  const busy = status === 'scanning' || status === 'analyzing';
+  scanBtn.disabled = busy;
+  deepScanBtn.disabled = busy;
+  scanBtnText.textContent = busy
     ? status.charAt(0).toUpperCase() + status.slice(1) + '...'
     : 'Scan Page';
 }
@@ -278,7 +280,7 @@ function createActionCard(contact: ContactActionPlan, expanded: boolean): HTMLEl
   const card = document.createElement('div');
   card.className = `action-card${expanded ? ' expanded' : ''}`;
 
-  const isSkip = contact.book.toLowerCase().startsWith('skip');
+  const isSkip = (contact.book || '').toLowerCase().startsWith('skip');
 
   card.innerHTML = `
     <div class="action-card-header">
@@ -318,7 +320,7 @@ function createActionCard(contact: ContactActionPlan, expanded: boolean): HTMLEl
 
       <div class="action-book${isSkip ? ' skip' : ''}">
         <span>📅</span>
-        <span>${escapeHtml(contact.book)}</span>
+        <span>${escapeHtml(contact.book || 'No booking suggestion')}</span>
       </div>
     </div>
   `;

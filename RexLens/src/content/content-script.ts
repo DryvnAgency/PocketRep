@@ -4,7 +4,6 @@ import type { ExtensionMessage } from '../shared/messages';
 // ── Page Type Detection ──────────────────────────────────────────────────────
 
 function detectPageType(): PageType {
-  const url = window.location.href.toLowerCase();
   const host = window.location.hostname.toLowerCase();
 
   // Email providers
@@ -259,20 +258,24 @@ const PLATFORM_CONTACT_SELECTORS = [
   '.msg-conversation-card__participant-names a',
 ];
 
-const NAME_PATTERN = /^[A-Z][a-z]+(?:\s[A-Z][a-z]+){0,2}$/;
+// Supports: John Smith, O'Brien, McDonald, Jean-Pierre, De La Cruz
+const NAME_PATTERN = /^[A-Z][a-zA-Z'-]+(?:\s(?:[A-Z][a-zA-Z'-]+|[a-z]{1,3})){1,3}$/;
 
 function findClickableContacts(): ClickableContact[] {
   const results: ClickableContact[] = [];
   const seen = new Set<string>();
 
+  let contactIndex = 0;
+
   // Try platform-specific selectors first
   for (const sel of PLATFORM_CONTACT_SELECTORS) {
     const elements = document.querySelectorAll<HTMLElement>(sel);
     for (const el of elements) {
-      const contact = extractClickableContact(el);
+      const contact = extractClickableContact(el, contactIndex);
       if (contact && !seen.has(contact.name)) {
         seen.add(contact.name);
         results.push(contact);
+        contactIndex++;
       }
     }
   }
@@ -282,17 +285,18 @@ function findClickableContacts(): ClickableContact[] {
     'table a, [role="row"] a, [role="listitem"] a, .list-item a'
   );
   for (const el of genericLinks) {
-    const contact = extractClickableContact(el);
+    const contact = extractClickableContact(el, contactIndex);
     if (contact && !seen.has(contact.name)) {
       seen.add(contact.name);
       results.push(contact);
+      contactIndex++;
     }
   }
 
   return results.slice(0, 30);
 }
 
-function extractClickableContact(el: HTMLElement): ClickableContact | null {
+function extractClickableContact(el: HTMLElement, index: number): ClickableContact | null {
   const text = (el.textContent || '').trim();
 
   // Must look like a person's name: 2-3 capitalized words, 3-50 chars
@@ -306,7 +310,7 @@ function extractClickableContact(el: HTMLElement): ClickableContact | null {
 
   if (!isClickable) return null;
 
-  const selector = buildUniqueSelector(el, 0);
+  const selector = buildUniqueSelector(el, index);
   const href = isLink ? (el as HTMLAnchorElement).href : '';
 
   return { name: text, selector, href };
@@ -384,14 +388,14 @@ async function clickAndExtract(selector: string): Promise<PageContent> {
     await new Promise(r => setTimeout(r, 1000));
   }
 
-  // Fallback: if still not on original URL, hard navigate
-  if (window.location.href !== savedUrl) {
-    window.location.href = savedUrl;
-    await new Promise(r => setTimeout(r, 2000));
-  }
-
-  // Restore scroll position
+  // Restore scroll position (best-effort, may be on wrong page)
   window.scrollTo({ top: savedScroll, behavior: 'instant' });
+
+  // Fallback: if still not on original URL, hard navigate
+  // Do this AFTER returning content since hard navigate destroys this script context
+  if (window.location.href !== savedUrl) {
+    setTimeout(() => { window.location.href = savedUrl; }, 50);
+  }
 
   return content;
 }
