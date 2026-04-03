@@ -95,9 +95,8 @@ function setStatus(status: 'idle' | 'scanning' | 'analyzing' | 'ready' | 'error'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-function toEmail(input: string): string {
-  const val = input.trim().toLowerCase();
-  return val.includes('@') ? val : `${val}@pocketrep.app`;
+function usernameToEmail(username: string): string {
+  return `${username.trim().toLowerCase()}@pocketrep.app`;
 }
 
 loginBtn.addEventListener('click', async () => {
@@ -105,7 +104,7 @@ loginBtn.addEventListener('click', async () => {
   const password = passwordInput.value;
 
   if (!username || !password) {
-    showError('Enter your email and password.');
+    showError('Enter your username and password.');
     return;
   }
 
@@ -115,7 +114,7 @@ loginBtn.addEventListener('click', async () => {
 
   const result = await chrome.runtime.sendMessage({
     type: 'AUTH_LOGIN',
-    payload: { email: toEmail(username), password },
+    payload: { email: usernameToEmail(username), password },
   });
 
   loginBtn.disabled = false;
