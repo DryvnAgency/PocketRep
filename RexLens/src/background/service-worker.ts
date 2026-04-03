@@ -146,6 +146,36 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 // ── AI Calls ─────────────────────────────────────────────────────────────────
 
+/** Call the AI proxy and extract the text response, with full error diagnostics. */
+async function callAIProxy(body: Record<string, unknown>): Promise<string> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(AI_PROXY_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  const json = await res.json();
+
+  // Anthropic error response: { type: "error", error: { type: "...", message: "..." } }
+  if (json.type === 'error' || json.error) {
+    const msg = json.error?.message || json.error?.type || JSON.stringify(json.error || json);
+    throw new Error(`Anthropic API error: ${msg}`);
+  }
+
+  if (!res.ok) {
+    throw new Error(`AI proxy returned ${res.status}: ${JSON.stringify(json).slice(0, 200)}`);
+  }
+
+  const text = json.content?.[0]?.text;
+  if (text === undefined || text === null) {
+    console.error('[Rex Lens] Unexpected AI proxy response:', JSON.stringify(json).slice(0, 500));
+    throw new Error(`Unexpected AI response format: ${JSON.stringify(json).slice(0, 200)}`);
+  }
+
+  return text;
+}
+
 async function analyzePageWithAI(page: PageContent): Promise<RexSuggestion> {
   const matchedContacts = matchContacts(page);
   const cleanedPage = {
@@ -160,24 +190,18 @@ async function analyzePageWithAI(page: PageContent): Promise<RexSuggestion> {
     matchedContacts,
   );
 
-  const headers = await getAuthHeaders();
-  const res = await fetch(AI_PROXY_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: REX_MODEL,
-      max_tokens: 600,
-      system: 'Respond only with valid JSON. No markdown fences.',
-      messages: [{ role: 'user', content: systemPrompt }],
-    }),
+  const text = await callAIProxy({
+    model: REX_MODEL,
+    max_tokens: 600,
+    system: 'Respond only with valid JSON. No markdown fences.',
+    messages: [{ role: 'user', content: systemPrompt }],
   });
 
-  if (!res.ok) throw new Error(`AI proxy returned ${res.status}`);
-  const json = await res.json();
-  const text = json.content?.[0]?.text ?? '';
+  // Strip markdown fences if the model wrapped it anyway
+  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(cleaned);
     return {
       situation: parsed.situation || 'Could not analyze page.',
       suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
@@ -217,21 +241,12 @@ async function chatWithRex(userMessage: string): Promise<string> {
   // Keep last 10 messages for context
   const recentHistory = chatHistory.slice(-10);
 
-  const headers = await getAuthHeaders();
-  const res = await fetch(AI_PROXY_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: REX_MODEL,
-      max_tokens: 600,
-      system: systemPrompt,
-      messages: recentHistory.map(m => ({ role: m.role, content: m.content })),
-    }),
+  const reply = await callAIProxy({
+    model: REX_MODEL,
+    max_tokens: 600,
+    system: systemPrompt,
+    messages: recentHistory.map(m => ({ role: m.role, content: m.content })),
   });
-
-  if (!res.ok) throw new Error(`AI proxy returned ${res.status}`);
-  const json = await res.json();
-  const reply = json.content?.[0]?.text ?? 'Rex hit an error. Try again.';
 
   chatHistory.push({ role: 'assistant', content: reply });
 
@@ -247,21 +262,12 @@ async function miniSummarize(pageContent: PageContent): Promise<string> {
       : '');
   const prompt = buildMiniSummaryPrompt(cleanedText);
 
-  const headers = await getAuthHeaders();
-  const res = await fetch(AI_PROXY_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: REX_MODEL,
-      max_tokens: 150,
-      system: 'Respond with exactly 3 lines of plain text. No JSON, no markdown.',
-      messages: [{ role: 'user', content: prompt }],
-    }),
+  return await callAIProxy({
+    model: REX_MODEL,
+    max_tokens: 150,
+    system: 'Respond with exactly 3 lines of plain text. No JSON, no markdown.',
+    messages: [{ role: 'user', content: prompt }],
   });
-
-  if (!res.ok) throw new Error(`AI proxy returned ${res.status}`);
-  const json = await res.json();
-  return json.content?.[0]?.text ?? 'Could not summarize this contact.';
 }
 
 async function analyzeDeepScan(summaries: ContactSummary[]): Promise<DeepScanResult> {
@@ -269,24 +275,17 @@ async function analyzeDeepScan(summaries: ContactSummary[]): Promise<DeepScanRes
     summaries.map(s => ({ name: s.name, summary: s.summary }))
   );
 
-  const headers = await getAuthHeaders();
-  const res = await fetch(AI_PROXY_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: REX_MODEL,
-      max_tokens: 2000,
-      system: 'Respond only with valid JSON. No markdown fences.',
-      messages: [{ role: 'user', content: prompt }],
-    }),
+  const text = await callAIProxy({
+    model: REX_MODEL,
+    max_tokens: 2000,
+    system: 'Respond only with valid JSON. No markdown fences.',
+    messages: [{ role: 'user', content: prompt }],
   });
 
-  if (!res.ok) throw new Error(`AI proxy returned ${res.status}`);
-  const json = await res.json();
-  const text = json.content?.[0]?.text ?? '';
+  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(cleaned);
     const contacts: ContactActionPlan[] = Array.isArray(parsed.contacts)
       ? parsed.contacts
       : [];
