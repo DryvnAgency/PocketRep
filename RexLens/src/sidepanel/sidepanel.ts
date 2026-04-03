@@ -1,4 +1,4 @@
-import type { RexSuggestion, AuthState, FormField } from '../shared/types';
+import type { RexSuggestion, AuthState, FormField, DeepScanResult, ContactActionPlan } from '../shared/types';
 
 // ── DOM References ───────────────────────────────────────────────────────────
 
@@ -42,6 +42,17 @@ const insertConfirmBtn = $<HTMLButtonElement>('insert-confirm-btn');
 const chatMessages = $('chat-messages');
 const chatInput = $<HTMLInputElement>('chat-input');
 const chatSendBtn = $<HTMLButtonElement>('chat-send-btn');
+
+// Deep Scan
+const deepScanBtn = $<HTMLButtonElement>('deep-scan-btn');
+const deepScanBtnText = $('deep-scan-btn-text');
+const deepScanProgress = $('deep-scan-progress');
+const deepScanBar = $('deep-scan-bar');
+const deepScanStatus = $('deep-scan-status');
+const deepScanCancelBtn = $<HTMLButtonElement>('deep-scan-cancel-btn');
+const deepScanResults = $('deep-scan-results');
+const deepScanCards = $('deep-scan-cards');
+const deepScanBadge = $('deep-scan-badge');
 
 // Logout
 const logoutBtn = $<HTMLButtonElement>('logout-btn');
@@ -220,6 +231,129 @@ function displaySuggestions(suggestions: RexSuggestion) {
   }
 }
 
+// ── Deep Scan ───────────────────────────────────────────────────────────────
+
+deepScanBtn.addEventListener('click', async () => {
+  deepScanBtn.disabled = true;
+  deepScanBtnText.textContent = 'Scanning...';
+  deepScanProgress.style.display = 'flex';
+  deepScanResults.style.display = 'none';
+  deepScanBar.style.width = '0%';
+  deepScanStatus.textContent = 'Finding contacts...';
+
+  const result = await chrome.runtime.sendMessage({ type: 'DEEP_SCAN' });
+
+  deepScanBtn.disabled = false;
+  deepScanBtnText.textContent = 'Deep Scan (up to 30 contacts)';
+  deepScanProgress.style.display = 'none';
+
+  if (result.error) {
+    setStatus('error', result.error);
+    return;
+  }
+
+  if (result.deepScan) {
+    displayDeepScanResults(result.deepScan);
+  }
+});
+
+deepScanCancelBtn.addEventListener('click', async () => {
+  await chrome.runtime.sendMessage({ type: 'CANCEL_DEEP_SCAN' });
+  deepScanStatus.textContent = 'Cancelling...';
+  deepScanCancelBtn.disabled = true;
+});
+
+function displayDeepScanResults(result: DeepScanResult) {
+  deepScanResults.style.display = 'block';
+  deepScanBadge.textContent = `${result.scannedCount} contacts`;
+  deepScanCards.innerHTML = '';
+
+  result.contacts.forEach((contact, index) => {
+    const card = createActionCard(contact, index < 3); // First 3 expanded
+    deepScanCards.appendChild(card);
+  });
+}
+
+function createActionCard(contact: ContactActionPlan, expanded: boolean): HTMLElement {
+  const card = document.createElement('div');
+  card.className = `action-card${expanded ? ' expanded' : ''}`;
+
+  const isSkip = contact.book.toLowerCase().startsWith('skip');
+
+  card.innerHTML = `
+    <div class="action-card-header">
+      <span>👤</span>
+      <span class="action-card-name">${escapeHtml(contact.name)}</span>
+      <span class="action-card-toggle">▶</span>
+    </div>
+    <div class="action-card-summary">${escapeHtml(contact.summary)}</div>
+    <div class="action-card-body">
+      ${contact.text ? `
+      <div class="action-section">
+        <div class="action-section-header">
+          <span class="action-section-label">📱 Text</span>
+          <button class="btn-copy-sm" data-copy="text">Copy</button>
+        </div>
+        <div class="action-section-text">${escapeHtml(contact.text)}</div>
+      </div>` : ''}
+
+      ${contact.email.subject ? `
+      <div class="action-section">
+        <div class="action-section-header">
+          <span class="action-section-label">📧 Email</span>
+          <button class="btn-copy-sm" data-copy="email">Copy</button>
+        </div>
+        <div class="action-section-subject">Subject: ${escapeHtml(contact.email.subject)}</div>
+        <div class="action-section-text">${escapeHtml(contact.email.body)}</div>
+      </div>` : ''}
+
+      ${contact.callScript ? `
+      <div class="action-section">
+        <div class="action-section-header">
+          <span class="action-section-label">📞 Call Script</span>
+          <button class="btn-copy-sm" data-copy="call">Copy</button>
+        </div>
+        <div class="action-section-text">${escapeHtml(contact.callScript)}</div>
+      </div>` : ''}
+
+      <div class="action-book${isSkip ? ' skip' : ''}">
+        <span>📅</span>
+        <span>${escapeHtml(contact.book)}</span>
+      </div>
+    </div>
+  `;
+
+  // Toggle expand/collapse
+  const header = card.querySelector('.action-card-header')!;
+  header.addEventListener('click', () => {
+    card.classList.toggle('expanded');
+  });
+
+  // Copy buttons
+  card.querySelectorAll<HTMLButtonElement>('.btn-copy-sm').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const type = btn.dataset.copy;
+      let text = '';
+      if (type === 'text') text = contact.text;
+      else if (type === 'email') text = `Subject: ${contact.email.subject}\n\n${contact.email.body}`;
+      else if (type === 'call') text = contact.callScript;
+
+      navigator.clipboard.writeText(text);
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1000);
+    });
+  });
+
+  return card;
+}
+
+function escapeHtml(str: string): string {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 // ── Copy Response ────────────────────────────────────────────────────────────
 
 copyResponseBtn.addEventListener('click', () => {
@@ -349,6 +483,20 @@ chrome.runtime.onMessage.addListener((message) => {
     case 'SUGGESTIONS_READY':
       displaySuggestions(message.payload);
       break;
+    case 'DEEP_SCAN_PROGRESS': {
+      const { current, total, name } = message.payload;
+      const pct = Math.round((current / total) * 100);
+      deepScanBar.style.width = `${pct}%`;
+      deepScanStatus.textContent = `Scanning ${current} of ${total} — ${name}`;
+      break;
+    }
+    case 'DEEP_SCAN_COMPLETE':
+      deepScanProgress.style.display = 'none';
+      deepScanBtn.disabled = false;
+      deepScanBtnText.textContent = 'Deep Scan (up to 30 contacts)';
+      deepScanCancelBtn.disabled = false;
+      displayDeepScanResults(message.payload);
+      break;
   }
 });
 
@@ -364,6 +512,9 @@ function resetUI() {
   responseCard.style.display = 'none';
   followupCard.style.display = 'none';
   chatMessages.innerHTML = '';
+  deepScanProgress.style.display = 'none';
+  deepScanResults.style.display = 'none';
+  deepScanCards.innerHTML = '';
   setStatus('idle');
 }
 
@@ -377,6 +528,9 @@ async function initialize() {
   const last = await chrome.runtime.sendMessage({ type: 'GET_LAST_SUGGESTIONS' });
   if (last.suggestions) {
     displaySuggestions(last.suggestions);
+    if (last.suggestions.deepScan) {
+      displayDeepScanResults(last.suggestions.deepScan);
+    }
   }
 }
 

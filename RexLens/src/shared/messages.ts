@@ -1,4 +1,4 @@
-import type { PageContent, RexSuggestion, AuthState, FormField } from './types';
+import type { PageContent, RexSuggestion, AuthState, FormField, ClickableContact, DeepScanResult } from './types';
 
 // ── Content Script → Service Worker ──────────────────────────────────────────
 
@@ -40,6 +40,35 @@ export interface ExtractPageMessage {
 
 export interface DetectFieldsMessage {
   type: 'DETECT_FIELDS';
+}
+
+// ── Deep Scan Messages ──────────────────────────────────────────────────────
+
+export interface DeepScanMessage {
+  type: 'DEEP_SCAN';
+}
+
+export interface CancelDeepScanMessage {
+  type: 'CANCEL_DEEP_SCAN';
+}
+
+export interface FindClickableMessage {
+  type: 'FIND_CLICKABLE';
+}
+
+export interface ClickAndExtractMessage {
+  type: 'CLICK_AND_EXTRACT';
+  payload: { selector: string };
+}
+
+export interface DeepScanProgressMessage {
+  type: 'DEEP_SCAN_PROGRESS';
+  payload: { current: number; total: number; name: string };
+}
+
+export interface DeepScanCompleteMessage {
+  type: 'DEEP_SCAN_COMPLETE';
+  payload: DeepScanResult;
 }
 
 // ── Side Panel ↔ Service Worker ──────────────────────────────────────────────
@@ -99,4 +128,10 @@ export type ExtensionMessage =
   | ConfirmInsertMessage
   | AuthStateMessage
   | ErrorMessage
-  | StatusMessage;
+  | StatusMessage
+  | DeepScanMessage
+  | CancelDeepScanMessage
+  | FindClickableMessage
+  | ClickAndExtractMessage
+  | DeepScanProgressMessage
+  | DeepScanCompleteMessage;

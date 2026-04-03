@@ -79,10 +79,40 @@ export interface RexSuggestion {
   draftResponse: string | null;
   followUp: string | null;
   matchedContact: Contact | null;
+  deepScan?: DeepScanResult;
 }
 
 export interface AuthState {
   authenticated: boolean;
   profile: Profile | null;
   hasAccess: boolean; // elite + rex_lens_active
+}
+
+// ── Deep Scan types ─────────────────────────────────────────────────────────
+
+export interface ClickableContact {
+  name: string;
+  selector: string;
+  href: string;
+}
+
+export interface ContactSummary {
+  name: string;
+  summary: string;
+  sourceUrl: string;
+}
+
+export interface ContactActionPlan {
+  name: string;
+  summary: string;
+  text: string;
+  email: { subject: string; body: string };
+  callScript: string;
+  book: string;
+}
+
+export interface DeepScanResult {
+  contacts: ContactActionPlan[];
+  scannedCount: number;
+  totalFound: number;
 }

@@ -51,12 +51,38 @@
         </div>
       </div>
 
-      <!-- Scan Button -->
+      <!-- Scan Buttons -->
       <div class="scan-section">
         <button id="scan-btn" class="btn-primary btn-scan">
           <span id="scan-btn-text">Scan Page</span>
         </button>
+        <button id="deep-scan-btn" class="btn-secondary btn-scan btn-deep-scan">
+          <span id="deep-scan-btn-text">Deep Scan (up to 30 contacts)</span>
+        </button>
         <span class="hint">or press Ctrl+Shift+R</span>
+      </div>
+
+      <!-- Deep Scan Progress -->
+      <div id="deep-scan-progress" class="card" style="display:none">
+        <div class="card-header">
+          <span class="card-icon">🔍</span>
+          <span class="card-title">Deep Scanning</span>
+        </div>
+        <div class="progress-bar-container">
+          <div id="deep-scan-bar" class="progress-bar" style="width:0%"></div>
+        </div>
+        <p id="deep-scan-status" class="hint">Starting...</p>
+        <button id="deep-scan-cancel-btn" class="btn-secondary btn-sm">Cancel</button>
+      </div>
+
+      <!-- Deep Scan Results (per-contact action cards) -->
+      <div id="deep-scan-results" style="display:none">
+        <div class="card-header" style="padding: 0 0 8px 0">
+          <span class="card-icon">📋</span>
+          <span class="card-title">Action Plans</span>
+          <span id="deep-scan-badge" class="badge badge-ready" style="margin-left:auto">0 contacts</span>
+        </div>
+        <div id="deep-scan-cards"></div>
       </div>
 
       <!-- Contact Match -->

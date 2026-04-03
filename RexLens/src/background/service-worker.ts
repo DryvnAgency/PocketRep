@@ -1,6 +1,6 @@
 import { getSupabase } from '../shared/supabase';
-import { buildScreenAnalysisPrompt, buildChatPrompt, REX_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
-import type { Contact, Profile, PageContent, RexSuggestion, AuthState } from '../shared/types';
+import { buildScreenAnalysisPrompt, buildChatPrompt, buildMiniSummaryPrompt, buildDeepScanAnalysisPrompt, REX_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
+import type { Contact, Profile, PageContent, RexSuggestion, AuthState, ContactSummary, ContactActionPlan, DeepScanResult } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -12,6 +12,11 @@ let lastSuggestions: RexSuggestion | null = null;
 let chatHistory: { role: string; content: string }[] = [];
 let lastScanTime = 0;
 const SCAN_COOLDOWN_MS = 10_000; // 10 second minimum between scans
+
+// Deep scan state
+let isDeepScanning = false;
+let deepScanCancelled = false;
+let deepScanResults: ContactSummary[] = [];
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
@@ -195,6 +200,145 @@ async function chatWithRex(userMessage: string): Promise<string> {
   return reply;
 }
 
+// ── Deep Scan AI ────────────────────────────────────────────────────────────
+
+async function miniSummarize(pageContent: PageContent): Promise<string> {
+  const cleanedText = stripSensitiveData(pageContent.mainText);
+  const prompt = buildMiniSummaryPrompt(cleanedText);
+
+  const res = await fetch(AI_PROXY_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: REX_MODEL,
+      max_tokens: 150,
+      system: 'Respond with exactly 3 lines of plain text. No JSON, no markdown.',
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+
+  const json = await res.json();
+  return json.content?.[0]?.text ?? 'Could not summarize this contact.';
+}
+
+async function analyzeDeepScan(summaries: ContactSummary[]): Promise<DeepScanResult> {
+  const prompt = buildDeepScanAnalysisPrompt(
+    summaries.map(s => ({ name: s.name, summary: s.summary }))
+  );
+
+  const res = await fetch(AI_PROXY_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: REX_MODEL,
+      max_tokens: 2000,
+      system: 'Respond only with valid JSON. No markdown fences.',
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+
+  const json = await res.json();
+  const text = json.content?.[0]?.text ?? '';
+
+  try {
+    const parsed = JSON.parse(text);
+    const contacts: ContactActionPlan[] = Array.isArray(parsed.contacts)
+      ? parsed.contacts
+      : [];
+
+    return {
+      contacts,
+      scannedCount: summaries.length,
+      totalFound: summaries.length,
+    };
+  } catch {
+    // Fallback: create minimal action plans from summaries
+    return {
+      contacts: summaries.map(s => ({
+        name: s.name,
+        summary: s.summary,
+        text: '',
+        email: { subject: '', body: '' },
+        callScript: '',
+        book: 'Analysis failed — review manually',
+      })),
+      scannedCount: summaries.length,
+      totalFound: summaries.length,
+    };
+  }
+}
+
+async function runDeepScan(tabId: number): Promise<DeepScanResult> {
+  isDeepScanning = true;
+  deepScanCancelled = false;
+  deepScanResults = [];
+
+  // Step 1: Find clickable contacts on the page
+  const clickableContacts = await chrome.tabs.sendMessage(tabId, { type: 'FIND_CLICKABLE' });
+  if (!Array.isArray(clickableContacts) || clickableContacts.length === 0) {
+    isDeepScanning = false;
+    throw new Error('No clickable contacts found on this page.');
+  }
+
+  const total = clickableContacts.length;
+
+  // Broadcast found count
+  broadcast({ type: 'DEEP_SCAN_PROGRESS', payload: { current: 0, total, name: 'Starting...' } });
+
+  // Step 2: Click into each contact, extract, and mini-summarize
+  for (let i = 0; i < total; i++) {
+    if (deepScanCancelled) break;
+
+    const contact = clickableContacts[i];
+    broadcast({ type: 'DEEP_SCAN_PROGRESS', payload: { current: i + 1, total, name: contact.name } });
+
+    try {
+      const result = await chrome.tabs.sendMessage(tabId, {
+        type: 'CLICK_AND_EXTRACT',
+        payload: { selector: contact.selector },
+      });
+
+      if (result.success && result.content) {
+        const summary = await miniSummarize(result.content);
+        deepScanResults.push({
+          name: contact.name,
+          summary,
+          sourceUrl: result.content.url || '',
+        });
+      } else {
+        deepScanResults.push({
+          name: contact.name,
+          summary: 'Could not extract — page may require manual navigation.',
+          sourceUrl: '',
+        });
+      }
+    } catch {
+      deepScanResults.push({
+        name: contact.name,
+        summary: 'Extraction failed — contact may not have a detail page.',
+        sourceUrl: '',
+      });
+    }
+
+    // 500ms pause between navigations
+    if (i < total - 1 && !deepScanCancelled) {
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
+  // Step 3: Analyze all summaries with final AI call
+  broadcast({ type: 'STATUS', payload: { status: 'analyzing', message: 'Generating action plans...' } });
+  const result = await analyzeDeepScan(deepScanResults);
+  result.totalFound = total;
+
+  isDeepScanning = false;
+  return result;
+}
+
+function broadcast(message: any) {
+  chrome.runtime.sendMessage(message).catch(() => {});
+}
+
 // ── Message Handler ──────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener(
@@ -287,6 +431,38 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         chrome.runtime.sendMessage({ type: 'STATUS', payload: { status: 'error', message: err.message } }).catch(() => {});
         return { error: `AI analysis failed: ${err.message}` };
       }
+    }
+
+    case 'DEEP_SCAN': {
+      if (isDeepScanning) return { error: 'Deep scan already in progress.' };
+      if (!authState.hasAccess) return { error: 'Rex Lens requires an Elite plan with Rex Lens add-on.' };
+
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return { error: 'No active tab found.' };
+
+      broadcast({ type: 'STATUS', payload: { status: 'scanning', message: 'Deep scanning...' } });
+
+      try {
+        const deepResult = await runDeepScan(tab.id);
+        broadcast({ type: 'STATUS', payload: { status: 'ready' } });
+        broadcast({ type: 'DEEP_SCAN_COMPLETE', payload: deepResult });
+
+        // Also store as part of suggestions for persistence
+        if (lastSuggestions) {
+          lastSuggestions.deepScan = deepResult;
+        }
+
+        return { success: true, deepScan: deepResult };
+      } catch (err: any) {
+        isDeepScanning = false;
+        broadcast({ type: 'STATUS', payload: { status: 'error', message: err.message } });
+        return { error: `Deep scan failed: ${err.message}` };
+      }
+    }
+
+    case 'CANCEL_DEEP_SCAN': {
+      deepScanCancelled = true;
+      return { ok: true };
     }
 
     case 'CHAT_MESSAGE': {

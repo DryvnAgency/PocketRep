@@ -1,4 +1,4 @@
-import type { PageContent, PageType, FormField } from '../shared/types';
+import type { PageContent, PageType, FormField, ClickableContact } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
 
 // ── Page Type Detection ──────────────────────────────────────────────────────
@@ -242,6 +242,160 @@ function buildUniqueSelector(el: HTMLElement, index: number): string {
   return `[data-rex-field="${index}"]`;
 }
 
+// ── Deep Scan: Find Clickable Contacts ──────────────────────────────────────
+
+const PLATFORM_CONTACT_SELECTORS = [
+  // VinSolutions
+  'a.customer-name', 'table a[href*="contact"]', 'table a[href*="customer"]',
+  // DealerSocket
+  '.contact-link', '.lead-name a',
+  // Salesforce
+  'a[data-refid]', '.slds-truncate a',
+  // HubSpot
+  'a.private-link', '.contact-name-link',
+  // Gmail
+  '.yP', '.gD',
+  // LinkedIn
+  '.msg-conversation-card__participant-names a',
+];
+
+const NAME_PATTERN = /^[A-Z][a-z]+(?:\s[A-Z][a-z]+){0,2}$/;
+
+function findClickableContacts(): ClickableContact[] {
+  const results: ClickableContact[] = [];
+  const seen = new Set<string>();
+
+  // Try platform-specific selectors first
+  for (const sel of PLATFORM_CONTACT_SELECTORS) {
+    const elements = document.querySelectorAll<HTMLElement>(sel);
+    for (const el of elements) {
+      const contact = extractClickableContact(el);
+      if (contact && !seen.has(contact.name)) {
+        seen.add(contact.name);
+        results.push(contact);
+      }
+    }
+  }
+
+  // Generic: <a> inside <table> or [role="row"] with name-like text
+  const genericLinks = document.querySelectorAll<HTMLAnchorElement>(
+    'table a, [role="row"] a, [role="listitem"] a, .list-item a'
+  );
+  for (const el of genericLinks) {
+    const contact = extractClickableContact(el);
+    if (contact && !seen.has(contact.name)) {
+      seen.add(contact.name);
+      results.push(contact);
+    }
+  }
+
+  return results.slice(0, 30);
+}
+
+function extractClickableContact(el: HTMLElement): ClickableContact | null {
+  const text = (el.textContent || '').trim();
+
+  // Must look like a person's name: 2-3 capitalized words, 3-50 chars
+  if (text.length < 3 || text.length > 50) return null;
+  if (!NAME_PATTERN.test(text)) return null;
+
+  // Must be clickable (link or has click handler)
+  const isLink = el.tagName === 'A' && (el as HTMLAnchorElement).href;
+  const isClickable = el.getAttribute('role') === 'link' || el.style.cursor === 'pointer'
+    || el.onclick !== null || isLink;
+
+  if (!isClickable) return null;
+
+  const selector = buildUniqueSelector(el, 0);
+  const href = isLink ? (el as HTMLAnchorElement).href : '';
+
+  return { name: text, selector, href };
+}
+
+// ── Deep Scan: Click and Extract ────────────────────────────────────────────
+
+function waitForPageChange(timeout = 5000): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const startUrl = window.location.href;
+    let resolved = false;
+
+    const done = () => {
+      if (resolved) return;
+      resolved = true;
+      observer.disconnect();
+      clearInterval(urlCheck);
+      clearTimeout(timer);
+      resolve();
+    };
+
+    // Watch for significant DOM changes
+    let mutationCount = 0;
+    const observer = new MutationObserver((mutations) => {
+      mutationCount += mutations.length;
+      if (mutationCount > 20) done();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Watch for URL changes (SPA navigation)
+    const urlCheck = setInterval(() => {
+      if (window.location.href !== startUrl) done();
+    }, 100);
+
+    // Timeout fallback
+    const timer = setTimeout(done, timeout);
+  });
+}
+
+async function clickAndExtract(selector: string): Promise<PageContent> {
+  const savedUrl = window.location.href;
+  const savedScroll = window.scrollY;
+
+  // Find and click the element
+  const el = document.querySelector(selector) as HTMLElement | null;
+  if (!el) throw new Error(`Element not found: ${selector}`);
+
+  el.click();
+
+  // Wait for navigation/content change
+  await waitForPageChange();
+  // Small extra delay for rendering
+  await new Promise(r => setTimeout(r, 300));
+
+  // Extract the detail page content
+  tagFields();
+  const content = extractPageContent();
+
+  // Navigate back
+  if (window.location.href !== savedUrl) {
+    history.back();
+    // Wait for back navigation to complete
+    await new Promise<void>((resolve) => {
+      const check = setInterval(() => {
+        if (window.location.href === savedUrl || document.readyState === 'complete') {
+          clearInterval(check);
+          resolve();
+        }
+      }, 100);
+      setTimeout(() => { clearInterval(check); resolve(); }, 3000);
+    });
+  } else {
+    // SPA may have changed DOM without URL change — try back anyway
+    history.back();
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  // Fallback: if still not on original URL, hard navigate
+  if (window.location.href !== savedUrl) {
+    window.location.href = savedUrl;
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  // Restore scroll position
+  window.scrollTo({ top: savedScroll, behavior: 'instant' });
+
+  return content;
+}
+
 // ── Text Insertion ───────────────────────────────────────────────────────────
 
 function insertTextIntoField(selector: string, text: string): boolean {
@@ -351,6 +505,20 @@ chrome.runtime.onMessage.addListener(
       case 'SCROLL': {
         scrollPage(message.payload.direction);
         sendResponse({ ok: true });
+        break;
+      }
+
+      case 'FIND_CLICKABLE': {
+        const contacts = findClickableContacts();
+        sendResponse(contacts);
+        break;
+      }
+
+      case 'CLICK_AND_EXTRACT': {
+        const { selector } = message.payload;
+        clickAndExtract(selector)
+          .then(content => sendResponse({ success: true, content }))
+          .catch(err => sendResponse({ success: false, error: err.message }));
         break;
       }
     }

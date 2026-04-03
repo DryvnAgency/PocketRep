@@ -428,6 +428,148 @@ input:focus {
   to { transform: rotate(360deg); }
 }
 
+/* ── Deep Scan ─────────────────────────────────────────────────────────────── */
+
+.btn-deep-scan {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* Contact action card */
+.action-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.action-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.action-card-header:hover {
+  background: var(--bg-hover);
+}
+
+.action-card-name {
+  font-weight: 600;
+  font-size: 13px;
+  flex: 1;
+}
+
+.action-card-summary {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 0 12px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.action-card-toggle {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+
+.action-card.expanded .action-card-toggle {
+  transform: rotate(90deg);
+}
+
+.action-card-body {
+  display: none;
+  padding: 0 12px 12px;
+}
+
+.action-card.expanded .action-card-body {
+  display: block;
+}
+
+.action-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+
+.action-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.action-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.action-section-text {
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.action-section-subject {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.btn-copy-sm {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-copy-sm:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.action-book {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--warning);
+}
+
+.action-book.skip {
+  color: var(--text-muted);
+}
+
 /* ── Scrollbar ─────────────────────────────────────────────────────────────── */
 
 ::-webkit-scrollbar { width: 6px; }
