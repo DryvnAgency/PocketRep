@@ -13,16 +13,49 @@ import type { Contact, RexMessage, RexMemory, Profile } from '@/lib/types';
 const REX_MODEL = 'claude-haiku-4-5-20251001';
 const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
 
+// ── Action types Rex can execute ─────────────────────────────────────────────
+interface RexAction {
+  type: 'mass_text' | 'show_followups' | 'log_customer' | 'start_sequence';
+  filter?: { vehicle_make?: string; stage?: string; lease_months?: number };
+  message?: string;
+  contact_name?: string;
+  sequence_name?: string;
+}
+
+function parseRexAction(text: string): RexAction | null {
+  const match = text.match(/<action>([\s\S]*?)<\/action>/);
+  if (!match) return null;
+  try { return JSON.parse(match[1]); } catch { return null; }
+}
+
+function stripActionTag(text: string): string {
+  return text.replace(/<action>[\s\S]*?<\/action>/g, '').trim();
+}
+
 const REX_SYSTEM = (repName: string, memory: string, contact: Contact | null) => `
-You are Rex — a sharp, no-BS AI sales assistant built into PocketRep. You speak directly to ${repName || 'the rep'} like a trusted closer, not a chatbot.
+You are Rex — a sharp, no-BS AI sales assistant and command center for PocketRep. You speak directly to ${repName || 'the rep'} like a trusted closer who can also take action in their app.
 
 ${memory ? `What you know about this rep:\n${memory}\n` : ''}
 ${contact ? `Active customer context:\nName: ${contact.first_name} ${contact.last_name}\nVehicle: ${[contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ') || 'not logged'}\nMileage: ${contact.mileage ?? 'unknown'} | Annual: ${contact.annual_mileage ?? 'unknown'}\nLease end: ${contact.lease_end_date ?? 'N/A'}\nNotes: ${contact.notes ?? 'none'}\n` : ''}
-Rules:
+
+## Rules
 - Short, punchy responses. No corporate filler.
-- When giving rebuttals, make them specific to the customer's actual situation.
+- When giving rebuttals, give the actual words to say.
 - Never say "I cannot" — find an angle or ask for more context.
-- If asked for a rebuttal, give the actual words to say, not a strategy lecture.
+- If the rep asks you to DO something in the app, respond with your advice AND append an action block.
+
+## Actions you can take
+When the rep asks you to take action, end your message with:
+<action>{"type":"mass_text","filter":{"vehicle_make":"Malibu"},"message":"Hey {{first_name}}, ..."}</action>
+<action>{"type":"show_followups"}</action>
+<action>{"type":"log_customer","contact_name":"Marcus Webb"}</action>
+
+Action types:
+- mass_text: rep says "send a text to [group] about [offer]" — fill filter (vehicle_make, stage) and message
+- show_followups: rep says "who should I call today" or "who needs attention" — no filter needed
+- log_customer: rep describes a customer interaction in chat — extract and offer to log it
+
+${contact ? `\nSince a contact is selected, proactively give the rep a 1-2 sentence game plan for their next move with ${contact.first_name} ${contact.last_name} before answering any questions.` : ''}
 `.trim();
 
 // ── Rebuttals data ────────────────────────────────────────────────────────────
@@ -80,6 +113,8 @@ export default function RexScreen() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showContactPicker, setShowContactPicker] = useState(false);
+  const [pendingAction, setPendingAction] = useState<RexAction | null>(null);
+  const [proactiveCoach, setProactiveCoach] = useState<string | null>(null);
   const listRef = useRef<FlatList>(null);
 
   useFocusEffect(useCallback(() => {
@@ -161,7 +196,12 @@ export default function RexScreen() {
       });
 
       const json = await res.json();
-      const replyText = json.content?.[0]?.text ?? 'Rex hit an error. Check your API key.';
+      const rawReply = json.content?.[0]?.text ?? 'Rex hit an error. Check your API key.';
+
+      // Detect action intent from Rex reply
+      const action = parseRexAction(rawReply);
+      if (action) setPendingAction(action);
+      const replyText = stripActionTag(rawReply);
 
       const { data: savedReply } = await supabase.from('rex_messages').insert({
         user_id: user.id,
@@ -223,6 +263,78 @@ export default function RexScreen() {
     const json = await res.json();
     const summary = json.content?.[0]?.text ?? '';
     await supabase.from('rex_memory').upsert({ user_id: userId, summary, message_count: count });
+  }
+
+  // Fetch proactive coach card when a contact is selected
+  async function fetchProactiveCoach(contact: Contact) {
+    if (!ANTHROPIC_KEY) return;
+    setProactiveCoach(null);
+    try {
+      const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ');
+      const prompt = `In 2 sentences max, give the rep their immediate game plan for ${contact.first_name} ${contact.last_name}. Vehicle: ${vehicle || 'unknown'}. Lease end: ${contact.lease_end_date ?? 'unknown'}. Notes: ${contact.notes ?? 'none'}. Be direct — what to do next and the one thing to lead with.`;
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model: REX_MODEL, max_tokens: 150, messages: [{ role: 'user', content: prompt }] }),
+      });
+      const rj = await res.json();
+      setProactiveCoach(rj.content?.[0]?.text ?? null);
+    } catch {}
+  }
+
+  // Execute an action Rex proposed
+  async function executeAction(action: RexAction) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setPendingAction(null);
+
+    if (action.type === 'show_followups') {
+      const today = new Date().toISOString().split('T')[0];
+      const { data: followUps } = await supabase
+        .from('contacts')
+        .select('id,first_name,last_name,follow_up_date,heat_tier,notes')
+        .eq('user_id', user.id)
+        .lte('follow_up_date', today)
+        .not('follow_up_date', 'is', null)
+        .order('follow_up_date')
+        .limit(10);
+
+      const hotContacts = contacts.filter(c => c.heat_tier === 'hot').slice(0, 5);
+      const combined = [...(followUps ?? []), ...hotContacts.filter(h => !(followUps ?? []).find((f: any) => f.id === h.id))];
+
+      const resultText = combined.length === 0
+        ? "No follow-ups due today. Book looks good — want me to find who's gone cold?"
+        : `📋 Today's follow-up list:\n\n${combined.slice(0, 8).map((c: any, i) => `${i + 1}. ${c.first_name} ${c.last_name}${c.heat_tier === 'hot' ? ' 🔥' : ''}`).join('\n')}`;
+
+      const aiMsg: RexMessage = {
+        id: Date.now().toString() + 'a',
+        user_id: user.id, contact_id: null, role: 'assistant',
+        content: resultText, created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, aiMsg]);
+    }
+
+    if (action.type === 'mass_text' && action.message) {
+      // Filter contacts based on action.filter
+      let filtered = contacts;
+      if (action.filter?.vehicle_make) {
+        const vm = action.filter.vehicle_make.toLowerCase();
+        filtered = filtered.filter(c => (c.vehicle_make ?? '').toLowerCase().includes(vm));
+      }
+      if (action.filter?.stage) {
+        filtered = filtered.filter(c => c.stage === action.filter!.stage);
+      }
+
+      const confirmMsg: RexMessage = {
+        id: Date.now().toString() + 'a',
+        user_id: user.id, contact_id: null, role: 'assistant',
+        content: `✅ Mass text queued to ${filtered.length} contact${filtered.length !== 1 ? 's' : ''}${action.filter?.vehicle_make ? ` with a ${action.filter.vehicle_make}` : ''}.\n\nMessage: "${action.message?.replace('{{first_name}}', filtered[0]?.first_name ?? 'there')}"`,
+        created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, confirmMsg]);
+    }
+
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150);
   }
 
   const isElite = profile?.plan === 'elite';
@@ -372,6 +484,40 @@ export default function RexScreen() {
             </View>
           ) : null}
 
+          {/* Proactive coach card when contact selected */}
+          {activeContact && proactiveCoach ? (
+            <View style={s.coachCard}>
+              <Text style={s.coachLabel}>🎯 Rex on {activeContact.first_name}</Text>
+              <Text style={s.coachText}>{proactiveCoach}</Text>
+            </View>
+          ) : activeContact && !proactiveCoach ? (
+            <View style={s.coachCard}>
+              <ActivityIndicator size="small" color={colors.gold} />
+              <Text style={[s.coachLabel, { marginLeft: 8 }]}>Rex is sizing up {activeContact.first_name}…</Text>
+            </View>
+          ) : null}
+
+          {/* Pending action card */}
+          {pendingAction ? (
+            <View style={s.actionCard}>
+              <Text style={s.actionCardTitle}>
+                {pendingAction.type === 'mass_text' ? '📤 Rex wants to send a mass text' :
+                 pendingAction.type === 'show_followups' ? '📋 Rex wants to pull your follow-up list' :
+                 '⚡ Rex wants to take an action'}
+              </Text>
+              {pendingAction.message ? <Text style={s.actionCardMsg} numberOfLines={2}>"{pendingAction.message}"</Text> : null}
+              {pendingAction.filter?.vehicle_make ? <Text style={s.actionCardSub}>Filter: {pendingAction.filter.vehicle_make} owners</Text> : null}
+              <View style={s.actionCardBtns}>
+                <TouchableOpacity style={s.actionCancelBtn} onPress={() => setPendingAction(null)} activeOpacity={0.8}>
+                  <Text style={s.actionCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.actionConfirmBtn} onPress={() => executeAction(pendingAction)} activeOpacity={0.85}>
+                  <Text style={s.actionConfirmText}>Confirm →</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
           {/* Messages */}
           <FlatList
             ref={listRef}
@@ -383,7 +529,7 @@ export default function RexScreen() {
               <View style={s.empty}>
                 <Text style={s.emptyIcon}>🧠</Text>
                 <Text style={s.emptyTitle}>Rex is ready.</Text>
-                <Text style={s.emptySub}>Try: "Give me a rebuttal for 'the payment is too high'" or "Who should I call today?"</Text>
+                <Text style={s.emptySub}>Try: "Who should I call today?" or "Send a mass text to my Malibu customers about the $299 special"</Text>
               </View>
             }
             renderItem={({ item: m }) => (
@@ -441,7 +587,7 @@ export default function RexScreen() {
               <TouchableOpacity
                 key={c.id}
                 style={[s.pickerRow, activeContact?.id === c.id && s.pickerRowActive]}
-                onPress={() => { setActiveContact(c); setShowContactPicker(false); }}
+                onPress={() => { setActiveContact(c); setShowContactPicker(false); fetchProactiveCoach(c); }}
               >
                 <Text style={s.pickerRowText}>
                   {c.first_name} {c.last_name}
@@ -565,4 +711,26 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
   },
   rebActionText: { color: colors.gold, fontSize: 11, fontWeight: '700' },
+  // Proactive coach card
+  coachCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(212,168,67,0.06)', borderBottomWidth: 1, borderBottomColor: colors.goldBorder,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: 6,
+  },
+  coachLabel: { fontSize: 10, fontWeight: '800', color: colors.gold, letterSpacing: 0.5, marginBottom: 3 },
+  coachText: { color: colors.grey3, fontSize: 13, lineHeight: 19 },
+  // Action card
+  actionCard: {
+    margin: spacing.md, marginBottom: 0,
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: radius.lg, padding: spacing.md,
+  },
+  actionCardTitle: { color: colors.gold, fontWeight: '700', fontSize: 13, marginBottom: 4 },
+  actionCardMsg: { color: colors.grey3, fontSize: 12, fontStyle: 'italic', marginBottom: 4 },
+  actionCardSub: { color: colors.grey2, fontSize: 11, marginBottom: spacing.sm },
+  actionCardBtns: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  actionCancelBtn: { flex: 1, borderWidth: 1, borderColor: colors.goldBorder, borderRadius: radius.md, padding: 8, alignItems: 'center' },
+  actionCancelText: { color: colors.grey2, fontWeight: '600', fontSize: 12 },
+  actionConfirmBtn: { flex: 2, backgroundColor: colors.gold, borderRadius: radius.md, padding: 8, alignItems: 'center' },
+  actionConfirmText: { color: colors.ink, fontWeight: '700', fontSize: 12 },
 });

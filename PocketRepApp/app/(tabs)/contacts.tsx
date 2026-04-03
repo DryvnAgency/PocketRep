@@ -149,10 +149,28 @@ const STAGES: { key: string; label: string; icon: string }[] = [
   { key: 'lost', label: 'Lost', icon: '❌' },
 ];
 
+const LEASE_FILTERS: { key: string; label: string }[] = [
+  { key: 'all', label: 'All Leases' },
+  { key: 'lt6', label: '< 6 mo' },
+  { key: '6to12', label: '6–12 mo' },
+  { key: '12to18', label: '12–18 mo' },
+  { key: '18to24', label: '18–24 mo' },
+];
+
+function leaseMonthsAway(lease_end_date: string | null): number | null {
+  if (!lease_end_date) return null;
+  const end = new Date(lease_end_date);
+  const now = new Date();
+  return (end.getFullYear() - now.getFullYear()) * 12 + (end.getMonth() - now.getMonth());
+}
+
 export default function ContactsScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('all');
+  const [leaseFilter, setLeaseFilter] = useState('all');
+  const [vehicleFilter, setVehicleFilter] = useState('');
+  const [showVehiclePicker, setShowVehiclePicker] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showMassText, setShowMassText] = useState(false);
@@ -192,8 +210,19 @@ export default function ContactsScreen() {
       (c.phone ?? '').includes(q)
     );
     const matchStage = stageFilter === 'all' || (c.stage ?? 'prospect') === stageFilter;
-    return matchSearch && matchStage;
+    const matchVehicle = !vehicleFilter || (c.vehicle_make ?? '').toLowerCase().includes(vehicleFilter.toLowerCase());
+    const months = leaseMonthsAway(c.lease_end_date);
+    const matchLease = leaseFilter === 'all' ? true
+      : leaseFilter === 'lt6' ? (months !== null && months >= 0 && months < 6)
+      : leaseFilter === '6to12' ? (months !== null && months >= 6 && months < 12)
+      : leaseFilter === '12to18' ? (months !== null && months >= 12 && months < 18)
+      : leaseFilter === '18to24' ? (months !== null && months >= 18 && months < 24)
+      : true;
+    return matchSearch && matchStage && matchVehicle && matchLease;
   });
+
+  // Distinct vehicle makes for picker
+  const vehicleMakes = Array.from(new Set(contacts.map(c => c.vehicle_make).filter(Boolean) as string[])).sort();
 
   function openAdd() {
     setEditing(null);
@@ -374,6 +403,58 @@ export default function ContactsScreen() {
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      {/* Lease expiry + vehicle filters */}
+      <View style={s.smartFilterRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs, paddingRight: spacing.sm }}>
+          {LEASE_FILTERS.map(lf => (
+            <TouchableOpacity
+              key={lf.key}
+              style={[s.leaseFilterPill, leaseFilter === lf.key && s.leaseFilterPillActive]}
+              onPress={() => setLeaseFilter(lf.key)}
+              activeOpacity={0.8}
+            >
+              <Text style={[s.leaseFilterText, leaseFilter === lf.key && s.leaseFilterTextActive]}>
+                {lf.key !== 'all' ? '📅 ' : ''}{lf.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <TouchableOpacity
+          style={[s.vehicleBtn, vehicleFilter && s.vehicleBtnActive]}
+          onPress={() => setShowVehiclePicker(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={[s.vehicleBtnText, vehicleFilter && s.vehicleBtnTextActive]}>
+            🚗 {vehicleFilter || 'Any vehicle'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Vehicle picker modal */}
+      <Modal visible={showVehiclePicker} animationType="slide" transparent>
+        <View style={m.overlay}>
+          <View style={m.sheet}>
+            <View style={m.handle} />
+            <View style={m.mHeader}>
+              <Text style={m.mTitle}>Filter by Vehicle</Text>
+              <TouchableOpacity onPress={() => setShowVehiclePicker(false)}><Text style={m.mClose}>✕</Text></TouchableOpacity>
+            </View>
+            <ScrollView>
+              <TouchableOpacity style={[s.vehicleRow, !vehicleFilter && s.vehicleRowActive]} onPress={() => { setVehicleFilter(''); setShowVehiclePicker(false); }}>
+                <Text style={s.vehicleRowText}>All Vehicles</Text>
+              </TouchableOpacity>
+              {vehicleMakes.map(make => (
+                <TouchableOpacity key={make} style={[s.vehicleRow, vehicleFilter === make && s.vehicleRowActive]} onPress={() => { setVehicleFilter(make); setShowVehiclePicker(false); }}>
+                  <Text style={s.vehicleRowText}>{make}</Text>
+                  {vehicleFilter === make && <Text style={{ color: colors.gold }}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+              <View style={{ height: 32 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {loading ? (
         <ActivityIndicator color={colors.gold} style={{ marginTop: 40 }} />
@@ -650,6 +731,32 @@ const s = StyleSheet.create({
   emptyIcon: { fontSize: 40 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: colors.white },
   emptySub: { color: colors.grey2, fontSize: 13, textAlign: 'center' },
+  // Smart filters
+  smartFilterRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.xs,
+  },
+  leaseFilterPill: {
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.full, paddingHorizontal: spacing.sm + 2, paddingVertical: 4,
+  },
+  leaseFilterPillActive: { backgroundColor: 'rgba(66,184,131,0.12)', borderColor: 'rgba(66,184,131,0.4)' },
+  leaseFilterText: { color: colors.grey2, fontSize: 11, fontWeight: '600' },
+  leaseFilterTextActive: { color: colors.green },
+  vehicleBtn: {
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.full, paddingHorizontal: spacing.sm + 2, paddingVertical: 4,
+    flexShrink: 0,
+  },
+  vehicleBtnActive: { backgroundColor: 'rgba(224,140,82,0.12)', borderColor: 'rgba(224,140,82,0.4)' },
+  vehicleBtnText: { color: colors.grey2, fontSize: 11, fontWeight: '600' },
+  vehicleBtnTextActive: { color: colors.orange },
+  vehicleRow: {
+    padding: spacing.md, borderRadius: radius.sm,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+  },
+  vehicleRowActive: { backgroundColor: colors.goldBg },
+  vehicleRowText: { color: colors.grey3, fontSize: 14 },
 });
 
 const mt = StyleSheet.create({

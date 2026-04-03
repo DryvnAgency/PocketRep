@@ -1,0 +1,150 @@
+/**
+ * PocketRep — Local Push Notification Scheduling
+ *
+ * Schedules reminders tied to:
+ *   - follow_up_date (from voice intake)
+ *   - lease_end_date milestones (6mo / 3mo / 1mo before)
+ *   - personal_events (baby due, anniversary, etc.)
+ *
+ * Uses expo-notifications (already installed + configured in app.json).
+ * Safe to call from web — all methods no-op gracefully on web platform.
+ */
+
+import { Platform } from 'react-native';
+
+let Notifications: any = null;
+try {
+  Notifications = require('expo-notifications');
+} catch {}
+
+export interface PersonalEvent {
+  type: string;   // 'baby_due' | 'anniversary' | 'birthday' | etc.
+  date: string;   // ISO date string 'YYYY-MM-DD'
+}
+
+// ── Setup handler (call once at app root) ────────────────────────────────────
+export function setupNotificationHandler() {
+  if (!Notifications || Platform.OS === 'web') return;
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
+
+// ── Request permission ────────────────────────────────────────────────────────
+export async function requestNotificationPermission(): Promise<boolean> {
+  if (!Notifications || Platform.OS === 'web') return false;
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === 'granted';
+}
+
+// ── Schedule a single notification ───────────────────────────────────────────
+async function schedule(title: string, body: string, date: Date): Promise<void> {
+  if (!Notifications || Platform.OS === 'web') return;
+  if (date <= new Date()) return; // skip past dates
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: { title, body, sound: true },
+      trigger: { date },
+    });
+  } catch (e) {
+    console.warn('PocketRep notification schedule error:', e);
+  }
+}
+
+// ── Cancel all notifications for a contact ───────────────────────────────────
+// (Call before rescheduling to avoid duplicates)
+export async function cancelContactNotifications(contactId: string): Promise<void> {
+  if (!Notifications || Platform.OS === 'web') return;
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const n of scheduled) {
+      if (n.content?.data?.contact_id === contactId) {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      }
+    }
+  } catch {}
+}
+
+// ── Main entry point — schedule all reminders for a contact ──────────────────
+export async function scheduleContactReminders(opts: {
+  contactId: string;
+  contactName: string;
+  followUpDate: string | null;
+  leaseEndDate: string | null;
+  personalEvents: PersonalEvent[];
+}): Promise<number> {
+  if (!Notifications || Platform.OS === 'web') return 0;
+
+  const { contactId, contactName, followUpDate, leaseEndDate, personalEvents } = opts;
+  let count = 0;
+
+  // 1. Follow-up date reminder
+  if (followUpDate) {
+    const d = new Date(followUpDate);
+    d.setHours(9, 0, 0, 0); // 9 AM
+    await schedule(
+      `📞 Follow up with ${contactName}`,
+      `Rex says: "This is the day you said you'd reach out. Don't let them go cold."`,
+      d
+    );
+    count++;
+  }
+
+  // 2. Lease end date milestones
+  if (leaseEndDate) {
+    const leaseDate = new Date(leaseEndDate);
+
+    const milestones = [
+      { daysBeforeMs: 180 * 86400000, label: '6 months', tag: '⏰' },
+      { daysBeforeMs: 90 * 86400000,  label: '3 months', tag: '🔥' },
+      { daysBeforeMs: 30 * 86400000,  label: '1 month',  tag: '🚨' },
+    ];
+
+    for (const m of milestones) {
+      const d = new Date(leaseDate.getTime() - m.daysBeforeMs);
+      d.setHours(9, 0, 0, 0);
+      await schedule(
+        `${m.tag} ${contactName}'s lease is up in ${m.label}`,
+        `Time to reach out before the bank does. Rex has your script.`,
+        d
+      );
+      count++;
+    }
+  }
+
+  // 3. Personal events
+  for (const ev of personalEvents) {
+    if (!ev.date) continue;
+    const d = new Date(ev.date);
+    d.setHours(9, 0, 0, 0);
+
+    const labels: Record<string, { title: string; body: string }> = {
+      baby_due: {
+        title: `🍼 ${contactName}'s baby is due around now`,
+        body: `Check in — congratulate them, and this is the perfect time to talk bigger vehicle.`,
+      },
+      anniversary: {
+        title: `🎉 ${contactName}'s anniversary`,
+        body: `A quick personal touch goes a long way. Rex tip: keep it short and warm.`,
+      },
+      birthday: {
+        title: `🎂 ${contactName}'s birthday`,
+        body: `Happy birthday message = top of mind. No pitch needed today.`,
+      },
+    };
+
+    const notif = labels[ev.type] ?? {
+      title: `📌 ${contactName} — personal milestone`,
+      body: `You noted: ${ev.type}. A good time to reach out.`,
+    };
+
+    await schedule(notif.title, notif.body, d);
+    count++;
+  }
+
+  return count;
+}

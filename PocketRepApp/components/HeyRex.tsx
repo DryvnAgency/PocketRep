@@ -8,6 +8,7 @@ import { Audio } from 'expo-av';
 import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
+import { scheduleContactReminders, requestNotificationPermission, type PersonalEvent } from '@/lib/notifications';
 
 // ── Hey Rex — Voice Intake Engine ────────────────────────────────────────────
 // Workflow:
@@ -32,12 +33,24 @@ type Stage = 'idle' | 'listening' | 'processing' | 'done';
 interface ParsedIntake {
   customer_name: string;
   contact_id: string | null;
+  phone: string | null;
   interests: string;
   objections: string;
   follow_up_in_days: number | null;
   follow_up_note: string;
   updated_notes: string;
   game_plan: string;
+  // New fields for Pocket Wrap
+  vehicle_interest: string | null;
+  lease_end_date: string | null;   // ISO 'YYYY-MM-DD'
+  personal_events: PersonalEvent[];
+  buying_urgency: 'low' | 'medium' | 'high';
+}
+
+interface GeneratedStep {
+  delay_days: number;
+  channel: 'text' | 'call' | 'email';
+  message: string;
 }
 
 export default function HeyRex() {
@@ -46,6 +59,10 @@ export default function HeyRex() {
   const [parsed, setParsed] = useState<ParsedIntake | null>(null);
   const [showSheet, setShowSheet] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [generatedSteps, setGeneratedSteps] = useState<GeneratedStep[]>([]);
+  const [sequenceExpanded, setSequenceExpanded] = useState(false);
+  const [reminderCount, setReminderCount] = useState(0);
+  const [generatingSeq, setGeneratingSeq] = useState(false);
   const recording = useRef<Audio.Recording | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const router = useRouter();
@@ -170,7 +187,7 @@ export default function HeyRex() {
       const today = new Date().toISOString().split('T')[0];
       const systemPrompt = `
 You are Rex, a sales intake AI. The rep just gave you a voice memo after a customer meeting.
-Your job: extract the key info and return a JSON object ONLY — no other text.
+Your job: extract ALL key info and return a JSON object ONLY — no other text, no markdown.
 
 Today's date: ${today}
 Contacts in their book: ${contactList}
@@ -178,13 +195,18 @@ Contacts in their book: ${contactList}
 Return this exact JSON shape:
 {
   "customer_name": "Full name mentioned",
-  "contact_id": "the id from the contacts list if matched, or null",
-  "interests": "what they want / are interested in",
+  "contact_id": "the id from the contacts list if name matches, or null",
+  "phone": "phone number mentioned or null",
+  "interests": "what they want / are interested in (vehicle, product, etc)",
   "objections": "objections or hesitations mentioned",
-  "follow_up_in_days": number of days until follow-up (null if not mentioned),
-  "follow_up_note": "brief reminder note (what to do on the follow-up call)",
-  "updated_notes": "full clean notes to save on the contact (2-4 sentences, present tense, no filler)",
-  "game_plan": "Rex's 2-3 sentence game plan — specific angle to close this deal, what to lead with on the next call, one risk to avoid"
+  "follow_up_in_days": number or null,
+  "follow_up_note": "brief reminder of what to say/do on follow-up",
+  "updated_notes": "2-4 sentences of clean notes, present tense, no filler",
+  "game_plan": "2-3 sentence game plan — specific angle, what to lead with next call, one risk to avoid",
+  "vehicle_interest": "specific vehicle they are interested in buying, or null",
+  "lease_end_date": "YYYY-MM-DD if a lease end / contract end date is mentioned, or null",
+  "personal_events": [{ "type": "baby_due|anniversary|birthday|other", "date": "YYYY-MM-DD" }],
+  "buying_urgency": "low|medium|high based on timeline and intent signals"
 }
 `.trim();
 
@@ -249,8 +271,11 @@ Return this exact JSON shape:
 
     const noteWithPlan = [
       parsed.updated_notes,
+      parsed.vehicle_interest ? `Looking at: ${parsed.vehicle_interest}` : '',
       parsed.follow_up_note ? `Follow-up: ${parsed.follow_up_note}` : '',
     ].filter(Boolean).join('\n');
+
+    let savedContactId = parsed.contact_id;
 
     if (parsed.contact_id) {
       // Update existing contact
@@ -258,19 +283,23 @@ Return this exact JSON shape:
         notes: noteWithPlan,
         last_contact_date: new Date().toISOString().split('T')[0],
         follow_up_date: followUpDate,
+        ...(parsed.lease_end_date ? { lease_end_date: parsed.lease_end_date } : {}),
       }).eq('id', parsed.contact_id);
     } else {
       // Create new contact from voice intake
       const nameParts = parsed.customer_name.trim().split(' ');
-      await supabase.from('contacts').insert({
+      const { data: newContact } = await supabase.from('contacts').insert({
         user_id: user.id,
         first_name: nameParts[0] ?? parsed.customer_name,
         last_name: nameParts.slice(1).join(' ') || '',
-        phone: '',
+        phone: parsed.phone ?? '',
         notes: noteWithPlan,
         last_contact_date: new Date().toISOString().split('T')[0],
         follow_up_date: followUpDate,
-      });
+        lease_end_date: parsed.lease_end_date ?? null,
+        stage: 'prospect',
+      }).select('id').single();
+      savedContactId = newContact?.id ?? null;
     }
 
     // Save to rex_messages log
@@ -279,7 +308,124 @@ Return this exact JSON shape:
       { user_id: user.id, role: 'assistant', content: `Game plan for ${parsed.customer_name}: ${parsed.game_plan}` },
     ]);
 
+    // Generate AI sequence + schedule notifications in background
+    if (savedContactId && ANTHROPIC_KEY) {
+      setGeneratingSeq(true);
+      try {
+        const [steps, notifCount] = await Promise.all([
+          generatePersonalizedSequence(parsed, user.id, savedContactId),
+          scheduleNotifications(savedContactId, parsed.customer_name, followUpDate, parsed),
+        ]);
+        setGeneratedSteps(steps);
+        setReminderCount(notifCount);
+      } catch (e) {
+        console.warn('Sequence/notification error:', e);
+      } finally {
+        setGeneratingSeq(false);
+      }
+    }
+
     setSaved(true);
+  }
+
+  async function generatePersonalizedSequence(
+    intake: ParsedIntake,
+    userId: string,
+    contactId: string,
+  ): Promise<GeneratedStep[]> {
+    const prompt = `
+The sales rep just logged a customer. Build a personalized follow-up sequence for this specific person.
+Return a JSON array ONLY — no markdown, no other text.
+
+Customer details:
+- Name: ${intake.customer_name}
+- Interested in: ${intake.vehicle_interest ?? intake.interests}
+- Notes: ${intake.updated_notes}
+- Lease/contract ends: ${intake.lease_end_date ?? 'unknown'}
+- Personal events: ${intake.personal_events.length ? JSON.stringify(intake.personal_events) : 'none'}
+- Buying urgency: ${intake.buying_urgency}
+- Rep follow-up note: ${intake.follow_up_note}
+
+Rules:
+- 4 to 7 steps total
+- Space them out based on urgency and lease timeline
+- Messages must be specific to THIS person — use their name, vehicle interest, and personal events
+- Natural, conversational tone — not corporate or generic
+- Mix channels: mostly text, one call, maybe one email
+- Each message should move the deal forward one step
+
+Return format (JSON array):
+[
+  { "delay_days": 0, "channel": "text", "message": "Hey [name], ..." },
+  ...
+]
+`.trim();
+
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: REX_MODEL,
+        max_tokens: 1200,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    const rj = await r.json();
+    const raw = rj.content?.[0]?.text ?? '[]';
+    let steps: GeneratedStep[] = [];
+    try {
+      steps = JSON.parse(raw.match(/\[[\s\S]*\]/)?.[0] ?? '[]');
+    } catch { steps = []; }
+
+    // Save to Supabase
+    if (steps.length > 0) {
+      const { data: seq } = await supabase.from('sequences').insert({
+        user_id: userId,
+        contact_id: contactId,
+        name: `Follow-up: ${intake.customer_name}`,
+        description: `AI-generated from voice intake. ${intake.vehicle_interest ? `Interested in: ${intake.vehicle_interest}.` : ''}`,
+        industry: 'auto',
+        is_template: false,
+        is_custom: true,
+      }).select('id').single();
+
+      if (seq?.id) {
+        await supabase.from('sequence_steps').insert(
+          steps.map((st, i) => ({
+            sequence_id: seq.id,
+            step_number: i + 1,
+            delay_days: st.delay_days,
+            channel: st.channel,
+            message_template: st.message,
+            ai_personalize: false,
+          }))
+        );
+      }
+    }
+
+    return steps;
+  }
+
+  async function scheduleNotifications(
+    contactId: string,
+    contactName: string,
+    followUpDate: string | null,
+    intake: ParsedIntake,
+  ): Promise<number> {
+    await requestNotificationPermission();
+    return scheduleContactReminders({
+      contactId,
+      contactName,
+      followUpDate,
+      leaseEndDate: intake.lease_end_date,
+      personalEvents: intake.personal_events ?? [],
+    });
   }
 
   function dismiss() {
@@ -390,11 +536,46 @@ Return this exact JSON shape:
                   </View>
                 ) : null}
 
+                {/* Lease / vehicle interest if extracted */}
+                {(parsed.lease_end_date || parsed.vehicle_interest) ? (
+                  <View style={s.leaseRow}>
+                    {parsed.vehicle_interest ? <Text style={s.leaseChip}>🚗 {parsed.vehicle_interest}</Text> : null}
+                    {parsed.lease_end_date ? <Text style={s.leaseChip}>📅 Lease ends {parsed.lease_end_date}</Text> : null}
+                    {parsed.buying_urgency === 'high' ? <Text style={[s.leaseChip, s.urgentChip]}>🔥 High urgency</Text> : null}
+                  </View>
+                ) : null}
+
                 {/* Game plan */}
                 <View style={s.gamePlanBox}>
                   <Text style={s.gamePlanLabel}>🎯 Rex's Game Plan</Text>
                   <Text style={s.gamePlanText}>{parsed.game_plan}</Text>
                 </View>
+
+                {/* Generated sequence (shown after save) */}
+                {saved && (generatingSeq || generatedSteps.length > 0) ? (
+                  <View style={s.seqBox}>
+                    <TouchableOpacity
+                      style={s.seqHeader}
+                      onPress={() => setSequenceExpanded(e => !e)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={s.seqTitle}>
+                        {generatingSeq ? '⏳ Building sequence…' : `📋 Sequence created (${generatedSteps.length} steps)`}
+                      </Text>
+                      {!generatingSeq && <Text style={s.seqChevron}>{sequenceExpanded ? '▲' : '▼'}</Text>}
+                    </TouchableOpacity>
+                    {sequenceExpanded && generatedSteps.map((st, i) => (
+                      <View key={i} style={s.seqStep}>
+                        <Text style={s.seqStepDay}>Day {st.delay_days}</Text>
+                        <Text style={s.seqStepChannel}>{st.channel === 'text' ? '💬' : st.channel === 'call' ? '📞' : '📧'}</Text>
+                        <Text style={s.seqStepMsg} numberOfLines={2}>{st.message}</Text>
+                      </View>
+                    ))}
+                    {reminderCount > 0 && !generatingSeq ? (
+                      <Text style={s.reminderBadge}>🔔 {reminderCount} reminder{reminderCount !== 1 ? 's' : ''} scheduled</Text>
+                    ) : null}
+                  </View>
+                ) : null}
 
                 {/* Actions */}
                 <View style={s.actions}>
@@ -403,7 +584,7 @@ Return this exact JSON shape:
                   </TouchableOpacity>
                   {saved ? (
                     <View style={[s.btnPrimary, { backgroundColor: colors.green }]}>
-                      <Text style={s.btnPrimaryText}>✓ Saved</Text>
+                      <Text style={s.btnPrimaryText}>✓ Saved to Book</Text>
                     </View>
                   ) : (
                     <TouchableOpacity style={s.btnPrimary} onPress={saveToContact} activeOpacity={0.85}>
@@ -490,6 +671,33 @@ const s = StyleSheet.create({
   },
   gamePlanLabel: { fontSize: 11, fontWeight: '800', color: colors.gold, letterSpacing: 0.3, marginBottom: 8 },
   gamePlanText: { color: colors.white, fontSize: 14, lineHeight: 22 },
+  // Lease / vehicle chips
+  leaseRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
+  leaseChip: {
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 3,
+    color: colors.grey3, fontSize: 11, fontWeight: '600',
+  },
+  urgentChip: { borderColor: colors.redBorder, backgroundColor: colors.redBg, color: colors.red },
+  // Sequence box
+  seqBox: {
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: 'rgba(212,168,67,0.2)',
+    borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md,
+  },
+  seqHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  seqTitle: { color: colors.gold, fontSize: 12, fontWeight: '700' },
+  seqChevron: { color: colors.grey, fontSize: 10 },
+  seqStep: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.ink4, marginTop: spacing.sm,
+  },
+  seqStepDay: { color: colors.grey, fontSize: 10, fontWeight: '700', minWidth: 32 },
+  seqStepChannel: { fontSize: 12 },
+  seqStepMsg: { color: colors.grey3, fontSize: 12, flex: 1, lineHeight: 17 },
+  reminderBadge: {
+    marginTop: spacing.sm, color: colors.grey2, fontSize: 11,
+    borderTopWidth: 1, borderTopColor: colors.ink4, paddingTop: spacing.sm,
+  },
   actions: { flexDirection: 'row', gap: spacing.sm },
   btnSecondary: {
     flex: 1, borderWidth: 1, borderColor: colors.ink4,
