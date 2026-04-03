@@ -267,22 +267,22 @@ footer a{color:#444;text-decoration:none}
 <div style="position:relative">
   <div class="confirm-hero">
     <div class="top-glow"></div>
-    <div class="confirm-badge"><span class="check">✓</span> Trial activated — you're in</div>
+    <div class="confirm-badge"><span class="check">✓</span> <span id="hero-badge-text">Trial activated — you're in</span></div>
     <div class="name-greeting" id="greeting">Welcome to the book.</div>
-    <h1>7 days free.<br><span>Make them count.</span></h1>
-    <p class="sub">
+    <h1 id="hero-headline">7 days free.<br><span>Make them count.</span></h1>
+    <p class="sub" id="hero-sub">
       Your trial is live. <b>Download the app, run your first Heat Sheet, and find the deal that pays for your next two years of Pro.</b> Cancel before day 7 and you won't be charged — ever.
     </p>
   </div>
 </div>
 
 <!-- DOWNLOAD -->
-<div class="download-section">
+<div class="download-section" id="download-section">
   <div class="dl-inner">
-    <div class="dl-eyebrow">Get The App</div>
-    <h2>Get the app.<br>Your trial clock is running.</h2>
-    <p>Download now, sign in with your registration email, and your 7-day trial is live. You have until day 7 to cancel — no charge. After that, your founding rate locks in permanently.</p>
-    <div class="dl-buttons">
+    <div class="dl-eyebrow" id="dl-eyebrow">Get The App</div>
+    <h2 id="dl-heading">Get the app.<br>Your trial clock is running.</h2>
+    <p id="dl-desc">Download now, sign in with your registration email, and your 7-day trial is live. You have until day 7 to cancel — no charge. After that, your founding rate locks in permanently.</p>
+    <div class="dl-buttons" id="dl-buttons">
       <a href="#" class="dl-btn" id="app-store-btn">
         <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
           <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
@@ -478,9 +478,9 @@ footer a{color:#444;text-decoration:none}
 <!-- WHAT'S NEXT -->
 <div class="next-section">
   <div class="next-inner">
-    <div class="next-eyebrow">Your 7-Day Trial Roadmap</div>
-    <h2>Make the most of your week</h2>
-    <div class="steps-grid">
+    <div class="next-eyebrow" id="next-eyebrow">Your 7-Day Trial Roadmap</div>
+    <h2 id="next-heading">Make the most of your week</h2>
+    <div class="steps-grid" id="steps-grid">
       <div class="step">
         <div class="step-num">Day 1</div>
         <h4>Download &amp; log in</h4>
@@ -537,10 +537,59 @@ footer a{color:#444;text-decoration:none}
     }catch(e){}
   }
   if(firstName)document.getElementById('greeting').textContent='Welcome to the book, '+firstName+'.';
-  var planLabels={solo:'Solo Member',pro:'Pro Member',elite:'Elite Member'};
+  var planLabels={solo:'Solo Member',pro:'Pro Member',elite:'Elite Member',rex_lens_standalone:'Rex Lens Member',elite_bundle:'Elite + Rex Lens Member'};
   var chip=document.getElementById('nav-plan-label');
   if(chip&&planLabels[plan])chip.textContent=planLabels[plan];
   if(email){var ev=document.getElementById('acct-email-val');if(ev)ev.textContent=email;}
+
+  // ── REX LENS / BUNDLE PLAN OVERRIDES ──
+  var isLens = plan === 'rex_lens_standalone';
+  var isBundle = plan === 'elite_bundle';
+  var hasLens = isLens || isBundle;
+
+  if(hasLens){
+    // Hero
+    document.getElementById('hero-badge-text').textContent = 'Payment confirmed — you\'re in';
+    document.getElementById('hero-headline').innerHTML = isBundle
+      ? 'Elite + Rex Lens.<br><span>You got the full stack.</span>'
+      : 'Rex Lens is yours.<br><span>Let\'s get it installed.</span>';
+    document.getElementById('hero-sub').innerHTML = isBundle
+      ? '<b>Install the Chrome extension below, then download the PocketRep app.</b> Your Elite account and Rex Lens are both live. Open your CRM and let Rex read the screen.'
+      : '<b>Install the Chrome extension below, sign in, and open your CRM.</b> Rex will start reading your screen and coaching you in real-time. Deep Scan your first 30 contacts in under 2 minutes.';
+
+    // Download section — show Chrome Web Store + app buttons for bundle
+    document.getElementById('dl-eyebrow').textContent = isBundle ? 'Install Extension + Get The App' : 'Install The Extension';
+    document.getElementById('dl-heading').innerHTML = isBundle
+      ? 'Install Rex Lens.<br>Then grab the app.'
+      : 'Add Rex Lens to Chrome.<br>Takes 10 seconds.';
+    document.getElementById('dl-desc').textContent = isBundle
+      ? 'Install the Rex Lens Chrome extension first, then download PocketRep on your phone. Sign into both with your registration email — everything is already linked.'
+      : 'Click below to add Rex Lens to Chrome. Once installed, click the extension icon, sign in with your registration email, and open any CRM or email tab. Rex takes it from there.';
+
+    var btnsHtml = '<a href="#" class="dl-btn" id="chrome-store-btn" style="border-color:rgba(99,102,241,0.3)">'
+      + '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="color:#4F46E5"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 7.5A4.5 4.5 0 0 0 8.1 10H2.6" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M14.25 16.4A4.5 4.5 0 0 0 16.5 12h5.4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M9.75 16.4A4.5 4.5 0 0 1 8.1 14l-2.7 4.7" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>'
+      + '<div class="dl-btn-text"><div class="dl-small">Add to</div><div class="dl-big">Chrome</div></div></a>';
+
+    if(isBundle){
+      btnsHtml += document.getElementById('app-store-btn').outerHTML + document.getElementById('google-play-btn').outerHTML;
+    }
+    document.getElementById('dl-buttons').innerHTML = btnsHtml;
+
+    // What's Next steps
+    document.getElementById('next-eyebrow').textContent = isBundle ? 'Your Setup Checklist' : 'Get Started in 3 Steps';
+    document.getElementById('next-heading').textContent = isBundle ? 'Set up everything in 5 minutes' : 'You\'ll be scanning in 2 minutes';
+
+    var lensSteps = isBundle
+      ? '<div class="step"><div class="step-num">Step 1</div><h4>Install Rex Lens</h4><p>Click "Add to Chrome" above. Pin the extension so it\'s always one click away.</p></div>'
+        + '<div class="step"><div class="step-num">Step 2</div><h4>Download the app</h4><p>Grab PocketRep from the App Store or Google Play. Sign in with your registration email.</p></div>'
+        + '<div class="step"><div class="step-num">Step 3</div><h4>Open your CRM</h4><p>Navigate to VinSolutions, DealerSocket, Salesforce — whatever you use. Click the Rex Lens icon and hit Scan Page.</p></div>'
+        + '<div class="step"><div class="step-num">Step 4</div><h4>Run a Deep Scan</h4><p>Click Deep Scan to process 30 contacts at once. Rex generates texts, emails, and call scripts for each one — ready to send.</p></div>'
+      : '<div class="step"><div class="step-num">Step 1</div><h4>Install the extension</h4><p>Click "Add to Chrome" above. Pin Rex Lens to your toolbar so it\'s always one click away.</p></div>'
+        + '<div class="step"><div class="step-num">Step 2</div><h4>Sign in &amp; open your CRM</h4><p>Click the Rex Lens icon, sign in with your email, then navigate to your CRM queue, email inbox, or LinkedIn.</p></div>'
+        + '<div class="step"><div class="step-num">Step 3</div><h4>Run your first Deep Scan</h4><p>Hit Deep Scan. Rex reads 30 contacts from your screen and generates ready-to-send texts, emails, and call scripts for each one. Under 2 minutes.</p></div>';
+
+    document.getElementById('steps-grid').innerHTML = lensSteps;
+  }
 })()
 
 function togglePw(inputId,btnId){
