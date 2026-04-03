@@ -19,12 +19,23 @@ create policy "Users manage own profile"
 -- Auto-create profile on signup
 create or replace function handle_new_user()
 returns trigger language plpgsql security definer as $$
+declare
+  _plan text;
 begin
-  insert into profiles (id, email, trial_ends_at)
+  _plan := coalesce(new.raw_user_meta_data->>'plan', 'pro');
+  -- Validate plan value
+  if _plan not in ('pro', 'elite', 'rex_lens_standalone', 'elite_bundle') then
+    _plan := 'pro';
+  end if;
+
+  insert into profiles (id, email, plan, trial_ends_at)
   values (
     new.id,
     new.email,
-    now() + interval '7 days'
+    _plan,
+    case when _plan in ('rex_lens_standalone', 'elite_bundle') then null
+         else now() + interval '7 days'
+    end
   );
   return new;
 end;
