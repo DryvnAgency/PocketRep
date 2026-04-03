@@ -113,6 +113,34 @@ function matchContacts(page: PageContent): Contact[] {
   return matched.slice(0, 3); // Max 3 matched contacts for context
 }
 
+// ── Content Script Injection Fallback ────────────────────────────────────────
+
+async function ensureContentScript(tabId: number): Promise<void> {
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_PAGE' });
+  } catch {
+    // Content script not loaded — inject it programmatically
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['dist/content-script.js'],
+    });
+    // Brief wait for the script to initialize
+    await new Promise(r => setTimeout(r, 200));
+  }
+}
+
+// ── AI Auth Header Helper ───────────────────────────────────────────────────
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const supabase = getSupabase();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+  return headers;
+}
+
 // ── AI Calls ─────────────────────────────────────────────────────────────────
 
 async function analyzePageWithAI(page: PageContent): Promise<RexSuggestion> {
@@ -129,9 +157,10 @@ async function analyzePageWithAI(page: PageContent): Promise<RexSuggestion> {
     matchedContacts,
   );
 
+  const headers = await getAuthHeaders();
   const res = await fetch(AI_PROXY_URL, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model: REX_MODEL,
       max_tokens: 600,
@@ -140,6 +169,7 @@ async function analyzePageWithAI(page: PageContent): Promise<RexSuggestion> {
     }),
   });
 
+  if (!res.ok) throw new Error(`AI proxy returned ${res.status}`);
   const json = await res.json();
   const text = json.content?.[0]?.text ?? '';
 
@@ -184,9 +214,10 @@ async function chatWithRex(userMessage: string): Promise<string> {
   // Keep last 10 messages for context
   const recentHistory = chatHistory.slice(-10);
 
+  const headers = await getAuthHeaders();
   const res = await fetch(AI_PROXY_URL, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model: REX_MODEL,
       max_tokens: 600,
@@ -195,6 +226,7 @@ async function chatWithRex(userMessage: string): Promise<string> {
     }),
   });
 
+  if (!res.ok) throw new Error(`AI proxy returned ${res.status}`);
   const json = await res.json();
   const reply = json.content?.[0]?.text ?? 'Rex hit an error. Try again.';
 
@@ -212,9 +244,10 @@ async function miniSummarize(pageContent: PageContent): Promise<string> {
       : '');
   const prompt = buildMiniSummaryPrompt(cleanedText);
 
+  const headers = await getAuthHeaders();
   const res = await fetch(AI_PROXY_URL, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model: REX_MODEL,
       max_tokens: 150,
@@ -223,6 +256,7 @@ async function miniSummarize(pageContent: PageContent): Promise<string> {
     }),
   });
 
+  if (!res.ok) throw new Error(`AI proxy returned ${res.status}`);
   const json = await res.json();
   return json.content?.[0]?.text ?? 'Could not summarize this contact.';
 }
@@ -232,9 +266,10 @@ async function analyzeDeepScan(summaries: ContactSummary[]): Promise<DeepScanRes
     summaries.map(s => ({ name: s.name, summary: s.summary }))
   );
 
+  const headers = await getAuthHeaders();
   const res = await fetch(AI_PROXY_URL, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model: REX_MODEL,
       max_tokens: 2000,
@@ -243,6 +278,7 @@ async function analyzeDeepScan(summaries: ContactSummary[]): Promise<DeepScanRes
     }),
   });
 
+  if (!res.ok) throw new Error(`AI proxy returned ${res.status}`);
   const json = await res.json();
   const text = json.content?.[0]?.text ?? '';
 
@@ -283,6 +319,9 @@ async function runDeepScan(tabId: number): Promise<DeepScanResult> {
   const scanStart = Date.now();
 
   try {
+    // Ensure content script is loaded before deep scan
+    await ensureContentScript(tabId);
+
     // Step 1: Find clickable contacts on the page
     const clickableContacts = await chrome.tabs.sendMessage(tabId, { type: 'FIND_CLICKABLE' });
     if (!Array.isArray(clickableContacts) || clickableContacts.length === 0) {
@@ -418,9 +457,10 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       // Broadcast scanning status
       chrome.runtime.sendMessage({ type: 'STATUS', payload: { status: 'scanning' } }).catch(() => {});
 
-      // Extract page content from content script
+      // Ensure content script is loaded, inject if needed
       let pageContent: PageContent;
       try {
+        await ensureContentScript(tab.id);
         pageContent = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_PAGE' });
       } catch {
         return { error: 'Content script not loaded. Try refreshing the page.' };
