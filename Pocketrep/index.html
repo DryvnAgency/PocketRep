@@ -1121,6 +1121,42 @@ function sfSelectPlan(plan){
     var el=document.getElementById('sfp-'+p);
     if(el)el.classList.toggle('active',p===plan);
   });
+  // ── Swap signup copy for Rex Lens / Bundle plans ──
+  var hasLens = (plan === 'rex_lens_standalone' || plan === 'elite_bundle');
+  var isBundle = plan === 'elite_bundle';
+
+  var pitchH2 = document.querySelector('.signup-pitch h2');
+  var pitchSub = document.querySelector('.pitch-sub');
+  var timeline = document.querySelector('.trial-timeline');
+  var trustRow = document.querySelector('.trust-row');
+  var formTopLabel = document.querySelector('.sfb-top-label');
+  var formTopSub = document.querySelector('.sfb-top-sub');
+  var submitBtn = document.querySelector('.sf-submit');
+  var consent = document.querySelector('.sf-consent');
+
+  if(hasLens){
+    pitchH2.innerHTML = isBundle
+      ? 'The full stack.<br>App + Extension.'
+      : 'Rex Lens.<br>AI that reads your screen.';
+    pitchSub.innerHTML = isBundle
+      ? 'Get the PocketRep CRM app <b>and</b> the Rex Lens Chrome extension together. Rex reads your CRM, email, and LinkedIn — then coaches you on what to say and who to call.'
+      : 'Rex Lens is a Chrome extension that reads your CRM, email, and LinkedIn in real-time — and tells you exactly <b>what to say, who to call, and when to follow up.</b> Deep Scan 30 contacts in under 2 minutes.';
+    timeline.style.display = 'none';
+    trustRow.innerHTML = '<div class="trust-item">Cancel anytime</div><div class="trust-item">Secured by Stripe</div><div class="trust-item">Chrome extension — works with any CRM</div>';
+    formTopLabel.textContent = isBundle ? 'Get Elite + Rex Lens Bundle' : 'Get Rex Lens';
+    formTopSub.textContent = 'Enter your details and complete checkout on Stripe.';
+    submitBtn.textContent = isBundle ? 'Get Elite + Rex Lens — $99/mo →' : 'Get Rex Lens — $59/mo →';
+    consent.innerHTML = 'You\'ll enter card details on Stripe\'s secure checkout. By continuing you agree to our <a href="terms.html">Terms</a> and <a href="privacy.html">Privacy Policy</a>.';
+  } else {
+    pitchH2.innerHTML = '7 days free.<br>Then yours forever.';
+    pitchSub.innerHTML = 'Start the trial today. Find one deal from the Heat Sheet and your subscription is paid for <b>two years.</b> Cancel before day 7 — zero charge, no questions.';
+    timeline.style.display = '';
+    trustRow.innerHTML = '<div class="trust-item">Cancel anytime before day 7</div><div class="trust-item">Secured by Stripe</div><div class="trust-item">Founding rate locked forever</div>';
+    formTopLabel.textContent = 'Start Your Free 7-Day Trial';
+    formTopSub.textContent = 'Select your plan, fill in your details, and you\'re in.';
+    submitBtn.textContent = 'Start My Free 7-Day Trial →';
+    consent.innerHTML = 'You\'ll enter card details on Stripe\'s secure checkout. Card not charged until day 8 — cancel anytime before then. By continuing you agree to our <a href="terms.html">Terms</a> and <a href="privacy.html">Privacy Policy</a>.';
+  }
 }
 
 // ── OPEN MODAL / SCROLL TO FORM ──
