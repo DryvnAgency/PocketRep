@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rex Lens</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="screen">
+      <div class="logo-section">
+        <div class="logo">🔍</div>
+        <h1>Rex Lens</h1>
+        <p class="subtitle">AI Sales Coach by PocketRep</p>
+      </div>
+
+      <div id="login-form" class="card">
+        <input type="email" id="email-input" placeholder="Email" autocomplete="email" />
+        <input type="password" id="password-input" placeholder="Password" autocomplete="current-password" />
+        <button id="login-btn" class="btn-primary">Sign In</button>
+        <p id="login-error" class="error-text" style="display:none"></p>
+      </div>
+
+      <div id="api-key-form" class="card" style="display:none">
+        <p class="hint">Enter your Anthropic API key to enable AI features.</p>
+        <input type="password" id="api-key-input" placeholder="sk-ant-..." />
+        <button id="save-key-btn" class="btn-primary">Save Key</button>
+      </div>
+    </div>
+
+    <!-- Locked Screen (non-Elite) -->
+    <div id="locked-screen" class="screen" style="display:none">
+      <div class="logo-section">
+        <div class="logo">🔒</div>
+        <h1>Rex Lens</h1>
+        <p class="subtitle">Elite Add-on Required</p>
+      </div>
+      <div class="card">
+        <p>Rex Lens is a <strong>$19/mo add-on</strong> for PocketRep Elite subscribers.</p>
+        <p>Upgrade in the PocketRep app to unlock AI-powered screen reading, response suggestions, and auto-fill.</p>
+        <button id="logout-locked-btn" class="btn-secondary">Sign Out</button>
+      </div>
+    </div>
+
+    <!-- Main Screen -->
+    <div id="main-screen" class="screen" style="display:none">
+      <!-- Header -->
+      <div class="header">
+        <div class="header-left">
+          <span class="header-title">Rex Lens</span>
+          <span id="status-badge" class="badge badge-idle">Idle</span>
+        </div>
+        <div class="header-right">
+          <button id="settings-btn" class="btn-icon" title="Settings">⚙</button>
+          <button id="logout-btn" class="btn-icon" title="Sign Out">⏻</button>
+        </div>
+      </div>
+
+      <!-- Scan Button -->
+      <div class="scan-section">
+        <button id="scan-btn" class="btn-primary btn-scan">
+          <span id="scan-btn-text">Scan Page</span>
+        </button>
+        <span class="hint">or press Ctrl+Shift+R</span>
+      </div>
+
+      <!-- Contact Match -->
+      <div id="contact-match" class="card" style="display:none">
+        <div class="card-header">
+          <span class="card-icon">👤</span>
+          <span class="card-title">PocketRep Contact</span>
+        </div>
+        <div id="contact-match-content"></div>
+      </div>
+
+      <!-- Situation -->
+      <div id="situation-card" class="card" style="display:none">
+        <div class="card-header">
+          <span class="card-icon">📍</span>
+          <span class="card-title">Situation</span>
+        </div>
+        <p id="situation-text"></p>
+      </div>
+
+      <!-- Suggestions -->
+      <div id="suggestions-card" class="card" style="display:none">
+        <div class="card-header">
+          <span class="card-icon">💡</span>
+          <span class="card-title">Suggestions</span>
+        </div>
+        <ul id="suggestions-list"></ul>
+      </div>
+
+      <!-- Draft Response -->
+      <div id="response-card" class="card" style="display:none">
+        <div class="card-header">
+          <span class="card-icon">💬</span>
+          <span class="card-title">Draft Response</span>
+        </div>
+        <div id="response-text" class="response-text"></div>
+        <div class="card-actions">
+          <button id="copy-response-btn" class="btn-secondary btn-sm">Copy</button>
+          <button id="insert-response-btn" class="btn-primary btn-sm">Insert into Page</button>
+        </div>
+      </div>
+
+      <!-- Insert Confirmation Modal -->
+      <div id="insert-modal" class="modal" style="display:none">
+        <div class="modal-content">
+          <h3>Insert Response</h3>
+          <p id="insert-modal-field">Target field: </p>
+          <div id="insert-modal-preview" class="response-text"></div>
+          <div class="modal-actions">
+            <button id="insert-cancel-btn" class="btn-secondary">Cancel</button>
+            <button id="insert-confirm-btn" class="btn-primary">Insert</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Follow-up -->
+      <div id="followup-card" class="card" style="display:none">
+        <div class="card-header">
+          <span class="card-icon">📅</span>
+          <span class="card-title">Follow-up</span>
+        </div>
+        <p id="followup-text"></p>
+      </div>
+
+      <!-- Rex Chat -->
+      <div id="chat-section" class="chat-section">
+        <div class="card-header">
+          <span class="card-icon">🤖</span>
+          <span class="card-title">Ask Rex</span>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Ask Rex a follow-up..." />
+          <button id="chat-send-btn" class="btn-primary btn-sm">Send</button>
+        </div>
+      </div>
+
+      <!-- Settings Panel (hidden by default) -->
+      <div id="settings-panel" class="card" style="display:none">
+        <div class="card-header">
+          <span class="card-icon">⚙</span>
+          <span class="card-title">Settings</span>
+        </div>
+        <label class="settings-label">Anthropic API Key</label>
+        <input type="password" id="settings-api-key" placeholder="sk-ant-..." />
+        <button id="settings-save-key-btn" class="btn-secondary btn-sm">Update Key</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../dist/sidepanel.js" type="module"></script>
+</body>
+</html>
