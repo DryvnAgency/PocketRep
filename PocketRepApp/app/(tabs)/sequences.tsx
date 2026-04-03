@@ -711,7 +711,7 @@ export default function SequencesScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={[s.filterPillText, templateFilter === f && s.filterPillTextActive]}>
-                  {f === 'all' ? '⭐ All' : INDUSTRY_CONFIG[f] ? `${INDUSTRY_CONFIG[f].icon} ${INDUSTRY_CONFIG[f].label}` : f}
+                  {f === 'all' ? '⭐ All' : f === 'prospect' ? '🎯 Prospects' : INDUSTRY_CONFIG[f] ? `${INDUSTRY_CONFIG[f].icon} ${INDUSTRY_CONFIG[f].label}` : f}
                 </Text>
               </TouchableOpacity>
             ))}

@@ -13,6 +13,4 @@ export const INDUSTRY_CONFIG: Record<string, { label: string; icon: string }> = 
   other:     { label: 'Other',               icon: '⚡' },
 };
 
-export type IndustryKey = keyof typeof INDUSTRY_CONFIG;
-
-export const INDUSTRY_KEYS = Object.keys(INDUSTRY_CONFIG) as IndustryKey[];
+export const INDUSTRY_KEYS = Object.keys(INDUSTRY_CONFIG) as Array<keyof typeof INDUSTRY_CONFIG>;
