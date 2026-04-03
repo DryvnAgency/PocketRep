@@ -23,6 +23,7 @@ const entryPoints = [
   {
     entryPoints: ['src/sidepanel/sidepanel.ts'],
     outfile: 'dist/sidepanel.js',
+    format: 'iife', // Side panel scripts need IIFE (no type="module")
   },
 ];
 
