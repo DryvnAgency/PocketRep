@@ -157,12 +157,12 @@ function extractConversations(): string[] {
 function extractContactInfo(): { names: string[]; emails: string[]; phones: string[] } {
   // Gather text from main frame + all accessible iframes
   let text = document.body.textContent || '';
-  try {
-    for (const iframe of document.querySelectorAll('iframe')) {
+  for (const iframe of document.querySelectorAll('iframe')) {
+    try {
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
       if (doc?.body) text += ' ' + (doc.body.textContent || '');
-    }
-  } catch { /* cross-origin */ }
+    } catch { /* cross-origin — skip this iframe */ }
+  }
 
   // Email regex
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -750,6 +750,9 @@ chrome.runtime.onMessage.addListener(
 
       case 'CLICK_ELEMENT': {
         const { selector, text } = message.payload;
+        let responded = false;
+        const respond = (value: any) => { if (!responded) { responded = true; sendResponse(value); } };
+
         try {
           let el: HTMLElement | null = null;
 
@@ -776,7 +779,7 @@ chrome.runtime.onMessage.addListener(
           }
 
           if (!el) {
-            sendResponse({ success: false, error: `Element not found: ${selector || text}` });
+            respond({ success: false, error: `Element not found: ${selector || text}` });
             break;
           }
 
@@ -784,23 +787,29 @@ chrome.runtime.onMessage.addListener(
 
           // Wait 4s for iframe/page navigation to complete, then extract all content
           setTimeout(() => {
-            tagFields();
-            const content = extractPageContent();
+            try {
+              tagFields();
+              const content = extractPageContent();
 
-            // If first extraction is thin, wait 2 more seconds and retry (iframe may still be loading)
-            if (content.mainText.length < 50) {
-              setTimeout(() => {
-                tagFields();
-                const retryContent = extractPageContent();
-                sendResponse({ success: true, content: retryContent });
-              }, 2000);
-            } else {
-              sendResponse({ success: true, content });
+              // If first extraction is thin, wait 2 more seconds and retry (iframe may still be loading)
+              if (content.mainText.length < 50) {
+                setTimeout(() => {
+                  try {
+                    tagFields();
+                    const retryContent = extractPageContent();
+                    respond({ success: true, content: retryContent });
+                  } catch { respond({ success: true, content: extractPageContent() }); }
+                }, 2000);
+              } else {
+                respond({ success: true, content });
+              }
+            } catch (e: any) {
+              respond({ success: false, error: `Extraction after click failed: ${e.message}` });
             }
           }, 4000);
 
         } catch (err: any) {
-          sendResponse({ success: false, error: err.message });
+          respond({ success: false, error: err.message });
         }
         break;
       }

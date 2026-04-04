@@ -1,4 +1,4 @@
-import type { ScanResult, ScanItem, AuthState, DeepScanResult, ContactActionPlan, DeepReviewResult, DeepReviewLead } from '../shared/types';
+import type { ScanResult, ScanItem, AuthState, DeepReviewResult, DeepReviewLead } from '../shared/types';
 
 // ── DOM References ───────────────────────────────────────────────────────────
 
@@ -23,15 +23,6 @@ const scanBtnText = $('scan-btn-text');
 const scanResults = $('scan-results');
 const scanItems = $('scan-items');
 const scanCount = $('scan-count');
-
-// Deep Scan (auto-triggered after page scan when contacts are found)
-const deepScanProgress = $('deep-scan-progress');
-const deepScanBar = $('deep-scan-bar');
-const deepScanStatus = $('deep-scan-status');
-const deepScanCancelBtn = $<HTMLButtonElement>('deep-scan-cancel-btn');
-const deepScanResults = $('deep-scan-results');
-const deepScanCards = $('deep-scan-cards');
-const deepScanBadge = $('deep-scan-badge');
 
 // Deep Review (agent mode)
 const deepReviewSection = $('deep-review-section');
@@ -219,7 +210,7 @@ function displayScanResults(result: ScanResult) {
   // Show Deep Review button if there are actionable items
   if (actionableItems.length > 0) {
     const count = Math.min(actionableItems.length, 25);
-    const estimatedSec = count * 4;
+    const estimatedSec = count * 9;
     deepReviewEstimate.textContent = `Rex will click into ${count} lead${count !== 1 ? 's' : ''} — about ${estimatedSec}s`;
     deepReviewSection.style.display = 'block';
     deepReviewBtn.disabled = false;
@@ -386,109 +377,6 @@ function createGamePlanCard(lead: DeepReviewLead, index: number): HTMLElement {
   return card;
 }
 
-// ── Deep Scan (auto-triggered) ──────────────────────────────────────────────
-
-deepScanCancelBtn.addEventListener('click', async () => {
-  await chrome.runtime.sendMessage({ type: 'CANCEL_DEEP_SCAN' });
-  deepScanStatus.textContent = 'Cancelling...';
-  deepScanCancelBtn.disabled = true;
-});
-
-function displayDeepScanResults(result: DeepScanResult) {
-  deepScanResults.style.display = 'block';
-  deepScanBadge.textContent = `${result.scannedCount} contacts`;
-  deepScanCards.innerHTML = '';
-
-  result.contacts.forEach((contact, index) => {
-    const card = createActionCard(contact, index < 3);
-    deepScanCards.appendChild(card);
-  });
-}
-
-function createActionCard(contact: ContactActionPlan, expanded: boolean): HTMLElement {
-  const card = document.createElement('div');
-  card.className = `action-card${expanded ? ' expanded' : ''}${contact.dismiss ? ' dismiss' : ''}`;
-
-  const isSkip = contact.dismiss || (contact.book || '').toLowerCase().startsWith('skip') || (contact.book || '').toLowerCase().startsWith('dismiss');
-
-  const taskType = contact.taskType || 'followup';
-  const icon = TASK_ICONS[taskType] || '👤';
-  const label = TASK_LABELS[taskType] || 'Task';
-
-  card.innerHTML = `
-    <div class="action-card-header">
-      <span>${icon}</span>
-      <span class="action-card-name">${escapeHtml(contact.name)}</span>
-      <span class="action-card-badge task-${taskType}">${label}</span>
-      ${contact.product ? `<span class="action-card-vehicle">${escapeHtml(contact.product)}</span>` : ''}
-      <span class="action-card-toggle">▶</span>
-    </div>
-    <div class="action-card-summary">${escapeHtml(contact.summary)}</div>
-    <div class="action-card-body">
-      ${contact.dismiss ? `
-      <div class="action-book skip">
-        <span>🔔</span>
-        <span>${escapeHtml(contact.book || 'Notification only — dismiss this task')}</span>
-      </div>` : `
-      ${contact.callScript ? `
-      <div class="action-section">
-        <div class="action-section-header">
-          <span class="action-section-label">📞 Call Script</span>
-          <button class="btn-copy-sm" data-copy="call">Copy</button>
-        </div>
-        <div class="action-section-text">${escapeHtml(contact.callScript)}</div>
-      </div>` : ''}
-
-      ${contact.email && contact.email.subject ? `
-      <div class="action-section">
-        <div class="action-section-header">
-          <span class="action-section-label">📧 Email</span>
-          <button class="btn-copy-sm" data-copy="email">Copy</button>
-        </div>
-        <div class="action-section-subject">Subject: ${escapeHtml(contact.email.subject)}</div>
-        <div class="action-section-text">${escapeHtml(contact.email.body)}</div>
-      </div>` : ''}
-
-      ${contact.text ? `
-      <div class="action-section">
-        <div class="action-section-header">
-          <span class="action-section-label">📱 Text</span>
-          <button class="btn-copy-sm" data-copy="text">Copy</button>
-        </div>
-        <div class="action-section-text">${escapeHtml(contact.text)}</div>
-      </div>` : ''}
-
-      <div class="action-book${isSkip ? ' skip' : ''}">
-        <span>📅</span>
-        <span>${escapeHtml(contact.book || 'No booking suggestion')}</span>
-      </div>
-      `}
-    </div>
-  `;
-
-  const header = card.querySelector('.action-card-header')!;
-  header.addEventListener('click', () => {
-    card.classList.toggle('expanded');
-  });
-
-  card.querySelectorAll<HTMLButtonElement>('.btn-copy-sm').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const type = btn.dataset.copy;
-      let text = '';
-      if (type === 'text') text = contact.text;
-      else if (type === 'email') text = `Subject: ${contact.email.subject}\n\n${contact.email.body}`;
-      else if (type === 'call') text = contact.callScript;
-
-      navigator.clipboard.writeText(text);
-      btn.textContent = 'Copied!';
-      setTimeout(() => { btn.textContent = 'Copy'; }, 1000);
-    });
-  });
-
-  return card;
-}
-
 // ── Chat ─────────────────────────────────────────────────────────────────────
 
 chatSendBtn.addEventListener('click', sendChatMessage);
@@ -590,25 +478,6 @@ chrome.runtime.onMessage.addListener((message) => {
     case 'SCAN_RESULTS':
       displayScanResults(message.payload);
       break;
-    case 'AUTO_DEEP_SCAN_START':
-      deepScanProgress.style.display = 'flex';
-      deepScanResults.style.display = 'none';
-      deepScanBar.style.width = '0%';
-      deepScanStatus.textContent = 'Contacts detected — scanning...';
-      deepScanCancelBtn.disabled = false;
-      break;
-    case 'DEEP_SCAN_PROGRESS': {
-      const { current, total, name } = message.payload;
-      const pct = Math.round((current / total) * 100);
-      deepScanBar.style.width = `${pct}%`;
-      deepScanStatus.textContent = `Scanning ${current} of ${total} — ${name}`;
-      break;
-    }
-    case 'DEEP_SCAN_COMPLETE':
-      deepScanProgress.style.display = 'none';
-      deepScanCancelBtn.disabled = false;
-      displayDeepScanResults(message.payload);
-      break;
     case 'DEEP_REVIEW_PROGRESS': {
       const { current, total, name } = message.payload;
       const pct = Math.round((current / total) * 100);
@@ -630,9 +499,6 @@ function resetUI() {
   scanResults.style.display = 'none';
   scanItems.innerHTML = '';
   chatMessages.innerHTML = '';
-  deepScanProgress.style.display = 'none';
-  deepScanResults.style.display = 'none';
-  deepScanCards.innerHTML = '';
   deepReviewSection.style.display = 'none';
   deepReviewProgress.style.display = 'none';
   deepReviewResults.style.display = 'none';
@@ -650,9 +516,6 @@ async function initialize() {
   const last = await chrome.runtime.sendMessage({ type: 'GET_LAST_SCAN' });
   if (last.scanResult) {
     displayScanResults(last.scanResult);
-    if (last.scanResult.deepScan) {
-      displayDeepScanResults(last.scanResult.deepScan);
-    }
   }
 }
 
