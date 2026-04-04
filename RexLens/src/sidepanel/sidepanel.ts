@@ -115,6 +115,22 @@ refreshBtn.addEventListener('click', async () => {
   await silentPageExtract();
 });
 
+// ── Quick Action Buttons ────────────────────────────────────────────────────
+
+const quickActions = $('quick-actions');
+
+quickActions.addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest('.quick-action-btn') as HTMLElement | null;
+  if (!btn) return;
+  const prompt = btn.getAttribute('data-prompt');
+  if (prompt) {
+    chatInput.value = prompt;
+    sendChat();
+    // Hide quick actions after first use
+    quickActions.style.display = 'none';
+  }
+});
+
 // ── Chat ────────────────────────────────────────────────────────────────────
 
 chatSendBtn.addEventListener('click', sendChat);
