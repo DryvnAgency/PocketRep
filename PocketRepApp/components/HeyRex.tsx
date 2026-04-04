@@ -29,6 +29,27 @@ import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 const REX_MODEL = 'claude-haiku-4-5-20251001';
 
+// ── Wake word (Porcupine) ─────────────────────────────────────────────────────
+// Get a free Access Key at picovoice.ai/console → add to .env as EXPO_PUBLIC_PICOVOICE_KEY
+//
+// PLACEHOLDER: currently uses built-in "Porcupine" wake word for testing.
+// To activate the real "Hey Rex" trigger:
+//   1. Go to picovoice.ai/console → Wake Word → Create "Hey Rex"
+//   2. Download .ppn files for iOS (arm64) and Android (arm64-v8a + armeabi-v7a)
+//   3. Drop them in assets/keywords/  (e.g. hey-rex_ios.ppn, hey-rex_android.ppn)
+//   4. Change HEYREX_KEYWORD_PATH to: Platform.OS === 'ios'
+//        ? require('../assets/keywords/hey-rex_ios.ppn')
+//        : require('../assets/keywords/hey-rex_android.ppn')
+//   5. Swap fromBuiltInKeywords → fromKeywordPaths in initWakeWord() below
+const PICOVOICE_KEY = process.env.EXPO_PUBLIC_PICOVOICE_KEY ?? '';
+
+// Lazy-load so a missing package never crashes the app
+let PorcupineManager: any = null;
+let BuiltInKeyword: any = null;
+try {
+  ({ PorcupineManager, BuiltInKeyword } = require('@picovoice/porcupine-react-native'));
+} catch {}
+
 type Stage = 'idle' | 'listening' | 'processing' | 'done';
 
 interface ParsedIntake {
@@ -70,6 +91,9 @@ export default function HeyRex() {
   const [generatingSeq, setGeneratingSeq] = useState(false);
   const recording = useRef<Audio.Recording | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const wakeManagerRef = useRef<any>(null);
+  const startListeningRef = useRef<() => void>(() => {});
+  const [wakeReady, setWakeReady] = useState(false);
   const router = useRouter();
   const segments = useSegments();
   // Hide the orb when already on the Rex tab
@@ -83,6 +107,49 @@ export default function HeyRex() {
       });
     });
   }, []);
+
+  // Keep startListeningRef current so the wake word callback never has a stale closure
+  useEffect(() => { startListeningRef.current = startListening; });
+
+  // Init Porcupine wake word on mount (native only)
+  useEffect(() => {
+    if (isWeb || !PICOVOICE_KEY || !PorcupineManager) return;
+
+    async function initWakeWord() {
+      try {
+        const mgr = await PorcupineManager.fromBuiltInKeywords(
+          PICOVOICE_KEY,
+          [BuiltInKeyword.PORCUPINE], // ← swap to fromKeywordPaths() once hey-rex.ppn is ready
+          (_index: number) => {
+            // Wake word detected — hand off to startListening
+            wakeManagerRef.current?.stop().catch(() => {});
+            setWakeReady(false);
+            startListeningRef.current();
+          },
+          (err: Error) => console.warn('Rex wake word error:', err),
+        );
+        await mgr.start();
+        wakeManagerRef.current = mgr;
+        setWakeReady(true);
+      } catch (e) {
+        console.warn('Wake word init failed (check EXPO_PUBLIC_PICOVOICE_KEY):', e);
+      }
+    }
+    initWakeWord();
+
+    return () => {
+      wakeManagerRef.current?.delete();
+      wakeManagerRef.current = null;
+    };
+  }, []);
+
+  // Restart wake word whenever recording session ends and HeyRex goes back to idle
+  useEffect(() => {
+    if (stage !== 'idle' || isWeb || !wakeManagerRef.current) return;
+    wakeManagerRef.current.start()
+      .then(() => setWakeReady(true))
+      .catch(() => {});
+  }, [stage]);
 
   useEffect(() => {
     if (stage === 'listening') {
@@ -100,6 +167,12 @@ export default function HeyRex() {
 
   async function startListening() {
     try {
+      // Release mic from Porcupine before expo-av takes it
+      if (wakeManagerRef.current) {
+        try { await wakeManagerRef.current.stop(); } catch {}
+        setWakeReady(false);
+      }
+
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
         Alert.alert('Mic needed', 'Allow microphone access to use Hey Rex.');
@@ -547,7 +620,9 @@ Return format (JSON array):
           >
             <Text style={s.orbIcon}>{orbIcon}</Text>
           </TouchableOpacity>
-          {stage === 'idle' && <Text style={s.orbLabel}>Hey Rex</Text>}
+          {stage === 'idle' && (
+            <Text style={s.orbLabel}>{wakeReady ? '👂 Listening…' : 'Hey Rex'}</Text>
+          )}
         </Animated.View>
       )}
 
