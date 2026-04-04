@@ -1,12 +1,13 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator,
+  StyleSheet, Alert, ActivityIndicator, Linking, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 import type { Profile } from '@/lib/types';
+import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 
 const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
 const REX_MODEL = 'claude-haiku-4-5-20251001';
@@ -107,7 +108,9 @@ export default function MoreScreen() {
     setDigestLoading(false);
   }
 
+  // Treat any non-elite as 'pro'
   const isElite = profile?.plan === 'elite';
+  const planLabel = isElite ? 'Elite' : 'Pro';
 
   return (
     <ScrollView style={s.root} contentContainerStyle={s.content}>
@@ -125,7 +128,7 @@ export default function MoreScreen() {
           <Text style={s.profileName}>{profile?.full_name || 'Your Name'}</Text>
           <Text style={s.profileEmail}>{profile?.email}</Text>
           <View style={s.planBadge}>
-            <Text style={s.planBadgeText}>{(profile?.plan ?? 'pro').toUpperCase()} PLAN</Text>
+            <Text style={s.planBadgeText}>{planLabel.toUpperCase()} PLAN</Text>
           </View>
         </View>
       </View>
@@ -184,6 +187,36 @@ export default function MoreScreen() {
         </View>
         {exportLoading ? <ActivityIndicator color={colors.gold} /> : <Text style={s.rowArrow}>→</Text>}
       </TouchableOpacity>
+
+      {/* Support */}
+      <Text style={s.section}>Support</Text>
+      <TouchableOpacity
+        style={s.row}
+        onPress={() => Linking.openURL(`sms:+15551234567${Platform.OS === 'ios' ? '&' : '?'}body=Hi PocketRep Support — I need help with...`)}
+        activeOpacity={0.8}
+      >
+        <View style={s.rowLeft}>
+          <Text style={s.rowIcon}>💬</Text>
+          <View>
+            <Text style={s.rowTitle}>Text PocketRep Support</Text>
+            <Text style={s.rowSub}>We reply fast — usually within a few hours</Text>
+          </View>
+        </View>
+        <Text style={s.rowArrow}>→</Text>
+      </TouchableOpacity>
+
+      {/* Industry badge */}
+      {profile?.industry ? (
+        <View style={[s.row, { marginTop: 2 }]}>
+          <View style={s.rowLeft}>
+            <Text style={s.rowIcon}>{INDUSTRY_CONFIG[profile.industry]?.icon ?? '⚡'}</Text>
+            <View>
+              <Text style={s.rowTitle}>Your Industry</Text>
+              <Text style={s.rowSub}>{INDUSTRY_CONFIG[profile.industry]?.label ?? profile.industry}</Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
 
       {/* Account */}
       <Text style={s.section}>Account</Text>

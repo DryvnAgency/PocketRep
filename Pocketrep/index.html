@@ -1058,7 +1058,6 @@ function pickObj(btn){
 
 // ── STRIPE PAYMENT LINKS ──
 var STRIPE_LINKS = {
-  solo:  'https://buy.stripe.com/dRmcN6cQr4kgbIF4wqcbC01',
   pro:   'https://buy.stripe.com/5kQeVedUv3gc2857ICcbC02',
   elite: 'https://buy.stripe.com/14A8wQdUv3gccMJ2oicbC03'
 };
@@ -1077,7 +1076,7 @@ function sfSelectPlan(plan){
   sfPlan=plan;
   ['pro','elite'].forEach(function(p){
     var el=document.getElementById('sfp-'+p);
-    if(el) el.classList.toggle('active',p===plan);
+    if(el)el.classList.toggle('active',p===plan);
   });
 }
 
@@ -1091,7 +1090,35 @@ function scrollToForm(plan){
 }
 
 // ── CAROUSEL ──
-// pricing layout is CSS-only (column on mobile, row on desktop)
+var carouselIndex=0; // start on Pro
+function carouselRender(){
+  var track=document.getElementById('carousel-track');
+  if(!track)return;
+  // only animate on mobile (carousel-track-outer has overflow:hidden)
+  if(window.innerWidth>=780){return}
+  track.style.transform='translateX(-'+carouselIndex+'00%)';
+  document.querySelectorAll('.carousel-dot').forEach(function(d,i){
+    d.classList.toggle('active',i===carouselIndex);
+  });
+}
+function carouselMove(dir){
+  carouselIndex=Math.max(0,Math.min(1,carouselIndex+dir));
+  carouselRender();
+}
+function carouselGo(i){carouselIndex=i;carouselRender();}
+// touch swipe support
+(function(){
+  var el=document.getElementById('carousel-track');
+  if(!el)return;
+  var startX=0;
+  el.addEventListener('touchstart',function(e){startX=e.touches[0].clientX},{passive:true});
+  el.addEventListener('touchend',function(e){
+    var dx=e.changedTouches[0].clientX-startX;
+    if(Math.abs(dx)>40){carouselMove(dx<0?1:-1)}
+  },{passive:true});
+})();
+// init carousel on Pro
+window.addEventListener('DOMContentLoaded',function(){carouselRender()});
 
 // clear errors on input
 ['sf-name','sf-phone','sf-email','sf-industry'].forEach(function(id){
