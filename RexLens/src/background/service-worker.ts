@@ -58,6 +58,14 @@ function broadcastAuthState() {
   chrome.runtime.sendMessage({ type: 'AUTH_STATE', payload: authState }).catch(() => {});
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function parseName(fullName: string): { first: string; last: string } {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return { first: parts[0], last: '' };
+  return { first: parts[0], last: parts.slice(1).join(' ') };
+}
+
 // ── Content Script Injection Fallback ────────────────────────────────────────
 
 async function ensureContentScript(tabId: number): Promise<void> {
@@ -492,6 +500,42 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       return { ok: true };
     }
 
+    case 'SAVE_CONTACT': {
+      if (!authState.profile?.id) return { error: 'Not signed in.' };
+      const { name, product, context } = message.payload;
+      const { first, last } = parseName(name);
+      const phone = lastPageContent?.phones?.[0] || '';
+      const email = lastPageContent?.emails?.[0] || null;
+
+      const supabase = getSupabase();
+
+      // Dedup check: same user + (matching phone OR email OR name)
+      let dupQuery = supabase
+        .from('contacts')
+        .select('id')
+        .eq('user_id', authState.profile.id)
+        .eq('first_name', first)
+        .eq('last_name', last)
+        .limit(1);
+      const { data: existing } = await dupQuery;
+      if (existing && existing.length > 0) {
+        return { alreadySaved: true };
+      }
+
+      const { error } = await supabase.from('contacts').insert({
+        user_id: authState.profile.id,
+        first_name: first,
+        last_name: last,
+        phone,
+        email,
+        notes: [context, product].filter(Boolean).join(' — '),
+        stage: 'prospect',
+      });
+
+      if (error) return { error: `Failed to save: ${error.message}` };
+      return { saved: true };
+    }
+
     case 'CHAT_MESSAGE': {
       if (!authState.hasAccess) return { error: 'Sign in to Rex Lens to use this feature.' };
 
@@ -571,6 +615,9 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 chrome.commands.onCommand.addListener((command) => {
   if (command === 'scan-page') {
     chrome.runtime.sendMessage({ type: 'ANALYZE_PAGE' }).catch(() => {});
+  }
+  if (command === 'copy-first-script') {
+    chrome.runtime.sendMessage({ type: 'COPY_FIRST_SCRIPT' }).catch(() => {});
   }
 });
 

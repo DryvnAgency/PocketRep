@@ -236,11 +236,15 @@ function createScanItemEl(item: ScanItem, num: number): HTMLElement {
     ${item.product ? `<div class="scan-item-product">${escapeHtml(item.product)}</div>` : ''}
     ${item.script ? `
     <div class="scan-item-script">
-      <div class="scan-item-script-text" contenteditable="true" spellcheck="true">${escapeHtml(item.script)}</div>
+      <div class="scan-item-script-text" contenteditable="true" spellcheck="true" data-item-num="${num}">${escapeHtml(item.script)}</div>
       <div class="scan-item-script-actions">
         <button class="btn-copy-script" title="Copy script">Copy</button>
+        <button class="btn-save-contact" title="Send to PocketRep">Send to PocketRep</button>
       </div>
-    </div>` : ''}
+    </div>` : `
+    <div class="scan-item-script-actions" style="margin-top:6px">
+      <button class="btn-save-contact" title="Send to PocketRep">Send to PocketRep</button>
+    </div>`}
   `;
 
   // Copy button — copies the current (possibly edited) text
@@ -251,6 +255,29 @@ function createScanItemEl(item: ScanItem, num: number): HTMLElement {
       navigator.clipboard.writeText(scriptText.textContent || '');
       (copyBtn as HTMLButtonElement).textContent = 'Copied!';
       setTimeout(() => { (copyBtn as HTMLButtonElement).textContent = 'Copy'; }, 1000);
+    });
+  }
+
+  // Send to PocketRep button
+  const saveBtn = el.querySelector('.btn-save-contact') as HTMLButtonElement | null;
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+      const result = await chrome.runtime.sendMessage({
+        type: 'SAVE_CONTACT',
+        payload: { name: item.name, product: item.product, context: item.context },
+      });
+      if (result.saved) {
+        saveBtn.textContent = 'Saved ✓';
+        saveBtn.classList.add('btn-save-done');
+      } else if (result.alreadySaved) {
+        saveBtn.textContent = 'Already saved';
+        saveBtn.classList.add('btn-save-done');
+      } else {
+        saveBtn.textContent = result.error || 'Failed';
+        setTimeout(() => { saveBtn.textContent = 'Send to PocketRep'; saveBtn.disabled = false; }, 2000);
+      }
     });
   }
 
@@ -404,8 +431,32 @@ async function sendChatMessage() {
   if (result.error) {
     appendChatMessage('assistant', `Error: ${result.error}`);
   } else {
-    appendChatMessage('assistant', result.reply);
+    handleChatReply(result.reply);
   }
+}
+
+function handleChatReply(reply: string) {
+  // Check for [UPDATE #N] prefix — Rex rewrote a script
+  const updateMatch = reply.match(/^\[UPDATE #(\d+)\]\n([\s\S]+?)(?:\n\n([\s\S]*))?$/);
+  if (updateMatch) {
+    const itemNum = parseInt(updateMatch[1], 10);
+    const newScript = updateMatch[2].trim();
+    const commentary = (updateMatch[3] || '').trim();
+
+    // Update the script in the scan results list
+    const scriptEl = scanItems.querySelector(`[data-item-num="${itemNum}"]`) as HTMLElement | null;
+    if (scriptEl) {
+      scriptEl.textContent = newScript;
+      scriptEl.style.borderColor = 'var(--gold)';
+      setTimeout(() => { scriptEl.style.borderColor = ''; }, 2000);
+    }
+
+    // Show commentary in chat (or confirmation if no commentary)
+    appendChatMessage('assistant', commentary || `Updated script #${itemNum}.`);
+    return;
+  }
+
+  appendChatMessage('assistant', reply);
 }
 
 function appendChatMessage(role: 'user' | 'assistant', content: string) {
@@ -423,6 +474,20 @@ chrome.runtime.onMessage.addListener((message) => {
     case 'AUTH_STATE':
       handleAuthState(message.payload);
       break;
+    case 'COPY_FIRST_SCRIPT': {
+      const firstScript = scanItems.querySelector('.scan-item-script-text') as HTMLElement | null;
+      if (firstScript?.textContent) {
+        navigator.clipboard.writeText(firstScript.textContent);
+        scanCount.textContent = 'Copied!';
+        setTimeout(() => {
+          if (currentScanResult) {
+            const count = currentScanResult.items.filter(i => !i.dismiss).length;
+            scanCount.textContent = `${count} item${count !== 1 ? 's' : ''}`;
+          }
+        }, 1500);
+      }
+      break;
+    }
     case 'STATUS':
       setStatus(message.payload.status, message.payload.message);
       break;

@@ -87,7 +87,16 @@ Rules:
 - If asked for alternatives, give different angles.
 - Never say "I cannot" — find an approach.
 - Keep it concise. 2-4 sentences for simple questions, short paragraph max for complex ones.
-- When referencing scan items, use the # number so the rep can follow along.`;
+- When referencing scan items, use the # number so the rep can follow along.
+
+IMPORTANT — Script updates: When the rep asks you to rewrite or update a specific script (e.g. "make #3 more urgent", "change #5 to an email"), start your response with [UPDATE #N] on its own line, followed by the new script on the next lines. After the script, leave a blank line, then add any commentary. Example:
+
+[UPDATE #3]
+Hey Sarah, wanted to reach out before Friday — we've got a limited window on that pricing and I'd hate for you to miss it. Worth a quick call?
+
+Made it more urgent by adding the Friday deadline and scarcity angle.
+
+If the rep is NOT asking to update a specific script, just respond normally without the [UPDATE] prefix.`;
 }
 
 // ── Deep Scan Prompts ───────────────────────────────────────────────────────

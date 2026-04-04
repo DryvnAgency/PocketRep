@@ -36,6 +36,10 @@
     "scan-page": {
       "suggested_key": { "default": "Ctrl+Shift+R", "mac": "Command+Shift+R" },
       "description": "Scan the current page with Rex Lens"
+    },
+    "copy-first-script": {
+      "suggested_key": { "default": "Ctrl+Shift+C", "mac": "Command+Shift+C" },
+      "description": "Copy the first scan script to clipboard"
     }
   },
   "icons": {
