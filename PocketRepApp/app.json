@@ -29,7 +29,7 @@
       ],
       [
         "expo-image-picker",
-        { "photosPermission": "PocketRep needs photo access for Rapport Vault." }
+        { "photosPermission": "PocketRep needs photo access for Rex Lens." }
       ],
       [
         "expo-location",
