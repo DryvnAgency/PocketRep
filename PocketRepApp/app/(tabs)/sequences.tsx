@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Dimensions, Alert, ActivityIndicator, Switch, Modal, Linking, Platform,
+  AppState, AppStateStatus,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -10,7 +11,7 @@ import type { Sequence, SequenceStep } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import {
   generateQueue, loadQueueState, saveQueueState, clearQueueState,
-  markSent, type QueueItem,
+  markSentAndLog, type QueueItem,
 } from '@/lib/messageQueue';
 
 let AsyncStorage: any = null;
@@ -283,6 +284,7 @@ export default function SequencesScreen() {
   ]);
   const [saving, setSaving] = useState(false);
   const [userPlan, setUserPlan] = useState<string>('pro');
+  const [userId, setUserId] = useState<string | null>(null);
   const [templateFilter, setTemplateFilter] = useState<TemplateFilter>('all');
   // Message queue
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
@@ -290,6 +292,13 @@ export default function SequencesScreen() {
   const [showQueueModal, setShowQueueModal] = useState(false);
   const [queuePos, setQueuePos] = useState(0);
   const [editingMessage, setEditingMessage] = useState<string | null>(null);
+  const pendingSendRef = useRef<QueueItem | null>(null);
+  const [showConfirmSent, setShowConfirmSent] = useState(false);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  // History
+  const [historyItems, setHistoryItems] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [showMassTextModal, setShowMassTextModal] = useState(false);
   const [massMsg, setMassMsg] = useState('');
   const [allContacts, setAllContacts] = useState<{id: string; first_name: string; last_name: string; phone: string}[]>([]);
@@ -305,11 +314,41 @@ export default function SequencesScreen() {
     loadQueue();
   }, []));
 
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      const wasBackground = appStateRef.current.match(/inactive|background/);
+      const nowActive = nextState === 'active';
+      if (wasBackground && nowActive && pendingSendRef.current) {
+        setShowConfirmSent(true);
+      }
+      appStateRef.current = nextState;
+    });
+    return () => sub.remove();
+  }, []);
+
+  async function loadHistory(uid: string) {
+    setHistoryLoading(true);
+    try {
+      const { data } = await supabase
+        .from('contact_interactions')
+        .select('*')
+        .eq('user_id', uid)
+        .order('sent_at', { ascending: false })
+        .limit(200);
+      setHistoryItems(data ?? []);
+      setHistoryLoaded(true);
+    } catch {
+      setHistoryItems([]);
+    }
+    setHistoryLoading(false);
+  }
+
   async function loadMySequences() {
     setLoadingMy(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoadingMy(false); return; }
+      setUserId(user.id);
 
       const [{ data: prof }, { data: seqs }, { data: ctcts }] = await Promise.all([
         supabase.from('profiles').select('plan,industry').eq('id', user.id).single(),
@@ -357,11 +396,21 @@ export default function SequencesScreen() {
   }
 
   async function handleSendItem(item: QueueItem) {
+    pendingSendRef.current = item;
     if (item.channel === 'text' && item.phone) {
       const url = `sms:${item.phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(editingMessage ?? item.message)}`;
       await Linking.openURL(url).catch(() => {});
+      // AppState listener fires when rep returns to app → shows "Did you send it?" banner
+    } else {
+      // Call/email: confirm immediately (no SMS app transition)
+      await confirmSent(item);
     }
-    await markSent(item.sequence_id, item.step_number);
+  }
+
+  async function confirmSent(item: QueueItem) {
+    pendingSendRef.current = null;
+    setShowConfirmSent(false);
+    if (userId) await markSentAndLog(item, userId);
     const next = queuePos + 1;
     const updatedItems = queueItems.map((q, i) =>
       i === queuePos ? { ...q, status: 'sent' as const } : q
@@ -744,6 +793,50 @@ export default function SequencesScreen() {
           )}
         </AccordionSection>
 
+        {/* Section: History (Done Log) */}
+        <AccordionSection
+          title="📜 History"
+          open={openSection === 4}
+          onToggle={() => {
+            toggleSection(4);
+            if (openSection !== 4 && userId && !historyLoaded) loadHistory(userId);
+          }}
+        >
+          {historyLoading ? (
+            <ActivityIndicator color={colors.gold} style={{ margin: spacing.lg }} />
+          ) : historyItems.length === 0 ? (
+            <View style={s.emptySection}>
+              <Text style={s.emptySectionText}>No sent messages yet. Start sending from your queue!</Text>
+            </View>
+          ) : (() => {
+            // Group by date
+            const groups: Record<string, any[]> = {};
+            for (const item of historyItems) {
+              const day = (item.sent_at ?? '').split('T')[0];
+              if (!groups[day]) groups[day] = [];
+              groups[day].push(item);
+            }
+            return (
+              <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.md }}>
+                {Object.entries(groups).map(([day, items]) => (
+                  <View key={day}>
+                    <Text style={s.historyDateHeader}>{day}</Text>
+                    {items.map((h: any) => (
+                      <View key={h.id} style={s.historyRow}>
+                        <Text style={s.historyChannel}>{CHANNEL_ICON[h.channel] ?? '📨'}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.historyContact} numberOfLines={1}>{h.contact_name ?? 'Unknown'}</Text>
+                          <Text style={s.historyMsg} numberOfLines={2}>{(h.message ?? '').slice(0, 80)}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
+        </AccordionSection>
+
         {/* Section: Recent Mass Texts */}
         <AccordionSection
           title="📱 Recent Mass Texts"
@@ -782,6 +875,29 @@ export default function SequencesScreen() {
           <View style={sq.progressTrack}>
             <View style={[sq.progressFill, { width: `${((queuePos + 1) / Math.max(queueItems.length, 1)) * 100}%` as any }]} />
           </View>
+
+          {/* "Did you send it?" confirmation banner */}
+          {showConfirmSent && pendingSendRef.current && (
+            <View style={sq.confirmBanner}>
+              <Text style={sq.confirmText}>Did you send it?</Text>
+              <View style={sq.confirmRow}>
+                <TouchableOpacity
+                  style={sq.confirmYes}
+                  onPress={() => confirmSent(pendingSendRef.current!)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={sq.confirmYesText}>✅ Yes, sent</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={sq.confirmNo}
+                  onPress={() => { pendingSendRef.current = null; setShowConfirmSent(false); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={sq.confirmNoText}>Not yet</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {queueItems[queuePos] ? (() => {
             const item = queueItems[queuePos];
@@ -1098,6 +1214,20 @@ const s = StyleSheet.create({
   emptySection: { padding: spacing.lg, alignItems: 'center' },
   emptySectionText: { color: colors.grey, fontSize: 13 },
 
+  // History
+  historyDateHeader: {
+    fontSize: 11, fontWeight: '700', color: colors.gold, letterSpacing: 0.8,
+    textTransform: 'uppercase', marginTop: spacing.md, marginBottom: spacing.xs,
+  },
+  historyRow: {
+    flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start',
+    backgroundColor: colors.surface2, borderRadius: radius.md, padding: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  historyChannel: { fontSize: 18, lineHeight: 22 },
+  historyContact: { fontSize: 12, fontWeight: '700', color: colors.ink, marginBottom: 2 },
+  historyMsg: { fontSize: 11, color: colors.grey2, lineHeight: 16 },
+
   // Detail
   detailMeta: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   templateBadge: {
@@ -1280,4 +1410,15 @@ const sq = StyleSheet.create({
   allDoneIcon: { fontSize: 56 },
   allDoneTitle: { fontSize: 24, fontWeight: '800', color: colors.white },
   allDoneSub: { fontSize: 14, color: colors.grey2 },
+  // "Did you send it?" confirmation banner
+  confirmBanner: {
+    backgroundColor: '#1a2a1a', borderBottomWidth: 1, borderBottomColor: '#2a4a2a',
+    padding: spacing.lg, gap: spacing.sm,
+  },
+  confirmText: { fontSize: 16, fontWeight: '800', color: colors.white, textAlign: 'center' },
+  confirmRow: { flexDirection: 'row', gap: spacing.sm },
+  confirmYes: { flex: 1, backgroundColor: '#22c55e', borderRadius: radius.lg, padding: spacing.md, alignItems: 'center' },
+  confirmYesText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  confirmNo: { flex: 1, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.lg, padding: spacing.md, alignItems: 'center' },
+  confirmNoText: { color: colors.grey2, fontWeight: '600', fontSize: 15 },
 });

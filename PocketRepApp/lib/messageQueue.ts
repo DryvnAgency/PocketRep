@@ -87,6 +87,32 @@ export async function markSent(sequenceId: string, stepNumber: number): Promise<
   } catch {}
 }
 
+export async function markSentAndLog(
+  item: QueueItem,
+  userId: string,
+): Promise<void> {
+  // 1. AsyncStorage deduplication
+  await markSent(item.sequence_id, item.step_number);
+
+  // 2. Stamp sent_at on the sequence_steps row (best-effort)
+  await supabase
+    .from('sequence_steps')
+    .update({ sent_at: new Date().toISOString() })
+    .eq('sequence_id', item.sequence_id)
+    .eq('step_number', item.step_number);
+
+  // 3. Insert interaction log row
+  await supabase.from('contact_interactions').insert({
+    user_id: userId,
+    contact_id: item.contact_id,
+    contact_name: item.contact_name,
+    sequence_id: item.sequence_id,
+    step_number: item.step_number,
+    channel: item.channel,
+    message: item.message,
+  });
+}
+
 // ── Queue persistence ─────────────────────────────────────────────────────────
 
 export async function loadQueueState(): Promise<QueueState | null> {

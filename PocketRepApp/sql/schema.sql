@@ -178,3 +178,26 @@ create policy if not exists "Users manage own sequence_steps"
     auth.uid() = (select user_id from sequences where id = sequence_id) or
     (select user_id from sequences where id = sequence_id) is null
   );
+
+-- ── SEQUENCE STEP SENT TRACKING ───────────────────────────────────────────────
+alter table sequence_steps add column if not exists sent_at timestamptz;
+
+-- ── CONTACT INTERACTIONS (done log) ──────────────────────────────────────────
+create table if not exists contact_interactions (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references profiles(id) on delete cascade,
+  contact_id   uuid references contacts(id) on delete set null,
+  contact_name text,
+  sequence_id  uuid references sequences(id) on delete set null,
+  step_number  int,
+  channel      text check (channel in ('text','call','email')),
+  message      text,
+  sent_at      timestamptz default now()
+);
+
+alter table contact_interactions enable row level security;
+create policy if not exists "Users manage own interactions"
+  on contact_interactions for all using (auth.uid() = user_id);
+
+create index if not exists interactions_user_date
+  on contact_interactions(user_id, sent_at desc);

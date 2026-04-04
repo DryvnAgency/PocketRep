@@ -471,7 +471,7 @@ Return format (JSON array):
         contact_id: contactId,
         name: `Follow-up: ${intake.customer_name}`,
         description: `AI-generated from voice intake. ${intake.vehicle_interest ? `Interested in: ${intake.vehicle_interest}.` : ''}`,
-        industry: 'auto',
+        industry: userIndustry,
         is_template: false,
         is_custom: true,
       }).select('id').single();
