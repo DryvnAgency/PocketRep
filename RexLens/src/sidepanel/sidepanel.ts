@@ -1,4 +1,4 @@
-import type { RexSuggestion, AuthState, FormField, DeepScanResult, ContactActionPlan } from '../shared/types';
+import type { ScanResult, ScanItem, AuthState, DeepScanResult, ContactActionPlan } from '../shared/types';
 
 // ── DOM References ───────────────────────────────────────────────────────────
 
@@ -18,28 +18,11 @@ const loginError = $('login-error');
 const statusBadge = $('status-badge');
 const scanBtn = $<HTMLButtonElement>('scan-btn');
 const scanBtnText = $('scan-btn-text');
-const situationCard = $('situation-card');
-const situationText = $('situation-text');
-const suggestionsCard = $('suggestions-card');
-const suggestionsList = $('suggestions-list');
-const responseCard = $('response-card');
-const responseText = $('response-text');
-const copyResponseBtn = $<HTMLButtonElement>('copy-response-btn');
-const insertResponseBtn = $<HTMLButtonElement>('insert-response-btn');
-const followupCard = $('followup-card');
-const followupText = $('followup-text');
 
-// Insert Modal
-const insertModal = $('insert-modal');
-const insertModalField = $('insert-modal-field');
-const insertModalPreview = $('insert-modal-preview');
-const insertCancelBtn = $<HTMLButtonElement>('insert-cancel-btn');
-const insertConfirmBtn = $<HTMLButtonElement>('insert-confirm-btn');
-
-// Chat
-const chatMessages = $('chat-messages');
-const chatInput = $<HTMLInputElement>('chat-input');
-const chatSendBtn = $<HTMLButtonElement>('chat-send-btn');
+// Scan Results
+const scanResults = $('scan-results');
+const scanItems = $('scan-items');
+const scanCount = $('scan-count');
 
 // Deep Scan (auto-triggered after page scan when contacts are found)
 const deepScanProgress = $('deep-scan-progress');
@@ -50,16 +33,18 @@ const deepScanResults = $('deep-scan-results');
 const deepScanCards = $('deep-scan-cards');
 const deepScanBadge = $('deep-scan-badge');
 
+// Chat
+const chatMessages = $('chat-messages');
+const chatInput = $<HTMLInputElement>('chat-input');
+const chatSendBtn = $<HTMLButtonElement>('chat-send-btn');
+
 // Logout
 const logoutBtn = $<HTMLButtonElement>('logout-btn');
 const logoutLockedBtn = $<HTMLButtonElement>('logout-locked-btn');
 
 // ── State ────────────────────────────────────────────────────────────────────
 
-let currentSuggestions: RexSuggestion | null = null;
-let currentDraftResponse: string | null = null;
-let detectedFields: FormField[] = [];
-let pendingInsert: { selector: string; text: string } | null = null;
+let currentScanResult: ScanResult | null = null;
 
 // ── Screen Management ────────────────────────────────────────────────────────
 
@@ -123,7 +108,6 @@ loginBtn.addEventListener('click', async () => {
   handleAuthState(result.authState);
 });
 
-// Handle Enter key on login fields
 passwordInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') loginBtn.click();
 });
@@ -136,7 +120,6 @@ function showError(msg: string) {
   loginError.style.display = 'block';
 }
 
-// Logout
 logoutBtn.addEventListener('click', async () => {
   await chrome.runtime.sendMessage({ type: 'AUTH_LOGOUT' });
   showScreen('auth');
@@ -153,12 +136,10 @@ function handleAuthState(state: AuthState) {
     showScreen('auth');
     return;
   }
-
   if (!state.hasAccess) {
     showScreen('locked');
     return;
   }
-
   showScreen('main');
 }
 
@@ -174,49 +155,95 @@ scanBtn.addEventListener('click', async () => {
     return;
   }
 
-  if (result.suggestions) {
-    displaySuggestions(result.suggestions);
+  if (result.scanResult) {
+    displayScanResults(result.scanResult);
   }
 });
 
-function displaySuggestions(suggestions: RexSuggestion) {
-  currentSuggestions = suggestions;
-  currentDraftResponse = suggestions.draftResponse;
+function displayScanResults(result: ScanResult) {
+  currentScanResult = result;
   setStatus('ready');
 
-  // Situation
-  situationText.textContent = suggestions.situation;
-  situationCard.style.display = 'flex';
+  const actionableItems = result.items.filter(i => !i.dismiss);
+  const dismissItems = result.items.filter(i => i.dismiss);
 
-  // Suggestions
-  suggestionsList.innerHTML = '';
-  for (const s of suggestions.suggestions) {
-    const li = document.createElement('li');
-    li.textContent = s;
-    li.addEventListener('click', () => {
-      navigator.clipboard.writeText(s);
-      li.style.borderColor = 'var(--success)';
-      setTimeout(() => { li.style.borderColor = ''; }, 1000);
+  scanCount.textContent = `${actionableItems.length} item${actionableItems.length !== 1 ? 's' : ''}`;
+  scanItems.innerHTML = '';
+
+  // Actionable items first
+  actionableItems.forEach((item, index) => {
+    scanItems.appendChild(createScanItemEl(item, index + 1));
+  });
+
+  // Dismiss items at the end (collapsed)
+  if (dismissItems.length > 0) {
+    const dismissHeader = document.createElement('div');
+    dismissHeader.className = 'dismiss-section-header';
+    dismissHeader.textContent = `${dismissItems.length} notification${dismissItems.length !== 1 ? 's' : ''} — dismiss`;
+    scanItems.appendChild(dismissHeader);
+
+    dismissItems.forEach((item, index) => {
+      scanItems.appendChild(createScanItemEl(item, actionableItems.length + index + 1));
     });
-    suggestionsList.appendChild(li);
-  }
-  suggestionsCard.style.display = suggestions.suggestions.length > 0 ? 'flex' : 'none';
-
-  // Draft response
-  if (suggestions.draftResponse) {
-    responseText.textContent = suggestions.draftResponse;
-    responseCard.style.display = 'flex';
-  } else {
-    responseCard.style.display = 'none';
   }
 
-  // Follow-up
-  if (suggestions.followUp) {
-    followupText.textContent = suggestions.followUp;
-    followupCard.style.display = 'flex';
-  } else {
-    followupCard.style.display = 'none';
+  scanResults.style.display = result.items.length > 0 ? 'block' : 'none';
+}
+
+const TASK_ICONS: Record<string, string> = {
+  phone: '📞', email: '📧', text: '📱',
+  followup: '🤝', service: '🔧',
+  notification: '🔔',
+};
+
+const TASK_LABELS: Record<string, string> = {
+  phone: 'PHONE', email: 'EMAIL', text: 'TEXT',
+  followup: 'FOLLOW-UP', service: 'SERVICE',
+  notification: 'DISMISS',
+};
+
+function createScanItemEl(item: ScanItem, num: number): HTMLElement {
+  const el = document.createElement('div');
+  el.className = `scan-item${item.dismiss ? ' scan-item-dismiss' : ''}`;
+
+  const taskType = item.taskType || 'followup';
+  const icon = TASK_ICONS[taskType] || '👤';
+  const label = TASK_LABELS[taskType] || 'TASK';
+  const urgencyClass = item.urgency === 'high' ? 'urgency-high' : item.urgency === 'low' ? 'urgency-low' : '';
+
+  el.innerHTML = `
+    <div class="scan-item-header">
+      <span class="scan-item-num">${num}</span>
+      <span class="scan-item-name">${escapeHtml(item.name)}</span>
+      <span class="scan-item-badge task-${taskType}">${icon} ${label}</span>
+      ${urgencyClass ? `<span class="scan-item-urgency ${urgencyClass}">${item.urgency.toUpperCase()}</span>` : ''}
+    </div>
+    <div class="scan-item-context">${escapeHtml(item.context)}</div>
+    ${item.product ? `<div class="scan-item-product">${escapeHtml(item.product)}</div>` : ''}
+    ${item.script ? `
+    <div class="scan-item-script">
+      <div class="scan-item-script-text">${escapeHtml(item.script)}</div>
+      <button class="btn-copy-script" title="Copy script">Copy</button>
+    </div>` : ''}
+  `;
+
+  // Copy button handler
+  const copyBtn = el.querySelector('.btn-copy-script');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(item.script);
+      (copyBtn as HTMLButtonElement).textContent = 'Copied!';
+      setTimeout(() => { (copyBtn as HTMLButtonElement).textContent = 'Copy'; }, 1000);
+    });
   }
+
+  return el;
+}
+
+function escapeHtml(str: string): string {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 // ── Deep Scan (auto-triggered) ──────────────────────────────────────────────
@@ -233,7 +260,7 @@ function displayDeepScanResults(result: DeepScanResult) {
   deepScanCards.innerHTML = '';
 
   result.contacts.forEach((contact, index) => {
-    const card = createActionCard(contact, index < 3); // First 3 expanded
+    const card = createActionCard(contact, index < 3);
     deepScanCards.appendChild(card);
   });
 }
@@ -244,26 +271,16 @@ function createActionCard(contact: ContactActionPlan, expanded: boolean): HTMLEl
 
   const isSkip = contact.dismiss || (contact.book || '').toLowerCase().startsWith('skip') || (contact.book || '').toLowerCase().startsWith('dismiss');
 
-  const taskIcons: Record<string, string> = {
-    phone: '📞', email: '📧', text: '📱',
-    sold_followup: '🤝', service_opportunity: '🔧',
-    notification: '🔔', unknown: '👤',
-  };
-  const taskLabels: Record<string, string> = {
-    phone: 'Phone', email: 'Email', text: 'Text',
-    sold_followup: 'Sold Follow-up', service_opportunity: 'Service Opp',
-    notification: 'Dismiss', unknown: 'Task',
-  };
-  const taskType = contact.taskType || 'unknown';
-  const icon = taskIcons[taskType] || '👤';
-  const label = taskLabels[taskType] || 'Task';
+  const taskType = contact.taskType || 'followup';
+  const icon = TASK_ICONS[taskType] || '👤';
+  const label = TASK_LABELS[taskType] || 'Task';
 
   card.innerHTML = `
     <div class="action-card-header">
       <span>${icon}</span>
       <span class="action-card-name">${escapeHtml(contact.name)}</span>
       <span class="action-card-badge task-${taskType}">${label}</span>
-      ${contact.vehicle ? `<span class="action-card-vehicle">${escapeHtml(contact.vehicle)}</span>` : ''}
+      ${contact.product ? `<span class="action-card-vehicle">${escapeHtml(contact.product)}</span>` : ''}
       <span class="action-card-toggle">▶</span>
     </div>
     <div class="action-card-summary">${escapeHtml(contact.summary)}</div>
@@ -309,13 +326,11 @@ function createActionCard(contact: ContactActionPlan, expanded: boolean): HTMLEl
     </div>
   `;
 
-  // Toggle expand/collapse
   const header = card.querySelector('.action-card-header')!;
   header.addEventListener('click', () => {
     card.classList.toggle('expanded');
   });
 
-  // Copy buttons
   card.querySelectorAll<HTMLButtonElement>('.btn-copy-sm').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -333,90 +348,6 @@ function createActionCard(contact: ContactActionPlan, expanded: boolean): HTMLEl
 
   return card;
 }
-
-function escapeHtml(str: string): string {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-// ── Copy Response ────────────────────────────────────────────────────────────
-
-copyResponseBtn.addEventListener('click', () => {
-  if (!currentDraftResponse) return;
-  navigator.clipboard.writeText(currentDraftResponse);
-  copyResponseBtn.textContent = 'Copied!';
-  setTimeout(() => { copyResponseBtn.textContent = 'Copy'; }, 1500);
-});
-
-// ── Insert into Page ─────────────────────────────────────────────────────────
-
-insertResponseBtn.addEventListener('click', async () => {
-  if (!currentDraftResponse) return;
-
-  // Detect fields on the page
-  const result = await chrome.runtime.sendMessage({ type: 'DETECT_FIELDS' });
-  detectedFields = result.fields || [];
-
-  if (detectedFields.length === 0) {
-    alert('No text fields found on the page.');
-    return;
-  }
-
-  // Use the first suitable field (compose/reply area)
-  const targetField = detectedFields.find(f =>
-    f.type === 'contenteditable' || f.type === 'textarea'
-  ) || detectedFields[0];
-
-  // Highlight the field
-  await chrome.runtime.sendMessage({
-    type: 'HIGHLIGHT_FIELD',
-    payload: { selector: targetField.selector, highlight: true },
-  });
-
-  // Show confirmation modal
-  pendingInsert = { selector: targetField.selector, text: currentDraftResponse };
-  insertModalField.textContent = `Target: ${targetField.label}`;
-  insertModalPreview.textContent = currentDraftResponse;
-  insertModal.style.display = 'flex';
-});
-
-insertCancelBtn.addEventListener('click', async () => {
-  insertModal.style.display = 'none';
-  if (pendingInsert) {
-    await chrome.runtime.sendMessage({
-      type: 'HIGHLIGHT_FIELD',
-      payload: { selector: pendingInsert.selector, highlight: false },
-    });
-    pendingInsert = null;
-  }
-});
-
-insertConfirmBtn.addEventListener('click', async () => {
-  if (!pendingInsert) return;
-
-  const result = await chrome.runtime.sendMessage({
-    type: 'CONFIRM_INSERT',
-    payload: pendingInsert,
-  });
-
-  // Remove highlight
-  await chrome.runtime.sendMessage({
-    type: 'HIGHLIGHT_FIELD',
-    payload: { selector: pendingInsert.selector, highlight: false },
-  });
-
-  insertModal.style.display = 'none';
-
-  if (result.success) {
-    insertResponseBtn.textContent = 'Inserted!';
-    setTimeout(() => { insertResponseBtn.textContent = 'Insert into Page'; }, 1500);
-  } else {
-    alert(result.error || 'Failed to insert text.');
-  }
-
-  pendingInsert = null;
-});
 
 // ── Chat ─────────────────────────────────────────────────────────────────────
 
@@ -466,8 +397,8 @@ chrome.runtime.onMessage.addListener((message) => {
     case 'STATUS':
       setStatus(message.payload.status, message.payload.message);
       break;
-    case 'SUGGESTIONS_READY':
-      displaySuggestions(message.payload);
+    case 'SCAN_RESULTS':
+      displayScanResults(message.payload);
       break;
     case 'AUTO_DEEP_SCAN_START':
       deepScanProgress.style.display = 'flex';
@@ -494,13 +425,9 @@ chrome.runtime.onMessage.addListener((message) => {
 // ── Reset UI ─────────────────────────────────────────────────────────────────
 
 function resetUI() {
-  currentSuggestions = null;
-  currentDraftResponse = null;
-  detectedFields = [];
-  situationCard.style.display = 'none';
-  suggestionsCard.style.display = 'none';
-  responseCard.style.display = 'none';
-  followupCard.style.display = 'none';
+  currentScanResult = null;
+  scanResults.style.display = 'none';
+  scanItems.innerHTML = '';
   chatMessages.innerHTML = '';
   deepScanProgress.style.display = 'none';
   deepScanResults.style.display = 'none';
@@ -514,12 +441,12 @@ async function initialize() {
   const authState = await chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' });
   handleAuthState(authState);
 
-  // Load any existing suggestions
-  const last = await chrome.runtime.sendMessage({ type: 'GET_LAST_SUGGESTIONS' });
-  if (last.suggestions) {
-    displaySuggestions(last.suggestions);
-    if (last.suggestions.deepScan) {
-      displayDeepScanResults(last.suggestions.deepScan);
+  // Load any existing scan results
+  const last = await chrome.runtime.sendMessage({ type: 'GET_LAST_SCAN' });
+  if (last.scanResult) {
+    displayScanResults(last.scanResult);
+    if (last.scanResult.deepScan) {
+      displayDeepScanResults(last.scanResult.deepScan);
     }
   }
 }

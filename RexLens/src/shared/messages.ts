@@ -1,4 +1,4 @@
-import type { PageContent, RexSuggestion, AuthState, FormField, DeepScanResult } from './types';
+import type { PageContent, ScanResult, AuthState, FormField, DeepScanResult } from './types';
 
 // ── Content Script → Service Worker ──────────────────────────────────────────
 
@@ -77,9 +77,9 @@ export interface AnalyzePageMessage {
   type: 'ANALYZE_PAGE';
 }
 
-export interface SuggestionsReadyMessage {
-  type: 'SUGGESTIONS_READY';
-  payload: RexSuggestion;
+export interface ScanResultsMessage {
+  type: 'SCAN_RESULTS';
+  payload: ScanResult;
 }
 
 export interface ChatMessage {
@@ -122,7 +122,7 @@ export type ExtensionMessage =
   | ExtractPageMessage
   | DetectFieldsMessage
   | AnalyzePageMessage
-  | SuggestionsReadyMessage
+  | ScanResultsMessage
   | ChatMessage
   | ChatResponseMessage
   | ConfirmInsertMessage

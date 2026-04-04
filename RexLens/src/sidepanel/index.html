@@ -82,57 +82,14 @@
         <div id="deep-scan-cards"></div>
       </div>
 
-      <!-- Situation -->
-      <div id="situation-card" class="card" style="display:none">
-        <div class="card-header">
-          <span class="card-icon">📍</span>
-          <span class="card-title">Situation</span>
+      <!-- Scan Results -->
+      <div id="scan-results" style="display:none">
+        <div class="card-header" style="padding: 0 0 8px 0">
+          <span class="card-icon">📋</span>
+          <span class="card-title">Scan Results</span>
+          <span id="scan-count" class="badge badge-ready" style="margin-left:auto">0 items</span>
         </div>
-        <p id="situation-text"></p>
-      </div>
-
-      <!-- Suggestions -->
-      <div id="suggestions-card" class="card" style="display:none">
-        <div class="card-header">
-          <span class="card-icon">💡</span>
-          <span class="card-title">Suggestions</span>
-        </div>
-        <ul id="suggestions-list"></ul>
-      </div>
-
-      <!-- Draft Response -->
-      <div id="response-card" class="card" style="display:none">
-        <div class="card-header">
-          <span class="card-icon">💬</span>
-          <span class="card-title">Draft Response</span>
-        </div>
-        <div id="response-text" class="response-text"></div>
-        <div class="card-actions">
-          <button id="copy-response-btn" class="btn-secondary btn-sm">Copy</button>
-          <button id="insert-response-btn" class="btn-primary btn-sm">Insert into Page</button>
-        </div>
-      </div>
-
-      <!-- Insert Confirmation Modal -->
-      <div id="insert-modal" class="modal" style="display:none">
-        <div class="modal-content">
-          <h3>Insert Response</h3>
-          <p id="insert-modal-field">Target field: </p>
-          <div id="insert-modal-preview" class="response-text"></div>
-          <div class="modal-actions">
-            <button id="insert-cancel-btn" class="btn-secondary">Cancel</button>
-            <button id="insert-confirm-btn" class="btn-primary">Insert</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Follow-up -->
-      <div id="followup-card" class="card" style="display:none">
-        <div class="card-header">
-          <span class="card-icon">📅</span>
-          <span class="card-title">Follow-up</span>
-        </div>
-        <p id="followup-text"></p>
+        <div id="scan-items"></div>
       </div>
 
       <!-- Rex Chat -->

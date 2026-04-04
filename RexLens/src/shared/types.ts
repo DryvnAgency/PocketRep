@@ -39,11 +39,22 @@ export interface FormField {
   currentValue: string;
 }
 
-export interface RexSuggestion {
-  situation: string;
-  suggestions: string[];
-  draftResponse: string | null;
-  followUp: string | null;
+// ── Scan Results ────────────────────────────────────────────────────────────
+
+export type TaskType = 'phone' | 'email' | 'text' | 'followup' | 'service' | 'notification';
+
+export interface ScanItem {
+  name: string;
+  taskType: TaskType;
+  product: string;
+  urgency: 'high' | 'medium' | 'low';
+  context: string;
+  script: string;
+  dismiss: boolean;
+}
+
+export interface ScanResult {
+  items: ScanItem[];
   deepScan?: DeepScanResult;
 }
 
@@ -64,8 +75,8 @@ export interface ContactSummary {
 export interface ContactActionPlan {
   name: string;
   summary: string;
-  taskType: 'phone' | 'email' | 'text' | 'sold_followup' | 'service_opportunity' | 'notification' | 'unknown';
-  vehicle: string;
+  taskType: string;
+  product: string;
   text: string;
   email: { subject: string; body: string };
   callScript: string;

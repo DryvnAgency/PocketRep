@@ -1,13 +1,13 @@
 import { getSupabase, SUPABASE_ANON_KEY } from '../shared/supabase';
-import { buildScreenAnalysisPrompt, buildChatPrompt, buildMiniSummaryPrompt, buildDeepScanAnalysisPrompt, REX_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
-import type { Profile, PageContent, RexSuggestion, AuthState, ContactSummary, ContactActionPlan, DeepScanResult } from '../shared/types';
+import { buildPageScanPrompt, buildChatPrompt, buildMiniSummaryPrompt, buildDeepScanAnalysisPrompt, REX_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
+import type { Profile, PageContent, ScanResult, ScanItem, AuthState, ContactSummary, ContactActionPlan, DeepScanResult } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
 
 // ── State ────────────────────────────────────────────────────────────────────
 
 let authState: AuthState = { authenticated: false, profile: null, hasAccess: false };
 let lastPageContent: PageContent | null = null;
-let lastSuggestions: RexSuggestion | null = null;
+let lastScanResult: ScanResult | null = null;
 let chatHistory: { role: string; content: string }[] = [];
 let lastScanTime = 0;
 const SCAN_COOLDOWN_MS = 10_000; // 10 second minimum between scans
@@ -121,21 +121,21 @@ async function callAIProxy(body: Record<string, unknown>): Promise<string> {
   return text;
 }
 
-async function analyzePageWithAI(page: PageContent): Promise<RexSuggestion> {
+async function analyzePageWithAI(page: PageContent): Promise<ScanResult> {
   const cleanedPage = {
     ...page,
     mainText: stripSensitiveData(page.mainText),
     conversations: page.conversations.map(stripSensitiveData),
   };
 
-  const systemPrompt = buildScreenAnalysisPrompt(
+  const systemPrompt = buildPageScanPrompt(
     authState.profile?.full_name || '',
     cleanedPage,
   );
 
   const text = await callAIProxy({
     model: REX_MODEL,
-    max_tokens: 600,
+    max_tokens: 2000,
     system: 'Respond only with valid JSON. No markdown fences.',
     messages: [{ role: 'user', content: systemPrompt }],
   });
@@ -145,18 +145,20 @@ async function analyzePageWithAI(page: PageContent): Promise<RexSuggestion> {
 
   try {
     const parsed = JSON.parse(cleaned);
-    return {
-      situation: parsed.situation || 'Could not analyze page.',
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
-      draftResponse: parsed.draftResponse || null,
-      followUp: parsed.followUp || null,
-    };
+    const items: ScanItem[] = Array.isArray(parsed.items) ? parsed.items : [];
+    return { items };
   } catch {
+    // If JSON parsing fails, return a single item with the raw text
     return {
-      situation: text.slice(0, 200) || 'Analysis complete but response was not structured.',
-      suggestions: ['Review the page content manually'],
-      draftResponse: null,
-      followUp: null,
+      items: [{
+        name: 'Page Analysis',
+        taskType: 'followup',
+        product: '',
+        urgency: 'medium' as const,
+        context: text.slice(0, 300) || 'Analysis complete but response was not structured.',
+        script: '',
+        dismiss: false,
+      }],
     };
   }
 }
@@ -166,14 +168,16 @@ async function chatWithRex(userMessage: string): Promise<string> {
     ? `Page: ${lastPageContent.title} (${lastPageContent.type})\n${lastPageContent.mainText.slice(0, 1000)}`
     : 'No page scanned yet.';
 
-  const suggestionsContext = lastSuggestions
-    ? `Situation: ${lastSuggestions.situation}\nSuggestions: ${lastSuggestions.suggestions.join(', ')}`
-    : 'No suggestions yet.';
+  const scanContext = lastScanResult && lastScanResult.items.length > 0
+    ? lastScanResult.items.map((item, i) =>
+      `#${i + 1} ${item.name} [${item.taskType.toUpperCase()}] — ${item.context}${item.script ? `\nScript: ${item.script.slice(0, 200)}` : ''}`
+    ).join('\n\n')
+    : 'No scan results yet.';
 
   const systemPrompt = buildChatPrompt(
     authState.profile?.full_name || '',
     pageContext,
-    suggestionsContext,
+    scanContext,
   );
 
   chatHistory.push({ role: 'user', content: userMessage });
@@ -265,8 +269,8 @@ async function autoDeepScan(tabId: number): Promise<void> {
     const deepResult = await runDeepScan(tabId);
     broadcast({ type: 'DEEP_SCAN_COMPLETE', payload: deepResult });
 
-    if (lastSuggestions) {
-      lastSuggestions.deepScan = deepResult;
+    if (lastScanResult) {
+      lastScanResult.deepScan = deepResult;
     }
   } catch {
     // Auto deep scan is best-effort — don't surface errors
@@ -389,7 +393,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       authState = { authenticated: false, profile: null, hasAccess: false };
       chatHistory = [];
       lastPageContent = null;
-      lastSuggestions = null;
+      lastScanResult = null;
       broadcastAuthState();
       return { success: true };
     }
@@ -434,15 +438,16 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 
       // Analyze with AI
       try {
-        const suggestions = await analyzePageWithAI(pageContent);
-        lastSuggestions = suggestions;
+        const scanResult = await analyzePageWithAI(pageContent);
+        lastScanResult = scanResult;
         chatHistory = []; // Reset chat on new scan
 
         chrome.runtime.sendMessage({ type: 'STATUS', payload: { status: 'ready' } }).catch(() => {});
-        chrome.runtime.sendMessage({ type: 'SUGGESTIONS_READY', payload: suggestions }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'SCAN_RESULTS', payload: scanResult }).catch(() => {});
 
         // Update badge
-        chrome.action.setBadgeText({ text: '✓' });
+        const itemCount = scanResult.items.filter(i => !i.dismiss).length;
+        chrome.action.setBadgeText({ text: itemCount > 0 ? String(itemCount) : '✓' });
         chrome.action.setBadgeBackgroundColor({ color: '#10B981' });
 
         // Auto deep scan: check for clickable contacts in the background
@@ -450,7 +455,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
           autoDeepScan(tab.id).catch(() => {});
         }
 
-        return { success: true, suggestions };
+        return { success: true, scanResult };
       } catch (err: any) {
         chrome.runtime.sendMessage({ type: 'STATUS', payload: { status: 'error', message: err.message } }).catch(() => {});
         return { error: `AI analysis failed: ${err.message}` };
@@ -547,8 +552,8 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       return { ok: true };
     }
 
-    case 'GET_LAST_SUGGESTIONS': {
-      return { suggestions: lastSuggestions, pageContent: lastPageContent };
+    case 'GET_LAST_SCAN': {
+      return { scanResult: lastScanResult, pageContent: lastPageContent };
     }
 
     case 'CONTENT_SCRIPT_READY': {
