@@ -100,7 +100,12 @@ async function callAIProxy(body: Record<string, unknown>): Promise<string> {
     body: JSON.stringify(body),
   });
 
-  const json = await res.json();
+  let json: any;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error(`AI proxy returned ${res.status} with non-JSON response`);
+  }
 
   // Anthropic error response: { type: "error", error: { type: "...", message: "..." } }
   if (json.type === 'error' || json.error) {
@@ -193,12 +198,19 @@ async function chatWithRex(userMessage: string): Promise<string> {
   // Keep last 10 messages for context
   const recentHistory = chatHistory.slice(-10);
 
-  const reply = await callAIProxy({
-    model: REX_MODEL,
-    max_tokens: 600,
-    system: systemPrompt,
-    messages: recentHistory.map(m => ({ role: m.role, content: m.content })),
-  });
+  let reply: string;
+  try {
+    reply = await callAIProxy({
+      model: REX_MODEL,
+      max_tokens: 600,
+      system: systemPrompt,
+      messages: recentHistory.map(m => ({ role: m.role, content: m.content })),
+    });
+  } catch (err) {
+    // Remove orphaned user message to keep alternating user/assistant pattern
+    chatHistory.pop();
+    throw err;
+  }
 
   chatHistory.push({ role: 'assistant', content: reply });
 
@@ -445,7 +457,6 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       }
 
       lastPageContent = pageContent;
-      lastScanTime = Date.now();
 
       // Broadcast analyzing status
       chrome.runtime.sendMessage({ type: 'STATUS', payload: { status: 'analyzing' } }).catch(() => {});
@@ -454,6 +465,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       try {
         const scanResult = await analyzePageWithAI(pageContent);
         lastScanResult = scanResult;
+        lastScanTime = Date.now(); // Set cooldown after successful AI analysis
         chatHistory = []; // Reset chat on new scan
 
         chrome.runtime.sendMessage({ type: 'STATUS', payload: { status: 'ready' } }).catch(() => {});
@@ -584,9 +596,14 @@ chrome.commands.onCommand.addListener((command) => {
 
 // ── Reset scan cooldown on URL change ────────────────────────────────────────
 
-chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.url) {
-    lastScanTime = 0; // Reset cooldown when the user navigates
+    // Only reset cooldown for the active tab, not background tabs
+    chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
+      if (activeTab?.id === tabId) {
+        lastScanTime = 0;
+      }
+    });
   }
 });
 

@@ -54,8 +54,8 @@ function extractText(root: Element | Document = document): string {
 
   // Get text content from this frame, collapse whitespace
   let text = (clone.textContent || '')
-    .replace(/\s+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]+/g, ' ')
     .trim();
 
   // Also read text from all same-origin iframes
@@ -83,8 +83,8 @@ function extractIframeText(): string {
       }
 
       const text = (clone.textContent || '')
-        .replace(/\s+/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
+        .replace(/[ \t]+/g, ' ')
         .trim();
 
       if (text.length > 20) {
@@ -97,7 +97,7 @@ function extractIframeText(): string {
         try {
           const nestedDoc = nested.contentDocument || nested.contentWindow?.document;
           if (!nestedDoc?.body) continue;
-          const nestedText = (nestedDoc.body.innerText || '').trim();
+          const nestedText = (nestedDoc.body.textContent || '').trim();
           if (nestedText.length > 20) {
             parts.push(nestedText);
           }
@@ -831,6 +831,11 @@ chrome.runtime.onMessage.addListener(
             sendResponse(content);
           }
         }, 5000);
+        break;
+      }
+
+      case 'CONTENT_SCRIPT_READY': {
+        sendResponse({ ok: true });
         break;
       }
 
