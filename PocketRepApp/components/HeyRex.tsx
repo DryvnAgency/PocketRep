@@ -363,21 +363,6 @@ Return this exact JSON shape:
       .map((c: any) => `${c.first_name} ${c.last_name} (id:${c.id})`)
       .join(', ') || 'No contacts yet';
 
-    if (!ANTHROPIC_KEY) {
-      setParsed({
-        customer_name: 'Add ANTHROPIC_KEY to activate',
-        contact_id: null, phone: null,
-        interests: text, objections: '',
-        follow_up_in_days: null, follow_up_note: '',
-        updated_notes: text,
-        game_plan: 'Add your Anthropic API key to .env to get Rex\'s full game plan.',
-        vehicle_interest: null, lease_end_date: null,
-        personal_events: [], buying_urgency: 'medium',
-      });
-      setStage('done');
-      return;
-    }
-
     try {
       const today = new Date().toISOString().split('T')[0];
       const industryLabel = INDUSTRY_CONFIG[userIndustry]?.label ?? 'Sales';
@@ -459,7 +444,7 @@ Return this exact JSON shape:
     ]);
 
     // Generate AI sequence + schedule notifications in background
-    if (savedContactId && ANTHROPIC_KEY) {
+    if (savedContactId) {
       setGeneratingSeq(true);
       try {
         const [steps, notifCount] = await Promise.all([
@@ -511,14 +496,9 @@ Return format (JSON array):
 ]
 `.trim();
 
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await fetch(`${AI_PROXY_URL}/anthropic`, {
       method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         model: REX_MODEL,
         max_tokens: 1200,

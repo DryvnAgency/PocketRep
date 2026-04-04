@@ -8,24 +8,42 @@
     "userInterfaceStyle": "dark",
     "scheme": "pocketrep",
     "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
       "backgroundColor": "#0c0c0e"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "pro.pocketrep.app"
+      "bundleIdentifier": "pro.pocketrep.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "PocketRep uses your mic so Rex can listen for 'Hey Rex' and log customer notes by voice.",
+        "NSSpeechRecognitionUsageDescription": "PocketRep uses speech recognition to transcribe voice memos into contact notes.",
+        "NSContactsUsageDescription": "PocketRep can import your phone contacts into your rep book.",
+        "NSLocationWhenInUseUsageDescription": "PocketRep uses location for proximity alerts to nearby customers."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0c0c0e"
       },
-      "package": "pro.pocketrep.app"
+      "package": "pro.pocketrep.app",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_CONTACTS",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
       [
         "expo-av",
-        { "microphonePermission": "PocketRep needs mic access for Voice-to-Rex." }
+        { "microphonePermission": "PocketRep uses your mic so Rex can listen for 'Hey Rex' and log customer notes by voice." }
+      ],
+      [
+        "expo-contacts",
+        { "contactsPermission": "PocketRep can import your phone contacts into your rep book." }
       ],
       [
         "expo-image-picker",
@@ -33,11 +51,15 @@
       ],
       [
         "expo-location",
-        { "locationAlwaysAndWhenInUsePermission": "PocketRep uses location for proximity alerts." }
+        { "locationAlwaysAndWhenInUsePermission": "PocketRep uses location for proximity alerts to nearby customers." }
       ],
       [
         "expo-notifications",
-        { "icon": "./assets/icon.png" }
+        {
+          "icon": "./assets/icon.png",
+          "color": "#D4A017",
+          "sounds": []
+        }
       ]
     ],
     "web": {
