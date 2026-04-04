@@ -1,12 +1,11 @@
 import { getSupabase, SUPABASE_ANON_KEY } from '../shared/supabase';
 import { buildScreenAnalysisPrompt, buildChatPrompt, buildMiniSummaryPrompt, buildDeepScanAnalysisPrompt, REX_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
-import type { Contact, Profile, PageContent, RexSuggestion, AuthState, ContactSummary, ContactActionPlan, DeepScanResult } from '../shared/types';
+import type { Profile, PageContent, RexSuggestion, AuthState, ContactSummary, ContactActionPlan, DeepScanResult } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
 
 // ── State ────────────────────────────────────────────────────────────────────
 
 let authState: AuthState = { authenticated: false, profile: null, hasAccess: false };
-let contacts: Contact[] = [];
 let lastPageContent: PageContent | null = null;
 let lastSuggestions: RexSuggestion | null = null;
 let chatHistory: { role: string; content: string }[] = [];
@@ -34,7 +33,6 @@ async function init() {
       await loadProfile(session.user.id);
     } else {
       authState = { authenticated: false, profile: null, hasAccess: false };
-      contacts = [];
     }
     broadcastAuthState();
   });
@@ -42,16 +40,11 @@ async function init() {
 
 async function loadProfile(userId: string) {
   const supabase = getSupabase();
-
-  const [profileRes, contactsRes] = await Promise.all([
-    supabase.from('profiles').select('*').eq('id', userId).single(),
-    supabase.from('contacts').select('*').eq('user_id', userId).order('last_name'),
-  ]);
-
+  const profileRes = await supabase.from('profiles').select('*').eq('id', userId).single();
   const profile = profileRes.data as Profile | null;
-  contacts = (contactsRes.data as Contact[]) || [];
 
-  // TODO: Add proper plan gating before launch
+  // TODO: Add proper plan gating before launch (e.g. check subscription status)
+  // For now, any authenticated Rex Lens user has access
   const hasAccess = true;
 
   authState = {
@@ -63,52 +56,6 @@ async function loadProfile(userId: string) {
 
 function broadcastAuthState() {
   chrome.runtime.sendMessage({ type: 'AUTH_STATE', payload: authState }).catch(() => {});
-}
-
-// ── Contact Matching ─────────────────────────────────────────────────────────
-
-function fuzzyMatch(a: string, b: string): boolean {
-  return a.toLowerCase().includes(b.toLowerCase()) || b.toLowerCase().includes(a.toLowerCase());
-}
-
-function matchContacts(page: PageContent): Contact[] {
-  const matched: Contact[] = [];
-
-  for (const contact of contacts) {
-    const fullName = `${contact.first_name} ${contact.last_name}`.trim();
-
-    // Match by name
-    for (const name of page.contactNames) {
-      if (fuzzyMatch(name, fullName) || fuzzyMatch(name, contact.first_name) || fuzzyMatch(name, contact.last_name)) {
-        matched.push(contact);
-        break;
-      }
-    }
-
-    // Match by email
-    if (contact.email) {
-      for (const email of page.emails) {
-        if (email.toLowerCase() === contact.email.toLowerCase()) {
-          if (!matched.includes(contact)) matched.push(contact);
-          break;
-        }
-      }
-    }
-
-    // Match by phone
-    if (contact.phone) {
-      const cleanContactPhone = contact.phone.replace(/\D/g, '');
-      for (const phone of page.phones) {
-        const cleanPagePhone = phone.replace(/\D/g, '');
-        if (cleanContactPhone === cleanPagePhone || cleanContactPhone.endsWith(cleanPagePhone) || cleanPagePhone.endsWith(cleanContactPhone)) {
-          if (!matched.includes(contact)) matched.push(contact);
-          break;
-        }
-      }
-    }
-  }
-
-  return matched.slice(0, 3); // Max 3 matched contacts for context
 }
 
 // ── Content Script Injection Fallback ────────────────────────────────────────
@@ -175,7 +122,6 @@ async function callAIProxy(body: Record<string, unknown>): Promise<string> {
 }
 
 async function analyzePageWithAI(page: PageContent): Promise<RexSuggestion> {
-  const matchedContacts = matchContacts(page);
   const cleanedPage = {
     ...page,
     mainText: stripSensitiveData(page.mainText),
@@ -185,7 +131,6 @@ async function analyzePageWithAI(page: PageContent): Promise<RexSuggestion> {
   const systemPrompt = buildScreenAnalysisPrompt(
     authState.profile?.full_name || '',
     cleanedPage,
-    matchedContacts,
   );
 
   const text = await callAIProxy({
@@ -205,16 +150,13 @@ async function analyzePageWithAI(page: PageContent): Promise<RexSuggestion> {
       suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
       draftResponse: parsed.draftResponse || null,
       followUp: parsed.followUp || null,
-      matchedContact: matchedContacts[0] || null,
     };
   } catch {
-    // If JSON parsing fails, extract what we can
     return {
       situation: text.slice(0, 200) || 'Analysis complete but response was not structured.',
       suggestions: ['Review the page content manually'],
       draftResponse: null,
       followUp: null,
-      matchedContact: matchedContacts[0] || null,
     };
   }
 }
@@ -263,7 +205,7 @@ async function miniSummarize(pageContent: PageContent): Promise<string> {
   return await callAIProxy({
     model: REX_MODEL,
     max_tokens: 150,
-    system: 'Respond with exactly 3 lines of plain text. No JSON, no markdown.',
+    system: 'Respond with exactly 4 lines of plain text. No JSON, no markdown.',
     messages: [{ role: 'user', content: prompt }],
   });
 }
@@ -294,7 +236,6 @@ async function analyzeDeepScan(summaries: ContactSummary[]): Promise<DeepScanRes
       totalFound: summaries.length,
     };
   } catch {
-    // Fallback: create minimal action plans from summaries
     return {
       contacts: summaries.map(s => ({
         name: s.name,
@@ -446,7 +387,6 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       const supabase = getSupabase();
       await supabase.auth.signOut();
       authState = { authenticated: false, profile: null, hasAccess: false };
-      contacts = [];
       chatHistory = [];
       lastPageContent = null;
       lastSuggestions = null;
@@ -467,7 +407,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       }
 
       if (!authState.hasAccess) {
-        return { error: 'Rex Lens requires an Elite plan with Rex Lens add-on.' };
+        return { error: 'Sign in to Rex Lens to use this feature.' };
       }
 
       // Get active tab
@@ -519,7 +459,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 
     case 'DEEP_SCAN': {
       if (isDeepScanning) return { error: 'Deep scan already in progress.' };
-      if (!authState.hasAccess) return { error: 'Rex Lens requires an Elite plan with Rex Lens add-on.' };
+      if (!authState.hasAccess) return { error: 'Sign in to Rex Lens to use this feature.' };
 
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) return { error: 'No active tab found.' };
@@ -531,7 +471,6 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         broadcast({ type: 'STATUS', payload: { status: 'ready' } });
         broadcast({ type: 'DEEP_SCAN_COMPLETE', payload: deepResult });
 
-        // Also store as part of suggestions for persistence
         if (lastSuggestions) {
           lastSuggestions.deepScan = deepResult;
         }
@@ -549,7 +488,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
     }
 
     case 'CHAT_MESSAGE': {
-      if (!authState.hasAccess) return { error: 'Rex Lens requires Elite plan.' };
+      if (!authState.hasAccess) return { error: 'Sign in to Rex Lens to use this feature.' };
 
       try {
         const reply = await chatWithRex(message.payload.content);

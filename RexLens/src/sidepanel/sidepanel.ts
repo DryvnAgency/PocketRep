@@ -18,8 +18,6 @@ const loginError = $('login-error');
 const statusBadge = $('status-badge');
 const scanBtn = $<HTMLButtonElement>('scan-btn');
 const scanBtnText = $('scan-btn-text');
-const contactMatch = $('contact-match');
-const contactMatchContent = $('contact-match-content');
 const situationCard = $('situation-card');
 const situationText = $('situation-text');
 const suggestionsCard = $('suggestions-card');
@@ -185,22 +183,6 @@ function displaySuggestions(suggestions: RexSuggestion) {
   currentSuggestions = suggestions;
   currentDraftResponse = suggestions.draftResponse;
   setStatus('ready');
-
-  // Contact match
-  if (suggestions.matchedContact) {
-    const c = suggestions.matchedContact;
-    const heatClass = c.heat_tier ? `heat-${c.heat_tier}` : '';
-    contactMatchContent.innerHTML = `
-      <strong>${c.first_name} ${c.last_name}</strong>
-      ${c.heat_tier ? `<span class="heat-badge ${heatClass}">${c.heat_tier.toUpperCase()}</span>` : ''}
-      <div class="contact-detail"><span>Vehicle:</span> <strong>${[c.vehicle_year, c.vehicle_make, c.vehicle_model].filter(Boolean).join(' ') || 'N/A'}</strong></div>
-      <div class="contact-detail"><span>Stage:</span> <strong>${c.stage || 'unknown'}</strong></div>
-      ${c.notes ? `<div class="contact-detail"><span>Notes:</span> ${c.notes}</div>` : ''}
-    `;
-    contactMatch.style.display = 'flex';
-  } else {
-    contactMatch.style.display = 'none';
-  }
 
   // Situation
   situationText.textContent = suggestions.situation;
@@ -515,7 +497,6 @@ function resetUI() {
   currentSuggestions = null;
   currentDraftResponse = null;
   detectedFields = [];
-  contactMatch.style.display = 'none';
   situationCard.style.display = 'none';
   suggestionsCard.style.display = 'none';
   responseCard.style.display = 'none';

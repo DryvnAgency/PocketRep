@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Rex Lens — PocketRep AI Sales Coach",
+  "name": "Rex Lens — AI Sales Coach",
   "version": "1.0.0",
-  "description": "AI-powered screen reader and sales coach. Reads any CRM, email, or LinkedIn page and suggests responses and next steps.",
+  "description": "AI-powered screen reader and sales coach for automotive professionals. Scans any CRM, email, or web page and coaches you with objection handling, draft responses, and next steps.",
   "permissions": [
     "activeTab",
     "sidePanel",

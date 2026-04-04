@@ -1,4 +1,4 @@
-import type { PageContent, RexSuggestion, AuthState, FormField, ClickableContact, DeepScanResult } from './types';
+import type { PageContent, RexSuggestion, AuthState, FormField, DeepScanResult } from './types';
 
 // ── Content Script → Service Worker ──────────────────────────────────────────
 
