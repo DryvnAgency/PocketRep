@@ -70,7 +70,14 @@ function extractText(root: Element | Document = document): string {
 /** Recursively extract text from all accessible (same-origin) iframes */
 function extractIframeText(): string {
   const parts: string[] = [];
-  const iframes = document.querySelectorAll('iframe');
+  collectIframeText(document, parts, 0);
+  return parts.join('\n\n').slice(0, 6000);
+}
+
+/** Walk same-origin iframes up to 4 levels deep, collecting cleaned text */
+function collectIframeText(root: Document, parts: string[], depth: number): void {
+  if (depth > 4) return;
+  const iframes = root.querySelectorAll('iframe');
 
   for (const iframe of iframes) {
     try {
@@ -91,36 +98,31 @@ function extractIframeText(): string {
         parts.push(text);
       }
 
-      // Check for nested iframes inside this iframe
-      const nestedIframes = doc.querySelectorAll('iframe');
-      for (const nested of nestedIframes) {
-        try {
-          const nestedDoc = nested.contentDocument || nested.contentWindow?.document;
-          if (!nestedDoc?.body) continue;
-          const nestedText = (nestedDoc.body.textContent || '').trim();
-          if (nestedText.length > 20) {
-            parts.push(nestedText);
-          }
-        } catch { /* cross-origin — skip */ }
-      }
+      // Recurse into nested iframes inside this iframe
+      collectIframeText(doc, parts, depth + 1);
     } catch {
       // Cross-origin iframe — skip gracefully
     }
   }
-
-  return parts.join('\n\n').slice(0, 6000);
 }
 
-/** querySelectorAll across the main doc + all same-origin iframes */
+/** querySelectorAll across the main doc + all same-origin iframes (recursive) */
 function querySelectorAllDeep(selector: string): Element[] {
   const results: Element[] = [...document.querySelectorAll(selector)];
-  for (const iframe of document.querySelectorAll('iframe')) {
+  collectFromIframes(document, selector, results, 0);
+  return results;
+}
+
+function collectFromIframes(root: Document, selector: string, results: Element[], depth: number): void {
+  if (depth > 4) return;
+  for (const iframe of root.querySelectorAll('iframe')) {
     try {
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (doc) results.push(...doc.querySelectorAll(selector));
+      if (!doc) continue;
+      results.push(...doc.querySelectorAll(selector));
+      collectFromIframes(doc, selector, results, depth + 1);
     } catch { /* cross-origin */ }
   }
-  return results;
 }
 
 function extractConversations(): string[] {
