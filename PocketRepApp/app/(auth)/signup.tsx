@@ -37,7 +37,7 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
       'Everything in Pro',
       'Proximity Alerts — 500ft trigger on hot leads',
       'Cross-Deal Rex Memory',
-      'Rapport Vault + AI Photo Vision',
+      'Rex Lens — AI Photo Vision',
       'Weekly Pipeline Digest',
     ],
   },
