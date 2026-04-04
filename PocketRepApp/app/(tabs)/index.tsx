@@ -1,12 +1,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, RefreshControl, Modal, ActivityIndicator, Alert,
+  StyleSheet, RefreshControl, Modal, ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing, heatConfig } from '@/constants/theme';
 import type { Contact, Profile } from '@/lib/types';
+import Onboarding from '@/components/Onboarding';
+import { scheduleContactReminders, requestNotificationPermission } from '@/lib/notifications';
+
+let AsyncStorage: any = null;
+try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
+const NOTIF_CHECK_KEY = 'pocketrep_notif_checked_';  // + YYYY-MM-DD
 
 const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
 
@@ -62,6 +68,33 @@ export default function HeatSheetScreen() {
   const [briefText, setBriefText] = useState('');
   const [briefLoading, setBriefLoading] = useState(false);
 
+  async function scheduleDailyFollowUpNotifications(contacts: Contact[]) {
+    if (Platform.OS === 'web') return;
+    const today = new Date().toISOString().split('T')[0];
+    const storageKey = `${NOTIF_CHECK_KEY}${today}`;
+    const storage = AsyncStorage;
+    if (!storage) return;
+    try {
+      const already = await storage.getItem(storageKey);
+      if (already) return; // already scheduled today
+      await requestNotificationPermission();
+      // Schedule reminders for any contact with a follow_up_date or lease_end_date
+      let count = 0;
+      for (const c of contacts) {
+        if (c.follow_up_date || c.lease_end_date || (c as any).personal_events?.length) {
+          count += await scheduleContactReminders({
+            contactId: c.id,
+            contactName: `${c.first_name} ${c.last_name}`.trim(),
+            followUpDate: c.follow_up_date,
+            leaseEndDate: c.lease_end_date,
+            personalEvents: (c as any).personal_events ?? [],
+          });
+        }
+      }
+      await storage.setItem(storageKey, String(count));
+    } catch {}
+  }
+
   async function load() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -72,6 +105,7 @@ export default function HeatSheetScreen() {
     ]);
 
     if (prof) setProfile(prof);
+    if (contacts?.length) scheduleDailyFollowUpNotifications(contacts);
 
     if (contacts) {
       const today = new Date().toISOString().split('T')[0];
@@ -159,6 +193,7 @@ export default function HeatSheetScreen() {
 
   return (
     <View style={s.root}>
+      <Onboarding />
       {/* Header */}
       <View style={s.header}>
         <View>
