@@ -25,8 +25,8 @@ import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 //   → Add @picovoice/porcupine-react-native + custom "Hey Rex" keyword
 //   → picovoice.ai/console — free tier, runs fully on-device, no battery drain
 
-const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
-const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_KEY ?? '';
+// API keys are now server-side only — calls go through the Supabase Edge Function proxy
+const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 const REX_MODEL = 'claude-haiku-4-5-20251001';
 
 type Stage = 'idle' | 'listening' | 'processing' | 'done';
@@ -146,22 +146,21 @@ export default function HeyRex() {
 
       // ── Step 1: Transcribe via Whisper ─────────────────────────────────────
       let voiceText = '';
-      if (OPENAI_KEY) {
+      if (true) { // Transcription always via proxy
         // Fetch the file as a blob — more reliable than object literal on both
         // iOS (file://) and Android (content://) URIs
         const audioBlob = await fetch(uri).then(r => r.blob());
         const form = new FormData();
         form.append('file', audioBlob, 'intake.m4a');
         form.append('model', 'whisper-1');
-        const wr = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        const wr = await fetch(`${AI_PROXY_URL}/whisper`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${OPENAI_KEY}` },
           body: form,
         });
         const wj = await wr.json();
         voiceText = wj.text ?? '';
       } else {
-        voiceText = '[No OPENAI_KEY — add EXPO_PUBLIC_OPENAI_KEY to .env for transcription]';
+        voiceText = '[Transcription unavailable]';
       }
 
       setTranscript(voiceText);
@@ -183,9 +182,9 @@ export default function HeyRex() {
         .join(', ') || 'No contacts yet';
 
       // ── Step 3: Rex parses transcript into structured intake ───────────────
-      if (!ANTHROPIC_KEY) {
+      if (false) { // Keys are now on the server
         setParsed({
-          customer_name: 'Add ANTHROPIC_KEY to activate',
+          customer_name: 'API proxy not configured',
           contact_id: null,
           interests: voiceText,
           objections: '',
@@ -226,13 +225,10 @@ Return this exact JSON shape:
 }
 `.trim();
 
-      const rr = await fetch('https://api.anthropic.com/v1/messages', {
+      const rr = await fetch(`${AI_PROXY_URL}/anthropic`, {
         method: 'POST',
         headers: {
-          'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
-          'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
           model: REX_MODEL,

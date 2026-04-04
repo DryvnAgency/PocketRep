@@ -1,7 +1,7 @@
 {
   "outputDirectory": "Pocketrep",
   "rewrites": [
-    { "source": "/thank-you", "destination": "/thank-you.html" },
+    { "source": "/thank-you", "destination": "/thankyou.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
