@@ -75,8 +75,10 @@ function setStatus(status: 'idle' | 'scanning' | 'analyzing' | 'ready' | 'error'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-function usernameToEmail(username: string): string {
-  return `${username.trim().toLowerCase()}@pocketrep.app`;
+function usernameToEmail(input: string): string {
+  const trimmed = input.trim().toLowerCase();
+  // If they typed a full email, use it as-is; otherwise append the default domain
+  return trimmed.includes('@') ? trimmed : `${trimmed}@pocketrep.app`;
 }
 
 loginBtn.addEventListener('click', async () => {
@@ -148,7 +150,16 @@ function handleAuthState(state: AuthState) {
 scanBtn.addEventListener('click', async () => {
   setStatus('scanning');
 
-  const result = await chrome.runtime.sendMessage({ type: 'ANALYZE_PAGE' });
+  let result: any;
+  try {
+    result = await Promise.race([
+      chrome.runtime.sendMessage({ type: 'ANALYZE_PAGE' }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Scan timed out. Try again.')), 60_000)),
+    ]);
+  } catch (err: any) {
+    setStatus('error', err.message);
+    return;
+  }
 
   if (result.error) {
     setStatus('error', result.error);
@@ -187,7 +198,10 @@ function displayScanResults(result: ScanResult) {
     });
   }
 
-  scanResults.style.display = result.items.length > 0 ? 'block' : 'none';
+  if (result.items.length === 0) {
+    scanItems.innerHTML = '<div class="scan-empty">No actionable items found on this page. Try scanning a CRM worklist, email inbox, or conversation.</div>';
+  }
+  scanResults.style.display = 'block';
 }
 
 const TASK_ICONS: Record<string, string> = {
@@ -222,16 +236,19 @@ function createScanItemEl(item: ScanItem, num: number): HTMLElement {
     ${item.product ? `<div class="scan-item-product">${escapeHtml(item.product)}</div>` : ''}
     ${item.script ? `
     <div class="scan-item-script">
-      <div class="scan-item-script-text">${escapeHtml(item.script)}</div>
-      <button class="btn-copy-script" title="Copy script">Copy</button>
+      <div class="scan-item-script-text" contenteditable="true" spellcheck="true">${escapeHtml(item.script)}</div>
+      <div class="scan-item-script-actions">
+        <button class="btn-copy-script" title="Copy script">Copy</button>
+      </div>
     </div>` : ''}
   `;
 
-  // Copy button handler
+  // Copy button — copies the current (possibly edited) text
   const copyBtn = el.querySelector('.btn-copy-script');
-  if (copyBtn) {
+  const scriptText = el.querySelector('.scan-item-script-text') as HTMLElement | null;
+  if (copyBtn && scriptText) {
     copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(item.script);
+      navigator.clipboard.writeText(scriptText.textContent || '');
       (copyBtn as HTMLButtonElement).textContent = 'Copied!';
       setTimeout(() => { (copyBtn as HTMLButtonElement).textContent = 'Copy'; }, 1000);
     });
@@ -364,13 +381,25 @@ async function sendChatMessage() {
   appendChatMessage('user', text);
 
   chatSendBtn.disabled = true;
+  chatInput.disabled = true;
+
+  // Show thinking indicator
+  const thinkingEl = document.createElement('div');
+  thinkingEl.className = 'chat-msg chat-msg-assistant chat-thinking';
+  thinkingEl.textContent = 'Rex is thinking...';
+  chatMessages.appendChild(thinkingEl);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
 
   const result = await chrome.runtime.sendMessage({
     type: 'CHAT_MESSAGE',
     payload: { role: 'user', content: text },
   });
 
+  // Remove thinking indicator
+  thinkingEl.remove();
   chatSendBtn.disabled = false;
+  chatInput.disabled = false;
+  chatInput.focus();
 
   if (result.error) {
     appendChatMessage('assistant', `Error: ${result.error}`);

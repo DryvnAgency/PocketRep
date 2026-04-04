@@ -476,8 +476,8 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         broadcast({ type: 'STATUS', payload: { status: 'ready' } });
         broadcast({ type: 'DEEP_SCAN_COMPLETE', payload: deepResult });
 
-        if (lastSuggestions) {
-          lastSuggestions.deepScan = deepResult;
+        if (lastScanResult) {
+          lastScanResult.deepScan = deepResult;
         }
 
         return { success: true, deepScan: deepResult };
@@ -571,6 +571,14 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 chrome.commands.onCommand.addListener((command) => {
   if (command === 'scan-page') {
     chrome.runtime.sendMessage({ type: 'ANALYZE_PAGE' }).catch(() => {});
+  }
+});
+
+// ── Reset scan cooldown on URL change ────────────────────────────────────────
+
+chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+  if (changeInfo.url) {
+    lastScanTime = 0; // Reset cooldown when the user navigates
   }
 });
 
