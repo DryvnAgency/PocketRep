@@ -1,6 +1,6 @@
 import type { PageContent } from './types';
 
-export const REX_MODEL = 'claude-sonnet-4-5-20250514';
+export const REX_MODEL = 'claude-sonnet-4-20250514';
 export const HAIKU_MODEL = 'claude-3-5-haiku-20241022';
 export const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/anthropic';
 
