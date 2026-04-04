@@ -314,6 +314,26 @@ async function analyzeDeepScan(summaries: ContactSummary[]): Promise<DeepScanRes
 
 const DEEP_SCAN_TIMEOUT_MS = 60_000; // 60-second total timeout
 
+/** Auto deep scan: silently checks for clickable contacts and runs deep scan if found. */
+async function autoDeepScan(tabId: number): Promise<void> {
+  try {
+    await ensureContentScript(tabId);
+    const clickable = await chrome.tabs.sendMessage(tabId, { type: 'FIND_CLICKABLE' });
+    if (!Array.isArray(clickable) || clickable.length === 0) return; // No contacts — skip silently
+
+    // Contacts found — trigger deep scan in background
+    broadcast({ type: 'AUTO_DEEP_SCAN_START' });
+    const deepResult = await runDeepScan(tabId);
+    broadcast({ type: 'DEEP_SCAN_COMPLETE', payload: deepResult });
+
+    if (lastSuggestions) {
+      lastSuggestions.deepScan = deepResult;
+    }
+  } catch {
+    // Auto deep scan is best-effort — don't surface errors
+  }
+}
+
 async function runDeepScan(tabId: number): Promise<DeepScanResult> {
   isDeepScanning = true;
   deepScanCancelled = false;
@@ -486,6 +506,11 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         // Update badge
         chrome.action.setBadgeText({ text: '✓' });
         chrome.action.setBadgeBackgroundColor({ color: '#10B981' });
+
+        // Auto deep scan: check for clickable contacts in the background
+        if (!isDeepScanning) {
+          autoDeepScan(tab.id).catch(() => {});
+        }
 
         return { success: true, suggestions };
       } catch (err: any) {

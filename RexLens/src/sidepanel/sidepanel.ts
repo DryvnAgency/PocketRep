@@ -43,9 +43,7 @@ const chatMessages = $('chat-messages');
 const chatInput = $<HTMLInputElement>('chat-input');
 const chatSendBtn = $<HTMLButtonElement>('chat-send-btn');
 
-// Deep Scan
-const deepScanBtn = $<HTMLButtonElement>('deep-scan-btn');
-const deepScanBtnText = $('deep-scan-btn-text');
+// Deep Scan (auto-triggered after page scan when contacts are found)
 const deepScanProgress = $('deep-scan-progress');
 const deepScanBar = $('deep-scan-bar');
 const deepScanStatus = $('deep-scan-status');
@@ -87,7 +85,6 @@ function setStatus(status: 'idle' | 'scanning' | 'analyzing' | 'ready' | 'error'
 
   const busy = status === 'scanning' || status === 'analyzing';
   scanBtn.disabled = busy;
-  deepScanBtn.disabled = busy;
   scanBtnText.textContent = busy
     ? status.charAt(0).toUpperCase() + status.slice(1) + '...'
     : 'Scan Page';
@@ -240,31 +237,7 @@ function displaySuggestions(suggestions: RexSuggestion) {
   }
 }
 
-// ── Deep Scan ───────────────────────────────────────────────────────────────
-
-deepScanBtn.addEventListener('click', async () => {
-  deepScanBtn.disabled = true;
-  deepScanBtnText.textContent = 'Scanning...';
-  deepScanProgress.style.display = 'flex';
-  deepScanResults.style.display = 'none';
-  deepScanBar.style.width = '0%';
-  deepScanStatus.textContent = 'Finding contacts...';
-
-  const result = await chrome.runtime.sendMessage({ type: 'DEEP_SCAN' });
-
-  deepScanBtn.disabled = false;
-  deepScanBtnText.textContent = 'Deep Scan (up to 30 contacts)';
-  deepScanProgress.style.display = 'none';
-
-  if (result.error) {
-    setStatus('error', result.error);
-    return;
-  }
-
-  if (result.deepScan) {
-    displayDeepScanResults(result.deepScan);
-  }
-});
+// ── Deep Scan (auto-triggered) ──────────────────────────────────────────────
 
 deepScanCancelBtn.addEventListener('click', async () => {
   await chrome.runtime.sendMessage({ type: 'CANCEL_DEEP_SCAN' });
@@ -514,6 +487,13 @@ chrome.runtime.onMessage.addListener((message) => {
     case 'SUGGESTIONS_READY':
       displaySuggestions(message.payload);
       break;
+    case 'AUTO_DEEP_SCAN_START':
+      deepScanProgress.style.display = 'flex';
+      deepScanResults.style.display = 'none';
+      deepScanBar.style.width = '0%';
+      deepScanStatus.textContent = 'Contacts detected — scanning...';
+      deepScanCancelBtn.disabled = false;
+      break;
     case 'DEEP_SCAN_PROGRESS': {
       const { current, total, name } = message.payload;
       const pct = Math.round((current / total) * 100);
@@ -523,8 +503,6 @@ chrome.runtime.onMessage.addListener((message) => {
     }
     case 'DEEP_SCAN_COMPLETE':
       deepScanProgress.style.display = 'none';
-      deepScanBtn.disabled = false;
-      deepScanBtnText.textContent = 'Deep Scan (up to 30 contacts)';
       deepScanCancelBtn.disabled = false;
       displayDeepScanResults(message.payload);
       break;
