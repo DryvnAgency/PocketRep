@@ -41,6 +41,10 @@ function calcHeatScore(c: Contact): { score: number; tier: 'hot' | 'warm' | 'wat
     score += 15; reasons.push('never contacted');
   }
 
+  // Buying urgency logged by HeyRex
+  if ((c as any).buying_urgency === 'high') { score += 25; reasons.push('high buying urgency'); }
+  else if ((c as any).buying_urgency === 'medium') { score += 10; reasons.push('active interest'); }
+
   const tier: 'hot' | 'warm' | 'watch' =
     score >= 50 ? 'hot' : score >= 25 ? 'warm' : 'watch';
 

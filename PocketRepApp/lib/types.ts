@@ -43,8 +43,15 @@ export interface Contact {
   rapport_notes: string | null;
   rapport_image_url: string | null;
   follow_up_date: string | null;
+  personal_events: PersonalEvent[] | null;
+  buying_urgency: 'low' | 'medium' | 'high' | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PersonalEvent {
+  type: 'baby_due' | 'anniversary' | 'birthday' | 'other';
+  date: string; // YYYY-MM-DD
 }
 
 export interface Deal {

@@ -11,16 +11,13 @@
  */
 
 import { Platform } from 'react-native';
+import type { PersonalEvent } from '@/lib/types';
+export type { PersonalEvent };
 
 let Notifications: any = null;
 try {
   Notifications = require('expo-notifications');
 } catch {}
-
-export interface PersonalEvent {
-  type: string;   // 'baby_due' | 'anniversary' | 'birthday' | etc.
-  date: string;   // ISO date string 'YYYY-MM-DD'
-}
 
 // ── Parse a YYYY-MM-DD string as LOCAL date (avoids UTC midnight timezone trap)
 export function parseLocalDate(s: string): Date {
