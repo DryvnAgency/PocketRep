@@ -55,39 +55,14 @@ export interface ScanItem {
 
 export interface ScanResult {
   items: ScanItem[];
-  deepScan?: DeepScanResult;
 }
 
-// ── Deep Scan ──────────────────────────────────────────────────────────────
+// ── Clickable Contact ──────────────────────────────────────────────────────
 
 export interface ClickableContact {
   name: string;
   selector: string;
   href: string;
-}
-
-export interface ContactSummary {
-  name: string;
-  summary: string;
-  sourceUrl: string;
-}
-
-export interface ContactActionPlan {
-  name: string;
-  summary: string;
-  taskType: string;
-  product: string;
-  text: string;
-  email: { subject: string; body: string };
-  callScript: string;
-  book: string;
-  dismiss: boolean;
-}
-
-export interface DeepScanResult {
-  contacts: ContactActionPlan[];
-  scannedCount: number;
-  totalFound: number;
 }
 
 // ── Deep Review (Agent Mode) ──────────────────────────────────────────────

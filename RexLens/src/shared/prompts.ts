@@ -100,64 +100,6 @@ Made it more urgent by adding the Friday deadline and scarcity angle.
 If the rep is NOT asking to update a specific script, just respond normally without the [UPDATE] prefix.`;
 }
 
-// ── Deep Scan Prompts ───────────────────────────────────────────────────────
-
-export function buildMiniSummaryPrompt(pageContent: string): string {
-  return `Summarize this contact/task record in exactly 4 lines:
-1. Contact name, phone, email (if available)
-2. Product/service of interest, lead source, age of lead, current status
-3. Task type — one of: PHONE, EMAIL, TEXT, FOLLOW-UP, SERVICE/RENEWAL, or NOTIFICATION-ONLY
-4. Key opportunity, risk, or reason this task matters
-
-Page content:
-${pageContent.slice(0, 6000)}`;
-}
-
-export function buildDeepScanAnalysisPrompt(
-  summaries: { name: string; summary: string }[],
-): string {
-  const summaryText = summaries
-    .map((s, i) => `[${i + 1}] ${s.name}: ${s.summary}`)
-    .join('\n');
-
-  return `You are Rex — a battle-tested AI sales coach reading a rep's worklist. Adapt your language to whatever industry these contacts are in.
-
-For each contact below, generate a script following these exact tone rules:
-
-Everything sounds like a real person who genuinely cares. Use "hey" not "hi". Full sentences, written the way a confident human talks. No bullet points or dashes inside scripts. Genuine curiosity, not a robot dialing for dollars.
-
-Respond in this exact JSON format (no markdown, no code fences):
-{
-  "contacts": [
-    {
-      "name": "John Smith",
-      "summary": "One-line summary of their situation",
-      "taskType": "phone|email|text|followup|service|notification",
-      "product": "Product or service of interest",
-      "text": "",
-      "email": { "subject": "", "body": "" },
-      "callScript": "",
-      "book": "Suggested next action or timing",
-      "dismiss": false
-    }
-  ]
-}
-
-Script rules by task type:
-- PHONE: One-liner opener. First name, their product/interest, reason to act now. Conversational.
-- EMAIL: Non-marketing subject line + body under 5 sentences. Opens with "hey". Soft CTA.
-- TEXT: 2-3 sentences. "hey" + first name, product, reason to act. Friendly, direct.
-- FOLLOW-UP: "hey", reference prior interaction, check in, ask for referrals or next steps.
-- SERVICE/RENEWAL: Tie service/renewal to upgrade conversation. Light, curious, no pressure.
-- NOTIFICATION-ONLY: Set dismiss to true. No script.
-
-Only populate the script field matching the task type. Leave others empty.
-Be specific with urgency. Adapt to the industry. Never be generic.
-
-Contact summaries:
-${summaryText}`;
-}
-
 // ── Deep Review Prompts (Agent Mode) ──────────────────────────────────────
 
 export function buildDeepReviewSummaryPrompt(pageContent: string): string {
