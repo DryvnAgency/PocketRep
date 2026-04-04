@@ -734,6 +734,126 @@ input::placeholder {
   color: var(--grey);
 }
 
+/* ── Game Plan Cards (Deep Review) ─────────────────────────────────────────── */
+
+.game-plan-card {
+  background: var(--ink2);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 8px;
+  transition: border-color 0.2s;
+}
+
+.game-plan-card:hover {
+  border-color: var(--gold-border);
+  border-left-color: var(--gold);
+}
+
+.game-plan-card.priority-hot { border-left-color: #f08080; }
+.game-plan-card.priority-warm { border-left-color: var(--gold); }
+.game-plan-card.priority-cold { border-left-color: var(--grey); }
+.game-plan-card.priority-dead { border-left-color: var(--ink4); opacity: 0.5; }
+
+.game-plan-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.game-plan-priority {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.game-plan-priority.priority-hot { background: rgba(224, 82, 82, 0.12); color: #f08080; }
+.game-plan-priority.priority-warm { background: var(--gold-bg); color: var(--gold); }
+.game-plan-priority.priority-cold { background: var(--ink3); color: var(--grey); }
+.game-plan-priority.priority-dead { background: var(--ink3); color: var(--grey); text-decoration: line-through; }
+
+.game-plan-name {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--white);
+  flex: 1;
+}
+
+.game-plan-product {
+  font-size: 11px;
+  color: var(--grey);
+  flex-shrink: 0;
+}
+
+.game-plan-last {
+  font-size: 12px;
+  color: var(--grey2);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.game-plan-last strong {
+  color: var(--grey3);
+}
+
+.game-plan-play {
+  font-size: 12px;
+  color: var(--gold);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.game-plan-play strong {
+  color: var(--gold2);
+}
+
+.game-plan-script {
+  background: var(--ink3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  position: relative;
+}
+
+.game-plan-script-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--grey3);
+  white-space: pre-wrap;
+  padding-right: 50px;
+  outline: none;
+  min-height: 1.5em;
+}
+
+.game-plan-script-text:focus {
+  color: var(--white);
+}
+
+.game-plan-script-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.game-plan-skipped {
+  opacity: 0.45;
+}
+
+.game-plan-skipped-note {
+  font-size: 12px;
+  color: var(--grey);
+  font-style: italic;
+}
+
 /* ── Response Text ─────────────────────────────────────────────────────────── */
 
 .response-text {

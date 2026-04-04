@@ -89,3 +89,22 @@ export interface DeepScanResult {
   scannedCount: number;
   totalFound: number;
 }
+
+// ── Deep Review (Agent Mode) ──────────────────────────────────────────────
+
+export interface DeepReviewLead {
+  name: string;
+  priority: 'HOT' | 'WARM' | 'COLD' | 'DEAD';
+  lastInteraction: string;
+  play: string;
+  taskType: string;
+  script: string;
+  product: string;
+  skipped?: boolean;
+}
+
+export interface DeepReviewResult {
+  leads: DeepReviewLead[];
+  reviewedCount: number;
+  totalFound: number;
+}

@@ -747,6 +747,98 @@ chrome.runtime.onMessage.addListener(
           .catch(err => sendResponse({ success: false, error: err.message }));
         break;
       }
+
+      case 'CLICK_ELEMENT': {
+        const { selector, text } = message.payload;
+        try {
+          let el: HTMLElement | null = null;
+
+          // Try selector first
+          if (selector) {
+            el = querySelectorAllDeep(selector)[0] as HTMLElement | null;
+          }
+
+          // Fallback: find by text content (for CRMs where selectors may not match)
+          if (!el && text) {
+            const candidates = querySelectorAllDeep('a, span, td, button, [role="link"], [role="row"]');
+            for (const candidate of candidates) {
+              const t = (candidate.textContent || '').trim();
+              if (t && t.toLowerCase().includes(text.toLowerCase()) && t.length < 80) {
+                // Prefer actual links/clickable elements
+                const htmlEl = candidate as HTMLElement;
+                if (htmlEl.tagName === 'A' || htmlEl.onclick || htmlEl.getAttribute('role') === 'link'
+                    || htmlEl.style.cursor === 'pointer' || htmlEl.closest('a')) {
+                  el = htmlEl.closest('a') as HTMLElement || htmlEl;
+                  break;
+                }
+                // Otherwise keep looking but store as fallback
+                if (!el) el = htmlEl;
+              }
+            }
+          }
+
+          if (!el) {
+            sendResponse({ success: false, error: `Element not found: ${selector || text}` });
+            break;
+          }
+
+          el.click();
+          sendResponse({ success: true });
+        } catch (err: any) {
+          sendResponse({ success: false, error: err.message });
+        }
+        break;
+      }
+
+      case 'WAIT_AND_EXTRACT': {
+        // Wait for dynamic content to load (CRM detail pages)
+        setTimeout(() => {
+          tagFields();
+          const content = extractPageContent();
+          sendResponse(content);
+        }, 2500);
+        break;
+      }
+
+      case 'GO_BACK': {
+        const startUrl = window.location.href;
+        history.back();
+
+        // Wait for navigation to complete (URL change or DOM mutations)
+        let resolved = false;
+        let mutationCount = 0;
+        const observer = new MutationObserver((mutations) => {
+          mutationCount += mutations.length;
+          if (mutationCount > 20 && !resolved) {
+            resolved = true;
+            observer.disconnect();
+            clearInterval(urlCheck);
+            clearTimeout(timer);
+            sendResponse({ success: true });
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        const urlCheck = setInterval(() => {
+          if (window.location.href !== startUrl && !resolved) {
+            resolved = true;
+            observer.disconnect();
+            clearInterval(urlCheck);
+            clearTimeout(timer);
+            sendResponse({ success: true });
+          }
+        }, 100);
+
+        const timer = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            observer.disconnect();
+            clearInterval(urlCheck);
+            sendResponse({ success: true });
+          }
+        }, 3000);
+        break;
+      }
     }
 
     return true; // Keep message channel open for async response

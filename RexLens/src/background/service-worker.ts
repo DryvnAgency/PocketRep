@@ -1,6 +1,6 @@
 import { getSupabase, SUPABASE_ANON_KEY } from '../shared/supabase';
-import { buildPageScanPrompt, buildChatPrompt, buildMiniSummaryPrompt, buildDeepScanAnalysisPrompt, REX_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
-import type { Profile, PageContent, ScanResult, ScanItem, AuthState, ContactSummary, ContactActionPlan, DeepScanResult } from '../shared/types';
+import { buildPageScanPrompt, buildChatPrompt, buildMiniSummaryPrompt, buildDeepScanAnalysisPrompt, buildDeepReviewSummaryPrompt, buildDeepReviewGamePlanPrompt, REX_MODEL, HAIKU_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
+import type { Profile, PageContent, ScanResult, ScanItem, AuthState, ContactSummary, ContactActionPlan, DeepScanResult, DeepReviewLead, DeepReviewResult } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -16,6 +16,11 @@ const SCAN_COOLDOWN_MS = 10_000; // 10 second minimum between scans
 let isDeepScanning = false;
 let deepScanCancelled = false;
 let deepScanResults: ContactSummary[] = [];
+
+// Deep review (agent mode) state
+let isDeepReviewing = false;
+let deepReviewCancelled = false;
+let lastDeepReviewResult: DeepReviewResult | null = null;
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
@@ -168,11 +173,19 @@ async function chatWithRex(userMessage: string): Promise<string> {
     ? `Page: ${lastPageContent.title} (${lastPageContent.type})\n${lastPageContent.mainText.slice(0, 1000)}`
     : 'No page scanned yet.';
 
-  const scanContext = lastScanResult && lastScanResult.items.length > 0
-    ? lastScanResult.items.map((item, i) =>
+  let scanContext: string;
+  if (lastDeepReviewResult && lastDeepReviewResult.leads.length > 0) {
+    // Use game plan context if Deep Review has been done
+    scanContext = 'GAME PLAN (from Deep Review):\n' + lastDeepReviewResult.leads.map((lead, i) =>
+      `#${i + 1} ${lead.name} [${lead.priority}] — ${lead.play}${lead.script ? `\nScript: ${lead.script.slice(0, 200)}` : ''}`
+    ).join('\n\n');
+  } else if (lastScanResult && lastScanResult.items.length > 0) {
+    scanContext = lastScanResult.items.map((item, i) =>
       `#${i + 1} ${item.name} [${item.taskType.toUpperCase()}] — ${item.context}${item.script ? `\nScript: ${item.script.slice(0, 200)}` : ''}`
-    ).join('\n\n')
-    : 'No scan results yet.';
+    ).join('\n\n');
+  } else {
+    scanContext = 'No scan results yet.';
+  }
 
   const systemPrompt = buildChatPrompt(
     authState.profile?.full_name || '',
@@ -358,6 +371,179 @@ async function runDeepScan(tabId: number): Promise<DeepScanResult> {
   }
 }
 
+// ── Deep Review (Agent Mode) ────────────────────────────────────────────────
+
+const MAX_DEEP_REVIEW_LEADS = 25;
+
+async function deepReviewWorklist(tabId: number): Promise<DeepReviewResult> {
+  isDeepReviewing = true;
+  deepReviewCancelled = false;
+
+  try {
+    if (!lastScanResult || lastScanResult.items.length === 0) {
+      throw new Error('No scan results to review. Scan the page first.');
+    }
+
+    // Get actionable items only, cap at 25
+    const actionableItems = lastScanResult.items
+      .filter(i => !i.dismiss)
+      .slice(0, MAX_DEEP_REVIEW_LEADS);
+
+    const total = actionableItems.length;
+    const summaries: { name: string; summary: string; skipped?: boolean }[] = [];
+
+    // Ensure content script is loaded
+    await ensureContentScript(tabId);
+
+    // Get clickable contacts once for name matching
+    let clickableContacts: any[] = [];
+    try {
+      clickableContacts = await chrome.tabs.sendMessage(tabId, { type: 'FIND_CLICKABLE' });
+      if (!Array.isArray(clickableContacts)) clickableContacts = [];
+    } catch { clickableContacts = []; }
+
+    for (let i = 0; i < total; i++) {
+      if (deepReviewCancelled) break;
+
+      const item = actionableItems[i];
+      broadcast({ type: 'DEEP_REVIEW_PROGRESS', payload: { current: i + 1, total, name: item.name } });
+
+      try {
+        // Find matching clickable contact by name (case-insensitive fuzzy match)
+        const nameLower = item.name.toLowerCase();
+        const matchedContact = clickableContacts.find((c: any) =>
+          c.name.toLowerCase().includes(nameLower) || nameLower.includes(c.name.toLowerCase())
+        );
+
+        // Try to click into the lead
+        let clickResult: any;
+        if (matchedContact) {
+          clickResult = await chrome.tabs.sendMessage(tabId, {
+            type: 'CLICK_ELEMENT',
+            payload: { selector: matchedContact.selector, text: item.name },
+          });
+        } else {
+          // No selector match — try text-based click
+          clickResult = await chrome.tabs.sendMessage(tabId, {
+            type: 'CLICK_ELEMENT',
+            payload: { selector: '', text: item.name },
+          });
+        }
+
+        if (!clickResult?.success) {
+          summaries.push({ name: item.name, summary: 'Could not access — review manually.', skipped: true });
+          continue;
+        }
+
+        // Wait 500ms then extract the detail page
+        await new Promise(r => setTimeout(r, 500));
+
+        const pageContent: PageContent = await chrome.tabs.sendMessage(tabId, { type: 'WAIT_AND_EXTRACT' });
+
+        if (!pageContent || !pageContent.mainText || pageContent.mainText.length < 50) {
+          summaries.push({ name: item.name, summary: 'Page loaded but no readable content found.', skipped: true });
+          // Still go back
+          await chrome.tabs.sendMessage(tabId, { type: 'GO_BACK' });
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
+        }
+
+        // Summarize with Haiku (cheap)
+        const cleanedText = stripSensitiveData(pageContent.mainText) +
+          (pageContent.conversations.length > 0
+            ? '\n\nConversations:\n' + pageContent.conversations.map(stripSensitiveData).join('\n---\n')
+            : '');
+        const prompt = buildDeepReviewSummaryPrompt(cleanedText);
+
+        const summary = await callAIProxy({
+          model: HAIKU_MODEL,
+          max_tokens: 200,
+          system: 'Respond with 2-3 sentences of plain text. No JSON, no markdown.',
+          messages: [{ role: 'user', content: prompt }],
+        });
+
+        summaries.push({ name: item.name, summary });
+
+        // Navigate back to worklist
+        await chrome.tabs.sendMessage(tabId, { type: 'GO_BACK' });
+        await new Promise(r => setTimeout(r, 1000));
+
+      } catch {
+        summaries.push({ name: item.name, summary: 'Extraction failed — could not access lead detail page.', skipped: true });
+        // Try to go back in case we're stuck on a detail page
+        try { await chrome.tabs.sendMessage(tabId, { type: 'GO_BACK' }); } catch {}
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+
+    // Generate final game plan with Sonnet (premium)
+    if (summaries.length === 0) {
+      return { leads: [], reviewedCount: 0, totalFound: total };
+    }
+
+    broadcast({ type: 'STATUS', payload: { status: 'analyzing', message: 'Building your game plan...' } });
+
+    const gamePlanText = await callAIProxy({
+      model: REX_MODEL,
+      max_tokens: 3000,
+      system: 'Respond only with valid JSON. No markdown fences.',
+      messages: [{
+        role: 'user',
+        content: buildDeepReviewGamePlanPrompt(
+          authState.profile?.full_name || '',
+          summaries.filter(s => !s.skipped).map(s => ({ name: s.name, summary: s.summary })),
+        ),
+      }],
+    });
+
+    const cleaned = gamePlanText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+    let leads: DeepReviewLead[] = [];
+    try {
+      const parsed = JSON.parse(cleaned);
+      leads = Array.isArray(parsed.leads) ? parsed.leads : [];
+    } catch {
+      // JSON parse failed — create basic leads from summaries
+      leads = summaries.map(s => ({
+        name: s.name,
+        priority: 'WARM' as const,
+        lastInteraction: s.summary,
+        play: 'Review manually — game plan generation failed.',
+        taskType: 'phone',
+        script: '',
+        product: '',
+        skipped: s.skipped,
+      }));
+    }
+
+    // Add skipped leads back into the list at the end
+    const skippedLeads = summaries.filter(s => s.skipped).map(s => ({
+      name: s.name,
+      priority: 'COLD' as const,
+      lastInteraction: s.summary,
+      play: 'Could not access — review manually.',
+      taskType: 'phone',
+      script: '',
+      product: '',
+      skipped: true,
+    }));
+
+    // Merge: Sonnet leads + skipped leads (avoid duplicates)
+    const sonnetNames = new Set(leads.map(l => l.name.toLowerCase()));
+    for (const skipped of skippedLeads) {
+      if (!sonnetNames.has(skipped.name.toLowerCase())) {
+        leads.push(skipped);
+      }
+    }
+
+    const reviewedCount = summaries.filter(s => !s.skipped).length;
+    return { leads, reviewedCount, totalFound: total };
+
+  } finally {
+    isDeepReviewing = false;
+  }
+}
+
 function broadcast(message: any) {
   chrome.runtime.sendMessage(message).catch(() => {});
 }
@@ -450,11 +636,6 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         chrome.action.setBadgeText({ text: itemCount > 0 ? String(itemCount) : '✓' });
         chrome.action.setBadgeBackgroundColor({ color: '#10B981' });
 
-        // Auto deep scan: check for clickable contacts in the background
-        if (!isDeepScanning) {
-          autoDeepScan(tab.id).catch(() => {});
-        }
-
         return { success: true, scanResult };
       } catch (err: any) {
         chrome.runtime.sendMessage({ type: 'STATUS', payload: { status: 'error', message: err.message } }).catch(() => {});
@@ -489,6 +670,32 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 
     case 'CANCEL_DEEP_SCAN': {
       deepScanCancelled = true;
+      return { ok: true };
+    }
+
+    case 'DEEP_REVIEW': {
+      if (isDeepReviewing) return { error: 'Deep review already in progress.' };
+      if (!authState.hasAccess) return { error: 'Sign in to Rex Lens to use this feature.' };
+
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return { error: 'No active tab found.' };
+
+      broadcast({ type: 'STATUS', payload: { status: 'scanning', message: 'Deep reviewing...' } });
+
+      try {
+        const reviewResult = await deepReviewWorklist(tab.id);
+        lastDeepReviewResult = reviewResult;
+        broadcast({ type: 'STATUS', payload: { status: 'ready' } });
+        broadcast({ type: 'DEEP_REVIEW_COMPLETE', payload: reviewResult });
+        return { success: true, deepReview: reviewResult };
+      } catch (err: any) {
+        broadcast({ type: 'STATUS', payload: { status: 'error', message: err.message } });
+        return { error: `Deep review failed: ${err.message}` };
+      }
+    }
+
+    case 'CANCEL_DEEP_REVIEW': {
+      deepReviewCancelled = true;
       return { ok: true };
     }
 

@@ -1,6 +1,7 @@
 import type { PageContent } from './types';
 
 export const REX_MODEL = 'claude-sonnet-4-5-20250514';
+export const HAIKU_MODEL = 'claude-3-5-haiku-20241022';
 export const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/anthropic';
 
 export function buildPageScanPrompt(
@@ -154,6 +155,62 @@ Only populate the script field matching the task type. Leave others empty.
 Be specific with urgency. Adapt to the industry. Never be generic.
 
 Contact summaries:
+${summaryText}`;
+}
+
+// ── Deep Review Prompts (Agent Mode) ──────────────────────────────────────
+
+export function buildDeepReviewSummaryPrompt(pageContent: string): string {
+  return `Summarize this lead's situation in 2-3 sentences. Key context:
+- Last interaction (what happened, when)
+- Objections raised or concerns mentioned
+- Buying signals or positive indicators
+- Current status and where they left off
+- What they care about most
+
+Page content:
+${pageContent.slice(0, 6000)}`;
+}
+
+export function buildDeepReviewGamePlanPrompt(
+  repName: string,
+  summaries: { name: string; summary: string }[],
+): string {
+  const summaryText = summaries
+    .map((s, i) => `[${i + 1}] ${s.name}: ${s.summary}`)
+    .join('\n');
+
+  return `You are the best closer in the building. You've been doing this for 20 years and you've seen every trick, every objection, every stall tactic. You write like you talk — direct, warm, no corporate BS. When you write a script for a customer, it sounds like you just got off the phone with their best friend and you know exactly what to say to get them back in.
+
+Your scripts are uncomfortably human. They reference specific details from the conversation history. They acknowledge what happened last time without being weird about it. They give the customer a real reason to respond that isn't "just checking in." Every word has a purpose. No filler. No fluff.
+
+You use "hey" not "hi." You write in lowercase when it feels right. You drop in details that make the customer think "wait, this person actually remembers me." You know when to be funny, when to be direct, and when to just be honest about wanting their business.
+
+Generate a numbered game plan for ${repName || 'the rep'}. For each lead:
+
+* Priority level (HOT / WARM / COLD / DEAD based on conversation context)
+* What happened last (1 sentence max, from their actual conversation history)
+* The play (your recommended approach — call, text, or email and WHY)
+* The script (ready to use, copy-paste, sounds like a real human who gives a damn)
+
+Put the hottest leads first. If a lead is dead, say so — don't waste the rep's time.
+
+Respond in JSON (no markdown fences):
+{
+  "leads": [
+    {
+      "name": "Customer Name",
+      "priority": "HOT|WARM|COLD|DEAD",
+      "lastInteraction": "one sentence",
+      "play": "call/text/email + why",
+      "taskType": "phone|email|text",
+      "script": "the script",
+      "product": "what they're interested in"
+    }
+  ]
+}
+
+Lead summaries:
 ${summaryText}`;
 }
 

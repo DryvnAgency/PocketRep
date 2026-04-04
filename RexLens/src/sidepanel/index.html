@@ -90,6 +90,37 @@
           <span id="scan-count" class="badge badge-ready" style="margin-left:auto">0 items</span>
         </div>
         <div id="scan-items"></div>
+
+        <!-- Deep Review Button (shown after scan results) -->
+        <div id="deep-review-section" style="display:none">
+          <button id="deep-review-btn" class="btn-primary btn-scan" style="margin-top:8px">
+            <span id="deep-review-btn-text">Deep Review</span>
+          </button>
+          <span id="deep-review-estimate" class="hint" style="text-align:center;display:block;margin-top:4px"></span>
+        </div>
+      </div>
+
+      <!-- Deep Review Progress -->
+      <div id="deep-review-progress" class="card" style="display:none">
+        <div class="card-header">
+          <span class="card-icon">🔍</span>
+          <span class="card-title">Deep Review</span>
+        </div>
+        <div class="progress-bar-container">
+          <div id="deep-review-bar" class="progress-bar" style="width:0%"></div>
+        </div>
+        <p id="deep-review-status" class="hint">Starting...</p>
+        <button id="deep-review-cancel-btn" class="btn-secondary btn-sm">Cancel</button>
+      </div>
+
+      <!-- Deep Review Results (game plan cards) -->
+      <div id="deep-review-results" style="display:none">
+        <div class="card-header" style="padding: 0 0 8px 0">
+          <span class="card-icon">🎯</span>
+          <span class="card-title">Game Plan</span>
+          <span id="deep-review-badge" class="badge badge-ready" style="margin-left:auto">0 leads</span>
+        </div>
+        <div id="deep-review-cards"></div>
       </div>
 
       <!-- Rex Chat -->

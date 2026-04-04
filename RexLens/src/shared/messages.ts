@@ -1,4 +1,4 @@
-import type { PageContent, ScanResult, AuthState, FormField, DeepScanResult } from './types';
+import type { PageContent, ScanResult, AuthState, FormField, DeepScanResult, DeepReviewResult } from './types';
 
 // ── Content Script → Service Worker ──────────────────────────────────────────
 
@@ -71,6 +71,39 @@ export interface DeepScanCompleteMessage {
   payload: DeepScanResult;
 }
 
+// ── Deep Review (Agent Mode) ──────────────────────────────────────────────
+
+export interface ClickElementMessage {
+  type: 'CLICK_ELEMENT';
+  payload: { selector: string; text?: string };
+}
+
+export interface WaitAndExtractMessage {
+  type: 'WAIT_AND_EXTRACT';
+}
+
+export interface GoBackMessage {
+  type: 'GO_BACK';
+}
+
+export interface DeepReviewMessage {
+  type: 'DEEP_REVIEW';
+}
+
+export interface CancelDeepReviewMessage {
+  type: 'CANCEL_DEEP_REVIEW';
+}
+
+export interface DeepReviewProgressMessage {
+  type: 'DEEP_REVIEW_PROGRESS';
+  payload: { current: number; total: number; name: string };
+}
+
+export interface DeepReviewCompleteMessage {
+  type: 'DEEP_REVIEW_COMPLETE';
+  payload: DeepReviewResult;
+}
+
 // ── Side Panel ↔ Service Worker ──────────────────────────────────────────────
 
 export interface AnalyzePageMessage {
@@ -134,4 +167,11 @@ export type ExtensionMessage =
   | FindClickableMessage
   | ClickAndExtractMessage
   | DeepScanProgressMessage
-  | DeepScanCompleteMessage;
+  | DeepScanCompleteMessage
+  | ClickElementMessage
+  | WaitAndExtractMessage
+  | GoBackMessage
+  | DeepReviewMessage
+  | CancelDeepReviewMessage
+  | DeepReviewProgressMessage
+  | DeepReviewCompleteMessage;

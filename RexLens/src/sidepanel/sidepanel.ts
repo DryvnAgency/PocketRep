@@ -1,4 +1,4 @@
-import type { ScanResult, ScanItem, AuthState, DeepScanResult, ContactActionPlan } from '../shared/types';
+import type { ScanResult, ScanItem, AuthState, DeepScanResult, ContactActionPlan, DeepReviewResult, DeepReviewLead } from '../shared/types';
 
 // ── DOM References ───────────────────────────────────────────────────────────
 
@@ -32,6 +32,19 @@ const deepScanCancelBtn = $<HTMLButtonElement>('deep-scan-cancel-btn');
 const deepScanResults = $('deep-scan-results');
 const deepScanCards = $('deep-scan-cards');
 const deepScanBadge = $('deep-scan-badge');
+
+// Deep Review (agent mode)
+const deepReviewSection = $('deep-review-section');
+const deepReviewBtn = $<HTMLButtonElement>('deep-review-btn');
+const deepReviewBtnText = $('deep-review-btn-text');
+const deepReviewEstimate = $('deep-review-estimate');
+const deepReviewProgress = $('deep-review-progress');
+const deepReviewBar = $('deep-review-bar');
+const deepReviewStatus = $('deep-review-status');
+const deepReviewCancelBtn = $<HTMLButtonElement>('deep-review-cancel-btn');
+const deepReviewResults = $('deep-review-results');
+const deepReviewCards = $('deep-review-cards');
+const deepReviewBadge = $('deep-review-badge');
 
 // Chat
 const chatMessages = $('chat-messages');
@@ -202,6 +215,22 @@ function displayScanResults(result: ScanResult) {
     scanItems.innerHTML = '<div class="scan-empty">No actionable items found on this page. Try scanning a CRM worklist, email inbox, or conversation.</div>';
   }
   scanResults.style.display = 'block';
+
+  // Show Deep Review button if there are actionable items
+  if (actionableItems.length > 0) {
+    const count = Math.min(actionableItems.length, 25);
+    const estimatedSec = count * 4;
+    deepReviewEstimate.textContent = `Rex will click into ${count} lead${count !== 1 ? 's' : ''} — about ${estimatedSec}s`;
+    deepReviewSection.style.display = 'block';
+    deepReviewBtn.disabled = false;
+    deepReviewBtnText.textContent = 'Deep Review';
+  } else {
+    deepReviewSection.style.display = 'none';
+  }
+
+  // Hide previous deep review results when a new scan happens
+  deepReviewResults.style.display = 'none';
+  deepReviewCards.innerHTML = '';
 }
 
 const TASK_ICONS: Record<string, string> = {
@@ -261,6 +290,100 @@ function escapeHtml(str: string): string {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+// ── Deep Review (Agent Mode) ──────────────────────────────────────────────
+
+deepReviewBtn.addEventListener('click', async () => {
+  deepReviewBtn.disabled = true;
+  deepReviewBtnText.textContent = 'Starting...';
+  deepReviewSection.style.display = 'none';
+
+  // Show progress
+  deepReviewProgress.style.display = 'flex';
+  deepReviewBar.style.width = '0%';
+  deepReviewStatus.textContent = 'Starting deep review...';
+  deepReviewCancelBtn.disabled = false;
+
+  const result = await chrome.runtime.sendMessage({ type: 'DEEP_REVIEW' });
+
+  if (result.error) {
+    deepReviewProgress.style.display = 'none';
+    deepReviewSection.style.display = 'block';
+    deepReviewBtn.disabled = false;
+    deepReviewBtnText.textContent = 'Deep Review';
+    setStatus('error', result.error);
+  }
+});
+
+deepReviewCancelBtn.addEventListener('click', async () => {
+  await chrome.runtime.sendMessage({ type: 'CANCEL_DEEP_REVIEW' });
+  deepReviewStatus.textContent = 'Cancelling...';
+  deepReviewCancelBtn.disabled = true;
+});
+
+function displayDeepReviewResults(result: DeepReviewResult) {
+  deepReviewProgress.style.display = 'none';
+  deepReviewResults.style.display = 'block';
+
+  // Hide scan results — game plan replaces them
+  scanResults.style.display = 'none';
+
+  deepReviewBadge.textContent = `${result.leads.length} lead${result.leads.length !== 1 ? 's' : ''}`;
+  deepReviewCards.innerHTML = '';
+
+  result.leads.forEach((lead, index) => {
+    deepReviewCards.appendChild(createGamePlanCard(lead, index));
+  });
+}
+
+const PRIORITY_ICONS: Record<string, string> = {
+  HOT: '🔥', WARM: '☀️', COLD: '❄️', DEAD: '💀',
+};
+
+function createGamePlanCard(lead: DeepReviewLead, index: number): HTMLElement {
+  const card = document.createElement('div');
+  const priority = (lead.priority || 'WARM').toUpperCase();
+  const priorityClass = `priority-${priority.toLowerCase()}`;
+  card.className = `game-plan-card ${priorityClass}${lead.skipped ? ' game-plan-skipped' : ''}`;
+
+  const icon = PRIORITY_ICONS[priority] || '☀️';
+  const taskIcon = TASK_ICONS[lead.taskType] || '📞';
+  const taskLabel = TASK_LABELS[lead.taskType] || lead.taskType?.toUpperCase() || 'TASK';
+
+  card.innerHTML = `
+    <div class="game-plan-header">
+      <span class="game-plan-priority ${priorityClass}">${icon} ${priority}</span>
+      <span class="game-plan-name">${escapeHtml(lead.name)}</span>
+      ${lead.product ? `<span class="game-plan-product">${escapeHtml(lead.product)}</span>` : ''}
+    </div>
+    ${lead.skipped ? `
+    <div class="game-plan-skipped-note">Could not access — review manually</div>
+    ` : `
+    <div class="game-plan-last"><strong>Last:</strong> ${escapeHtml(lead.lastInteraction)}</div>
+    <div class="game-plan-play"><strong>The play:</strong> ${taskIcon} ${escapeHtml(lead.play)}</div>
+    ${lead.script ? `
+    <div class="game-plan-script">
+      <div class="game-plan-script-text" contenteditable="true" spellcheck="true" data-review-num="${index + 1}">${escapeHtml(lead.script)}</div>
+      <div class="game-plan-script-actions">
+        <button class="btn-copy-script" title="Copy script">Copy</button>
+      </div>
+    </div>` : ''}
+    `}
+  `;
+
+  // Copy button
+  const copyBtn = card.querySelector('.btn-copy-script');
+  const scriptText = card.querySelector('.game-plan-script-text') as HTMLElement | null;
+  if (copyBtn && scriptText) {
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(scriptText.textContent || '');
+      (copyBtn as HTMLButtonElement).textContent = 'Copied!';
+      setTimeout(() => { (copyBtn as HTMLButtonElement).textContent = 'Copy'; }, 1000);
+    });
+  }
+
+  return card;
 }
 
 // ── Deep Scan (auto-triggered) ──────────────────────────────────────────────
@@ -486,6 +609,17 @@ chrome.runtime.onMessage.addListener((message) => {
       deepScanCancelBtn.disabled = false;
       displayDeepScanResults(message.payload);
       break;
+    case 'DEEP_REVIEW_PROGRESS': {
+      const { current, total, name } = message.payload;
+      const pct = Math.round((current / total) * 100);
+      deepReviewBar.style.width = `${pct}%`;
+      deepReviewStatus.textContent = `Reviewing lead ${current} of ${total}... clicking into ${name}`;
+      break;
+    }
+    case 'DEEP_REVIEW_COMPLETE':
+      deepReviewProgress.style.display = 'none';
+      displayDeepReviewResults(message.payload);
+      break;
   }
 });
 
@@ -499,6 +633,10 @@ function resetUI() {
   deepScanProgress.style.display = 'none';
   deepScanResults.style.display = 'none';
   deepScanCards.innerHTML = '';
+  deepReviewSection.style.display = 'none';
+  deepReviewProgress.style.display = 'none';
+  deepReviewResults.style.display = 'none';
+  deepReviewCards.innerHTML = '';
   setStatus('idle');
 }
 
