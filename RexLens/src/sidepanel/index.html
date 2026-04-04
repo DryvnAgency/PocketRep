@@ -15,8 +15,7 @@
         <h1>Rex Lens</h1>
         <p class="subtitle">AI Sales Coach</p>
       </div>
-
-      <div id="login-form" class="card">
+      <div class="auth-card">
         <input type="text" id="username-input" placeholder="Username" autocomplete="username" />
         <input type="password" id="password-input" placeholder="Password" autocomplete="current-password" />
         <button id="login-btn" class="btn-primary">Sign In</button>
@@ -31,88 +30,36 @@
         <h1>Rex Lens</h1>
         <p class="subtitle">Upgrade Required</p>
       </div>
-      <div class="card">
+      <div class="auth-card">
         <p>Your Rex Lens subscription is inactive or expired.</p>
-        <p style="margin-top:8px">Visit <a href="https://rexlens.ai" target="_blank" style="color:#4F46E5">rexlens.ai</a> to subscribe</p>
+        <p style="margin-top:8px">Visit <a href="https://rexlens.ai" target="_blank" class="link">rexlens.ai</a> to subscribe</p>
         <button id="logout-locked-btn" class="btn-secondary">Sign Out</button>
       </div>
     </div>
 
-    <!-- Main Screen -->
+    <!-- Main Chat Screen -->
     <div id="main-screen" class="screen" style="display:none">
-      <!-- Header -->
-      <div class="header">
-        <div class="header-left">
-          <span class="header-title">Rex Lens</span>
-          <span id="status-badge" class="badge badge-idle">Idle</span>
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <span class="chat-header-title">Rex</span>
+          <span id="page-indicator" class="page-indicator" title="Page context loaded">●</span>
         </div>
-        <div class="header-right">
+        <div class="chat-header-right">
+          <button id="refresh-btn" class="btn-icon" title="Re-read page">↻</button>
           <button id="logout-btn" class="btn-icon" title="Sign Out">⏻</button>
         </div>
       </div>
 
-      <!-- Scan Button -->
-      <div class="scan-section">
-        <button id="scan-btn" class="btn-primary btn-scan">
-          <span id="scan-btn-text">Scan Page</span>
-        </button>
-        <span class="hint">or press Ctrl+Shift+R</span>
-      </div>
+      <div id="chat-messages" class="chat-messages"></div>
 
-      <!-- Scan Results -->
-      <div id="scan-results" style="display:none">
-        <div class="card-header" style="padding: 0 0 8px 0">
-          <span class="card-icon">📋</span>
-          <span class="card-title">Scan Results</span>
-          <span id="scan-count" class="badge badge-ready" style="margin-left:auto">0 items</span>
-        </div>
-        <div id="scan-items"></div>
-
-        <!-- Deep Review Button (shown after scan results) -->
-        <div id="deep-review-section" style="display:none">
-          <button id="deep-review-btn" class="btn-primary btn-scan" style="margin-top:8px">
-            <span id="deep-review-btn-text">Deep Review</span>
-          </button>
-          <span id="deep-review-estimate" class="hint" style="text-align:center;display:block;margin-top:4px"></span>
-        </div>
-      </div>
-
-      <!-- Deep Review Progress -->
-      <div id="deep-review-progress" class="card" style="display:none">
-        <div class="card-header">
-          <span class="card-icon">🔍</span>
-          <span class="card-title">Deep Review</span>
-        </div>
-        <div class="progress-bar-container">
-          <div id="deep-review-bar" class="progress-bar" style="width:0%"></div>
-        </div>
-        <p id="deep-review-status" class="hint">Starting...</p>
-        <button id="deep-review-cancel-btn" class="btn-secondary btn-sm">Cancel</button>
-      </div>
-
-      <!-- Deep Review Results (game plan cards) -->
-      <div id="deep-review-results" style="display:none">
-        <div class="card-header" style="padding: 0 0 8px 0">
-          <span class="card-icon">🎯</span>
-          <span class="card-title">Game Plan</span>
-          <span id="deep-review-badge" class="badge badge-ready" style="margin-left:auto">0 leads</span>
-        </div>
-        <div id="deep-review-cards"></div>
-      </div>
-
-      <!-- Rex Chat -->
-      <div id="chat-section" class="chat-section">
-        <div class="card-header">
-          <span class="card-icon">🤖</span>
-          <span class="card-title">Ask Rex</span>
-        </div>
-        <div id="chat-messages" class="chat-messages"></div>
+      <div class="chat-input-area">
         <div class="chat-input-row">
-          <input type="text" id="chat-input" placeholder="Ask Rex a follow-up..." />
-          <button id="chat-send-btn" class="btn-primary btn-sm">Send</button>
+          <input type="text" id="chat-input" placeholder="Ask Rex anything..." autocomplete="off" />
+          <button id="chat-send-btn" class="btn-send" title="Send">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
         </div>
       </div>
-
     </div>
   </div>
 

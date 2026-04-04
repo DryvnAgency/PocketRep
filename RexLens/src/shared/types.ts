@@ -13,7 +13,7 @@ export interface Profile {
 export interface AuthState {
   authenticated: boolean;
   profile: Profile | null;
-  hasAccess: boolean; // true when user has a valid Rex Lens account
+  hasAccess: boolean;
 }
 
 // ── Page Analysis ───────────────────────────────────────────────────────────
@@ -37,24 +37,6 @@ export interface FormField {
   label: string;
   type: 'input' | 'textarea' | 'contenteditable';
   currentValue: string;
-}
-
-// ── Scan Results ────────────────────────────────────────────────────────────
-
-export type TaskType = 'phone' | 'email' | 'text' | 'followup' | 'service' | 'notification';
-
-export interface ScanItem {
-  name: string;
-  taskType: TaskType;
-  product: string;
-  urgency: 'high' | 'medium' | 'low';
-  context: string;
-  script: string;
-  dismiss: boolean;
-}
-
-export interface ScanResult {
-  items: ScanItem[];
 }
 
 // ── Clickable Contact ──────────────────────────────────────────────────────
