@@ -139,7 +139,7 @@ async function analyzePageWithAI(page: PageContent): Promise<ScanResult> {
   );
 
   const text = await callAIProxy({
-    model: REX_MODEL,
+    model: HAIKU_MODEL,
     max_tokens: 2000,
     system: 'Respond only with valid JSON. No markdown fences.',
     messages: [{ role: 'user', content: systemPrompt }],
