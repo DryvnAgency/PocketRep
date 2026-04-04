@@ -1,5 +1,5 @@
 import { getSupabase, SUPABASE_ANON_KEY } from '../shared/supabase';
-import { buildChatSystemPrompt, buildDeepReviewSummaryPrompt, buildDeepReviewGamePlanPrompt, REX_MODEL, HAIKU_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
+import { buildPageScanPrompt, buildChatSystemPrompt, buildDeepReviewSummaryPrompt, buildDeepReviewGamePlanPrompt, REX_MODEL, HAIKU_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
 import type { Profile, PageContent, AuthState, DeepReviewLead, DeepReviewResult } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
 
@@ -7,6 +7,7 @@ import type { ExtensionMessage } from '../shared/messages';
 
 let authState: AuthState = { authenticated: false, profile: null, hasAccess: false };
 let cachedPageContent: PageContent | null = null;
+let cachedPageSummary: string | null = null; // Haiku-generated compact summary
 let chatHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 
 // Deep review (agent mode) state
@@ -108,7 +109,7 @@ async function callAIProxy(body: Record<string, unknown>): Promise<string> {
   return text;
 }
 
-// ── Silent Page Context Extraction ──────────────────────────────────────────
+// ── Silent Page Context Extraction + Haiku Pre-Scan ─────────────────────────
 
 async function extractPageContext(): Promise<PageContent | null> {
   try {
@@ -118,6 +119,8 @@ async function extractPageContext(): Promise<PageContent | null> {
     const content: PageContent = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_PAGE' });
     if (content && content.mainText) {
       cachedPageContent = content;
+      // Run Haiku pre-scan in background — don't block the UI
+      runHaikuPageScan(content).catch(() => {});
     }
     return content;
   } catch {
@@ -125,22 +128,38 @@ async function extractPageContext(): Promise<PageContent | null> {
   }
 }
 
+/** Use Haiku to create a compact page summary. Cheap (~$0.003) and fast. */
+async function runHaikuPageScan(page: PageContent): Promise<void> {
+  if (!authState.hasAccess) return;
+  if (page.mainText.length < 50) return;
+
+  const cleanedPage: PageContent = {
+    ...page,
+    mainText: stripSensitiveData(page.mainText),
+    conversations: page.conversations.map(stripSensitiveData),
+  };
+
+  try {
+    const summary = await callAIProxy({
+      model: HAIKU_MODEL,
+      max_tokens: 1000,
+      system: 'Respond with concise plain text. No JSON, no markdown fences.',
+      messages: [{ role: 'user', content: buildPageScanPrompt(cleanedPage) }],
+    });
+    cachedPageSummary = summary;
+  } catch {
+    // Scan failed — Sonnet will work without it, just with less context
+    cachedPageSummary = null;
+  }
+}
+
 // ── Chat ────────────────────────────────────────────────────────────────────
 
 async function chatWithRex(userMessage: string): Promise<string> {
-  // Clean page content for the system prompt
-  let cleanedPage: PageContent | null = null;
-  if (cachedPageContent) {
-    cleanedPage = {
-      ...cachedPageContent,
-      mainText: stripSensitiveData(cachedPageContent.mainText),
-      conversations: cachedPageContent.conversations.map(stripSensitiveData),
-    };
-  }
-
+  // Use the Haiku pre-scan summary for Sonnet context (much cheaper than raw page text)
   const systemPrompt = buildChatSystemPrompt(
     authState.profile?.full_name || '',
-    cleanedPage,
+    cachedPageSummary,
   );
 
   chatHistory.push({ role: 'user', content: userMessage });
@@ -385,6 +404,7 @@ async function handleMessage(message: any, _sender: chrome.runtime.MessageSender
       authState = { authenticated: false, profile: null, hasAccess: false };
       chatHistory = [];
       cachedPageContent = null;
+      cachedPageSummary = null;
       broadcastAuthState();
       return { success: true };
     }

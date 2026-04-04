@@ -4,12 +4,9 @@ export const REX_MODEL = 'claude-sonnet-4-6';
 export const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 export const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/anthropic';
 
-export function buildChatSystemPrompt(
-  repName: string,
-  page: PageContent | null,
-): string {
-  const pageBlock = page
-    ? `You can see the user's screen right now. Here's what's on it:
+/** Prompt for Haiku to pre-scan a page and produce a compact summary */
+export function buildPageScanPrompt(page: PageContent): string {
+  return `Analyze this page and produce a structured summary. Identify every person/lead/contact, their vehicle or product of interest, task type, and any key context. Be concise.
 
 Page type: ${page.type}
 Page title: ${page.title}
@@ -18,10 +15,17 @@ URL: ${page.url}
 Page content:
 ${page.mainText.slice(0, 5000)}
 
-${page.conversations.length > 0 ? `Conversations visible on page:\n${page.conversations.join('\n---\n')}` : ''}
-${page.contactNames.length > 0 ? `Contact names visible: ${page.contactNames.join(', ')}` : ''}
-${page.emails.length > 0 ? `Emails visible: ${page.emails.join(', ')}` : ''}
-${page.phones.length > 0 ? `Phones visible: ${page.phones.join(', ')}` : ''}`
+${page.conversations.length > 0 ? `Conversations:\n${page.conversations.join('\n---\n')}` : ''}
+
+Respond with a brief plain-text summary: what kind of page this is, how many leads/contacts/tasks are visible, and a one-line summary for each person you can identify (name, vehicle/product, task type, status). Keep it under 800 words.`;
+}
+
+export function buildChatSystemPrompt(
+  repName: string,
+  pageSummary: string | null,
+): string {
+  const pageBlock = pageSummary
+    ? `You can see the user's screen right now. Here's what Haiku found:\n\n${pageSummary}`
     : 'No page is currently loaded or visible.';
 
   return `You are Rex, an elite sales closer and AI coach built into a Chrome extension. You can see the rep's current screen/CRM. When the rep asks you to review their worklist, pull up tasks, or make a game plan, analyze the page content and generate scripts for each lead/task you find. You're helping ${repName || 'the rep'} right now.
