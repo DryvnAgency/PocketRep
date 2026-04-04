@@ -764,14 +764,12 @@ chrome.runtime.onMessage.addListener(
             for (const candidate of candidates) {
               const t = (candidate.textContent || '').trim();
               if (t && t.toLowerCase().includes(text.toLowerCase()) && t.length < 80) {
-                // Prefer actual links/clickable elements
                 const htmlEl = candidate as HTMLElement;
                 if (htmlEl.tagName === 'A' || htmlEl.onclick || htmlEl.getAttribute('role') === 'link'
                     || htmlEl.style.cursor === 'pointer' || htmlEl.closest('a')) {
                   el = htmlEl.closest('a') as HTMLElement || htmlEl;
                   break;
                 }
-                // Otherwise keep looking but store as fallback
                 if (!el) el = htmlEl;
               }
             }
@@ -783,7 +781,24 @@ chrome.runtime.onMessage.addListener(
           }
 
           el.click();
-          sendResponse({ success: true });
+
+          // Wait 4s for iframe/page navigation to complete, then extract all content
+          setTimeout(() => {
+            tagFields();
+            const content = extractPageContent();
+
+            // If first extraction is thin, wait 2 more seconds and retry (iframe may still be loading)
+            if (content.mainText.length < 50) {
+              setTimeout(() => {
+                tagFields();
+                const retryContent = extractPageContent();
+                sendResponse({ success: true, content: retryContent });
+              }, 2000);
+            } else {
+              sendResponse({ success: true, content });
+            }
+          }, 4000);
+
         } catch (err: any) {
           sendResponse({ success: false, error: err.message });
         }
@@ -791,12 +806,22 @@ chrome.runtime.onMessage.addListener(
       }
 
       case 'WAIT_AND_EXTRACT': {
-        // Wait for dynamic content to load (CRM detail pages)
+        // Wait 5s for dynamic content to load (CRM detail pages with iframes)
         setTimeout(() => {
           tagFields();
           const content = extractPageContent();
-          sendResponse(content);
-        }, 2500);
+
+          // If first extraction is thin, wait 2 more seconds and retry
+          if (content.mainText.length < 50) {
+            setTimeout(() => {
+              tagFields();
+              const retryContent = extractPageContent();
+              sendResponse(retryContent);
+            }, 2000);
+          } else {
+            sendResponse(content);
+          }
+        }, 5000);
         break;
       }
 

@@ -375,6 +375,21 @@ async function runDeepScan(tabId: number): Promise<DeepScanResult> {
 
 const MAX_DEEP_REVIEW_LEADS = 25;
 
+/** Send a message to the content script, re-injecting it if the first attempt fails (handles page navigations). */
+async function sendToContentScript(tabId: number, message: any): Promise<any> {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch {
+    // Content script may have been destroyed by navigation — re-inject
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['dist/content-script.js'],
+    });
+    await new Promise(r => setTimeout(r, 500));
+    return await chrome.tabs.sendMessage(tabId, message);
+  }
+}
+
 async function deepReviewWorklist(tabId: number): Promise<DeepReviewResult> {
   isDeepReviewing = true;
   deepReviewCancelled = false;
@@ -398,7 +413,7 @@ async function deepReviewWorklist(tabId: number): Promise<DeepReviewResult> {
     // Get clickable contacts once for name matching
     let clickableContacts: any[] = [];
     try {
-      clickableContacts = await chrome.tabs.sendMessage(tabId, { type: 'FIND_CLICKABLE' });
+      clickableContacts = await sendToContentScript(tabId, { type: 'FIND_CLICKABLE' });
       if (!Array.isArray(clickableContacts)) clickableContacts = [];
     } catch { clickableContacts = []; }
 
@@ -415,36 +430,29 @@ async function deepReviewWorklist(tabId: number): Promise<DeepReviewResult> {
           c.name.toLowerCase().includes(nameLower) || nameLower.includes(c.name.toLowerCase())
         );
 
-        // Try to click into the lead
-        let clickResult: any;
-        if (matchedContact) {
-          clickResult = await chrome.tabs.sendMessage(tabId, {
-            type: 'CLICK_ELEMENT',
-            payload: { selector: matchedContact.selector, text: item.name },
-          });
-        } else {
-          // No selector match — try text-based click
-          clickResult = await chrome.tabs.sendMessage(tabId, {
-            type: 'CLICK_ELEMENT',
-            payload: { selector: '', text: item.name },
-          });
-        }
+        // Click into the lead — CLICK_ELEMENT now waits 4-6s and returns extracted content
+        const clickPayload = matchedContact
+          ? { selector: matchedContact.selector, text: item.name }
+          : { selector: '', text: item.name };
+
+        const clickResult = await sendToContentScript(tabId, {
+          type: 'CLICK_ELEMENT',
+          payload: clickPayload,
+        });
 
         if (!clickResult?.success) {
-          summaries.push({ name: item.name, summary: 'Could not access — review manually.', skipped: true });
+          summaries.push({ name: item.name, summary: `Could not click into lead: ${clickResult?.error || 'unknown'}. Scan data: ${item.context}`, skipped: true });
           continue;
         }
 
-        // Wait 500ms then extract the detail page
-        await new Promise(r => setTimeout(r, 500));
+        // Use the content returned by CLICK_ELEMENT (extracted after click + wait)
+        const pageContent: PageContent | undefined = clickResult.content;
 
-        const pageContent: PageContent = await chrome.tabs.sendMessage(tabId, { type: 'WAIT_AND_EXTRACT' });
-
-        if (!pageContent || !pageContent.mainText || pageContent.mainText.length < 50) {
-          summaries.push({ name: item.name, summary: 'Page loaded but no readable content found.', skipped: true });
-          // Still go back
-          await chrome.tabs.sendMessage(tabId, { type: 'GO_BACK' });
-          await new Promise(r => setTimeout(r, 1000));
+        if (!pageContent || !pageContent.mainText || pageContent.mainText.length < 20) {
+          summaries.push({ name: item.name, summary: `Page loaded but content too thin. Scan data: ${item.context}`, skipped: true });
+          // Go back to worklist
+          try { await sendToContentScript(tabId, { type: 'GO_BACK' }); } catch {}
+          await new Promise(r => setTimeout(r, 1500));
           continue;
         }
 
@@ -465,23 +473,22 @@ async function deepReviewWorklist(tabId: number): Promise<DeepReviewResult> {
         summaries.push({ name: item.name, summary });
 
         // Navigate back to worklist
-        await chrome.tabs.sendMessage(tabId, { type: 'GO_BACK' });
-        await new Promise(r => setTimeout(r, 1000));
+        try { await sendToContentScript(tabId, { type: 'GO_BACK' }); } catch {}
+        await new Promise(r => setTimeout(r, 1500));
 
-      } catch {
-        summaries.push({ name: item.name, summary: 'Extraction failed — could not access lead detail page.', skipped: true });
+      } catch (err: any) {
+        summaries.push({ name: item.name, summary: `Extraction failed: ${err.message || 'unknown'}. Scan data: ${item.context}`, skipped: true });
         // Try to go back in case we're stuck on a detail page
-        try { await chrome.tabs.sendMessage(tabId, { type: 'GO_BACK' }); } catch {}
-        await new Promise(r => setTimeout(r, 1000));
+        try { await sendToContentScript(tabId, { type: 'GO_BACK' }); } catch {}
+        await new Promise(r => setTimeout(r, 1500));
       }
     }
 
     // Generate final game plan with Sonnet (premium)
-    if (summaries.length === 0) {
-      return { leads: [], reviewedCount: 0, totalFound: total };
-    }
-
+    // Send ALL leads to Sonnet — even skipped ones get scan context so Sonnet can prioritize
     broadcast({ type: 'STATUS', payload: { status: 'analyzing', message: 'Building your game plan...' } });
+
+    const allSummaries = summaries.map(s => ({ name: s.name, summary: s.summary }));
 
     const gamePlanText = await callAIProxy({
       model: REX_MODEL,
@@ -491,7 +498,7 @@ async function deepReviewWorklist(tabId: number): Promise<DeepReviewResult> {
         role: 'user',
         content: buildDeepReviewGamePlanPrompt(
           authState.profile?.full_name || '',
-          summaries.filter(s => !s.skipped).map(s => ({ name: s.name, summary: s.summary })),
+          allSummaries,
         ),
       }],
     });
@@ -508,7 +515,7 @@ async function deepReviewWorklist(tabId: number): Promise<DeepReviewResult> {
         name: s.name,
         priority: 'WARM' as const,
         lastInteraction: s.summary,
-        play: 'Review manually — game plan generation failed.',
+        play: s.skipped ? 'Could not access — review manually.' : 'Review manually — game plan generation failed.',
         taskType: 'phone',
         script: '',
         product: '',
@@ -516,24 +523,10 @@ async function deepReviewWorklist(tabId: number): Promise<DeepReviewResult> {
       }));
     }
 
-    // Add skipped leads back into the list at the end
-    const skippedLeads = summaries.filter(s => s.skipped).map(s => ({
-      name: s.name,
-      priority: 'COLD' as const,
-      lastInteraction: s.summary,
-      play: 'Could not access — review manually.',
-      taskType: 'phone',
-      script: '',
-      product: '',
-      skipped: true,
-    }));
-
-    // Merge: Sonnet leads + skipped leads (avoid duplicates)
-    const sonnetNames = new Set(leads.map(l => l.name.toLowerCase()));
-    for (const skipped of skippedLeads) {
-      if (!sonnetNames.has(skipped.name.toLowerCase())) {
-        leads.push(skipped);
-      }
+    // Mark leads that were skipped
+    for (const lead of leads) {
+      const matchedSummary = summaries.find(s => s.name.toLowerCase() === lead.name.toLowerCase());
+      if (matchedSummary?.skipped) lead.skipped = true;
     }
 
     const reviewedCount = summaries.filter(s => !s.skipped).length;
