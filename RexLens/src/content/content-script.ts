@@ -39,7 +39,7 @@ function detectPageType(): PageType {
 const NOISE_SELECTORS = [
   'nav', 'footer', 'header', '.ad', '.ads', '.advertisement',
   '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
-  'script', 'style', 'noscript', 'svg', 'iframe',
+  'script', 'style', 'noscript', 'svg',
   '.cookie-banner', '.cookie-consent', '#cookie-notice',
 ];
 
@@ -47,25 +47,87 @@ function extractText(root: Element | Document = document): string {
   // Clone to avoid mutation
   const clone = root.cloneNode(true) as Element;
 
-  // Remove noise elements
+  // Remove noise elements (but keep iframes — we read them separately)
   for (const sel of NOISE_SELECTORS) {
     clone.querySelectorAll(sel).forEach(el => el.remove());
   }
 
-  // Get text content, collapse whitespace
-  const text = clone.textContent || '';
-  return text
+  // Get text content from this frame, collapse whitespace
+  let text = (clone.textContent || '')
     .replace(/\s+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
-    .trim()
-    .slice(0, 6000); // Hard cap before AI token limit is applied
+    .trim();
+
+  // Also read text from all same-origin iframes
+  const iframeText = extractIframeText();
+  if (iframeText) {
+    text = text + '\n\n' + iframeText;
+  }
+
+  return text.slice(0, 8000); // Increased cap for iframe-heavy pages
+}
+
+/** Recursively extract text from all accessible (same-origin) iframes */
+function extractIframeText(): string {
+  const parts: string[] = [];
+  const iframes = document.querySelectorAll('iframe');
+
+  for (const iframe of iframes) {
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc || !doc.body) continue; // Cross-origin or not loaded — skip
+
+      const clone = doc.body.cloneNode(true) as HTMLElement;
+      for (const sel of NOISE_SELECTORS) {
+        clone.querySelectorAll(sel).forEach(el => el.remove());
+      }
+
+      const text = (clone.textContent || '')
+        .replace(/\s+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+      if (text.length > 20) {
+        parts.push(text);
+      }
+
+      // Check for nested iframes inside this iframe
+      const nestedIframes = doc.querySelectorAll('iframe');
+      for (const nested of nestedIframes) {
+        try {
+          const nestedDoc = nested.contentDocument || nested.contentWindow?.document;
+          if (!nestedDoc?.body) continue;
+          const nestedText = (nestedDoc.body.innerText || '').trim();
+          if (nestedText.length > 20) {
+            parts.push(nestedText);
+          }
+        } catch { /* cross-origin — skip */ }
+      }
+    } catch {
+      // Cross-origin iframe — skip gracefully
+    }
+  }
+
+  return parts.join('\n\n').slice(0, 6000);
+}
+
+/** querySelectorAll across the main doc + all same-origin iframes */
+function querySelectorAllDeep(selector: string): Element[] {
+  const results: Element[] = [...document.querySelectorAll(selector)];
+  for (const iframe of document.querySelectorAll('iframe')) {
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc) results.push(...doc.querySelectorAll(selector));
+    } catch { /* cross-origin */ }
+  }
+  return results;
 }
 
 function extractConversations(): string[] {
   const conversations: string[] = [];
 
   // Email thread messages
-  const emailMessages = document.querySelectorAll(
+  const emailMessages = querySelectorAllDeep(
     '.adn, .h7, [role="listitem"], .message-body, .email-content, ' +
     '.ii.gt, [data-message-id], .ConversationItem'
   );
@@ -77,7 +139,7 @@ function extractConversations(): string[] {
   });
 
   // Chat messages
-  const chatMessages = document.querySelectorAll(
+  const chatMessages = querySelectorAllDeep(
     '[class*="message"], [class*="chat"], [data-testid*="message"], ' +
     '.msg-s-event-listitem, .msg-s-message-list-content'
   );
@@ -93,7 +155,14 @@ function extractConversations(): string[] {
 }
 
 function extractContactInfo(): { names: string[]; emails: string[]; phones: string[] } {
-  const text = document.body.textContent || '';
+  // Gather text from main frame + all accessible iframes
+  let text = document.body.textContent || '';
+  try {
+    for (const iframe of document.querySelectorAll('iframe')) {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc?.body) text += ' ' + (doc.body.textContent || '');
+    }
+  } catch { /* cross-origin */ }
 
   // Email regex
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -103,8 +172,8 @@ function extractContactInfo(): { names: string[]; emails: string[]; phones: stri
   const phoneRegex = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
   const phones = [...new Set(text.match(phoneRegex) || [])].slice(0, 10);
 
-  // Names from common patterns (headings, profile elements, etc.)
-  const nameElements = document.querySelectorAll(
+  // Names from common patterns (headings, profile elements, etc.) — search iframes too
+  const nameElements = querySelectorAllDeep(
     'h1, h2, h3, [class*="name"], [class*="Name"], [data-testid*="name"], ' +
     '.profile-name, .contact-name, .customer-name, .pv-top-card--list li:first-child'
   );
@@ -623,7 +692,18 @@ chrome.runtime.onMessage.addListener(
       case 'EXTRACT_PAGE': {
         tagFields();
         const content = extractPageContent();
-        sendResponse(content);
+
+        // If content is nearly empty (< 200 chars), dynamic content may not have loaded yet.
+        // Wait 2s and retry once — covers CRMs like VinSolutions that load data async.
+        if (content.mainText.length < 200) {
+          setTimeout(() => {
+            tagFields();
+            const retryContent = extractPageContent();
+            sendResponse(retryContent);
+          }, 2000);
+        } else {
+          sendResponse(content);
+        }
         break;
       }
 
