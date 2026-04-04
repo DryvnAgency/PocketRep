@@ -195,7 +195,7 @@ function isDeepReviewIntent(message: string): boolean {
 
 // ── Deep Review (Agent Mode) ────────────────────────────────────────────────
 
-const MAX_DEEP_REVIEW_LEADS = 25;
+const MAX_DEEP_REVIEW_LEADS = 30;
 
 async function sendToContentScript(tabId: number, message: any): Promise<any> {
   try {
