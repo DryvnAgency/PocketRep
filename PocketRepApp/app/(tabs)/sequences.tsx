@@ -759,20 +759,18 @@ export default function SequencesScreen() {
         {/* Templates tab */}
         {seqSegment === 'templates' && (
           <>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={mt.filterRow}>
-              {TEMPLATE_FILTERS.map(f => (
-                <TouchableOpacity
-                  key={f}
-                  style={[mt.filterPill, templateFilter === f && mt.filterPillActive]}
-                  onPress={() => setTemplateFilter(f)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[mt.filterPillText, templateFilter === f && mt.filterPillTextActive]}>
-                    {f === 'all' ? '⭐ All' : f === 'prospect' ? '🎯 Prospects' : INDUSTRY_CONFIG[f] ? `${INDUSTRY_CONFIG[f].icon} ${INDUSTRY_CONFIG[f].label}` : f}
-                  </Text>
+            <View style={mt.industrySubtitleRow}>
+              <Text style={mt.industrySubtitleText}>
+                {templateFilter === 'all'
+                  ? 'All templates'
+                  : `Showing: ${INDUSTRY_CONFIG[templateFilter]?.icon ?? ''} ${INDUSTRY_CONFIG[templateFilter]?.label ?? templateFilter}`}
+              </Text>
+              {templateFilter !== 'all' && (
+                <TouchableOpacity onPress={() => setTemplateFilter('all')} activeOpacity={0.7}>
+                  <Text style={mt.viewAllLink}> · View All ↗</Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              )}
+            </View>
             <View style={s.bubbleGrid}>
               {TEMPLATES.filter(t => templateFilter === 'all' || t.industry === templateFilter).map(seq => (
                 <SequenceBubble key={seq.id} seq={seq} onPress={() => openDetail(seq)} />
@@ -1329,15 +1327,13 @@ const mt = StyleSheet.create({
     padding: spacing.md, alignItems: 'center', marginTop: spacing.sm,
   },
   sendBtnText: { color: colors.ink, fontWeight: '700', fontSize: 14 },
-  // Template filter pills
-  filterRow: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.xs },
-  filterPill: {
-    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
-    borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 5,
+  // Industry subtitle row (replaces filter pills)
+  industrySubtitleRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.lg, paddingBottom: spacing.sm,
   },
-  filterPillActive: { backgroundColor: colors.goldBg, borderColor: colors.goldBorder },
-  filterPillText: { color: colors.grey2, fontSize: 12, fontWeight: '600' },
-  filterPillTextActive: { color: colors.gold },
+  industrySubtitleText: { color: colors.grey2, fontSize: 12 },
+  viewAllLink: { color: colors.gold, fontSize: 12, fontWeight: '600' },
 });
 
 // ── Queue / Ready-to-Send styles ─────────────────────────────────────────────

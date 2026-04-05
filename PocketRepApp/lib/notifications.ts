@@ -162,6 +162,44 @@ export async function scheduleContactReminders(opts: {
   return count;
 }
 
+// ── Weekly Sunday digest notification ────────────────────────────────────────
+export async function scheduleWeeklyDigest(hour: number, minute: number): Promise<void> {
+  if (!Notifications || Platform.OS === 'web') return;
+  // Cancel any existing weekly digest
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of scheduled) {
+    if (n.content?.data?.type === 'weekly_digest') {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    }
+  }
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: '📊 Your Weekly Digest is Ready',
+      body: "Rex reviewed your week — tap to see your game plan and who to contact.",
+      data: { type: 'weekly_digest' },
+      sound: true,
+    },
+    trigger: {
+      weekday: 1, // 1 = Sunday in expo-notifications
+      hour,
+      minute,
+      repeats: true,
+    },
+  });
+}
+
+export async function cancelWeeklyDigest(): Promise<void> {
+  if (!Notifications || Platform.OS === 'web') return;
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const n of scheduled) {
+      if (n.content?.data?.type === 'weekly_digest') {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      }
+    }
+  } catch {}
+}
+
 // ── Schedule daily sequence reminders (one per day, 9am) ─────────────────────
 // Call after creating a Rex-generated sequence so the rep gets a morning nudge
 // for each step.

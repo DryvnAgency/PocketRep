@@ -160,6 +160,7 @@ export default function RexScreen() {
   const [pendingAction, setPendingAction] = useState<RexAction | null>(null);
   const [proactiveCoach, setProactiveCoach] = useState<string | null>(null);
   const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null);
+  const [rexRecording, setRexRecording] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   useFocusEffect(useCallback(() => {
@@ -443,6 +444,68 @@ export default function RexScreen() {
     }
   }
 
+  async function startRexVoice() {
+    if (Platform.OS === 'web') {
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SR) { alert('Voice input is not supported in this browser. Try Chrome.'); return; }
+      const r = new SR();
+      r.lang = 'en-US';
+      r.continuous = false;
+      r.interimResults = false;
+      r.onresult = (e: any) => {
+        const t = e.results[0][0].transcript;
+        setInput(t);
+        setTimeout(() => send(), 100);
+      };
+      r.onerror = () => setRexRecording(false);
+      r.onend = () => setRexRecording(false);
+      r.start();
+      setRexRecording(true);
+      return;
+    }
+    // Native: use expo-av to record then transcribe via Whisper
+    try {
+      const { Audio } = require('expo-av');
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted) { alert('Microphone permission required.'); return; }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const rec = new Audio.Recording();
+      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await rec.startAsync();
+      setRexRecording(true);
+      // Auto-stop at 10 seconds
+      setTimeout(async () => {
+        try {
+          await rec.stopAndUnloadAsync();
+          await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: false });
+          const uri = rec.getURI();
+          if (!uri) { setRexRecording(false); return; }
+          const audioBlob = await fetch(uri).then(r => r.blob());
+          const form = new FormData();
+          form.append('file', audioBlob, 'rex_input.m4a');
+          form.append('model', 'whisper-1');
+          const wr = await fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/whisper', {
+            method: 'POST',
+            body: form,
+          });
+          const wj = await wr.json();
+          const text = wj.text ?? '';
+          if (text) {
+            setInput(text);
+            setTimeout(() => send(), 100);
+          }
+        } catch (e) {
+          console.warn('Rex voice error:', e);
+        } finally {
+          setRexRecording(false);
+        }
+      }, 10000);
+    } catch (e) {
+      console.warn('Rex voice start error:', e);
+      setRexRecording(false);
+    }
+  }
+
   async function fetchAiRebuttal(key: string, objection: string, fallback: string, newAngle = false) {
     if (!ANTHROPIC_KEY) { setAiRebuttals(prev => ({ ...prev, [key]: fallback })); return; }
     setAiLoading(key);
@@ -670,6 +733,9 @@ export default function RexScreen() {
                 <Text style={s.attachBtnText}>📎</Text>
               </TouchableOpacity>
             )}
+            <TouchableOpacity style={[s.attachBtn, rexRecording && s.micRecording]} onPress={startRexVoice} activeOpacity={0.7}>
+              <Text style={s.attachBtnText}>{rexRecording ? '🔴' : '🎤'}</Text>
+            </TouchableOpacity>
             <TextInput
               style={s.input}
               value={input}
@@ -787,6 +853,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   attachBtnText: { fontSize: 16 },
+  micRecording: { borderColor: 'rgba(255,60,60,0.6)', backgroundColor: 'rgba(255,60,60,0.12)' },
   imgPreviewRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: colors.goldBg, borderTopWidth: 1, borderTopColor: colors.goldBorder,
