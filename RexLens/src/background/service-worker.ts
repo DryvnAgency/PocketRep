@@ -183,10 +183,13 @@ async function runHaikuPageScan(page: PageContent, signal?: AbortSignal): Promis
 // ── Chat ────────────────────────────────────────────────────────────────────
 
 async function chatWithRex(userMessage: string): Promise<string> {
-  // Use the Haiku pre-scan summary for Sonnet context (much cheaper than raw page text)
+  // If Haiku pre-scan hasn't finished yet, use raw page text as fallback
+  const pageContext = cachedPageSummary
+    || (cachedPageContent ? `[Page: ${cachedPageContent.title}]\n${stripSensitiveData(cachedPageContent.mainText).slice(0, 2000)}` : null);
+
   const systemPrompt = buildChatSystemPrompt(
     authState.profile?.full_name || '',
-    cachedPageSummary,
+    pageContext,
   );
 
   chatHistory.push({ role: 'user', content: userMessage });
@@ -324,6 +327,8 @@ async function runDeepReview(tabId: number): Promise<DeepReviewResult> {
           continue;
         }
 
+        if (deepReviewCancelled) break; // Check cancel before expensive API call
+
         const cleanedLeadText = stripSensitiveData(pageContent.mainText) +
           (pageContent.conversations.length > 0
             ? '\n\nConversations:\n' + pageContent.conversations.map(stripSensitiveData).join('\n---\n')
@@ -454,7 +459,11 @@ async function handleMessage(message: any, _sender: chrome.runtime.MessageSender
       const userMessage = message.payload.content;
 
       // Check for deep review intent
-      if (isDeepReviewIntent(userMessage) && !isDeepReviewing) {
+      if (isDeepReviewIntent(userMessage) && isDeepReviewing) {
+        return { reply: 'Deep review is already running. You can cancel it or wait for it to finish.' };
+      }
+
+      if (isDeepReviewIntent(userMessage)) {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab?.id) return { error: 'No active tab found.' };
 
@@ -543,11 +552,12 @@ async function handleMessage(message: any, _sender: chrome.runtime.MessageSender
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === 'complete') {
+    // Don't auto-extract during deep review — it navigates tabs and would thrash the cache
+    if (isDeepReviewing) return;
+
     chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
       if (activeTab?.id === tabId) {
-        // Silently re-extract page content when the active tab finishes loading
         extractPageContext();
-        // Notify side panel that page changed
         broadcast({ type: 'PAGE_CHANGED' });
       }
     });
