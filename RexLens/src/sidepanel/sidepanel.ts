@@ -299,7 +299,18 @@ function showDeepReviewProgress(current: number, total: number, name: string) {
     <div class="dr-progress-text">Reviewing lead ${current} of ${total}...</div>
     <div class="dr-progress-name">${escapeHtml(name)}</div>
     <div class="dr-progress-bar-bg"><div class="dr-progress-bar" style="width:${pct}%"></div></div>
+    <button class="dr-cancel-btn">Cancel</button>
   `;
+
+  const cancelBtn = deepReviewProgressEl.querySelector('.dr-cancel-btn');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', async () => {
+      await chrome.runtime.sendMessage({ type: 'CANCEL_DEEP_REVIEW' });
+      (cancelBtn as HTMLButtonElement).textContent = 'Cancelling...';
+      (cancelBtn as HTMLButtonElement).disabled = true;
+    }, { once: true });
+  }
+
   scrollToBottom();
 }
 

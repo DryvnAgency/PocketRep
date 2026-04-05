@@ -765,19 +765,39 @@ chrome.runtime.onMessage.addListener(
 
           // Fallback: find by text content (for CRMs where selectors may not match)
           if (!el && text) {
+            const textLower = text.toLowerCase();
             const candidates = querySelectorAllDeep('a, span, td, button, [role="link"], [role="row"]');
+            let exactMatch: HTMLElement | null = null;
+            let substringMatch: HTMLElement | null = null;
+
             for (const candidate of candidates) {
               const t = (candidate.textContent || '').trim();
-              if (t && t.toLowerCase().includes(text.toLowerCase()) && t.length < 80) {
-                const htmlEl = candidate as HTMLElement;
-                if (htmlEl.tagName === 'A' || htmlEl.onclick || htmlEl.getAttribute('role') === 'link'
-                    || htmlEl.style.cursor === 'pointer' || htmlEl.closest('a')) {
-                  el = htmlEl.closest('a') as HTMLElement || htmlEl;
-                  break;
-                }
-                if (!el) el = htmlEl;
+              if (!t || t.length > 80) continue;
+              const tLower = t.toLowerCase();
+
+              const isExact = tLower === textLower;
+              const isSubstring = !isExact && tLower.includes(textLower);
+              if (!isExact && !isSubstring) continue;
+
+              const htmlEl = candidate as HTMLElement;
+              const isClickable = htmlEl.tagName === 'A' || htmlEl.onclick
+                  || htmlEl.getAttribute('role') === 'link'
+                  || htmlEl.style.cursor === 'pointer' || htmlEl.closest('a');
+
+              const resolved = isClickable
+                ? (htmlEl.closest('a') as HTMLElement || htmlEl)
+                : htmlEl;
+
+              if (isExact && isClickable) {
+                exactMatch = resolved;
+                break; // Best possible match — stop searching
               }
+              if (isExact && !exactMatch) exactMatch = resolved;
+              if (isSubstring && isClickable && !substringMatch) substringMatch = resolved;
+              if (isSubstring && !substringMatch) substringMatch = resolved;
             }
+
+            el = exactMatch || substringMatch;
           }
 
           if (!el) {

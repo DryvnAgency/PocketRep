@@ -76,13 +76,27 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 // ── AI Calls ─────────────────────────────────────────────────────────────────
 
+const AI_TIMEOUT_MS = 30_000; // 30 second timeout for API calls
+
 async function callAIProxy(body: Record<string, unknown>): Promise<string> {
   const headers = await getAuthHeaders();
-  const res = await fetch(AI_PROXY_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(AI_PROXY_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    clearTimeout(timer);
+    if (err.name === 'AbortError') throw new Error('AI request timed out (30s). Try again.');
+    throw err;
+  }
+  clearTimeout(timer);
 
   let json: any;
   try {
@@ -111,6 +125,8 @@ async function callAIProxy(body: Record<string, unknown>): Promise<string> {
 
 // ── Silent Page Context Extraction + Haiku Pre-Scan ─────────────────────────
 
+let haikuScanAbort: AbortController | null = null;
+
 async function extractPageContext(): Promise<PageContent | null> {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -119,8 +135,11 @@ async function extractPageContext(): Promise<PageContent | null> {
     const content: PageContent = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_PAGE' });
     if (content && content.mainText) {
       cachedPageContent = content;
+      // Abort any in-flight Haiku scan from a previous page
+      if (haikuScanAbort) haikuScanAbort.abort();
+      haikuScanAbort = new AbortController();
       // Run Haiku pre-scan in background — don't block the UI
-      runHaikuPageScan(content).catch(() => {});
+      runHaikuPageScan(content, haikuScanAbort.signal).catch(() => {});
     }
     return content;
   } catch {
@@ -128,10 +147,14 @@ async function extractPageContext(): Promise<PageContent | null> {
   }
 }
 
+// Page types worth scanning with Haiku (costs money — don't scan random browsing)
+const SCANNABLE_TYPES = new Set(['crm', 'email', 'chat', 'linkedin']);
+
 /** Use Haiku to create a compact page summary. Cheap (~$0.003) and fast. */
-async function runHaikuPageScan(page: PageContent): Promise<void> {
+async function runHaikuPageScan(page: PageContent, signal?: AbortSignal): Promise<void> {
   if (!authState.hasAccess) return;
   if (page.mainText.length < 50) return;
+  if (!SCANNABLE_TYPES.has(page.type)) return; // Don't burn credits on random pages
 
   const cleanedPage: PageContent = {
     ...page,
@@ -146,10 +169,14 @@ async function runHaikuPageScan(page: PageContent): Promise<void> {
       system: 'Respond with concise plain text. No JSON, no markdown fences.',
       messages: [{ role: 'user', content: buildPageScanPrompt(cleanedPage) }],
     });
-    cachedPageSummary = summary;
+    // Only update if this scan wasn't aborted (user navigated away)
+    if (!signal?.aborted) {
+      cachedPageSummary = summary;
+    }
   } catch {
-    // Scan failed — Sonnet will work without it, just with less context
-    cachedPageSummary = null;
+    if (!signal?.aborted) {
+      cachedPageSummary = null;
+    }
   }
 }
 
@@ -185,8 +212,11 @@ async function chatWithRex(userMessage: string): Promise<string> {
 // ── Deep Review Intent Detection ────────────────────────────────────────────
 
 const DEEP_REVIEW_PATTERNS = [
-  /\b(deep\s*review|game\s*plan|review\s*(my|the|this)?\s*worklist|review\s*(my|the|this)?\s*leads|analyze\s*(my|the|this)?\s*(worklist|leads|pipeline))\b/i,
-  /\b(click\s*into\s*(each|every|all)\s*(lead|contact)|go\s*through\s*(my|the|each)\s*(leads|contacts|worklist))\b/i,
+  /\bdeep\s*review\b/i,
+  /\breview\s+(my|the|this)\s+(worklist|leads|pipeline)\b/i,
+  /\bclick\s+(into|through)\s+(each|every|all|my)\s+(lead|contact)/i,
+  /\bgo\s+through\s+(each|every|all|my)\s+(lead|contact|worklist)\b/i,
+  /\bbuild\s+(my|a|the)\s+game\s*plan\b/i,
 ];
 
 function isDeepReviewIntent(message: string): boolean {
@@ -434,19 +464,17 @@ async function handleMessage(message: any, _sender: chrome.runtime.MessageSender
 
         broadcast({ type: 'STATUS', payload: { status: 'deep_review' } });
 
-        try {
-          const reviewResult = await runDeepReview(tab.id);
+        // Run deep review in background — DON'T await, return reply immediately
+        runDeepReview(tab.id).then(reviewResult => {
           broadcast({ type: 'DEEP_REVIEW_COMPLETE', payload: reviewResult });
-
-          // Add game plan summary to chat history
           const gamePlanSummary = `Game plan ready — ${reviewResult.leads.length} leads analyzed (${reviewResult.reviewedCount} reviewed, ${reviewResult.totalFound - reviewResult.reviewedCount} skipped).`;
           chatHistory.push({ role: 'assistant', content: gamePlanSummary });
+        }).catch(err => {
+          broadcast({ type: 'DEEP_REVIEW_COMPLETE', payload: { leads: [], reviewedCount: 0, totalFound: 0 } });
+          chatHistory.push({ role: 'assistant', content: `Deep review failed: ${err.message}` });
+        });
 
-          return { reply: 'On it. I\'ll click into each lead and build your game plan. Hang tight...', deepReview: true };
-        } catch (err: any) {
-          broadcast({ type: 'STATUS', payload: { status: 'error', message: err.message } });
-          return { reply: 'On it. I\'ll click into each lead and build your game plan. Hang tight...', deepReview: true, error: err.message };
-        }
+        return { reply: 'On it. I\'ll click into each lead and build your game plan. Hang tight...', deepReview: true };
       }
 
       // Normal chat
