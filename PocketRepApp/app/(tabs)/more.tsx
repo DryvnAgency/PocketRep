@@ -192,14 +192,14 @@ export default function MoreScreen() {
       <Text style={s.section}>Support</Text>
       <TouchableOpacity
         style={s.row}
-        onPress={() => Linking.openURL(`sms:+15551234567${Platform.OS === 'ios' ? '&' : '?'}body=Hi PocketRep Support — I need help with...`)}
+        onPress={() => Linking.openURL(`sms:+1XXXXXXXXXX${Platform.OS === 'ios' ? '&' : '?'}body=Hi PocketRep Support — I need help with...`)}
         activeOpacity={0.8}
       >
         <View style={s.rowLeft}>
           <Text style={s.rowIcon}>💬</Text>
           <View>
             <Text style={s.rowTitle}>Text PocketRep Support</Text>
-            <Text style={s.rowSub}>We reply fast — usually within a few hours</Text>
+            <Text style={s.rowSub}>We'll reply within a few hours</Text>
           </View>
         </View>
         <Text style={s.rowArrow}>→</Text>

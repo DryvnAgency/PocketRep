@@ -8,16 +8,32 @@
     "userInterfaceStyle": "dark",
     "scheme": "pocketrep",
     "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
       "backgroundColor": "#0c0c0e"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "pro.pocketrep.app"
+      "bundleIdentifier": "pro.pocketrep.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "PocketRep uses your microphone for Hey Rex voice intake and wake word detection.",
+        "NSSpeechRecognitionUsageDescription": "PocketRep transcribes your voice notes to capture contact info and follow-up plans.",
+        "NSContactsUsageDescription": "PocketRep can import your contacts to quickly build your book.",
+        "NSLocationWhenInUseUsageDescription": "PocketRep uses location to show nearby contacts and proximity alerts."
+      }
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0c0c0e"
       },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_CONTACTS",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE"
+      ],
       "package": "pro.pocketrep.app"
     },
     "plugins": [
