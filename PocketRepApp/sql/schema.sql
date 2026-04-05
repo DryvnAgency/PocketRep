@@ -159,7 +159,8 @@ create table if not exists sequences (
 );
 
 alter table sequences enable row level security;
-create policy if not exists "Users manage own sequences"
+drop policy if exists "Users manage own sequences" on sequences;
+create policy "Users manage own sequences"
   on sequences for all using (auth.uid() = user_id or user_id is null);
 
 create table if not exists sequence_steps (
@@ -173,7 +174,8 @@ create table if not exists sequence_steps (
 );
 
 alter table sequence_steps enable row level security;
-create policy if not exists "Users manage own sequence_steps"
+drop policy if exists "Users manage own sequence_steps" on sequence_steps;
+create policy "Users manage own sequence_steps"
   on sequence_steps for all using (
     auth.uid() = (select user_id from sequences where id = sequence_id) or
     (select user_id from sequences where id = sequence_id) is null
@@ -196,7 +198,8 @@ create table if not exists contact_interactions (
 );
 
 alter table contact_interactions enable row level security;
-create policy if not exists "Users manage own interactions"
+drop policy if exists "Users manage own interactions" on contact_interactions;
+create policy "Users manage own interactions"
   on contact_interactions for all using (auth.uid() = user_id);
 
 create index if not exists interactions_user_date

@@ -40,6 +40,10 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-contacts",
+        { "contactsPermission": "PocketRep can import your contacts to quickly build your book." }
+      ],
+      [
         "expo-av",
         { "microphonePermission": "PocketRep needs mic access for Voice-to-Rex." }
       ],

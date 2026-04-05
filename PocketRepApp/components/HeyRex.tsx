@@ -27,6 +27,7 @@ import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 
 const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
 const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_KEY ?? '';
+const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://api.anthropic.com';
 const REX_MODEL = 'claude-haiku-4-5-20251001';
 
 type Stage = 'idle' | 'listening' | 'processing' | 'done';
@@ -226,13 +227,12 @@ Return this exact JSON shape:
 }
 `.trim();
 
-      const rr = await fetch('https://api.anthropic.com/v1/messages', {
+      const rr = await fetch(`${AI_PROXY_URL}/v1/messages`, {
         method: 'POST',
         headers: {
           'x-api-key': ANTHROPIC_KEY,
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
-          'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
           model: REX_MODEL,
@@ -252,12 +252,17 @@ Return this exact JSON shape:
         intake = {
           customer_name: 'Unknown',
           contact_id: null,
+          phone: null,
           interests: voiceText,
           objections: '',
           follow_up_in_days: null,
           follow_up_note: '',
           updated_notes: voiceText,
           game_plan: "Rex couldn't fully parse that — tap 'Save anyway' to keep the raw transcript.",
+          vehicle_interest: null,
+          lease_end_date: null,
+          personal_events: [],
+          buying_urgency: 'medium',
         };
       }
 
@@ -314,9 +319,9 @@ Return this exact JSON shape:
       const industryLabel = INDUSTRY_CONFIG[userIndustry]?.label ?? 'Sales';
       const systemPrompt = `You are Rex, a sales intake AI for a ${industryLabel} rep.\nYour job: extract ALL key info and return a JSON object ONLY — no other text, no markdown.\n\nToday's date: ${today}\nIndustry: ${industryLabel}\nContacts in their book: ${contactList}\n\nReturn this exact JSON shape:\n{\n  "customer_name": "Full name mentioned",\n  "contact_id": "the id from the contacts list if name matches, or null",\n  "phone": "phone number mentioned or null",\n  "interests": "what they want / are interested in",\n  "objections": "objections or hesitations mentioned",\n  "follow_up_in_days": number or null,\n  "follow_up_note": "brief reminder of what to say/do on follow-up",\n  "updated_notes": "2-4 sentences of clean notes, present tense, no filler",\n  "game_plan": "2-3 sentence game plan — specific angle, what to lead with next call, one risk to avoid",\n  "vehicle_interest": "specific item/product they are interested in, or null",\n  "lease_end_date": "YYYY-MM-DD if a contract/lease end date is mentioned, or null",\n  "personal_events": [{ "type": "baby_due|anniversary|birthday|other", "date": "YYYY-MM-DD" }],\n  "buying_urgency": "low|medium|high based on timeline and intent signals"\n}`;
 
-      const rr = await fetch('https://api.anthropic.com/v1/messages', {
+      const rr = await fetch(`${AI_PROXY_URL}/v1/messages`, {
         method: 'POST',
-        headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
+        headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
         body: JSON.stringify({ model: REX_MODEL, max_tokens: 600, system: systemPrompt, messages: [{ role: 'user', content: text }] }),
       });
       const rj = await rr.json();
@@ -442,13 +447,12 @@ Return format (JSON array):
 ]
 `.trim();
 
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await fetch(`${AI_PROXY_URL}/v1/messages`, {
       method: 'POST',
       headers: {
         'x-api-key': ANTHROPIC_KEY,
         'anthropic-version': '2023-06-01',
         'content-type': 'application/json',
-        'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
         model: REX_MODEL,

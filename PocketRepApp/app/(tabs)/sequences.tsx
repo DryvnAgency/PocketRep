@@ -444,6 +444,8 @@ export default function SequencesScreen() {
   }
 
   async function handleSaveAndExit() {
+    pendingSendRef.current = null;
+    setShowConfirmSent(false);
     await saveQueueState({ generated_at: new Date().toISOString(), items: queueItems, saved_position: queuePos });
     setShowQueueModal(false);
   }
