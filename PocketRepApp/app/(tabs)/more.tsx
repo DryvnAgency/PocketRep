@@ -175,6 +175,44 @@ export default function MoreScreen() {
         </View>
       )}
 
+      {/* Upgrade CTA — shown to Pro users only */}
+      {!isElite ? (
+        <>
+          <Text style={s.section}>Upgrade</Text>
+          <TouchableOpacity
+            style={s.upgradeRow}
+            onPress={() => Linking.openURL('https://pocketrep.pro/upgrade')}
+            activeOpacity={0.85}
+          >
+            <View style={s.rowLeft}>
+              <Text style={s.rowIcon}>⚡</Text>
+              <View>
+                <Text style={s.upgradeTitle}>Upgrade to Elite</Text>
+                <Text style={s.rowSub}>Rex memory · weekly digest · 100-contact batches</Text>
+              </View>
+            </View>
+            <Text style={s.rowArrow}>→</Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
+
+      {/* Rex Lens Chrome Extension promo */}
+      <Text style={s.section}>Tools</Text>
+      <TouchableOpacity
+        style={s.rexLensCard}
+        onPress={() => Linking.openURL('https://pocketrep.pro/rex-lens')}
+        activeOpacity={0.85}
+      >
+        <View style={s.rexLensTop}>
+          <Text style={s.rexLensIcon}>🔍</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.rexLensTitle}>Rex Lens — Chrome Extension</Text>
+            <Text style={s.rexLensSub}>Works inside Vinsolutions, Gmail, and texting apps. Rex reads your screen and coaches you live.</Text>
+          </View>
+        </View>
+        <Text style={s.rexLensLink}>Install Free →</Text>
+      </TouchableOpacity>
+
       {/* Data */}
       <Text style={s.section}>Your Data</Text>
       <TouchableOpacity style={s.row} onPress={exportBook} disabled={exportLoading} activeOpacity={0.8}>
@@ -303,4 +341,20 @@ const s = StyleSheet.create({
     textAlign: 'center', color: colors.grey, fontSize: 11,
     marginTop: spacing.xxl, paddingHorizontal: spacing.lg,
   },
+  upgradeRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: spacing.lg, borderRadius: radius.md, padding: spacing.md, marginBottom: 2,
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+  },
+  upgradeTitle: { fontSize: 14, fontWeight: '700', color: colors.gold },
+  rexLensCard: {
+    marginHorizontal: spacing.lg, borderRadius: radius.md, padding: spacing.md,
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    marginBottom: 2,
+  },
+  rexLensTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.sm },
+  rexLensIcon: { fontSize: 22, marginTop: 1 },
+  rexLensTitle: { fontSize: 14, fontWeight: '700', color: colors.white, marginBottom: 2 },
+  rexLensSub: { fontSize: 11, color: colors.grey2, lineHeight: 16 },
+  rexLensLink: { color: colors.gold, fontSize: 13, fontWeight: '700', textAlign: 'right' },
 });

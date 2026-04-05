@@ -268,6 +268,7 @@ const EMPTY_STEP = (): Omit<SequenceStep, 'id' | 'sequence_id'> => ({
 export default function SequencesScreen() {
   const [view, setView] = useState<ScreenView>('list');
   const [openSection, setOpenSection] = useState<number | null>(0);
+  const [seqSegment, setSeqSegment] = useState<'templates' | 'mine' | 'sent'>('templates');
 
   const [mySequences, setMySequences] = useState<Sequence[]>([]);
   const [massTexts, setMassTexts] = useState<MassTextRecord[]>([]);
@@ -712,78 +713,80 @@ export default function SequencesScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
-        {/* Section: Ready to Send */}
-        <AccordionSection
-          title={`📤 Ready to Send${queueItems.length > 0 ? `  •  ${queueItems.length}` : ''}`}
-          open={openSection === 3}
-          onToggle={() => toggleSection(3)}
-        >
-          {queueLoading ? (
-            <ActivityIndicator color={colors.gold} style={{ margin: spacing.lg }} />
-          ) : queueItems.length === 0 ? (
-            <View style={s.emptySection}>
-              <Text style={s.emptySectionText}>You're all caught up ✅</Text>
-            </View>
-          ) : (
-            <View style={sq.card}>
-              <View style={sq.cardTop}>
-                <Text style={sq.cardCount}>{queueItems.length} message{queueItems.length !== 1 ? 's' : ''} ready</Text>
-                <Text style={sq.cardSub}>Oldest due: {queueItems[0]?.due_date} · Est. {Math.ceil(queueItems.length * 0.5)} min</Text>
-              </View>
-              {userPlan === 'pro' && queueItems.length === 50 && (
-                <Text style={sq.limitNote}>Showing 50 (Pro limit) · Upgrade to Elite for 100/batch</Text>
-              )}
-              <View style={sq.cardBtns}>
-                <TouchableOpacity style={sq.startBtn} onPress={() => { setQueuePos(0); setShowQueueModal(true); }} activeOpacity={0.85}>
-                  <Text style={sq.startBtnText}>▶ Start Sending</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={sq.saveBtn} onPress={handleSaveAndExit} activeOpacity={0.8}>
-                  <Text style={sq.saveBtnText}>💾 Save for Later</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+      {/* Ready to Send banner — always visible when queue has items */}
+      {queueLoading ? null : queueItems.length > 0 ? (
+        <View style={sq.card}>
+          <View style={sq.cardTop}>
+            <Text style={sq.cardCount}>{queueItems.length} message{queueItems.length !== 1 ? 's' : ''} ready to send</Text>
+            <Text style={sq.cardSub}>Oldest due: {queueItems[0]?.due_date} · Est. {Math.ceil(queueItems.length * 0.5)} min</Text>
+          </View>
+          {userPlan === 'pro' && queueItems.length === 50 && (
+            <Text style={sq.limitNote}>Showing 50 (Pro limit) · Upgrade to Elite for 100/batch</Text>
           )}
-        </AccordionSection>
+          <View style={sq.cardBtns}>
+            <TouchableOpacity style={sq.startBtn} onPress={() => { setQueuePos(0); setShowQueueModal(true); }} activeOpacity={0.85}>
+              <Text style={sq.startBtnText}>▶ Start Sending</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={sq.saveBtn} onPress={handleSaveAndExit} activeOpacity={0.8}>
+              <Text style={sq.saveBtnText}>💾 Save for Later</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
 
-        {/* Section: Templates */}
-        <AccordionSection
-          title="📋 Templates"
-          open={openSection === 0}
-          onToggle={() => toggleSection(0)}
-        >
-          {/* Industry filter pills */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={mt.filterRow}>
-            {TEMPLATE_FILTERS.map(f => (
-              <TouchableOpacity
-                key={f}
-                style={[mt.filterPill, templateFilter === f && mt.filterPillActive]}
-                onPress={() => setTemplateFilter(f)}
-                activeOpacity={0.8}
-              >
-                <Text style={[mt.filterPillText, templateFilter === f && mt.filterPillTextActive]}>
-                  {f === 'all' ? '⭐ All' : f === 'prospect' ? '🎯 Prospects' : INDUSTRY_CONFIG[f] ? `${INDUSTRY_CONFIG[f].icon} ${INDUSTRY_CONFIG[f].label}` : f}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.bubbleScroll}>
-            {TEMPLATES.filter(t => templateFilter === 'all' || t.industry === templateFilter).map(seq => (
-              <SequenceBubble key={seq.id} seq={seq} onPress={() => openDetail(seq)} />
-            ))}
-          </ScrollView>
-        </AccordionSection>
+      {/* 3-segment tab bar */}
+      <View style={s.segBar}>
+        {([
+          { key: 'templates', label: '📋 Templates' },
+          { key: 'mine', label: '⚡ Mine' },
+          { key: 'sent', label: '📜 Sent' },
+        ] as const).map(tab => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[s.segTab, seqSegment === tab.key && s.segTabActive]}
+            onPress={() => {
+              setSeqSegment(tab.key);
+              if (tab.key === 'sent' && userId && !historyLoaded) loadHistory(userId);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.segTabText, seqSegment === tab.key && s.segTabTextActive]}>{tab.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-        {/* Section: My Sequences */}
-        <AccordionSection
-          title="⚡ My Sequences"
-          open={openSection === 1}
-          onToggle={() => toggleSection(1)}
-        >
-          {loadingMy ? (
-            <ActivityIndicator color={colors.gold} style={{ margin: spacing.lg }} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
+        {/* Templates tab */}
+        {seqSegment === 'templates' && (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={mt.filterRow}>
+              {TEMPLATE_FILTERS.map(f => (
+                <TouchableOpacity
+                  key={f}
+                  style={[mt.filterPill, templateFilter === f && mt.filterPillActive]}
+                  onPress={() => setTemplateFilter(f)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[mt.filterPillText, templateFilter === f && mt.filterPillTextActive]}>
+                    {f === 'all' ? '⭐ All' : f === 'prospect' ? '🎯 Prospects' : INDUSTRY_CONFIG[f] ? `${INDUSTRY_CONFIG[f].icon} ${INDUSTRY_CONFIG[f].label}` : f}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <View style={s.bubbleGrid}>
+              {TEMPLATES.filter(t => templateFilter === 'all' || t.industry === templateFilter).map(seq => (
+                <SequenceBubble key={seq.id} seq={seq} onPress={() => openDetail(seq)} />
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* My Sequences tab */}
+        {seqSegment === 'mine' && (
+          loadingMy ? (
+            <ActivityIndicator color={colors.gold} style={{ marginTop: 40 }} />
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.bubbleScroll}>
+            <View style={s.bubbleGrid}>
               {mySequences.map(seq => (
                 <SequenceBubble key={seq.id} seq={seq} onPress={() => openDetail(seq)} />
               ))}
@@ -791,27 +794,19 @@ export default function SequencesScreen() {
                 <Text style={s.newBubbleIcon}>+</Text>
                 <Text style={s.newBubbleText}>New Sequence</Text>
               </TouchableOpacity>
-            </ScrollView>
-          )}
-        </AccordionSection>
+            </View>
+          )
+        )}
 
-        {/* Section: History (Done Log) */}
-        <AccordionSection
-          title="📜 History"
-          open={openSection === 4}
-          onToggle={() => {
-            toggleSection(4);
-            if (openSection !== 4 && userId && !historyLoaded) loadHistory(userId);
-          }}
-        >
-          {historyLoading ? (
-            <ActivityIndicator color={colors.gold} style={{ margin: spacing.lg }} />
+        {/* Sent tab */}
+        {seqSegment === 'sent' && (
+          historyLoading ? (
+            <ActivityIndicator color={colors.gold} style={{ marginTop: 40 }} />
           ) : historyItems.length === 0 ? (
             <View style={s.emptySection}>
               <Text style={s.emptySectionText}>No sent messages yet. Start sending from your queue!</Text>
             </View>
           ) : (() => {
-            // Group by date
             const groups: Record<string, any[]> = {};
             for (const item of historyItems) {
               const day = (item.sent_at ?? '').split('T')[0];
@@ -819,7 +814,7 @@ export default function SequencesScreen() {
               groups[day].push(item);
             }
             return (
-              <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.md }}>
+              <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.md }}>
                 {Object.entries(groups).map(([day, items]) => (
                   <View key={day}>
                     <Text style={s.historyDateHeader}>{day}</Text>
@@ -836,31 +831,8 @@ export default function SequencesScreen() {
                 ))}
               </View>
             );
-          })()}
-        </AccordionSection>
-
-        {/* Section: Recent Mass Texts */}
-        <AccordionSection
-          title="📱 Recent Mass Texts"
-          open={openSection === 2}
-          onToggle={() => toggleSection(2)}
-        >
-          {massTexts.length === 0 ? (
-            <View style={s.emptySection}>
-              <Text style={s.emptySectionText}>No mass texts yet</Text>
-            </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.bubbleScroll}>
-              {massTexts.slice().reverse().map(mt => (
-                <View key={mt.id} style={s.massBubble}>
-                  <Text style={s.massBubbleDate}>{new Date(mt.sent_at).toLocaleDateString()}</Text>
-                  <Text style={s.massBubbleCount}>{mt.recipient_count} recipients</Text>
-                  <Text style={s.massBubbleMsg} numberOfLines={3}>{mt.message}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-        </AccordionSection>
+          })()
+        )}
       </ScrollView>
 
       {/* Send Queue Modal */}
@@ -1167,9 +1139,24 @@ const s = StyleSheet.create({
   sectionBody: { paddingBottom: spacing.md },
 
   bubbleScroll: { paddingHorizontal: spacing.md, paddingBottom: 4, gap: spacing.sm, flexDirection: 'row' },
+  bubbleGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.md,
+  },
+  segBar: {
+    flexDirection: 'row', backgroundColor: colors.ink2,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  segTab: {
+    flex: 1, alignItems: 'center', paddingVertical: spacing.sm + 2,
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  segTabActive: { borderBottomColor: colors.gold },
+  segTabText: { fontSize: 12, fontWeight: '600', color: colors.grey2 },
+  segTabTextActive: { color: colors.gold, fontWeight: '700' },
 
   bubble: {
-    width: screenWidth * 0.6,
+    width: (screenWidth - spacing.lg * 2 - spacing.sm) / 2,
     backgroundColor: colors.ink3,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -1189,7 +1176,7 @@ const s = StyleSheet.create({
   industryBadgeText: { fontSize: 9, fontWeight: '700', color: colors.gold, letterSpacing: 0.5, textTransform: 'uppercase' },
 
   newBubble: {
-    width: screenWidth * 0.4,
+    width: (screenWidth - spacing.lg * 2 - spacing.sm) / 2,
     backgroundColor: colors.gold,
     borderRadius: radius.md,
     padding: spacing.md,

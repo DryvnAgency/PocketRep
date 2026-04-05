@@ -25,10 +25,30 @@ import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 //   → Add @picovoice/porcupine-react-native + custom "Hey Rex" keyword
 //   → picovoice.ai/console — free tier, runs fully on-device, no battery drain
 
-const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
-const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_KEY ?? '';
-const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://api.anthropic.com';
+// API keys are now server-side only — calls go through the Supabase Edge Function proxy
+const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 const REX_MODEL = 'claude-haiku-4-5-20251001';
+
+// ── Wake word (Porcupine) ─────────────────────────────────────────────────────
+// Get a free Access Key at picovoice.ai/console → add to .env as EXPO_PUBLIC_PICOVOICE_KEY
+//
+// PLACEHOLDER: currently uses built-in "Porcupine" wake word for testing.
+// To activate the real "Hey Rex" trigger:
+//   1. Go to picovoice.ai/console → Wake Word → Create "Hey Rex"
+//   2. Download .ppn files for iOS (arm64) and Android (arm64-v8a + armeabi-v7a)
+//   3. Drop them in assets/keywords/  (e.g. hey-rex_ios.ppn, hey-rex_android.ppn)
+//   4. Change HEYREX_KEYWORD_PATH to: Platform.OS === 'ios'
+//        ? require('../assets/keywords/hey-rex_ios.ppn')
+//        : require('../assets/keywords/hey-rex_android.ppn')
+//   5. Swap fromBuiltInKeywords → fromKeywordPaths in initWakeWord() below
+const PICOVOICE_KEY = process.env.EXPO_PUBLIC_PICOVOICE_KEY ?? '';
+
+// Lazy-load so a missing package never crashes the app
+let PorcupineManager: any = null;
+let BuiltInKeyword: any = null;
+try {
+  ({ PorcupineManager, BuiltInKeyword } = require('@picovoice/porcupine-react-native'));
+} catch {}
 
 type Stage = 'idle' | 'listening' | 'processing' | 'done';
 
@@ -71,6 +91,9 @@ export default function HeyRex() {
   const [generatingSeq, setGeneratingSeq] = useState(false);
   const recording = useRef<Audio.Recording | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const wakeManagerRef = useRef<any>(null);
+  const startListeningRef = useRef<() => void>(() => {});
+  const [wakeReady, setWakeReady] = useState(false);
   const router = useRouter();
   const segments = useSegments();
   // Hide the orb when already on the Rex tab
@@ -84,6 +107,49 @@ export default function HeyRex() {
       });
     });
   }, []);
+
+  // Keep startListeningRef current so the wake word callback never has a stale closure
+  useEffect(() => { startListeningRef.current = startListening; });
+
+  // Init Porcupine wake word on mount (native only)
+  useEffect(() => {
+    if (isWeb || !PICOVOICE_KEY || !PorcupineManager) return;
+
+    async function initWakeWord() {
+      try {
+        const mgr = await PorcupineManager.fromBuiltInKeywords(
+          PICOVOICE_KEY,
+          [BuiltInKeyword.PORCUPINE], // ← swap to fromKeywordPaths() once hey-rex.ppn is ready
+          (_index: number) => {
+            // Wake word detected — hand off to startListening
+            wakeManagerRef.current?.stop().catch(() => {});
+            setWakeReady(false);
+            startListeningRef.current();
+          },
+          (err: Error) => console.warn('Rex wake word error:', err),
+        );
+        await mgr.start();
+        wakeManagerRef.current = mgr;
+        setWakeReady(true);
+      } catch (e) {
+        console.warn('Wake word init failed (check EXPO_PUBLIC_PICOVOICE_KEY):', e);
+      }
+    }
+    initWakeWord();
+
+    return () => {
+      wakeManagerRef.current?.delete();
+      wakeManagerRef.current = null;
+    };
+  }, []);
+
+  // Restart wake word whenever recording session ends and HeyRex goes back to idle
+  useEffect(() => {
+    if (stage !== 'idle' || isWeb || !wakeManagerRef.current) return;
+    wakeManagerRef.current.start()
+      .then(() => setWakeReady(true))
+      .catch(() => {});
+  }, [stage]);
 
   useEffect(() => {
     if (stage === 'listening') {
@@ -101,6 +167,12 @@ export default function HeyRex() {
 
   async function startListening() {
     try {
+      // Release mic from Porcupine before expo-av takes it
+      if (wakeManagerRef.current) {
+        try { await wakeManagerRef.current.stop(); } catch {}
+        setWakeReady(false);
+      }
+
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
         Alert.alert('Mic needed', 'Allow microphone access to use Hey Rex.');
@@ -147,22 +219,21 @@ export default function HeyRex() {
 
       // ── Step 1: Transcribe via Whisper ─────────────────────────────────────
       let voiceText = '';
-      if (OPENAI_KEY) {
+      if (true) { // Transcription always via proxy
         // Fetch the file as a blob — more reliable than object literal on both
         // iOS (file://) and Android (content://) URIs
         const audioBlob = await fetch(uri).then(r => r.blob());
         const form = new FormData();
         form.append('file', audioBlob, 'intake.m4a');
         form.append('model', 'whisper-1');
-        const wr = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        const wr = await fetch(`${AI_PROXY_URL}/whisper`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${OPENAI_KEY}` },
           body: form,
         });
         const wj = await wr.json();
         voiceText = wj.text ?? '';
       } else {
-        voiceText = '[No OPENAI_KEY — add EXPO_PUBLIC_OPENAI_KEY to .env for transcription]';
+        voiceText = '[Transcription unavailable]';
       }
 
       setTranscript(voiceText);
@@ -184,9 +255,9 @@ export default function HeyRex() {
         .join(', ') || 'No contacts yet';
 
       // ── Step 3: Rex parses transcript into structured intake ───────────────
-      if (!ANTHROPIC_KEY) {
+      if (false) { // Keys are now on the server
         setParsed({
-          customer_name: 'Add ANTHROPIC_KEY to activate',
+          customer_name: 'API proxy not configured',
           contact_id: null,
           phone: null,
           interests: voiceText,
@@ -194,7 +265,7 @@ export default function HeyRex() {
           follow_up_in_days: null,
           follow_up_note: '',
           updated_notes: voiceText,
-          game_plan: 'Add your Anthropic API key to .env to get Rex\'s full game plan.',
+          game_plan: 'Configure EXPO_PUBLIC_AI_PROXY_URL to activate Rex.',
           vehicle_interest: null,
           lease_end_date: null,
           personal_events: [],
@@ -232,11 +303,9 @@ Return this exact JSON shape:
 }
 `.trim();
 
-      const rr = await fetch(`${AI_PROXY_URL}/v1/messages`, {
+      const rr = await fetch(`${AI_PROXY_URL}/anthropic`, {
         method: 'POST',
         headers: {
-          'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
         },
         body: JSON.stringify({
@@ -304,29 +373,14 @@ Return this exact JSON shape:
       .map((c: any) => `${c.first_name} ${c.last_name} (id:${c.id})`)
       .join(', ') || 'No contacts yet';
 
-    if (!ANTHROPIC_KEY) {
-      setParsed({
-        customer_name: 'Add ANTHROPIC_KEY to activate',
-        contact_id: null, phone: null,
-        interests: text, objections: '',
-        follow_up_in_days: null, follow_up_note: '',
-        updated_notes: text,
-        game_plan: 'Add your Anthropic API key to .env to get Rex\'s full game plan.',
-        vehicle_interest: null, lease_end_date: null,
-        personal_events: [], buying_urgency: 'medium',
-      });
-      setStage('done');
-      return;
-    }
-
     try {
       const today = new Date().toISOString().split('T')[0];
       const industryLabel = INDUSTRY_CONFIG[userIndustry]?.label ?? 'Sales';
       const systemPrompt = `You are Rex, a sales intake AI for a ${industryLabel} rep.\nYour job: extract ALL key info and return a JSON object ONLY — no other text, no markdown.\n\nToday's date: ${today}\nIndustry: ${industryLabel}\nContacts in their book: ${contactList}\n\nReturn this exact JSON shape:\n{\n  "customer_name": "Full name mentioned",\n  "contact_id": "the id from the contacts list if name matches, or null",\n  "phone": "phone number mentioned or null",\n  "interests": "what they want / are interested in",\n  "objections": "objections or hesitations mentioned",\n  "follow_up_in_days": number or null,\n  "follow_up_note": "brief reminder of what to say/do on follow-up",\n  "updated_notes": "2-4 sentences of clean notes, present tense, no filler",\n  "game_plan": "2-3 sentence game plan — specific angle, what to lead with next call, one risk to avoid",\n  "vehicle_interest": "specific item/product they are interested in, or null",\n  "lease_end_date": "YYYY-MM-DD if a contract/lease end date is mentioned, or null",\n  "personal_events": [{ "type": "baby_due|anniversary|birthday|other", "date": "YYYY-MM-DD" }],\n  "buying_urgency": "low|medium|high based on timeline and intent signals"\n}`;
 
-      const rr = await fetch(`${AI_PROXY_URL}/v1/messages`, {
+      const rr = await fetch(`${AI_PROXY_URL}/anthropic`, {
         method: 'POST',
-        headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ model: REX_MODEL, max_tokens: 600, system: systemPrompt, messages: [{ role: 'user', content: text }] }),
       });
       const rj = await rr.json();
@@ -400,7 +454,7 @@ Return this exact JSON shape:
     ]);
 
     // Generate AI sequence + schedule notifications in background
-    if (savedContactId && ANTHROPIC_KEY) {
+    if (savedContactId) {
       setGeneratingSeq(true);
       try {
         const [steps, notifCount] = await Promise.all([
@@ -452,13 +506,9 @@ Return format (JSON array):
 ]
 `.trim();
 
-    const r = await fetch(`${AI_PROXY_URL}/v1/messages`, {
+    const r = await fetch(`${AI_PROXY_URL}/anthropic`, {
       method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         model: REX_MODEL,
         max_tokens: 1200,
@@ -480,7 +530,7 @@ Return format (JSON array):
         contact_id: contactId,
         name: `Follow-up: ${intake.customer_name}`,
         description: `AI-generated from voice intake. ${intake.vehicle_interest ? `Interested in: ${intake.vehicle_interest}.` : ''}`,
-        industry: userIndustry,
+        industry: 'auto',
         is_template: false,
         is_custom: true,
       }).select('id').single();
@@ -560,7 +610,9 @@ Return format (JSON array):
           >
             <Text style={s.orbIcon}>{orbIcon}</Text>
           </TouchableOpacity>
-          {stage === 'idle' && <Text style={s.orbLabel}>Hey Rex</Text>}
+          {stage === 'idle' && (
+            <Text style={s.orbLabel}>{wakeReady ? '👂 Listening…' : 'Hey Rex'}</Text>
+          )}
         </Animated.View>
       )}
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, Modal, ScrollView, Alert, ActivityIndicator,
@@ -247,20 +247,48 @@ export default function ContactsScreen() {
   const [csvText, setCsvText] = useState('');
   const [csvPreview, setCsvPreview] = useState<any[]>([]);
   const [csvImporting, setCsvImporting] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const pageRef = useRef(0);
+  const userIdRef = useRef<string | null>(null);
+
+  const PAGE_SIZE = 50;
 
   // Plan limits: Pro=50, Elite=100
   const MASS_TEXT_LIMIT = userPlan === 'elite' ? 100 : 50;
 
-  async function load() {
+  async function load(reset = true) {
+    if (reset) {
+      pageRef.current = 0;
+      setLoading(true);
+    }
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) { setLoading(false); return; }
+    userIdRef.current = user.id;
+
+    const page = pageRef.current;
     const [{ data }, { data: prof }] = await Promise.all([
-      supabase.from('contacts').select('*').eq('user_id', user.id).order('last_name', { ascending: true }),
-      supabase.from('profiles').select('plan').eq('id', user.id).single(),
+      supabase.from('contacts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('last_name', { ascending: true })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1),
+      reset ? supabase.from('profiles').select('plan').eq('id', user.id).single() : Promise.resolve({ data: null }),
     ]);
-    setContacts(data ?? []);
+
+    const rows = data ?? [];
+    setContacts(prev => reset ? rows : [...prev, ...rows]);
+    setHasMore(rows.length === PAGE_SIZE);
     if (prof) setUserPlan(prof.plan ?? 'pro');
     setLoading(false);
+    setLoadingMore(false);
+  }
+
+  async function loadMore() {
+    if (!hasMore || loadingMore) return;
+    setLoadingMore(true);
+    pageRef.current += 1;
+    await load(false);
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
@@ -314,8 +342,19 @@ export default function ContactsScreen() {
     setShowModal(true);
   }
 
+  function validateForm(): string | null {
+    if (!form.first_name.trim()) return 'First name is required.';
+    if (form.phone.trim() && !/^[\d\s\-\(\)\+\.]{7,20}$/.test(form.phone.trim())) return 'Phone number looks invalid.';
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return 'Email address looks invalid.';
+    if (form.vehicle_year.trim() && (isNaN(Number(form.vehicle_year)) || Number(form.vehicle_year) < 1900 || Number(form.vehicle_year) > new Date().getFullYear() + 2)) return 'Vehicle year looks invalid.';
+    if (form.lease_end_date.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(form.lease_end_date.trim())) return 'Lease End Date must be YYYY-MM-DD.';
+    if (form.follow_up_date.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(form.follow_up_date.trim())) return 'Follow-Up Date must be YYYY-MM-DD.';
+    return null;
+  }
+
   async function save() {
-    if (!form.first_name.trim()) { Alert.alert('First name is required'); return; }
+    const validErr = validateForm();
+    if (validErr) { Alert.alert('Check your info', validErr); return; }
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
@@ -601,6 +640,8 @@ export default function ContactsScreen() {
           data={filtered}
           keyExtractor={c => c.id}
           contentContainerStyle={filtered.length === 0 ? s.emptyList : { padding: spacing.lg, paddingBottom: 32 }}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.3}
           ListEmptyComponent={
             <View style={s.empty}>
               <Text style={s.emptyIcon}>📖</Text>
@@ -610,8 +651,17 @@ export default function ContactsScreen() {
               </Text>
             </View>
           }
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator color={colors.gold} style={{ marginVertical: 16 }} />
+            ) : hasMore && !search ? (
+              <TouchableOpacity style={s.loadMoreBtn} onPress={loadMore} activeOpacity={0.7}>
+                <Text style={s.loadMoreText}>Load more contacts</Text>
+              </TouchableOpacity>
+            ) : null
+          }
           renderItem={({ item: c, index }) => (
-            <FadeIn delay={index * 30}>
+            <FadeIn delay={Math.min(index, 20) * 30}>
               <SwipeableRow onEdit={() => openEdit(c)} onDelete={() => deleteContact(c)}>
                 <ContactRow contact={c} onPress={() => openEdit(c)} />
               </SwipeableRow>
@@ -935,6 +985,8 @@ const s = StyleSheet.create({
   emptyIcon: { fontSize: 40 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: colors.white },
   emptySub: { color: colors.grey2, fontSize: 13, textAlign: 'center' },
+  loadMoreBtn: { alignItems: 'center', paddingVertical: spacing.md },
+  loadMoreText: { color: colors.grey2, fontSize: 13, fontWeight: '600' },
   // Smart filters
   smartFilterRow: {
     flexDirection: 'row', alignItems: 'center',

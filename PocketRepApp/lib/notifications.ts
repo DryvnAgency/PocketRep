@@ -161,3 +161,34 @@ export async function scheduleContactReminders(opts: {
 
   return count;
 }
+
+// ── Schedule daily sequence reminders (one per day, 9am) ─────────────────────
+// Call after creating a Rex-generated sequence so the rep gets a morning nudge
+// for each step.
+export async function scheduleSequenceDailyReminders(opts: {
+  contactId: string;
+  contactFirstName: string;
+  contactPhone: string | null;
+  sequenceSteps: Array<{ delay_days: number }>;
+  sequenceCreatedAt?: string; // ISO string — defaults to now
+}): Promise<number> {
+  if (!Notifications || Platform.OS === 'web') return 0;
+
+  const { contactId, contactFirstName, contactPhone, sequenceSteps, sequenceCreatedAt } = opts;
+  const base = sequenceCreatedAt ? new Date(sequenceCreatedAt) : new Date();
+  // Normalise base to start of day
+  base.setHours(0, 0, 0, 0);
+
+  let count = 0;
+  for (const step of sequenceSteps) {
+    const fire = new Date(base.getTime() + step.delay_days * 86400000);
+    fire.setHours(9, 0, 0, 0);
+    await schedule(
+      `📞 Day ${step.delay_days}: Reach out to ${contactFirstName}`,
+      contactPhone ? `Open Messages to ${contactFirstName} — ${contactPhone}` : `Time to follow up with ${contactFirstName}`,
+      fire,
+    );
+    count++;
+  }
+  return count;
+}
