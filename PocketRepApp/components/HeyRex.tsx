@@ -188,12 +188,17 @@ export default function HeyRex() {
         setParsed({
           customer_name: 'Add ANTHROPIC_KEY to activate',
           contact_id: null,
+          phone: null,
           interests: voiceText,
           objections: '',
           follow_up_in_days: null,
           follow_up_note: '',
           updated_notes: voiceText,
           game_plan: 'Add your Anthropic API key to .env to get Rex\'s full game plan.',
+          vehicle_interest: null,
+          lease_end_date: null,
+          personal_events: [],
+          buying_urgency: 'medium',
         });
         setStage('done');
         return;

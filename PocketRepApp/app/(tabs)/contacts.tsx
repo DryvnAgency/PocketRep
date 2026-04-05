@@ -559,11 +559,11 @@ export default function ContactsScreen() {
           ))}
         </ScrollView>
         <TouchableOpacity
-          style={[s.vehicleBtn, vehicleFilter && s.vehicleBtnActive]}
+          style={[s.vehicleBtn, vehicleFilter ? s.vehicleBtnActive : undefined]}
           onPress={() => setShowVehiclePicker(true)}
           activeOpacity={0.8}
         >
-          <Text style={[s.vehicleBtnText, vehicleFilter && s.vehicleBtnTextActive]}>
+          <Text style={[s.vehicleBtnText, vehicleFilter ? s.vehicleBtnTextActive : undefined]}>
             🚗 {vehicleFilter || 'Any vehicle'}
           </Text>
         </TouchableOpacity>
@@ -778,10 +778,10 @@ export default function ContactsScreen() {
             </View>
 
             <ScrollView style={m.scroll} keyboardShouldPersistTaps="handled">
-              <Field label="First Name *" value={form.first_name} onChangeText={v => setForm(f => ({ ...f, first_name: v }))} placeholder="Marcus" />
-              <Field label="Last Name" value={form.last_name} onChangeText={v => setForm(f => ({ ...f, last_name: v }))} placeholder="Webb" />
-              <Field label="Phone" value={form.phone} onChangeText={v => setForm(f => ({ ...f, phone: v }))} placeholder="555-867-5309" keyboardType="phone-pad" />
-              <Field label="Email" value={form.email} onChangeText={v => setForm(f => ({ ...f, email: v }))} placeholder="marcus@email.com" keyboardType="email-address" autoCapitalize="none" />
+              <Field label="First Name *" value={form.first_name} onChangeText={(v: string) => setForm(f => ({ ...f, first_name: v }))} placeholder="Marcus" />
+              <Field label="Last Name" value={form.last_name} onChangeText={(v: string) => setForm(f => ({ ...f, last_name: v }))} placeholder="Webb" />
+              <Field label="Phone" value={form.phone} onChangeText={(v: string) => setForm(f => ({ ...f, phone: v }))} placeholder="555-867-5309" keyboardType="phone-pad" />
+              <Field label="Email" value={form.email} onChangeText={(v: string) => setForm(f => ({ ...f, email: v }))} placeholder="marcus@email.com" keyboardType="email-address" autoCapitalize="none" />
 
               <Text style={m.section}>Stage</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -801,20 +801,20 @@ export default function ContactsScreen() {
               </ScrollView>
 
               <Text style={m.section}>Vehicle</Text>
-              <Field label="Year" value={form.vehicle_year} onChangeText={v => setForm(f => ({ ...f, vehicle_year: v }))} placeholder="2021" keyboardType="numeric" />
-              <Field label="Make" value={form.vehicle_make} onChangeText={v => setForm(f => ({ ...f, vehicle_make: v }))} placeholder="Honda" />
-              <Field label="Model" value={form.vehicle_model} onChangeText={v => setForm(f => ({ ...f, vehicle_model: v }))} placeholder="Pilot" />
-              <Field label="Current Mileage" value={form.mileage} onChangeText={v => setForm(f => ({ ...f, mileage: v }))} placeholder="38000" keyboardType="numeric" />
-              <Field label="Annual Mileage" value={form.annual_mileage} onChangeText={v => setForm(f => ({ ...f, annual_mileage: v }))} placeholder="18000" keyboardType="numeric" />
-              <Field label="Purchase Date (YYYY-MM-DD)" value={form.purchase_date} onChangeText={v => setForm(f => ({ ...f, purchase_date: v }))} placeholder="2021-04-15" />
-              <Field label="Lease End Date (YYYY-MM-DD)" value={form.lease_end_date} onChangeText={v => setForm(f => ({ ...f, lease_end_date: v }))} placeholder="2024-04-15" />
-              <Field label="Follow-Up Date (YYYY-MM-DD)" value={form.follow_up_date} onChangeText={v => setForm(f => ({ ...f, follow_up_date: v }))} placeholder="2024-05-01" />
+              <Field label="Year" value={form.vehicle_year} onChangeText={(v: string) => setForm(f => ({ ...f, vehicle_year: v }))} placeholder="2021" keyboardType="numeric" />
+              <Field label="Make" value={form.vehicle_make} onChangeText={(v: string) => setForm(f => ({ ...f, vehicle_make: v }))} placeholder="Honda" />
+              <Field label="Model" value={form.vehicle_model} onChangeText={(v: string) => setForm(f => ({ ...f, vehicle_model: v }))} placeholder="Pilot" />
+              <Field label="Current Mileage" value={form.mileage} onChangeText={(v: string) => setForm(f => ({ ...f, mileage: v }))} placeholder="38000" keyboardType="numeric" />
+              <Field label="Annual Mileage" value={form.annual_mileage} onChangeText={(v: string) => setForm(f => ({ ...f, annual_mileage: v }))} placeholder="18000" keyboardType="numeric" />
+              <Field label="Purchase Date (YYYY-MM-DD)" value={form.purchase_date} onChangeText={(v: string) => setForm(f => ({ ...f, purchase_date: v }))} placeholder="2021-04-15" />
+              <Field label="Lease End Date (YYYY-MM-DD)" value={form.lease_end_date} onChangeText={(v: string) => setForm(f => ({ ...f, lease_end_date: v }))} placeholder="2024-04-15" />
+              <Field label="Follow-Up Date (YYYY-MM-DD)" value={form.follow_up_date} onChangeText={(v: string) => setForm(f => ({ ...f, follow_up_date: v }))} placeholder="2024-05-01" />
 
               <Text style={m.section}>Notes</Text>
               <TextInput
                 style={[m.input, { height: 80, textAlignVertical: 'top' }]}
                 value={form.notes}
-                onChangeText={v => setForm(f => ({ ...f, notes: v }))}
+                onChangeText={(v: string) => setForm(f => ({ ...f, notes: v }))}
                 placeholder="Kids' names, what almost killed last deal, preferred color…"
                 placeholderTextColor={colors.grey}
                 multiline

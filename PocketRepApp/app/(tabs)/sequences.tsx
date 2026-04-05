@@ -753,15 +753,15 @@ export default function SequencesScreen() {
           onToggle={() => toggleSection(0)}
         >
           {/* Industry filter pills */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={mt.filterRow}>
             {TEMPLATE_FILTERS.map(f => (
               <TouchableOpacity
                 key={f}
-                style={[s.filterPill, templateFilter === f && s.filterPillActive]}
+                style={[mt.filterPill, templateFilter === f && mt.filterPillActive]}
                 onPress={() => setTemplateFilter(f)}
                 activeOpacity={0.8}
               >
-                <Text style={[s.filterPillText, templateFilter === f && s.filterPillTextActive]}>
+                <Text style={[mt.filterPillText, templateFilter === f && mt.filterPillTextActive]}>
                   {f === 'all' ? '⭐ All' : f === 'prospect' ? '🎯 Prospects' : INDUSTRY_CONFIG[f] ? `${INDUSTRY_CONFIG[f].icon} ${INDUSTRY_CONFIG[f].label}` : f}
                 </Text>
               </TouchableOpacity>

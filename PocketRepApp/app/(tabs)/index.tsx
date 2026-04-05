@@ -313,7 +313,7 @@ function HeatCard({
   contact: c, cfg, onBrief,
 }: {
   contact: Contact;
-  cfg: typeof heatConfig['hot'];
+  cfg: typeof heatConfig[keyof typeof heatConfig];
   onBrief: (c: Contact) => void;
 }) {
   const vehicle = [c.vehicle_year, c.vehicle_make, c.vehicle_model].filter(Boolean).join(' ');
