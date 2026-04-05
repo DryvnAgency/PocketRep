@@ -800,7 +800,7 @@ chrome.runtime.onMessage.addListener(
                     tagFields();
                     const retryContent = extractPageContent();
                     respond({ success: true, content: retryContent });
-                  } catch { respond({ success: true, content: extractPageContent() }); }
+                  } catch { respond({ success: false, error: 'Retry extraction failed' }); }
                 }, 2000);
               } else {
                 respond({ success: true, content });
