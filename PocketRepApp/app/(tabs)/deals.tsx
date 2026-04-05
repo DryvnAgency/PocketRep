@@ -200,7 +200,7 @@ export default function DealsScreen() {
             </View>
 
             <ScrollView style={m.scroll} keyboardShouldPersistTaps="handled">
-              <MField label="Deal Name *" value={form.title} onChangeText={v => setForm(f => ({ ...f, title: v }))} placeholder="2024 F-150 — Marcus Webb" />
+              <MField label="Deal Name *" value={form.title} onChangeText={(v: string) => setForm(f => ({ ...f, title: v }))} placeholder="2024 F-150 — Marcus Webb" />
 
               {/* Contact picker */}
               <Text style={m.label}>Customer</Text>
@@ -222,7 +222,7 @@ export default function DealsScreen() {
                   <TextInput
                     style={m.input}
                     value={form.front_gross}
-                    onChangeText={v => setForm(f => ({ ...f, front_gross: v }))}
+                    onChangeText={(v: string) => setForm(f => ({ ...f, front_gross: v }))}
                     placeholder="1200"
                     placeholderTextColor={colors.grey}
                     keyboardType="decimal-pad"
@@ -233,7 +233,7 @@ export default function DealsScreen() {
                   <TextInput
                     style={m.input}
                     value={form.back_gross}
-                    onChangeText={v => setForm(f => ({ ...f, back_gross: v }))}
+                    onChangeText={(v: string) => setForm(f => ({ ...f, back_gross: v }))}
                     placeholder="800"
                     placeholderTextColor={colors.grey}
                     keyboardType="decimal-pad"
@@ -241,14 +241,14 @@ export default function DealsScreen() {
                 </View>
               </View>
 
-              <MField label="Sale Amount" value={form.amount} onChangeText={v => setForm(f => ({ ...f, amount: v }))} placeholder="34500" keyboardType="decimal-pad" />
-              <MField label="Close Date (YYYY-MM-DD)" value={form.closed_at} onChangeText={v => setForm(f => ({ ...f, closed_at: v }))} placeholder="2026-04-01" />
+              <MField label="Sale Amount" value={form.amount} onChangeText={(v: string) => setForm(f => ({ ...f, amount: v }))} placeholder="34500" keyboardType="decimal-pad" />
+              <MField label="Close Date (YYYY-MM-DD)" value={form.closed_at} onChangeText={(v: string) => setForm(f => ({ ...f, closed_at: v }))} placeholder="2026-04-01" />
 
               <Text style={m.label}>Notes</Text>
               <TextInput
                 style={[m.input, { height: 72, textAlignVertical: 'top' }]}
                 value={form.notes}
-                onChangeText={v => setForm(f => ({ ...f, notes: v }))}
+                onChangeText={(v: string) => setForm(f => ({ ...f, notes: v }))}
                 placeholder="Trade-in, F&I products, anything noteworthy…"
                 placeholderTextColor={colors.grey}
                 multiline

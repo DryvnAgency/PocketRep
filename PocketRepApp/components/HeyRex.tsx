@@ -259,12 +259,17 @@ export default function HeyRex() {
         setParsed({
           customer_name: 'API proxy not configured',
           contact_id: null,
+          phone: null,
           interests: voiceText,
           objections: '',
           follow_up_in_days: null,
           follow_up_note: '',
           updated_notes: voiceText,
-          game_plan: 'Add your Anthropic API key to .env to get Rex\'s full game plan.',
+          game_plan: 'Configure EXPO_PUBLIC_AI_PROXY_URL to activate Rex.',
+          vehicle_interest: null,
+          lease_end_date: null,
+          personal_events: [],
+          buying_urgency: 'medium',
         });
         setStage('done');
         return;
@@ -321,12 +326,17 @@ Return this exact JSON shape:
         intake = {
           customer_name: 'Unknown',
           contact_id: null,
+          phone: null,
           interests: voiceText,
           objections: '',
           follow_up_in_days: null,
           follow_up_note: '',
           updated_notes: voiceText,
           game_plan: "Rex couldn't fully parse that — tap 'Save anyway' to keep the raw transcript.",
+          vehicle_interest: null,
+          lease_end_date: null,
+          personal_events: [],
+          buying_urgency: 'medium',
         };
       }
 

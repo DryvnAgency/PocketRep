@@ -123,7 +123,7 @@ export default function SignupScreen() {
                 <TouchableOpacity
                   key={key}
                   style={[s.industryCard, active && s.industryCardActive]}
-                  onPress={() => setIndustry(key)}
+                  onPress={() => setIndustry(key as IndustryKey)}
                   activeOpacity={0.75}
                 >
                   <Text style={s.industryIcon}>{cfg.icon}</Text>
