@@ -2,6 +2,9 @@
   "outputDirectory": "Pocketrep",
   "rewrites": [
     { "source": "/thank-you", "destination": "/thankyou.html" },
+    { "source": "/privacy", "destination": "/privacy.html" },
+    { "source": "/terms", "destination": "/terms.html" },
+    { "source": "/cancel", "destination": "/cancel.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
