@@ -243,6 +243,8 @@ export default function ContactsScreen() {
   const [deviceContacts, setDeviceContacts] = useState<any[]>([]);
   const [selectedImport, setSelectedImport] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
+  const [importFilter, setImportFilter] = useState<'all' | 'has_phone' | 'has_email'>('all');
+  const [importSearch, setImportSearch] = useState('');
   const [showCsvModal, setShowCsvModal] = useState(false);
   const [csvText, setCsvText] = useState('');
   const [csvPreview, setCsvPreview] = useState<any[]>([]);
@@ -720,8 +722,40 @@ export default function ContactsScreen() {
             </TouchableOpacity>
           </View>
           <Text style={imp.sub}>{selectedImport.size} selected · Added as Prospect</Text>
+
+          {/* Filter pills */}
+          <View style={imp.filterRow}>
+            {(['all', 'has_phone', 'has_email'] as const).map(f => (
+              <TouchableOpacity
+                key={f}
+                style={[imp.filterPill, importFilter === f && imp.filterPillActive]}
+                onPress={() => setImportFilter(f)}
+                activeOpacity={0.8}
+              >
+                <Text style={[imp.filterPillText, importFilter === f && imp.filterPillTextActive]}>
+                  {f === 'all' ? 'All' : f === 'has_phone' ? '📞 Has Phone' : '✉️ Has Email'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Search bar */}
+          <TextInput
+            style={imp.searchInput}
+            value={importSearch}
+            onChangeText={setImportSearch}
+            placeholder="Search contacts…"
+            placeholderTextColor="#666"
+          />
+
           <FlatList
-            data={deviceContacts}
+            data={deviceContacts.filter(dc => {
+              const matchFilter = importFilter === 'all' ? true
+                : importFilter === 'has_phone' ? !!dc.phoneNumbers?.length
+                : !!dc.emails?.length;
+              const matchSearch = !importSearch || dc.name?.toLowerCase().includes(importSearch.toLowerCase());
+              return matchFilter && matchSearch;
+            })}
             keyExtractor={dc => dc.id}
             contentContainerStyle={{ padding: spacing.lg }}
             renderItem={({ item: dc }) => {
@@ -1086,6 +1120,21 @@ const imp = StyleSheet.create({
   footer: { padding: spacing.lg, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)', backgroundColor: colors.ink2 },
   importBtn: { backgroundColor: colors.gold, borderRadius: radius.lg, padding: spacing.md, alignItems: 'center' },
   importBtnText: { color: colors.ink, fontWeight: '700', fontSize: 15 },
+  // Filter pills + search
+  filterRow: { flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
+  filterPill: {
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 4,
+  },
+  filterPillActive: { backgroundColor: colors.goldBg, borderColor: colors.goldBorder },
+  filterPillText: { color: colors.grey2, fontSize: 11, fontWeight: '600' },
+  filterPillTextActive: { color: colors.gold },
+  searchInput: {
+    marginHorizontal: spacing.lg, marginBottom: spacing.xs,
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 8,
+    color: colors.white, fontSize: 13,
+  },
 });
 
 const csv = StyleSheet.create({

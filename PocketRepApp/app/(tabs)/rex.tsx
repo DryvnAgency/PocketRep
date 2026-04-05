@@ -14,6 +14,10 @@ import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 const REX_MODEL = 'claude-haiku-4-5-20251001';
 const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
 
+// Lazy-load expo-image-picker so a missing package never crashes the app
+let ImagePicker: any = null;
+try { ImagePicker = require('expo-image-picker'); } catch {}
+
 // ── Action types Rex can execute ─────────────────────────────────────────────
 interface RexAction {
   type: 'mass_text' | 'show_followups' | 'log_customer' | 'start_sequence';
@@ -34,15 +38,19 @@ function stripActionTag(text: string): string {
 }
 
 const REX_SYSTEM = (repName: string, memory: string, contact: Contact | null, industry = 'auto') => `
-You are Rex — a sharp, no-BS AI sales assistant and command center for PocketRep. You speak directly to ${repName || 'the rep'}, a ${INDUSTRY_CONFIG[industry]?.label ?? 'sales'} rep, like a trusted closer who can also take action in their app.
+You are Rex — a 30-year-old sales closer and coach. You're sharp, compassionate, direct, and firm without being aggressive. Think top-performing floor manager who genuinely wants the rep to win. You know every objection, every close, every follow-up angle. You give real advice, not generic tips. You ask the right questions to understand the deal, then give specific, actionable coaching.
+
+You speak directly to ${repName || 'the rep'}, a ${INDUSTRY_CONFIG[industry]?.label ?? 'sales'} rep.
 
 ${memory ? `What you know about this rep:\n${memory}\n` : ''}
 ${contact ? `Active customer context:\nName: ${contact.first_name} ${contact.last_name}\nVehicle: ${[contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ') || 'not logged'}\nMileage: ${contact.mileage ?? 'unknown'} | Annual: ${contact.annual_mileage ?? 'unknown'}\nLease end: ${contact.lease_end_date ?? 'N/A'}\nNotes: ${contact.notes ?? 'none'}\n` : ''}
 
 ## Rules
-- Short, punchy responses. No corporate filler.
-- When giving rebuttals, give the actual words to say.
+- Keep responses tight — 2-4 sentences max unless walking through a rebuttal script.
+- When a contact is provided, use their notes, vehicle interest, and buying signals to give deal-specific advice.
+- When giving rebuttals, give the actual words to say — not advice about what to say.
 - Never say "I cannot" — find an angle or ask for more context.
+- If a screenshot or image is shared, analyze the conversation and give direct coaching on the next move.
 - If the rep asks you to DO something in the app, respond with your advice AND append an action block.
 
 ## Actions you can take
@@ -151,6 +159,8 @@ export default function RexScreen() {
   const [showContactPicker, setShowContactPicker] = useState(false);
   const [pendingAction, setPendingAction] = useState<RexAction | null>(null);
   const [proactiveCoach, setProactiveCoach] = useState<string | null>(null);
+  const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null);
+  const [rexRecording, setRexRecording] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   useFocusEffect(useCallback(() => {
@@ -189,17 +199,23 @@ export default function RexScreen() {
 
   async function send() {
     const text = input.trim();
-    if (!text || loading) return;
+    if ((!text && !pendingImage) || loading) return;
     if (!ANTHROPIC_KEY) {
       alert('Add your ANTHROPIC_KEY to .env to activate Rex.');
       return;
     }
 
+    const imageToSend = pendingImage;
     setInput('');
+    setPendingImage(null);
     setLoading(true);
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
+
+    const displayText = imageToSend
+      ? (text ? `[Screenshot] ${text}` : '[Screenshot shared]')
+      : text;
 
     // Optimistic user message
     const userMsg: RexMessage = {
@@ -207,7 +223,7 @@ export default function RexScreen() {
       user_id: user.id,
       contact_id: activeContact?.id ?? null,
       role: 'user',
-      content: text,
+      content: displayText,
       created_at: new Date().toISOString(),
     };
     setMessages(prev => [...prev, userMsg]);
@@ -218,7 +234,7 @@ export default function RexScreen() {
       user_id: user.id,
       contact_id: activeContact?.id ?? null,
       role: 'user',
-      content: text,
+      content: displayText,
     });
 
     // Build history for context (last 10 messages)
@@ -226,6 +242,19 @@ export default function RexScreen() {
       role: m.role,
       content: m.content,
     }));
+
+    // Build the final user message content — multimodal if image attached
+    const lastUserContent: any = imageToSend
+      ? [
+          { type: 'image', source: { type: 'base64', media_type: imageToSend.mimeType, data: imageToSend.base64 } },
+          { type: 'text', text: text || 'Here is a screenshot. What is your coaching advice based on this conversation?' },
+        ]
+      : text;
+
+    const apiMessages = [
+      ...history.slice(0, -1), // all but the last (user) message
+      { role: 'user', content: lastUserContent },
+    ];
 
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -240,7 +269,7 @@ export default function RexScreen() {
           model: REX_MODEL,
           max_tokens: 600,
           system: REX_SYSTEM(profile?.full_name ?? '', memory?.summary ?? '', activeContact, profile?.industry ?? 'auto'),
-          messages: history,
+          messages: apiMessages,
         }),
       });
 
@@ -389,6 +418,93 @@ export default function RexScreen() {
   }
 
   const isElite = profile?.plan === 'elite';
+
+  async function pickImage() {
+    if (!ImagePicker) {
+      alert('Image picker not available in this build.');
+      return;
+    }
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') { alert('Allow photo access to share screenshots with Rex.'); return; }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions?.Images ?? 'images',
+        base64: true,
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets?.[0]?.base64) {
+        const asset = result.assets[0];
+        setPendingImage({
+          base64: asset.base64!,
+          mimeType: (asset.mimeType ?? 'image/jpeg') as string,
+        });
+      }
+    } catch (e) {
+      console.warn('Image picker error:', e);
+    }
+  }
+
+  async function startRexVoice() {
+    if (Platform.OS === 'web') {
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SR) { alert('Voice input is not supported in this browser. Try Chrome.'); return; }
+      const r = new SR();
+      r.lang = 'en-US';
+      r.continuous = false;
+      r.interimResults = false;
+      r.onresult = (e: any) => {
+        const t = e.results[0][0].transcript;
+        setInput(t);
+        setTimeout(() => send(), 100);
+      };
+      r.onerror = () => setRexRecording(false);
+      r.onend = () => setRexRecording(false);
+      r.start();
+      setRexRecording(true);
+      return;
+    }
+    // Native: use expo-av to record then transcribe via Whisper
+    try {
+      const { Audio } = require('expo-av');
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted) { alert('Microphone permission required.'); return; }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const rec = new Audio.Recording();
+      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await rec.startAsync();
+      setRexRecording(true);
+      // Auto-stop at 10 seconds
+      setTimeout(async () => {
+        try {
+          await rec.stopAndUnloadAsync();
+          await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: false });
+          const uri = rec.getURI();
+          if (!uri) { setRexRecording(false); return; }
+          const audioBlob = await fetch(uri).then(r => r.blob());
+          const form = new FormData();
+          form.append('file', audioBlob, 'rex_input.m4a');
+          form.append('model', 'whisper-1');
+          const wr = await fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/whisper', {
+            method: 'POST',
+            body: form,
+          });
+          const wj = await wr.json();
+          const text = wj.text ?? '';
+          if (text) {
+            setInput(text);
+            setTimeout(() => send(), 100);
+          }
+        } catch (e) {
+          console.warn('Rex voice error:', e);
+        } finally {
+          setRexRecording(false);
+        }
+      }, 10000);
+    } catch (e) {
+      console.warn('Rex voice start error:', e);
+      setRexRecording(false);
+    }
+  }
 
   async function fetchAiRebuttal(key: string, objection: string, fallback: string, newAngle = false) {
     if (!ANTHROPIC_KEY) { setAiRebuttals(prev => ({ ...prev, [key]: fallback })); return; }
@@ -601,23 +717,47 @@ export default function RexScreen() {
       )}
 
       {/* Input — only in chat mode */}
-      {segment === 'chat' && <View style={s.inputRow}>
-        <TextInput
-          style={s.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder="Ask Rex anything…"
-          placeholderTextColor={colors.grey}
-          multiline
-          maxLength={600}
-          onSubmitEditing={send}
-          returnKeyType="send"
-          blurOnSubmit={false}
-        />
-        <TouchableOpacity style={[s.sendBtn, (!input.trim() || loading) && s.sendBtnDisabled]} onPress={send} disabled={!input.trim() || loading}>
-          <Text style={s.sendBtnText}>↑</Text>
-        </TouchableOpacity>
-      </View>}
+      {segment === 'chat' && (
+        <View>
+          {pendingImage && (
+            <View style={s.imgPreviewRow}>
+              <Text style={s.imgPreviewLabel}>📎 Screenshot attached</Text>
+              <TouchableOpacity onPress={() => setPendingImage(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={s.imgPreviewRemove}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          <View style={s.inputRow}>
+            {ImagePicker && Platform.OS !== 'web' && (
+              <TouchableOpacity style={s.attachBtn} onPress={pickImage} activeOpacity={0.7}>
+                <Text style={s.attachBtnText}>📎</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[s.attachBtn, rexRecording && s.micRecording]} onPress={startRexVoice} activeOpacity={0.7}>
+              <Text style={s.attachBtnText}>{rexRecording ? '🔴' : '🎤'}</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={s.input}
+              value={input}
+              onChangeText={setInput}
+              placeholder={pendingImage ? 'Add a note (optional)…' : 'Ask Rex anything…'}
+              placeholderTextColor={colors.grey}
+              multiline
+              maxLength={600}
+              onSubmitEditing={send}
+              returnKeyType="send"
+              blurOnSubmit={false}
+            />
+            <TouchableOpacity
+              style={[s.sendBtn, ((!input.trim() && !pendingImage) || loading) && s.sendBtnDisabled]}
+              onPress={send}
+              disabled={(!input.trim() && !pendingImage) || loading}
+            >
+              <Text style={s.sendBtnText}>↑</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Contact picker modal */}
       <Modal visible={showContactPicker} animationType="slide" transparent>
@@ -707,6 +847,20 @@ const s = StyleSheet.create({
   },
   sendBtnDisabled: { backgroundColor: colors.ink4 },
   sendBtnText: { color: colors.ink, fontWeight: '800', fontSize: 18 },
+  attachBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  attachBtnText: { fontSize: 16 },
+  micRecording: { borderColor: 'rgba(255,60,60,0.6)', backgroundColor: 'rgba(255,60,60,0.12)' },
+  imgPreviewRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.goldBg, borderTopWidth: 1, borderTopColor: colors.goldBorder,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.xs,
+  },
+  imgPreviewLabel: { color: colors.gold2, fontSize: 12, fontWeight: '600' },
+  imgPreviewRemove: { color: colors.grey2, fontSize: 16, fontWeight: '700' },
   pickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.7)' },
   pickerSheet: {
     backgroundColor: colors.ink2, borderTopLeftRadius: 20, borderTopRightRadius: 20,

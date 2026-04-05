@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Animated, Modal, ScrollView, ActivityIndicator,
-  Pressable, Alert, Platform, TextInput,
+  Pressable, Alert, Platform, TextInput, PanResponder,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { useRouter, useSegments } from 'expo-router';
@@ -83,6 +83,8 @@ export default function HeyRex() {
   const [parsed, setParsed] = useState<ParsedIntake | null>(null);
   const [showSheet, setShowSheet] = useState(false);
   const [webInput, setWebInput] = useState('');
+  const [showWebModal, setShowWebModal] = useState(false);
+  const [orbHidden, setOrbHidden] = useState(false);
   const [userIndustry, setUserIndustry] = useState<string>('auto');
   const [saved, setSaved] = useState(false);
   const [generatedSteps, setGeneratedSteps] = useState<GeneratedStep[]>([]);
@@ -91,6 +93,13 @@ export default function HeyRex() {
   const [generatingSeq, setGeneratingSeq] = useState(false);
   const recording = useRef<Audio.Recording | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const orbPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const panResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { orbPos.extractOffset(); },
+    onPanResponderMove: Animated.event([null, { dx: orbPos.x, dy: orbPos.y }], { useNativeDriver: false }),
+    onPanResponderRelease: () => { orbPos.flattenOffset(); },
+  })).current;
   const wakeManagerRef = useRef<any>(null);
   const startListeningRef = useRef<() => void>(() => {});
   const [wakeReady, setWakeReady] = useState(false);
@@ -166,6 +175,37 @@ export default function HeyRex() {
   }, [stage]);
 
   async function startListening() {
+    // Web: use Web Speech API or text modal fallback
+    if (isWeb) {
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SR) {
+        setShowSheet(true);
+        setStage('listening');
+        setTranscript('');
+        setParsed(null);
+        setSaved(false);
+        const r = new SR();
+        r.lang = 'en-US';
+        r.continuous = false;
+        r.interimResults = false;
+        r.onresult = (e: any) => {
+          const text = e.results[0][0].transcript;
+          setWebInput(text);
+          setTranscript(text);
+          setStage('processing');
+          processTextInput(text);
+        };
+        r.onerror = () => { setStage('idle'); setShowSheet(false); };
+        r.onend = () => { /* handled by onresult/onerror */ };
+        r.start();
+        return;
+      } else {
+        // No Speech API — open tap-triggered text modal
+        setShowWebModal(true);
+        return;
+      }
+    }
+
     try {
       // Release mic from Porcupine before expo-av takes it
       if (wakeManagerRef.current) {
@@ -351,10 +391,8 @@ Return this exact JSON shape:
     }
   }
 
-  // Web fallback: process typed text instead of voice
-  async function processWebInput() {
-    const text = webInput.trim();
-    if (!text) { Alert.alert('Type your notes first'); return; }
+  // Shared text processing — used by web speech result and typed web input
+  async function processTextInput(text: string) {
     setStage('processing');
     setShowSheet(true);
     setTranscript(text);
@@ -395,6 +433,13 @@ Return this exact JSON shape:
       setStage('idle');
       Alert.alert('Hey Rex', 'Something went wrong. Try again.');
     }
+  }
+
+  // Web fallback: process typed text from modal
+  async function processWebInput() {
+    const text = webInput.trim();
+    if (!text) { Alert.alert('Type your notes first'); return; }
+    await processTextInput(text);
   }
 
   async function saveToContact() {
@@ -584,28 +629,17 @@ Return format (JSON array):
 
   return (
     <>
-      {/* Web: text input + Process button instead of mic orb */}
-      {isWeb ? (
-        <View style={s.webInputRow}>
-          <TextInput
-            style={s.webInput}
-            value={webInput}
-            onChangeText={setWebInput}
-            placeholder="Type your post-meeting notes here… (name, vehicle, follow-up, etc.)"
-            placeholderTextColor={colors.grey}
-            multiline
-            numberOfLines={2}
-          />
-          <TouchableOpacity style={s.webBtn} onPress={stage === 'idle' || stage === 'done' ? processWebInput : () => setShowSheet(true)} activeOpacity={0.85}>
-            {stage === 'processing' ? <ActivityIndicator color={colors.ink} size="small" /> : <Text style={s.webBtnText}>{stage === 'done' ? 'View →' : 'Process →'}</Text>}
-          </TouchableOpacity>
-        </View>
-      ) : (
-        /* Native: persistent gold mic orb — floats above tab bar, left side */
-        <Animated.View style={[s.orbWrap, { transform: [{ scale: pulseAnim }] }]}>
+      {/* Floating draggable mic orb — all platforms */}
+      {!orbHidden ? (
+        <Animated.View
+          style={[s.orbWrap, { transform: [...orbPos.getTranslateTransform(), { scale: pulseAnim }] }]}
+          {...panResponder.panHandlers}
+        >
           <TouchableOpacity
             style={[s.orb, { backgroundColor: orbBg }]}
             onPress={stage === 'idle' ? startListening : stage === 'listening' ? stopListening : () => setShowSheet(true)}
+            onLongPress={() => setOrbHidden(true)}
+            delayLongPress={500}
             activeOpacity={0.85}
           >
             <Text style={s.orbIcon}>{orbIcon}</Text>
@@ -614,7 +648,46 @@ Return format (JSON array):
             <Text style={s.orbLabel}>{wakeReady ? '👂 Listening…' : 'Hey Rex'}</Text>
           )}
         </Animated.View>
+      ) : (
+        /* Hidden state — show restore pill */
+        <TouchableOpacity style={s.showRexPill} onPress={() => setOrbHidden(false)} activeOpacity={0.85}>
+          <Text style={s.showRexPillText}>🎙 Show Rex</Text>
+        </TouchableOpacity>
       )}
+
+      {/* Web text modal fallback (no Speech API) */}
+      <Modal visible={showWebModal} animationType="fade" transparent>
+        <Pressable style={s.overlay} onPress={() => setShowWebModal(false)}>
+          <Pressable style={[s.sheet, { paddingTop: spacing.lg }]} onPress={e => e.stopPropagation()}>
+            <Text style={s.webModalTitle}>🎙 Hey Rex</Text>
+            <Text style={s.webModalSub}>Type your post-meeting notes and Rex will parse them into your contact book.</Text>
+            <TextInput
+              style={s.webModalInput}
+              value={webInput}
+              onChangeText={setWebInput}
+              placeholder="Name, vehicle, follow-up, etc."
+              placeholderTextColor={colors.grey}
+              multiline
+              numberOfLines={4}
+              autoFocus
+            />
+            <View style={s.actions}>
+              <TouchableOpacity style={s.btnSecondary} onPress={() => setShowWebModal(false)} activeOpacity={0.8}>
+                <Text style={s.btnSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.btnPrimary}
+                onPress={() => { setShowWebModal(false); processWebInput(); }}
+                activeOpacity={0.85}
+              >
+                {stage === 'processing'
+                  ? <ActivityIndicator color={colors.ink} size="small" />
+                  : <Text style={s.btnPrimaryText}>Process →</Text>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Bottom sheet */}
       <Modal visible={showSheet} animationType="slide" transparent>
@@ -777,23 +850,21 @@ const s = StyleSheet.create({
   },
   orbIcon: { fontSize: 22 },
   orbLabel: { fontSize: 9, fontWeight: '700', color: colors.gold, letterSpacing: 0.5, marginTop: 4, textTransform: 'uppercase' },
-  // Web text input fallback
-  webInputRow: {
-    flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm,
-    paddingHorizontal: spacing.lg, paddingBottom: spacing.sm,
-    backgroundColor: colors.ink2, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)',
+  // Show Rex restore pill (when orb is hidden)
+  showRexPill: {
+    position: 'absolute', bottom: 96, left: 20, zIndex: 999,
+    backgroundColor: 'rgba(212,168,67,0.18)', borderWidth: 1, borderColor: colors.gold,
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6,
   },
-  webInput: {
-    flex: 1, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
-    borderRadius: radius.sm, padding: spacing.sm, color: colors.white, fontSize: 13,
-    minHeight: 44, maxHeight: 88,
+  showRexPillText: { color: colors.gold, fontWeight: '700', fontSize: 12 },
+  // Web text modal fallback
+  webModalTitle: { color: colors.white, fontWeight: '800', fontSize: 18, marginBottom: 6 },
+  webModalSub: { color: colors.grey2, fontSize: 13, lineHeight: 20, marginBottom: spacing.md },
+  webModalInput: {
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.sm, padding: spacing.md, color: colors.white, fontSize: 14,
+    minHeight: 100, textAlignVertical: 'top', marginBottom: spacing.md,
   },
-  webBtn: {
-    backgroundColor: colors.gold, borderRadius: radius.sm,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2,
-    alignItems: 'center', justifyContent: 'center', minWidth: 80,
-  },
-  webBtnText: { color: colors.ink, fontWeight: '700', fontSize: 13 },
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' },
   sheet: {
     backgroundColor: colors.ink2, borderTopLeftRadius: 22, borderTopRightRadius: 22,
