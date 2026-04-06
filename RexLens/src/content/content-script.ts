@@ -365,10 +365,11 @@ function findClickableCRMContacts(): ClickableContact[] {
   const seen = new Set<string>();
   let contactIndex = 0;
 
+  // Use querySelectorAllDeep so we find leads inside iframes (e.g. VinSolutions frameset)
   for (const sel of CRM_CONTACT_SELECTORS) {
-    const elements = document.querySelectorAll<HTMLElement>(sel);
+    const elements = querySelectorAllDeep(sel);
     for (const el of elements) {
-      const contact = extractClickableContact(el, contactIndex);
+      const contact = extractClickableContact(el as HTMLElement, contactIndex);
       if (contact && !seen.has(contact.name)) {
         seen.add(contact.name);
         results.push(contact);
@@ -377,11 +378,11 @@ function findClickableCRMContacts(): ClickableContact[] {
     }
   }
 
-  const genericLinks = document.querySelectorAll<HTMLAnchorElement>(
+  const genericLinks = querySelectorAllDeep(
     'table a, [role="row"] a, [role="listitem"] a, .list-item a'
   );
   for (const el of genericLinks) {
-    const contact = extractClickableContact(el, contactIndex);
+    const contact = extractClickableContact(el as HTMLElement, contactIndex);
     if (contact && !seen.has(contact.name)) {
       seen.add(contact.name);
       results.push(contact);
@@ -418,13 +419,13 @@ function findClickableConversations(): ClickableContact[] {
   const seen = new Set<string>();
   let index = 0;
 
-  // Try platform-specific selectors
+  // Try platform-specific selectors (search iframes too)
   for (const [domain, selectors] of Object.entries(CONVERSATION_SELECTORS)) {
     if (!host.includes(domain)) continue;
     for (const sel of selectors) {
-      const items = document.querySelectorAll<HTMLElement>(sel);
+      const items = querySelectorAllDeep(sel);
       for (const item of items) {
-        const contact = extractConversationItem(item, index);
+        const contact = extractConversationItem(item as HTMLElement, index);
         if (contact && !seen.has(contact.name)) {
           seen.add(contact.name);
           results.push(contact);
@@ -434,14 +435,14 @@ function findClickableConversations(): ClickableContact[] {
     }
   }
 
-  // Generic fallback: repeated clickable items in a list/sidebar
+  // Generic fallback: repeated clickable items in a list/sidebar (search iframes too)
   if (results.length === 0) {
-    const listItems = document.querySelectorAll<HTMLElement>(
+    const listItems = querySelectorAllDeep(
       '[role="listitem"], [role="option"], [class*="inbox"] li, ' +
       '[class*="conversation"], [class*="thread-item"], [class*="message-item"]'
     );
     for (const item of listItems) {
-      const contact = extractConversationItem(item, index);
+      const contact = extractConversationItem(item as HTMLElement, index);
       if (contact && !seen.has(contact.name)) {
         seen.add(contact.name);
         results.push(contact);

@@ -76,7 +76,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 // ── AI Calls ─────────────────────────────────────────────────────────────────
 
-const AI_TIMEOUT_MS = 30_000; // 30 second timeout for API calls
+const AI_TIMEOUT_MS = 60_000; // 60 second timeout — proxy chain (extension → Supabase Edge → Anthropic) needs headroom
 
 async function callAIProxy(body: Record<string, unknown>): Promise<string> {
   const headers = await getAuthHeaders();
