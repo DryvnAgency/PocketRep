@@ -1,202 +1,69 @@
-// ─── Profile / More Screen ────────────────────────────────────────────────────
-// PocketRep — ported from Snack ProfileScreen
-// Sub-views: Account Settings, Notifications, Subscription, Sunday Digest picker
-
 import { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Modal, Pressable,
-  Switch, TextInput, StyleSheet, Alert, ActivityIndicator,
-  Linking, Platform, StatusBar,
+  StyleSheet, Alert, ActivityIndicator, Linking, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { authService } from '@/lib/services';
-import { C, STRIPE, DIGEST_TIME_KEY } from '@/lib/constants';
-import { Avatar, GoldBtn } from '@/components/shared';
+import { colors, radius, spacing } from '@/constants/theme';
+import type { Profile } from '@/lib/types';
+import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import { scheduleWeeklyDigest, cancelWeeklyDigest } from '@/lib/notifications';
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type SubView = 'home' | 'account' | 'notifications' | 'subscription';
+const DIGEST_TIME_KEY = 'pocketrep_digest_time';
 
-interface NotifPrefs {
-  heatSheet7am: boolean;
-  sequenceStepDue: boolean;
-  followUpOverdue: boolean;
-  weeklySummary: boolean;
-}
+const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
+const REX_MODEL = 'claude-haiku-4-5-20251001';
 
-interface EditForm {
-  full_name: string;
-  phone: string;
-  rep_name_for_ai: string;
-  company_name: string;
-}
-
-// ─── Shared header with back arrow ────────────────────────────────────────────
-function SubHeader({ title, onBack }: { title: string; onBack: () => void }) {
-  return (
-    <View style={s.subHeader}>
-      <TouchableOpacity style={s.backBtn} onPress={onBack} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-        <Text style={s.backArrow}>←</Text>
-      </TouchableOpacity>
-      <Text style={s.subHeaderTitle}>{title}</Text>
-      <View style={{ width: 36 }} />
-    </View>
-  );
-}
-
-// ─── Menu row ─────────────────────────────────────────────────────────────────
-function MenuRow({
-  icon, title, subtitle, onPress, right, destructive = false,
-}: {
-  icon: string;
-  title: string;
-  subtitle?: string;
-  onPress?: () => void;
-  right?: React.ReactNode;
-  destructive?: boolean;
-}) {
-  return (
-    <TouchableOpacity
-      style={s.menuRow}
-      onPress={onPress}
-      activeOpacity={onPress ? 0.75 : 1}
-      disabled={!onPress && !right}
-    >
-      <View style={s.menuRowLeft}>
-        <Text style={s.menuRowIcon}>{icon}</Text>
-        <View style={s.menuRowText}>
-          <Text style={[s.menuRowTitle, destructive && { color: C.red }]}>{title}</Text>
-          {!!subtitle && <Text style={s.menuRowSub}>{subtitle}</Text>}
-        </View>
-      </View>
-      {right ?? (onPress ? <Text style={s.menuRowArrow}>›</Text> : null)}
-    </TouchableOpacity>
-  );
-}
-
-// ─── Feature pill for subscription cards ─────────────────────────────────────
-function FeaturePill({ label }: { label: string }) {
-  return (
-    <View style={s.featurePill}>
-      <Text style={s.featurePillText}>✓ {label}</Text>
-    </View>
-  );
-}
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function MoreScreen() {
-  // ── Navigation state
-  const [view, setView] = useState<SubView>('home');
-
-  // ── Profile
-  const [profile, setProfile] = useState<any>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
-
-  // ── Account Settings edit
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editForm, setEditForm] = useState<EditForm>({
-    full_name: '', phone: '', rep_name_for_ai: '', company_name: '',
-  });
-
-  // ── Notifications prefs (local state — persist via AsyncStorage if desired)
-  const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>({
-    heatSheet7am: true,
-    sequenceStepDue: true,
-    followUpOverdue: true,
-    weeklySummary: false,
-  });
-
-  // ── Sunday digest
-  const [digestTime, setDigestTime]     = useState<{ hour: number; minute: number } | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [digest, setDigest] = useState<string | null>(null);
+  const [digestLoading, setDigestLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [digestTime, setDigestTime] = useState<{ hour: number; minute: number } | null>(null);
   const [showDigestPicker, setShowDigestPicker] = useState(false);
-  const [pickerHour, setPickerHour]     = useState(9);   // 1–12 display
-  const [pickerAmPm, setPickerAmPm]     = useState<'AM' | 'PM'>('AM');
-  const [pickerMinute, setPickerMinute] = useState(0);   // 0, 15, 30, 45
+  const [pickerHour, setPickerHour] = useState(9);   // 1–12
+  const [pickerAmPm, setPickerAmPm] = useState<'AM' | 'PM'>('AM');
+  const [pickerMinute, setPickerMinute] = useState(0); // 0,15,30,45
 
-  // ─── Load profile ──────────────────────────────────────────────────────────
-  const loadProfile = useCallback(async () => {
-    setProfileLoading(true);
-    try {
-      const user = await authService.getUser();
-      if (user) {
-        setProfile(user);
-        setEditForm({
-          full_name: user.full_name || '',
-          phone: user.phone || '',
-          rep_name_for_ai: user.rep_name_for_ai || '',
-          company_name: user.company_name || '',
-        });
-      }
-    } catch {}
-    setProfileLoading(false);
-  }, []);
+  useFocusEffect(useCallback(() => {
+    loadProfile();
+    loadDigestTime();
+  }, []));
 
-  const loadDigestTime = useCallback(async () => {
+  async function loadProfile() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    if (data) setProfile(data);
+  }
+
+  async function loadDigestTime() {
     if (!AsyncStorage) return;
     try {
       const raw = await AsyncStorage.getItem(DIGEST_TIME_KEY);
       if (raw) setDigestTime(JSON.parse(raw));
     } catch {}
-  }, []);
+  }
 
-  useFocusEffect(
-    useCallback(() => {
-      loadProfile();
-      loadDigestTime();
-    }, [loadProfile, loadDigestTime])
-  );
-
-  // ─── Account Settings: save ────────────────────────────────────────────────
-  const handleSaveProfile = useCallback(async () => {
-    setSaving(true);
-    try {
-      await authService.updateProfile(editForm);
-      setProfile((prev: any) => ({ ...prev, ...editForm }));
-      setEditing(false);
-      Alert.alert('Saved', 'Your profile has been updated.');
-    } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Could not save profile.');
-    } finally {
-      setSaving(false);
-    }
-  }, [editForm]);
-
-  // ─── Sunday digest: save ───────────────────────────────────────────────────
-  const saveDigestSchedule = useCallback(async () => {
+  async function saveDigestSchedule() {
     const hour24 = pickerAmPm === 'PM'
-      ? pickerHour === 12 ? 12 : pickerHour + 12
-      : pickerHour === 12 ? 0  : pickerHour;
+      ? (pickerHour === 12 ? 12 : pickerHour + 12)
+      : (pickerHour === 12 ? 0 : pickerHour);
     const saved = { hour: hour24, minute: pickerMinute };
     try {
       await scheduleWeeklyDigest(hour24, pickerMinute);
-      if (AsyncStorage) {
-        await AsyncStorage.setItem(DIGEST_TIME_KEY, JSON.stringify(saved));
-      }
+      await AsyncStorage?.setItem(DIGEST_TIME_KEY, JSON.stringify(saved));
       setDigestTime(saved);
-    } catch {
+    } catch (e) {
       Alert.alert('Error', 'Could not schedule digest. Check notification permissions.');
     }
     setShowDigestPicker(false);
-  }, [pickerHour, pickerAmPm, pickerMinute]);
+  }
 
-  // ─── Sign out ──────────────────────────────────────────────────────────────
-  const handleSignOut = useCallback(() => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: () => supabase.auth.signOut(),
-      },
-    ]);
-  }, []);
-
-  // ─── Helpers ───────────────────────────────────────────────────────────────
   function formatDigestTime(dt: { hour: number; minute: number }) {
     const ampm = dt.hour >= 12 ? 'PM' : 'AM';
     const h = dt.hour % 12 || 12;
@@ -204,396 +71,300 @@ export default function MoreScreen() {
     return `${h}:${m} ${ampm}`;
   }
 
-  function openDigestPicker() {
-    if (digestTime) {
-      setPickerHour(digestTime.hour % 12 || 12);
-      setPickerAmPm(digestTime.hour >= 12 ? 'PM' : 'AM');
-      setPickerMinute(digestTime.minute);
+  async function signOut() {
+    Alert.alert('Sign out', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+    ]);
+  }
+
+  async function exportBook() {
+    setExportLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setExportLoading(false); return; }
+
+    const { data: contacts } = await supabase
+      .from('contacts')
+      .select('first_name,last_name,phone,email,vehicle_year,vehicle_make,vehicle_model,mileage,notes,last_contact_date')
+      .eq('user_id', user.id);
+
+    if (!contacts?.length) {
+      Alert.alert('No contacts', 'Add contacts to your book first.');
+      setExportLoading(false);
+      return;
     }
-    setShowDigestPicker(true);
+
+    const csv = [
+      'First,Last,Phone,Email,Year,Make,Model,Mileage,Last Contact,Notes',
+      ...contacts.map(c =>
+        [c.first_name, c.last_name, c.phone, c.email, c.vehicle_year, c.vehicle_make,
+          c.vehicle_model, c.mileage, c.last_contact_date, `"${(c.notes ?? '').replace(/"/g, '""')}"`
+        ].join(',')
+      ),
+    ].join('\n');
+
+    // Show preview (in a real build, use expo-sharing to export the file)
+    Alert.alert('Book export ready', `${contacts.length} contacts\n\nIn a production build this saves to Files. CSV preview:\n\n${csv.slice(0, 200)}…`);
+    setExportLoading(false);
   }
 
-  const plan: string = profile?.plan || 'solo';
-  const username: string = profile?.username || '';
-  const fullName: string = profile?.full_name || 'Your Name';
-  const isElite = plan === 'elite';
-  const isPro = plan === 'pro' || isElite;
+  async function buildDigest() {
+    if (!ANTHROPIC_KEY) {
+      Alert.alert('Anthropic key needed', 'Add ANTHROPIC_KEY to .env for the weekly digest.');
+      return;
+    }
+    setDigestLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setDigestLoading(false); return; }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // SUB-VIEW: Account Settings
-  // ══════════════════════════════════════════════════════════════════════════
-  if (view === 'account') {
-    return (
-      <View style={s.root}>
-        <StatusBar barStyle="light-content" />
-        <SubHeader title="Account Settings" onBack={() => { setEditing(false); setView('home'); }} />
+    const oneWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    const [{ data: contacts }, { data: deals }, { data: msgs }] = await Promise.all([
+      supabase.from('contacts').select('id,first_name,last_name,heat_tier').eq('user_id', user.id).gte('created_at', oneWeekAgo),
+      supabase.from('deals').select('title,front_gross,back_gross,amount').eq('user_id', user.id).gte('created_at', oneWeekAgo),
+      supabase.from('rex_messages').select('id').eq('user_id', user.id).gte('created_at', oneWeekAgo),
+    ]);
 
-        <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Avatar + username */}
-          <View style={s.accountAvatarRow}>
-            <Avatar name={fullName} size={64} />
-            <View style={{ marginTop: 10 }}>
-              {!!username && (
-                <Text style={s.accountUsername}>@{username}</Text>
-              )}
-              <Text style={s.accountEmail}>{profile?.email || ''}</Text>
-            </View>
-          </View>
+    const totalDeals = deals?.length ?? 0;
+    const totalFront = deals?.reduce((s, d) => s + (d.front_gross ?? 0), 0) ?? 0;
+    const totalBack = deals?.reduce((s, d) => s + (d.back_gross ?? 0), 0) ?? 0;
+    const newContacts = contacts?.length ?? 0;
+    const rexConvos = Math.round((msgs?.length ?? 0) / 2);
 
-          {/* Edit / Save toggle */}
-          <View style={s.editToggleRow}>
-            {editing ? (
-              <>
-                <TouchableOpacity
-                  style={s.cancelEditBtn}
-                  onPress={() => {
-                    setEditing(false);
-                    setEditForm({
-                      full_name: profile?.full_name || '',
-                      phone: profile?.phone || '',
-                      rep_name_for_ai: profile?.rep_name_for_ai || '',
-                      company_name: profile?.company_name || '',
-                    });
-                  }}
-                >
-                  <Text style={s.cancelEditText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.saveBtn}
-                  onPress={handleSaveProfile}
-                  disabled={saving}
-                >
-                  {saving
-                    ? <ActivityIndicator color={C.ink} size="small" />
-                    : <Text style={s.saveBtnText}>Save</Text>
-                  }
-                </TouchableOpacity>
-              </>
-            ) : (
-              <TouchableOpacity style={s.editBtn} onPress={() => setEditing(true)}>
-                <Text style={s.editBtnText}>Edit Profile</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Fields */}
-          <View style={s.fieldGroup}>
-            <FieldRow
-              label="Full Name"
-              value={editForm.full_name}
-              editing={editing}
-              placeholder="Your full name"
-              onChangeText={v => setEditForm(f => ({ ...f, full_name: v }))}
-            />
-            <FieldRow
-              label="Email"
-              value={profile?.email || ''}
-              editing={false}
-              locked
-              placeholder=""
-              onChangeText={() => {}}
-            />
-            <FieldRow
-              label="Phone"
-              value={editForm.phone}
-              editing={editing}
-              placeholder="e.g. 5551234567"
-              keyboardType="phone-pad"
-              onChangeText={v => setEditForm(f => ({ ...f, phone: v }))}
-            />
-            <FieldRow
-              label="AI Rep Name"
-              value={editForm.rep_name_for_ai}
-              editing={editing}
-              placeholder="Name Rex calls you"
-              onChangeText={v => setEditForm(f => ({ ...f, rep_name_for_ai: v }))}
-            />
-            <FieldRow
-              label="Company"
-              value={editForm.company_name}
-              editing={editing}
-              placeholder="Your dealership / company"
-              onChangeText={v => setEditForm(f => ({ ...f, company_name: v }))}
-            />
-          </View>
-
-          <View style={{ height: 48 }} />
-        </ScrollView>
-      </View>
-    );
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: REX_MODEL,
+        max_tokens: 350,
+        messages: [{
+          role: 'user',
+          content:
+            `Write a short weekly digest for a sales rep. Be motivating, direct, data-first. No fluff.\n\n` +
+            `Deals logged: ${totalDeals} | Front gross: $${totalFront} | Back gross: $${totalBack}\n` +
+            `New contacts added: ${newContacts} | Rex conversations: ${rexConvos}\n` +
+            `Rep name: ${profile?.full_name ?? 'Rep'}\n\n` +
+            `Format: 3 bullet points covering week highlights + one sharp coaching line at the end.`,
+        }],
+      }),
+    });
+    const json = await res.json();
+    setDigest(json.content?.[0]?.text ?? 'Could not generate digest.');
+    setDigestLoading(false);
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // SUB-VIEW: Notifications
-  // ══════════════════════════════════════════════════════════════════════════
-  if (view === 'notifications') {
-    return (
-      <View style={s.root}>
-        <StatusBar barStyle="light-content" />
-        <SubHeader title="Notifications" onBack={() => setView('home')} />
+  // Treat any non-elite as 'pro'
+  const isElite = profile?.plan === 'elite';
+  const planLabel = isElite ? 'Elite' : 'Pro';
 
-        <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-          <Text style={s.notifSectionLabel}>PUSH NOTIFICATIONS</Text>
-
-          <NotifToggleRow
-            icon="🔥"
-            title="Heat Sheet 7AM"
-            subtitle="Daily reminder to check your top contacts"
-            value={notifPrefs.heatSheet7am}
-            onValueChange={v => setNotifPrefs(p => ({ ...p, heatSheet7am: v }))}
-          />
-          <NotifToggleRow
-            icon="📋"
-            title="Sequence step due"
-            subtitle="Notified when a follow-up step is ready"
-            value={notifPrefs.sequenceStepDue}
-            onValueChange={v => setNotifPrefs(p => ({ ...p, sequenceStepDue: v }))}
-          />
-          <NotifToggleRow
-            icon="⏰"
-            title="Follow-up overdue"
-            subtitle="Alert when a contact follow-up date has passed"
-            value={notifPrefs.followUpOverdue}
-            onValueChange={v => setNotifPrefs(p => ({ ...p, followUpOverdue: v }))}
-          />
-          <NotifToggleRow
-            icon="📊"
-            title="Weekly summary"
-            subtitle="Sunday digest push notification"
-            value={notifPrefs.weeklySummary}
-            onValueChange={v => setNotifPrefs(p => ({ ...p, weeklySummary: v }))}
-          />
-
-          <View style={{ height: 48 }} />
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // SUB-VIEW: Subscription & Upgrade
-  // ══════════════════════════════════════════════════════════════════════════
-  if (view === 'subscription') {
-    return (
-      <View style={s.root}>
-        <StatusBar barStyle="light-content" />
-        <SubHeader title="Subscription & Upgrade" onBack={() => setView('home')} />
-
-        <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Current plan */}
-          <View style={s.currentPlanCard}>
-            <View style={s.currentPlanTop}>
-              <Text style={s.currentPlanLabel}>CURRENT PLAN</Text>
-              <View style={s.planBadgeSmall}>
-                <Text style={s.planBadgeSmallText}>{plan.toUpperCase()}</Text>
-              </View>
-            </View>
-            <Text style={s.currentPlanFounder}>Founding member — 40% off forever</Text>
-            <TouchableOpacity
-              style={s.manageBillingBtn}
-              onPress={() => Linking.openURL('https://billing.stripe.com/p/login/pocketrep')}
-            >
-              <Text style={s.manageBillingText}>Manage Billing →</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Pro plan */}
-          <View style={[s.planCard, isPro && s.planCardCurrent]}>
-            <View style={s.planCardHeader}>
-              <View>
-                <Text style={s.planCardName}>Pro</Text>
-                <Text style={s.planCardPrice}>
-                  <Text style={s.planCardPriceMain}>$29</Text>
-                  <Text style={s.planCardPriceSub}>/mo</Text>
-                  {'  '}
-                  <Text style={s.planCardPriceWas}>was $49</Text>
-                </Text>
-              </View>
-              {isPro && !isElite && (
-                <View style={s.currentBadge}>
-                  <Text style={s.currentBadgeText}>CURRENT</Text>
-                </View>
-              )}
-            </View>
-            <View style={s.featureList}>
-              <FeaturePill label="50-contact mass texts" />
-              <FeaturePill label="Rex AI coaching" />
-              <FeaturePill label="Sequence builder" />
-              <FeaturePill label="Heat sheet tracking" />
-              <FeaturePill label="Full contact book" />
-            </View>
-            {!isPro && (
-              <TouchableOpacity
-                style={s.upgradeBtn}
-                onPress={() => Linking.openURL(STRIPE.pro)}
-                activeOpacity={0.85}
-              >
-                <Text style={s.upgradeBtnText}>UPGRADE TO PRO →</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Elite plan */}
-          <View style={[s.planCard, isElite && s.planCardCurrent]}>
-            <View style={s.planCardHeader}>
-              <View>
-                <Text style={[s.planCardName, { color: C.gold }]}>Elite</Text>
-                <Text style={s.planCardPrice}>
-                  <Text style={s.planCardPriceMain}>$47</Text>
-                  <Text style={s.planCardPriceSub}>/mo</Text>
-                  {'  '}
-                  <Text style={s.planCardPriceWas}>was $79</Text>
-                </Text>
-              </View>
-              {isElite && (
-                <View style={s.currentBadge}>
-                  <Text style={s.currentBadgeText}>CURRENT</Text>
-                </View>
-              )}
-            </View>
-            <View style={s.featureList}>
-              <FeaturePill label="Everything in Pro" />
-              <FeaturePill label="100-contact mass texts" />
-              <FeaturePill label="Rex memory across sessions" />
-              <FeaturePill label="Sunday digest coaching" />
-              <FeaturePill label="Priority support" />
-              <FeaturePill label="Early feature access" />
-            </View>
-            {!isElite && (
-              <TouchableOpacity
-                style={[s.upgradeBtn, s.upgradeBtnGold]}
-                onPress={() => Linking.openURL(STRIPE.elite)}
-                activeOpacity={0.85}
-              >
-                <Text style={[s.upgradeBtnText, { color: C.ink }]}>UPGRADE TO ELITE →</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View style={{ height: 48 }} />
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // HOME VIEW (default)
-  // ══════════════════════════════════════════════════════════════════════════
   return (
-    <View style={s.root}>
-      <StatusBar barStyle="light-content" />
-
+    <ScrollView style={s.root} contentContainerStyle={s.content}>
       {/* Header */}
       <View style={s.header}>
-        <Text style={s.headerTitle}>Profile</Text>
+        <Text style={s.headerTitle}>More</Text>
       </View>
 
-      <ScrollView
-        style={s.scroll}
-        contentContainerStyle={s.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Profile card */}
-        <View style={s.profileCard}>
-          {profileLoading ? (
-            <ActivityIndicator color={C.gold} />
-          ) : (
-            <>
-              <Avatar name={fullName} size={56} />
-              <View style={s.profileCardInfo}>
-                <Text style={s.profileCardName}>{fullName}</Text>
-                {!!username && <Text style={s.profileCardUsername}>@{username}</Text>}
-                <TouchableOpacity
-                  style={s.profilePlanBadge}
-                  onPress={() => setView('subscription')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={s.profilePlanBadgeText}>{plan.toUpperCase()} PLAN</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
+      {/* Profile card */}
+      <View style={s.card}>
+        <View style={s.avatar}>
+          <Text style={s.avatarText}>{profile?.full_name?.[0] ?? '?'}</Text>
         </View>
+        <View>
+          <Text style={s.profileName}>{profile?.full_name || 'Your Name'}</Text>
+          <Text style={s.profileEmail}>{profile?.email}</Text>
+          <View style={s.planBadge}>
+            <Text style={s.planBadgeText}>{planLabel.toUpperCase()} PLAN</Text>
+          </View>
+        </View>
+      </View>
 
-        {/* Settings section */}
-        <Text style={s.sectionLabel}>SETTINGS</Text>
-        <MenuRow
-          icon="👤"
-          title="Account Settings"
-          subtitle="Name, phone, AI rep name, company"
-          onPress={() => setView('account')}
-        />
-        <MenuRow
-          icon="🔔"
-          title="Notifications"
-          subtitle="Heat sheet, sequences, follow-ups"
-          onPress={() => setView('notifications')}
-        />
-        <MenuRow
-          icon="⚡"
-          title="Subscription & Upgrade"
-          subtitle={`Current plan: ${plan.charAt(0).toUpperCase() + plan.slice(1)}`}
-          onPress={() => setView('subscription')}
-        />
+      {/* Trial info */}
+      {profile?.trial_ends_at && new Date(profile.trial_ends_at) > new Date() ? (
+        <View style={s.trialBanner}>
+          <Text style={s.trialText}>
+            🎉 Trial ends {new Date(profile.trial_ends_at).toLocaleDateString()} — no charge before then
+          </Text>
+        </View>
+      ) : null}
 
-        {/* Elite section */}
-        <Text style={s.sectionLabel}>ELITE</Text>
-        <MenuRow
-          icon="📅"
-          title="Sunday Digest"
-          subtitle={digestTime
-            ? `Scheduled: Sundays at ${formatDigestTime(digestTime)}`
-            : 'Set time for weekly digest'}
-          onPress={openDigestPicker}
-          right={
-            !isElite ? (
-              <View style={s.elitePill}>
-                <Text style={s.elitePillText}>ELITE</Text>
+      {/* Weekly Digest — Elite only */}
+      <Text style={s.section}>Performance</Text>
+      {isElite ? (
+        <>
+          <TouchableOpacity style={s.row} onPress={buildDigest} disabled={digestLoading} activeOpacity={0.8}>
+            <View style={s.rowLeft}>
+              <Text style={s.rowIcon}>📊</Text>
+              <View>
+                <Text style={s.rowTitle}>Generate Digest Now</Text>
+                <Text style={s.rowSub}>Rex reviews your week and coaches you</Text>
               </View>
-            ) : undefined
-          }
-        />
+            </View>
+            {digestLoading ? <ActivityIndicator color={colors.gold} /> : <Text style={s.rowArrow}>→</Text>}
+          </TouchableOpacity>
+          {digest ? (
+            <View style={s.digestBox}>
+              <Text style={s.digestText}>{digest}</Text>
+            </View>
+          ) : null}
+          {/* Sunday Digest scheduler */}
+          <TouchableOpacity
+            style={s.row}
+            onPress={() => {
+              // Pre-fill picker with saved time if available
+              if (digestTime) {
+                const h = digestTime.hour % 12 || 12;
+                const ampm = digestTime.hour >= 12 ? 'PM' : 'AM';
+                setPickerHour(h);
+                setPickerAmPm(ampm as 'AM' | 'PM');
+                setPickerMinute(digestTime.minute);
+              }
+              setShowDigestPicker(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={s.rowLeft}>
+              <Text style={s.rowIcon}>🔔</Text>
+              <View>
+                <Text style={s.rowTitle}>Sunday Digest</Text>
+                <Text style={s.rowSub}>
+                  {digestTime ? `Scheduled: Sundays at ${formatDigestTime(digestTime)}` : 'Tap to schedule weekly reminder'}
+                </Text>
+              </View>
+            </View>
+            <Text style={s.rowArrow}>→</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <View style={[s.row, s.rowLocked]}>
+          <View style={s.rowLeft}>
+            <Text style={s.rowIcon}>📊</Text>
+            <View>
+              <Text style={s.rowTitle}>Weekly Digest</Text>
+              <Text style={s.rowSub}>Rex reviews your week</Text>
+            </View>
+          </View>
+          <View style={s.eliteBadge}><Text style={s.eliteBadgeText}>ELITE</Text></View>
+        </View>
+      )}
 
-        {/* Account section */}
-        <Text style={s.sectionLabel}>ACCOUNT</Text>
-        <MenuRow
-          icon="🚪"
-          title="Sign Out"
-          destructive
-          onPress={handleSignOut}
-        />
+      {/* Upgrade CTA — shown to Pro users only */}
+      {!isElite ? (
+        <>
+          <Text style={s.section}>Upgrade</Text>
+          <TouchableOpacity
+            style={s.upgradeRow}
+            onPress={() => Linking.openURL('https://pocketrep.pro/upgrade')}
+            activeOpacity={0.85}
+          >
+            <View style={s.rowLeft}>
+              <Text style={s.rowIcon}>⚡</Text>
+              <View>
+                <Text style={s.upgradeTitle}>Upgrade to Elite</Text>
+                <Text style={s.rowSub}>Rex memory · weekly digest · 100-contact batches</Text>
+              </View>
+            </View>
+            <Text style={s.rowArrow}>→</Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
 
-        <Text style={s.footer}>PocketRep · The rep's edge, not the store's</Text>
-        <View style={{ height: 48 }} />
-      </ScrollView>
+      {/* Rex Lens Chrome Extension promo */}
+      <Text style={s.section}>Tools</Text>
+      <TouchableOpacity
+        style={s.rexLensCard}
+        onPress={() => Linking.openURL('https://pocketrep.pro/rex-lens')}
+        activeOpacity={0.85}
+      >
+        <View style={s.rexLensTop}>
+          <Text style={s.rexLensIcon}>🔍</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.rexLensTitle}>Rex Lens — Chrome Extension</Text>
+            <Text style={s.rexLensSub}>Works inside Vinsolutions, Gmail, and texting apps. Rex reads your screen and coaches you live.</Text>
+          </View>
+        </View>
+        <Text style={s.rexLensLink}>Install Free →</Text>
+      </TouchableOpacity>
 
-      {/* ── Sunday Digest Time Picker Modal ── */}
+      {/* Data */}
+      <Text style={s.section}>Your Data</Text>
+      <TouchableOpacity style={s.row} onPress={exportBook} disabled={exportLoading} activeOpacity={0.8}>
+        <View style={s.rowLeft}>
+          <Text style={s.rowIcon}>📤</Text>
+          <View>
+            <Text style={s.rowTitle}>Export Contact Book</Text>
+            <Text style={s.rowSub}>Download full CSV — your data, always</Text>
+          </View>
+        </View>
+        {exportLoading ? <ActivityIndicator color={colors.gold} /> : <Text style={s.rowArrow}>→</Text>}
+      </TouchableOpacity>
+
+      {/* Support */}
+      <Text style={s.section}>Support</Text>
+      <TouchableOpacity
+        style={s.row}
+        onPress={() => Linking.openURL(`sms:+1XXXXXXXXXX${Platform.OS === 'ios' ? '&' : '?'}body=Hi PocketRep Support — I need help with...`)}
+        activeOpacity={0.8}
+      >
+        <View style={s.rowLeft}>
+          <Text style={s.rowIcon}>💬</Text>
+          <View>
+            <Text style={s.rowTitle}>Text PocketRep Support</Text>
+            <Text style={s.rowSub}>We'll reply within a few hours</Text>
+          </View>
+        </View>
+        <Text style={s.rowArrow}>→</Text>
+      </TouchableOpacity>
+
+      {/* Industry badge */}
+      {profile?.industry ? (
+        <View style={[s.row, { marginTop: 2 }]}>
+          <View style={s.rowLeft}>
+            <Text style={s.rowIcon}>{INDUSTRY_CONFIG[profile.industry]?.icon ?? '⚡'}</Text>
+            <View>
+              <Text style={s.rowTitle}>Your Industry</Text>
+              <Text style={s.rowSub}>{INDUSTRY_CONFIG[profile.industry]?.label ?? profile.industry}</Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {/* Account */}
+      <Text style={s.section}>Account</Text>
+      <TouchableOpacity style={s.row} onPress={signOut} activeOpacity={0.8}>
+        <View style={s.rowLeft}>
+          <Text style={s.rowIcon}>🚪</Text>
+          <View>
+            <Text style={[s.rowTitle, { color: colors.red }]}>Sign Out</Text>
+          </View>
+        </View>
+        <Text style={s.rowArrow}>→</Text>
+      </TouchableOpacity>
+
+      {/* Footer */}
+      <Text style={s.footer}>PocketRep · The rep's edge, not the store's</Text>
+
+      {/* Sunday Digest Time Picker Modal */}
       <Modal visible={showDigestPicker} animationType="fade" transparent>
         <Pressable style={s.dpOverlay} onPress={() => setShowDigestPicker(false)}>
           <Pressable style={s.dpSheet} onPress={e => e.stopPropagation()}>
             <Text style={s.dpTitle}>📅 Sunday Digest Time</Text>
-            <Text style={s.dpSub}>
-              Choose when Rex sends your weekly recap every Sunday.
-            </Text>
+            <Text style={s.dpSub}>Choose when Rex sends your weekly recap every Sunday.</Text>
 
-            {/* Hour chips */}
-            <Text style={s.dpLabel}>HOUR</Text>
+            {/* Hour row */}
+            <Text style={s.dpLabel}>Hour</Text>
             <View style={s.dpRow}>
-              {[6, 7, 8, 9, 10, 11, 12].map(h => (
+              {[6,7,8,9,10,11,12].map(h => (
                 <TouchableOpacity
                   key={h}
                   style={[s.dpChip, pickerHour === h && s.dpChipActive]}
                   onPress={() => setPickerHour(h)}
                   activeOpacity={0.8}
                 >
-                  <Text style={[s.dpChipText, pickerHour === h && s.dpChipTextActive]}>
-                    {h}
-                  </Text>
+                  <Text style={[s.dpChipText, pickerHour === h && s.dpChipTextActive]}>{h}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* AM/PM chips */}
+            {/* AM/PM row */}
             <Text style={s.dpLabel}>AM / PM</Text>
             <View style={s.dpRow}>
               {(['AM', 'PM'] as const).map(ap => (
@@ -603,15 +374,13 @@ export default function MoreScreen() {
                   onPress={() => setPickerAmPm(ap)}
                   activeOpacity={0.8}
                 >
-                  <Text style={[s.dpChipText, pickerAmPm === ap && s.dpChipTextActive]}>
-                    {ap}
-                  </Text>
+                  <Text style={[s.dpChipText, pickerAmPm === ap && s.dpChipTextActive]}>{ap}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* Minute chips */}
-            <Text style={s.dpLabel}>MINUTE</Text>
+            {/* Minute row */}
+            <Text style={s.dpLabel}>Minute</Text>
             <View style={s.dpRow}>
               {[0, 15, 30, 45].map(m => (
                 <TouchableOpacity
@@ -628,656 +397,130 @@ export default function MoreScreen() {
             </View>
 
             <View style={s.dpActions}>
-              <TouchableOpacity
-                style={s.dpCancel}
-                onPress={() => setShowDigestPicker(false)}
-                activeOpacity={0.8}
-              >
+              <TouchableOpacity style={s.dpCancel} onPress={() => setShowDigestPicker(false)} activeOpacity={0.8}>
                 <Text style={s.dpCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={s.dpConfirm}
-                onPress={saveDigestSchedule}
-                activeOpacity={0.85}
-              >
+              <TouchableOpacity style={s.dpConfirm} onPress={saveDigestSchedule} activeOpacity={0.85}>
                 <Text style={s.dpConfirmText}>Schedule →</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 
-// ─── Field row component (used in Account Settings) ───────────────────────────
-function FieldRow({
-  label, value, editing, locked, placeholder, keyboardType, onChangeText,
-}: {
-  label: string;
-  value: string;
-  editing: boolean;
-  locked?: boolean;
-  placeholder: string;
-  keyboardType?: any;
-  onChangeText: (v: string) => void;
-}) {
-  return (
-    <View style={s.fieldRow}>
-      <Text style={s.fieldLabel}>{label}</Text>
-      {editing && !locked ? (
-        <TextInput
-          style={s.fieldInput}
-          value={value}
-          onChangeText={onChangeText}
-          placeholder={placeholder}
-          placeholderTextColor={C.grey}
-          keyboardType={keyboardType || 'default'}
-          autoCapitalize="none"
-        />
-      ) : (
-        <View style={[s.fieldDisplay, locked && s.fieldDisplayLocked]}>
-          <Text style={[s.fieldDisplayText, !value && s.fieldDisplayPlaceholder]}>
-            {value || placeholder}
-          </Text>
-          {locked && <Text style={s.fieldLockedIcon}>🔒</Text>}
-        </View>
-      )}
-    </View>
-  );
-}
-
-// ─── Notification toggle row ──────────────────────────────────────────────────
-function NotifToggleRow({
-  icon, title, subtitle, value, onValueChange,
-}: {
-  icon: string;
-  title: string;
-  subtitle: string;
-  value: boolean;
-  onValueChange: (v: boolean) => void;
-}) {
-  return (
-    <View style={s.notifRow}>
-      <View style={s.menuRowLeft}>
-        <Text style={s.menuRowIcon}>{icon}</Text>
-        <View style={s.menuRowText}>
-          <Text style={s.menuRowTitle}>{title}</Text>
-          <Text style={s.menuRowSub}>{subtitle}</Text>
-        </View>
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: C.border2, true: C.goldBorder }}
-        thumbColor={value ? C.gold : C.grey2}
-        ios_backgroundColor={C.border2}
-      />
-    </View>
-  );
-}
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: C.ink,
-  },
-
-  // ── Header (home)
+  root: { flex: 1, backgroundColor: colors.ink },
+  content: { paddingBottom: 48 },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: Platform.select({ ios: 56, android: 36 }),
-    paddingBottom: 14,
-    backgroundColor: C.ink2,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    paddingHorizontal: spacing.lg, paddingTop: 56, paddingBottom: spacing.md,
+    backgroundColor: colors.ink2, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
+    marginBottom: spacing.lg,
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: C.text,
-    letterSpacing: -0.4,
+  headerTitle: { fontSize: 22, fontWeight: '800', color: colors.white, letterSpacing: -0.4 },
+  card: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    marginHorizontal: spacing.lg, marginBottom: spacing.md,
+    backgroundColor: colors.surface2, borderRadius: radius.lg,
+    padding: spacing.lg, borderWidth: 1, borderColor: colors.ink4,
   },
-
-  // ── Sub-view header
-  subHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: Platform.select({ ios: 56, android: 36 }),
-    paddingBottom: 14,
-    backgroundColor: C.ink2,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
+  avatar: {
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+    alignItems: 'center', justifyContent: 'center',
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.surface2,
-    borderWidth: 1,
-    borderColor: C.border2,
-    alignItems: 'center',
-    justifyContent: 'center',
+  avatarText: { color: colors.gold, fontWeight: '800', fontSize: 20 },
+  profileName: { fontSize: 16, fontWeight: '700', color: colors.white },
+  profileEmail: { fontSize: 12, color: colors.grey2, marginTop: 2 },
+  planBadge: {
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2,
+    alignSelf: 'flex-start', marginTop: 6,
   },
-  backArrow: {
-    fontSize: 18,
-    color: C.text,
-    lineHeight: 22,
+  planBadgeText: { color: colors.gold2, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
+  trialBanner: {
+    marginHorizontal: spacing.lg, marginBottom: spacing.md,
+    backgroundColor: colors.greenBg, borderWidth: 1, borderColor: colors.greenBorder,
+    borderRadius: radius.sm, padding: spacing.md,
   },
-  subHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: C.text,
+  trialText: { color: colors.green, fontSize: 12, fontWeight: '600' },
+  section: {
+    fontSize: 11, fontWeight: '700', color: colors.gold,
+    letterSpacing: 0.8, textTransform: 'uppercase',
+    paddingHorizontal: spacing.lg, marginBottom: spacing.xs, marginTop: spacing.lg,
   },
-
-  // ── Scroll
-  scroll: {
-    flex: 1,
+  row: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.surface2, marginHorizontal: spacing.lg,
+    borderRadius: radius.md, padding: spacing.md, marginBottom: 2,
+    borderWidth: 1, borderColor: colors.ink4,
   },
-  scrollContent: {
-    paddingBottom: 24,
+  rowLocked: { opacity: 0.5 },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
+  rowIcon: { fontSize: 20, width: 28, textAlign: 'center' },
+  rowTitle: { fontSize: 14, fontWeight: '600', color: colors.white },
+  rowSub: { fontSize: 11, color: colors.grey2, marginTop: 2 },
+  rowArrow: { color: colors.grey, fontSize: 16 },
+  eliteBadge: {
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 2,
   },
-
-  // ── Section labels
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: C.grey,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginTop: 24,
-    marginBottom: 8,
-    marginHorizontal: 20,
+  eliteBadgeText: { color: colors.gold, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
+  digestBox: {
+    marginHorizontal: spacing.lg, marginTop: spacing.sm,
+    backgroundColor: colors.ink3, borderRadius: radius.md,
+    padding: spacing.md, borderWidth: 1, borderColor: colors.ink4,
   },
-
-  // ── Profile card (home)
-  profileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginHorizontal: 16,
-    marginTop: 20,
-    backgroundColor: C.surface2,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 16,
-    padding: 16,
-  },
-  profileCardInfo: {
-    flex: 1,
-    gap: 3,
-  },
-  profileCardName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: C.text,
-  },
-  profileCardUsername: {
-    fontSize: 12,
-    color: C.grey2,
-  },
-  profilePlanBadge: {
-    backgroundColor: C.goldBg,
-    borderWidth: 1,
-    borderColor: C.goldBorder,
-    borderRadius: 100,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  profilePlanBadgeText: {
-    color: C.gold2,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-  },
-
-  // ── Menu row
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: C.surface2,
-    marginHorizontal: 16,
-    marginBottom: 2,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  menuRowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  menuRowIcon: {
-    fontSize: 20,
-    width: 28,
-    textAlign: 'center',
-  },
-  menuRowText: {
-    flex: 1,
-  },
-  menuRowTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: C.text,
-  },
-  menuRowSub: {
-    fontSize: 11,
-    color: C.grey2,
-    marginTop: 2,
-  },
-  menuRowArrow: {
-    fontSize: 20,
-    color: C.grey,
-  },
-
-  // ── Elite pill
-  elitePill: {
-    backgroundColor: C.goldBg,
-    borderWidth: 1,
-    borderColor: C.goldBorder,
-    borderRadius: 100,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  elitePillText: {
-    color: C.gold,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-  },
-
-  // ── Footer
+  digestText: { color: colors.grey3, fontSize: 13, lineHeight: 21 },
   footer: {
-    textAlign: 'center',
-    color: C.grey,
-    fontSize: 11,
-    marginTop: 32,
-    marginHorizontal: 20,
+    textAlign: 'center', color: colors.grey, fontSize: 11,
+    marginTop: spacing.xxl, paddingHorizontal: spacing.lg,
   },
-
-  // ══ Account Settings ══
-  accountAvatarRow: {
-    alignItems: 'center',
-    paddingTop: 28,
-    paddingBottom: 16,
-    gap: 6,
+  upgradeRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: spacing.lg, borderRadius: radius.md, padding: spacing.md, marginBottom: 2,
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
   },
-  accountUsername: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: C.text,
-    textAlign: 'center',
-  },
-  accountEmail: {
-    fontSize: 12,
-    color: C.grey2,
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  editToggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  editBtn: {
-    backgroundColor: C.surface2,
-    borderWidth: 1,
-    borderColor: C.border2,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  editBtnText: {
-    color: C.text,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  cancelEditBtn: {
-    backgroundColor: C.surface2,
-    borderWidth: 1,
-    borderColor: C.border2,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  cancelEditText: {
-    color: C.grey2,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  saveBtn: {
-    backgroundColor: C.gold,
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    minWidth: 64,
-    alignItems: 'center',
-  },
-  saveBtnText: {
-    color: C.ink,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-
-  // ── Field rows
-  fieldGroup: {
-    marginHorizontal: 16,
-    gap: 2,
-  },
-  fieldRow: {
-    backgroundColor: C.surface2,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  upgradeTitle: { fontSize: 14, fontWeight: '700', color: colors.gold },
+  rexLensCard: {
+    marginHorizontal: spacing.lg, borderRadius: radius.md, padding: spacing.md,
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
     marginBottom: 2,
   },
-  fieldLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: C.grey,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    marginBottom: 5,
-  },
-  fieldInput: {
-    fontSize: 14,
-    color: C.text,
-    padding: 0,
-    margin: 0,
-  },
-  fieldDisplay: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  fieldDisplayLocked: {
-    opacity: 0.55,
-  },
-  fieldDisplayText: {
-    fontSize: 14,
-    color: C.text,
-  },
-  fieldDisplayPlaceholder: {
-    color: C.grey,
-    fontStyle: 'italic',
-  },
-  fieldLockedIcon: {
-    fontSize: 12,
-  },
-
-  // ══ Notifications ══
-  notifSectionLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: C.grey,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginTop: 20,
-    marginBottom: 8,
-    marginHorizontal: 20,
-  },
-  notifRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: C.surface2,
-    marginHorizontal: 16,
-    marginBottom: 2,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-
-  // ══ Subscription ══
-  currentPlanCard: {
-    marginHorizontal: 16,
-    marginTop: 20,
-    marginBottom: 12,
-    backgroundColor: C.surface2,
-    borderWidth: 1,
-    borderColor: C.goldBorder,
-    borderRadius: 14,
-    padding: 16,
-  },
-  currentPlanTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  currentPlanLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: C.grey,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  planBadgeSmall: {
-    backgroundColor: C.goldBg,
-    borderWidth: 1,
-    borderColor: C.goldBorder,
-    borderRadius: 100,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  planBadgeSmallText: {
-    color: C.gold2,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-  },
-  currentPlanFounder: {
-    fontSize: 12,
-    color: C.gold,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  manageBillingBtn: {
-    alignSelf: 'flex-start',
-  },
-  manageBillingText: {
-    fontSize: 13,
-    color: C.gold,
-    fontWeight: '600',
-  },
-  planCard: {
-    marginHorizontal: 16,
-    marginBottom: 10,
-    backgroundColor: C.surface2,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 14,
-    padding: 16,
-  },
-  planCardCurrent: {
-    borderColor: C.goldBorder,
-  },
-  planCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  planCardName: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: C.text,
-    marginBottom: 2,
-  },
-  planCardPrice: {
-    fontSize: 13,
-    color: C.grey2,
-  },
-  planCardPriceMain: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: C.text,
-  },
-  planCardPriceSub: {
-    fontSize: 13,
-    color: C.grey2,
-  },
-  planCardPriceWas: {
-    fontSize: 11,
-    color: C.grey,
-    textDecorationLine: 'line-through',
-  },
-  currentBadge: {
-    backgroundColor: C.goldBg,
-    borderWidth: 1,
-    borderColor: C.goldBorder,
-    borderRadius: 100,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  currentBadgeText: {
-    color: C.gold,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-  },
-  featureList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 14,
-  },
-  featurePill: {
-    backgroundColor: C.ink3,
-    borderWidth: 1,
-    borderColor: C.border2,
-    borderRadius: 100,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  featurePillText: {
-    fontSize: 11,
-    color: C.grey3,
-    fontWeight: '500',
-  },
-  upgradeBtn: {
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.border2,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  upgradeBtnGold: {
-    backgroundColor: C.gold,
-    borderColor: C.gold,
-  },
-  upgradeBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: C.gold,
-    letterSpacing: 0.6,
-  },
-
-  // ══ Digest picker modal ══
-  dpOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'flex-end',
-  },
+  rexLensTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.sm },
+  rexLensIcon: { fontSize: 22, marginTop: 1 },
+  rexLensTitle: { fontSize: 14, fontWeight: '700', color: colors.white, marginBottom: 2 },
+  rexLensSub: { fontSize: 11, color: colors.grey2, lineHeight: 16 },
+  rexLensLink: { color: colors.gold, fontSize: 13, fontWeight: '700', textAlign: 'right' },
+  // Digest time picker modal
+  dpOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
   dpSheet: {
-    backgroundColor: C.ink2,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    padding: 22,
-    paddingBottom: Platform.select({ ios: 40, android: 28 }),
+    backgroundColor: colors.ink2, borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    padding: spacing.lg, paddingBottom: 36,
   },
-  dpTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: C.text,
-    marginBottom: 4,
-  },
-  dpSub: {
-    color: C.grey2,
-    fontSize: 12,
-    lineHeight: 18,
-    marginBottom: 18,
-  },
-  dpLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: C.grey,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginBottom: 7,
-    marginTop: 12,
-  },
-  dpRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 7,
-  },
+  dpTitle: { fontSize: 17, fontWeight: '800', color: colors.white, marginBottom: 4 },
+  dpSub: { color: colors.grey2, fontSize: 12, lineHeight: 18, marginBottom: spacing.lg },
+  dpLabel: { fontSize: 10, fontWeight: '700', color: colors.grey, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6, marginTop: spacing.sm },
+  dpRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   dpChip: {
-    backgroundColor: C.surface2,
-    borderWidth: 1,
-    borderColor: C.border2,
-    borderRadius: 8,
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    minWidth: 48,
-    alignItems: 'center',
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 7,
+    minWidth: 48, alignItems: 'center',
   },
-  dpChipActive: {
-    backgroundColor: C.goldBg,
-    borderColor: C.goldBorder,
-  },
-  dpChipText: {
-    color: C.grey2,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  dpChipTextActive: {
-    color: C.gold,
-  },
-  dpActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 20,
-  },
+  dpChipActive: { backgroundColor: colors.goldBg, borderColor: colors.goldBorder },
+  dpChipText: { color: colors.grey2, fontSize: 13, fontWeight: '600' },
+  dpChipTextActive: { color: colors.gold },
+  dpActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   dpCancel: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: C.border2,
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
+    flex: 1, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.sm, padding: spacing.md, alignItems: 'center',
   },
-  dpCancelText: {
-    color: C.grey2,
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  dpCancelText: { color: colors.grey2, fontWeight: '600', fontSize: 14 },
   dpConfirm: {
-    flex: 2,
-    backgroundColor: C.gold,
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
+    flex: 2, backgroundColor: colors.gold,
+    borderRadius: radius.sm, padding: spacing.md, alignItems: 'center',
   },
-  dpConfirmText: {
-    color: C.ink,
-    fontWeight: '800',
-    fontSize: 14,
-  },
+  dpConfirmText: { color: colors.ink, fontWeight: '700', fontSize: 14 },
 });

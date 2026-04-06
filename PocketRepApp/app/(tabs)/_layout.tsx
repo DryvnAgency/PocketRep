@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
-import { C } from '@/lib/constants';
+import { colors } from '@/constants/theme';
 import HeyRex from '@/components/HeyRex';
 
 function TabIcon({ icon, label, focused }: { icon: string; label: string; focused: boolean }) {
@@ -19,7 +19,7 @@ export default function TabLayout() {
         screenOptions={{
           headerShown: false,
           tabBarStyle: {
-            backgroundColor: C.ink2,
+            backgroundColor: colors.ink2,
             borderTopColor: 'rgba(255,255,255,0.05)',
             borderTopWidth: 1,
             height: 72,
@@ -31,19 +31,19 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon icon="🔥" label="Home" focused={focused} />,
+            tabBarIcon: ({ focused }) => <TabIcon icon="🔥" label="Heat" focused={focused} />,
           }}
         />
         <Tabs.Screen
           name="contacts"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon icon="👤" label="Contacts" focused={focused} />,
+            tabBarIcon: ({ focused }) => <TabIcon icon="👥" label="Book" focused={focused} />,
           }}
         />
         <Tabs.Screen
-          name="rex"
+          name="deals"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon icon="🧠" label="AI Closer" focused={focused} />,
+            tabBarIcon: ({ focused }) => <TabIcon icon="💰" label="Deals" focused={focused} />,
           }}
         />
         <Tabs.Screen
@@ -53,18 +53,19 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="more"
+          name="rex"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon icon="⚙️" label="Profile" focused={focused} />,
+            tabBarIcon: ({ focused }) => <TabIcon icon="🧠" label="Rex" focused={focused} />,
           }}
         />
-        {/* Hidden screens — still reachable but not in tab bar */}
         <Tabs.Screen
-          name="deals"
-          options={{ href: null }}
+          name="more"
+          options={{
+            tabBarIcon: ({ focused }) => <TabIcon icon="⚙️" label="More" focused={focused} />,
+          }}
         />
       </Tabs>
-      {/* HeyRex floating orb — renders on top of all tabs */}
+      {/* HeyRex must be AFTER Tabs so it renders on top in z-order */}
       <HeyRex />
     </View>
   );
@@ -74,6 +75,6 @@ const s = StyleSheet.create({
   tabIcon: { alignItems: 'center', gap: 2, paddingTop: 5, opacity: 0.45 },
   tabIconActive: { opacity: 1 },
   tabEmoji: { fontSize: 18 },
-  tabLabel: { fontSize: 9, color: C.grey2, fontWeight: '500' },
-  tabLabelActive: { color: C.gold, fontWeight: '700' },
+  tabLabel: { fontSize: 9, color: colors.grey2, fontWeight: '500' },
+  tabLabelActive: { color: colors.gold, fontWeight: '700' },
 });
