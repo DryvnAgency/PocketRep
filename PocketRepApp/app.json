@@ -42,10 +42,6 @@
         { "microphonePermission": "PocketRep uses your mic so Rex can listen for 'Hey Rex' and log customer notes by voice." }
       ],
       [
-        "expo-contacts",
-        { "contactsPermission": "PocketRep can import your phone contacts into your rep book." }
-      ],
-      [
         "expo-image-picker",
         { "photosPermission": "PocketRep needs photo access for Rex Lens." }
       ],
