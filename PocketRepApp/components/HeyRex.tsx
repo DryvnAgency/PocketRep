@@ -92,6 +92,8 @@ export default function HeyRex() {
   const [reminderCount, setReminderCount] = useState(0);
   const [generatingSeq, setGeneratingSeq] = useState(false);
   const recording = useRef<Audio.Recording | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silenceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const orbPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const panResponder = useRef(PanResponder.create({
@@ -188,15 +190,20 @@ export default function HeyRex() {
         r.lang = 'en-US';
         r.continuous = false;
         r.interimResults = false;
+        // Auto-stop after 3s of silence (web: onspeechend fires when speech pauses)
+        r.onspeechend = () => { r.stop(); };
+        // Also set a 6s hard limit
+        const webTimeout = setTimeout(() => { try { r.stop(); } catch {} }, 6000);
         r.onresult = (e: any) => {
+          clearTimeout(webTimeout);
           const text = e.results[0][0].transcript;
           setWebInput(text);
           setTranscript(text);
           setStage('processing');
           processTextInput(text);
         };
-        r.onerror = () => { setStage('idle'); setShowSheet(false); };
-        r.onend = () => { /* handled by onresult/onerror */ };
+        r.onerror = () => { clearTimeout(webTimeout); setStage('idle'); setShowSheet(false); };
+        r.onend = () => { clearTimeout(webTimeout); };
         r.start();
         return;
       } else {
@@ -222,7 +229,10 @@ export default function HeyRex() {
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
 
       const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await rec.prepareToRecordAsync({
+        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        isMeteringEnabled: true,
+      });
       await rec.startAsync();
       recording.current = rec;
 
@@ -232,8 +242,34 @@ export default function HeyRex() {
       setParsed(null);
       setSaved(false);
 
-      // Auto-stop at 30 seconds
-      setTimeout(() => { if (recording.current) stopListening(); }, 30000);
+      // Silence detection — stop after 3 consecutive seconds of silence (< -40 dBFS)
+      silenceIntervalRef.current = setInterval(async () => {
+        if (!recording.current) {
+          if (silenceIntervalRef.current) clearInterval(silenceIntervalRef.current);
+          return;
+        }
+        try {
+          const status = await recording.current.getStatusAsync();
+          const db = (status as any).metering ?? 0;
+          if (db < -40) {
+            // Quiet — start/keep silence countdown
+            if (!silenceTimerRef.current) {
+              silenceTimerRef.current = setTimeout(() => {
+                if (recording.current) stopListening();
+              }, 3000);
+            }
+          } else {
+            // Sound detected — reset countdown
+            if (silenceTimerRef.current) {
+              clearTimeout(silenceTimerRef.current);
+              silenceTimerRef.current = null;
+            }
+          }
+        } catch {}
+      }, 250);
+
+      // Hard max-length fallback at 60 seconds
+      setTimeout(() => { if (recording.current) stopListening(); }, 60000);
     } catch (e) {
       console.warn('Hey Rex start error:', e);
       Alert.alert('Hey Rex', "Couldn't start recording. Check mic permissions in Settings.");
@@ -242,6 +278,9 @@ export default function HeyRex() {
 
   async function stopListening() {
     if (!recording.current || stage !== 'listening') return;
+    // Clear silence detection timers
+    if (silenceIntervalRef.current) { clearInterval(silenceIntervalRef.current); silenceIntervalRef.current = null; }
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
     setStage('processing');
 
     try {
@@ -691,7 +730,7 @@ Return format (JSON array):
 
       {/* Bottom sheet */}
       <Modal visible={showSheet} animationType="slide" transparent>
-        <Pressable style={s.overlay} onPress={stage === 'done' ? dismiss : undefined}>
+        <Pressable style={s.overlay} onPress={stage === 'done' ? dismiss : stage === 'listening' ? () => { stopListening(); setShowSheet(false); setStage('idle'); } : undefined}>
           <Pressable style={s.sheet} onPress={e => e.stopPropagation()}>
             <View style={s.handle} />
 
