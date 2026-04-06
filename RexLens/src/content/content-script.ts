@@ -501,6 +501,31 @@ function extractConversationItem(el: HTMLElement, index: number): ClickableConta
   return { name: identifier, selector: buildUniqueSelector(el, index), href: '' };
 }
 
+// ── CSP-Safe Click Helper ────────────────────────────────────────────────
+// VinSolutions and other CRMs use <a href="javascript:..."> links.
+// Calling el.click() on those triggers the javascript: URL execution,
+// which is blocked by strict CSP (script-src 'self'). Instead, dispatch
+// a synthetic MouseEvent — this triggers the element's click/mousedown
+// listeners without executing the javascript: href.
+
+function cspSafeClick(el: HTMLElement): void {
+  const isJSLink = el.tagName === 'A'
+    && (el as HTMLAnchorElement).href?.startsWith('javascript:');
+  const parentJSLink = el.closest('a[href^="javascript:"]') as HTMLAnchorElement | null;
+
+  if (isJSLink || parentJSLink) {
+    // Dispatch mouse events that trigger CRM click handlers without
+    // executing the javascript: URL via the href attribute
+    const target = isJSLink ? el : (parentJSLink as HTMLElement);
+    const opts: MouseEventInit = { bubbles: true, cancelable: true, view: window };
+    target.dispatchEvent(new MouseEvent('mousedown', opts));
+    target.dispatchEvent(new MouseEvent('mouseup', opts));
+    target.dispatchEvent(new MouseEvent('click', opts));
+  } else {
+    el.click();
+  }
+}
+
 // ── Deep Scan: Detect if page is SPA conversation view ─────────────────────
 
 function isSPAConversationView(): boolean {
@@ -552,7 +577,7 @@ async function clickAndExtract(selector: string): Promise<PageContent> {
   const el = document.querySelector(selector) as HTMLElement | null;
   if (!el) throw new Error(`Element not found: ${selector}`);
 
-  el.click();
+  cspSafeClick(el);
 
   // Wait for navigation/content change
   await waitForPageChange();
@@ -587,7 +612,8 @@ async function clickAndExtract(selector: string): Promise<PageContent> {
 
   // Fallback: if still not on original URL, hard navigate
   // Do this AFTER returning content since hard navigate destroys this script context
-  if (window.location.href !== savedUrl) {
+  // Guard: never assign a javascript: URL to location.href (CSP violation)
+  if (window.location.href !== savedUrl && !savedUrl.startsWith('javascript:')) {
     setTimeout(() => { window.location.href = savedUrl; }, 50);
   }
 
@@ -600,7 +626,7 @@ async function clickAndExtractSPA(selector: string): Promise<PageContent> {
   const el = document.querySelector(selector) as HTMLElement | null;
   if (!el) throw new Error(`Element not found: ${selector}`);
 
-  el.click();
+  cspSafeClick(el);
 
   // Wait for conversation/message pane to update
   await waitForPageChange(3000);
@@ -628,7 +654,7 @@ function insertTextIntoField(selector: string, text: string): boolean {
   }
 
   if (el.isContentEditable) {
-    // Contenteditable (Gmail, LinkedIn, etc.)
+    // Contenteditable (Gmail, LinkedIn, etc.) — CSP-safe insertion
     el.focus();
 
     // Select all existing content
@@ -638,9 +664,20 @@ function insertTextIntoField(selector: string, text: string): boolean {
     selection?.removeAllRanges();
     selection?.addRange(range);
 
-    // Insert new text
-    document.execCommand('insertText', false, text);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+    // Delete selected content, then insert new text node directly (no execCommand)
+    range.deleteContents();
+    const textNode = document.createTextNode(text);
+    range.insertNode(textNode);
+
+    // Move cursor to end
+    const endRange = document.createRange();
+    endRange.selectNodeContents(el);
+    endRange.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(endRange);
+
+    // Fire InputEvent so frameworks (React, Vue, etc.) pick up the change
+    el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
     return true;
   }
 
@@ -805,7 +842,7 @@ chrome.runtime.onMessage.addListener(
             break;
           }
 
-          el.click();
+          cspSafeClick(el);
 
           // Wait 4s for iframe/page navigation to complete, then extract all content
           setTimeout(() => {
