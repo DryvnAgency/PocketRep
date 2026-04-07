@@ -1,30 +1,27 @@
 export const colors = {
-  ink: '#0d1117',
-  ink2: '#111827',
-  ink3: '#1e293b',
-  ink4: '#374151',
-  gold: '#e94560',        // Primary Red — buttons, logo, accent
-  gold2: '#e94560',       // Same primary red
-  goldBg: 'rgba(233,69,96,0.10)',
-  goldBorder: 'rgba(233,69,96,0.22)',
-  white: '#e5e7eb',
-  grey: '#6b7280',
-  grey2: '#9ca3af',
-  grey3: '#e5e7eb',
-  surface: '#111827',
-  surface2: '#0d1117',
-  red: '#e94560',         // Primary Red
-  redBg: 'rgba(233,69,96,0.12)',
-  redBorder: 'rgba(233,69,96,0.25)',
+  ink: '#0c0c0e',
+  ink2: '#141418',
+  ink3: '#1c1c22',
+  ink4: '#23232b',
+  gold: '#d4a843',
+  gold2: '#f0c060',
+  goldBg: 'rgba(212,168,67,0.10)',
+  goldBorder: 'rgba(212,168,67,0.22)',
+  white: '#ffffff',
+  grey: '#5a6070',
+  grey2: '#8a90a0',
+  grey3: '#b4bac8',
+  surface: '#111116',
+  surface2: '#18181f',
+  red: '#e05252',
+  redBg: 'rgba(224,82,82,0.12)',
+  redBorder: 'rgba(224,82,82,0.25)',
   orange: '#e08c52',
   orangeBg: 'rgba(224,140,82,0.12)',
   orangeBorder: 'rgba(224,140,82,0.25)',
   green: '#42b883',
   greenBg: 'rgba(66,184,131,0.10)',
   greenBorder: 'rgba(66,184,131,0.22)',
-  deepBlue: '#0f3460',    // Deep Blue — gradient endpoint
-  errorBg: '#7f1d1d',
-  errorText: '#fca5a5',
 } as const;
 
 export const radius = {
