@@ -1,11 +1,14 @@
 export type Plan = 'pro' | 'elite' | 'rex_lens_standalone' | 'elite_bundle';
 export type HeatTier = 'hot' | 'warm' | 'watch';
 
+export type IndustryKey = 'auto' | 'mortgage' | 'realestate' | 'hvac' | 'staffing' | 'd2d' | 'roofing' | 'fence' | 'insurance' | 'solar' | 'b2b' | 'other';
+
 export interface Profile {
   id: string;
   email: string;
   full_name: string;
   plan: Plan;
+  industry: IndustryKey;
   trial_ends_at: string | null;
   stripe_customer_id: string | null;
   created_at: string;
@@ -40,8 +43,15 @@ export interface Contact {
   rapport_notes: string | null;
   rapport_image_url: string | null;
   follow_up_date: string | null;
+  personal_events: PersonalEvent[] | null;
+  buying_urgency: 'low' | 'medium' | 'high' | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PersonalEvent {
+  type: 'baby_due' | 'anniversary' | 'birthday' | 'other';
+  date: string; // YYYY-MM-DD
 }
 
 export interface Deal {

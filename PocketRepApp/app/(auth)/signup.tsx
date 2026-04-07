@@ -7,7 +7,8 @@ import {
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
-import type { Plan } from '@/lib/types';
+import type { Plan, IndustryKey } from '@/lib/types';
+import { INDUSTRY_CONFIG, INDUSTRY_KEYS } from '@/lib/industryConfig';
 
 // Supabase requires email — derived from username, never shown to user
 function usernameToEmail(username: string) {
@@ -36,7 +37,7 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
       'Everything in Pro',
       'Proximity Alerts — 500ft trigger on hot leads',
       'Cross-Deal Rex Memory',
-      'Rapport Vault + AI Photo Vision',
+      'Rex Lens — AI Photo Vision',
       'Weekly Pipeline Digest',
     ],
   },
@@ -67,6 +68,8 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
 
 export default function SignupScreen() {
   const router = useRouter();
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [industry, setIndustry] = useState<IndustryKey>('auto');
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -97,12 +100,11 @@ export default function SignupScreen() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: name, plan, username: username.trim() } },
+      options: { data: { full_name: name, plan, username: username.trim(), industry } },
     });
 
     if (error) {
       setLoading(false);
-      // Username taken = email already in use
       if (error.message.toLowerCase().includes('already')) {
         Alert.alert('Username taken', 'That username is already in use. Try a different one.');
       } else {
@@ -115,6 +117,7 @@ export default function SignupScreen() {
       await supabase.from('profiles').update({
         full_name: name,
         plan,
+        industry,
         username: username.trim(),
       }).eq('id', data.user.id);
     }
@@ -123,46 +126,128 @@ export default function SignupScreen() {
     // Auth state change in _layout.tsx will redirect to (tabs)
   }
 
+  // ── Step 1: Industry selection ────────────────────────────────────────────
+  if (step === 1) {
+    return (
+      <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+          <TouchableOpacity onPress={() => router.back()} style={s.back}>
+            <Text style={s.backText}>← Back</Text>
+          </TouchableOpacity>
+
+          <Text style={s.headline}>What do you sell?</Text>
+          <Text style={s.sub}>PocketRep tailors everything — templates, Rex's language, and follow-up sequences — to your industry.</Text>
+
+          <View style={s.industryGrid}>
+            {INDUSTRY_KEYS.map((key) => {
+              const cfg = INDUSTRY_CONFIG[key];
+              const active = industry === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[s.industryCard, active && s.industryCardActive]}
+                  onPress={() => setIndustry(key as IndustryKey)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={s.industryIcon}>{cfg.icon}</Text>
+                  <Text style={[s.industryLabel, active && s.industryLabelActive]}>{cfg.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <TouchableOpacity style={s.btn} onPress={() => setStep(2)} activeOpacity={0.85}>
+            <Text style={s.btnText}>Next: Choose Plan →</Text>
+          </TouchableOpacity>
+
+          <View style={s.footer}>
+            <Text style={s.footerText}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Text style={s.footerLink}>Sign in</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ── Step 2: Plan selection ────────────────────────────────────────────────
+  if (step === 2) {
+    return (
+      <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+          <TouchableOpacity onPress={() => setStep(1)} style={s.back}>
+            <Text style={s.backText}>← Back</Text>
+          </TouchableOpacity>
+
+          <Text style={s.headline}>Start your free trial.</Text>
+          <Text style={s.sub}>7 days free. Cancel before day 8 — zero charge.</Text>
+
+          <Text style={s.sectionLabel}>Choose your plan</Text>
+          <View style={s.plans}>
+            {PLANS.map((p) => (
+              <TouchableOpacity
+                key={p.id}
+                style={[s.planCard, plan === p.id && s.planCardActive]}
+                onPress={() => setPlan(p.id)}
+                activeOpacity={0.8}
+              >
+                {p.id === 'elite' && (
+                  <View style={s.popularBadge}>
+                    <Text style={s.popularBadgeText}>MARKET LEADER</Text>
+                  </View>
+                )}
+                <View style={s.planTop}>
+                  <Text style={[s.planName, plan === p.id && { color: colors.gold }]}>{p.name}</Text>
+                  <View>
+                    <Text style={s.planPrice}>{p.price}<Text style={s.planPer}>/mo</Text></Text>
+                    <Text style={s.planAfter}>{p.after}</Text>
+                  </View>
+                </View>
+                {p.features.map((f, i) => (
+                  <View key={i} style={s.featureRow}>
+                    <Text style={s.featureCheck}>✓</Text>
+                    <Text style={s.featureText}>{f}</Text>
+                  </View>
+                ))}
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TouchableOpacity style={[s.btn, { marginTop: spacing.lg }]} onPress={() => setStep(3)} activeOpacity={0.85}>
+            <Text style={s.btnText}>Next: Create Account →</Text>
+          </TouchableOpacity>
+
+          <View style={s.footer}>
+            <Text style={s.footerText}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Text style={s.footerLink}>Sign in</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ── Step 3: Account details ───────────────────────────────────────────────
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity onPress={() => router.back()} style={s.back}>
+        <TouchableOpacity onPress={() => setStep(2)} style={s.back}>
           <Text style={s.backText}>← Back</Text>
         </TouchableOpacity>
 
-        <Text style={s.headline}>Start your free trial.</Text>
-        <Text style={s.sub}>7 days free. Cancel before day 8 — zero charge.</Text>
+        <Text style={s.headline}>Almost there.</Text>
+        <Text style={s.sub}>Create your account to start your 7-day free trial.</Text>
 
-        {/* Plan picker */}
-        <Text style={s.sectionLabel}>Choose your plan</Text>
-        <View style={s.plans}>
-          {PLANS.map((p) => (
-            <TouchableOpacity
-              key={p.id}
-              style={[s.planCard, plan === p.id && s.planCardActive]}
-              onPress={() => setPlan(p.id)}
-              activeOpacity={0.8}
-            >
-              {p.id === 'elite' && (
-                <View style={s.popularBadge}>
-                  <Text style={s.popularBadgeText}>MARKET LEADER</Text>
-                </View>
-              )}
-              <View style={s.planTop}>
-                <Text style={[s.planName, plan === p.id && { color: colors.gold }]}>{p.name}</Text>
-                <View>
-                  <Text style={s.planPrice}>{p.price}<Text style={s.planPer}>/mo</Text></Text>
-                  <Text style={s.planAfter}>{p.after}</Text>
-                </View>
-              </View>
-              {p.features.map((f, i) => (
-                <View key={i} style={s.featureRow}>
-                  <Text style={s.featureCheck}>✓</Text>
-                  <Text style={s.featureText}>{f}</Text>
-                </View>
-              ))}
-            </TouchableOpacity>
-          ))}
+        {/* Industry + plan summary */}
+        <View style={s.summaryRow}>
+          <View style={s.summaryChip}>
+            <Text style={s.summaryChipText}>{INDUSTRY_CONFIG[industry]?.icon} {INDUSTRY_CONFIG[industry]?.label}</Text>
+          </View>
+          <View style={s.summaryChip}>
+            <Text style={s.summaryChipText}>{plan === 'elite' ? '⭐ Elite' : '🔥 Pro'}</Text>
+          </View>
         </View>
 
         {/* Form */}
@@ -236,6 +321,31 @@ const s = StyleSheet.create({
     letterSpacing: 0.1, textTransform: 'uppercase',
     marginBottom: spacing.sm, marginTop: spacing.lg,
   },
+  // Industry grid
+  industryGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm,
+    marginBottom: spacing.xl,
+  },
+  industryCard: {
+    width: '22%', aspectRatio: 1,
+    backgroundColor: colors.surface2,
+    borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.md,
+    alignItems: 'center', justifyContent: 'center',
+    gap: 4, padding: 6,
+  },
+  industryCardActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,168,67,0.08)' },
+  industryIcon: { fontSize: 22 },
+  industryLabel: { fontSize: 9, fontWeight: '600', color: colors.grey2, textAlign: 'center' },
+  industryLabelActive: { color: colors.gold },
+  // Summary chips
+  summaryRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  summaryChip: {
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4,
+  },
+  summaryChipText: { color: colors.gold, fontSize: 11, fontWeight: '700' },
+  // Plans
   plans: { gap: spacing.sm },
   planCard: {
     backgroundColor: colors.surface2,
@@ -257,6 +367,7 @@ const s = StyleSheet.create({
   featureRow: { flexDirection: 'row', gap: 7, alignItems: 'flex-start' },
   featureCheck: { color: colors.green, fontSize: 12, marginTop: 2 },
   featureText: { color: colors.grey3, fontSize: 13, flex: 1, lineHeight: 18 },
+  // Form
   form: { gap: spacing.xs },
   label: { fontSize: 11, fontWeight: '600', color: colors.grey3, letterSpacing: 0.5, textTransform: 'uppercase', marginTop: spacing.sm },
   input: {

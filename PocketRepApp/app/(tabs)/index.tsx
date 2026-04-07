@@ -1,14 +1,21 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, RefreshControl, Modal, ActivityIndicator, Alert,
+  StyleSheet, RefreshControl, Modal, ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing, heatConfig } from '@/constants/theme';
 import type { Contact, Profile } from '@/lib/types';
+import Onboarding from '@/components/Onboarding';
+import { requestNotificationPermission, scheduleContactReminders } from '@/lib/notifications';
+
+let AsyncStorage: any = null;
+try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
 
 const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
+const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://api.anthropic.com';
+const NOTIF_CHECK_KEY = 'pocketrep_notif_check_v1';
 
 // ── Heat score engine (runs client-side, no server needed) ──────────────────
 function calcHeatScore(c: Contact): { score: number; tier: 'hot' | 'warm' | 'watch'; reason: string } {
@@ -40,6 +47,15 @@ function calcHeatScore(c: Contact): { score: number; tier: 'hot' | 'warm' | 'wat
   } else {
     score += 15; reasons.push('never contacted');
   }
+
+  // AI-extracted buying urgency (set by Hey Rex)
+  const urgency = (c as any).buying_urgency;
+  if (urgency === 'high')   { score += 25; reasons.push('high buying urgency'); }
+  else if (urgency === 'medium') { score += 10; reasons.push('active interest'); }
+
+  // Upcoming personal events = warm signal
+  const events: any[] = (c as any).personal_events ?? [];
+  if (events.length > 0) { score += 10; reasons.push('upcoming life event'); }
 
   const tier: 'hot' | 'warm' | 'watch' =
     score >= 50 ? 'hot' : score >= 25 ? 'warm' : 'watch';
@@ -92,6 +108,32 @@ export default function HeatSheetScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
+  // Schedule follow-up notifications once per day
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const today = new Date().toISOString().split('T')[0];
+    const key = `${NOTIF_CHECK_KEY}_${today}`;
+    async function maybeSchedule() {
+      try {
+        const done = AsyncStorage ? await AsyncStorage.getItem(key) : null;
+        if (done) return;
+        const granted = await requestNotificationPermission();
+        if (!granted) return;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: contacts } = await supabase
+          .from('contacts')
+          .select('id, first_name, last_name, follow_up_date, lease_end_date, personal_events')
+          .eq('user_id', user.id);
+        if (contacts) {
+          for (const c of contacts) await scheduleContactReminders(c as any);
+        }
+        if (AsyncStorage) await AsyncStorage.setItem(key, '1');
+      } catch {}
+    }
+    maybeSchedule();
+  }, []);
+
   async function onRefresh() {
     setRefreshing(true);
     await load();
@@ -130,7 +172,7 @@ export default function HeatSheetScreen() {
       `Bullets: why they're hot, what to lead with, one risk to avoid, suggested first line to open the call.`;
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch(`${AI_PROXY_URL}/v1/messages`, {
         method: 'POST',
         headers: {
           'x-api-key': ANTHROPIC_KEY,
@@ -155,6 +197,7 @@ export default function HeatSheetScreen() {
 
   return (
     <View style={s.root}>
+      <Onboarding />
       {/* Header */}
       <View style={s.header}>
         <View>
@@ -270,7 +313,7 @@ function HeatCard({
   contact: c, cfg, onBrief,
 }: {
   contact: Contact;
-  cfg: typeof heatConfig['hot'];
+  cfg: typeof heatConfig[keyof typeof heatConfig];
   onBrief: (c: Contact) => void;
 }) {
   const vehicle = [c.vehicle_year, c.vehicle_make, c.vehicle_model].filter(Boolean).join(' ');

@@ -7,6 +7,7 @@ create table if not exists profiles (
   email        text not null,
   full_name    text not null default '',
   plan         text not null default 'pro' check (plan in ('pro','elite','rex_lens_standalone','elite_bundle')),
+  industry     text not null default 'auto',
   trial_ends_at timestamptz,
   stripe_customer_id text,
   created_at   timestamptz default now()
@@ -140,9 +141,14 @@ create table if not exists rex_memory (
 
 alter table rex_memory enable row level security;
 
+-- ── INDUSTRY: rep's industry on profiles ─────────────────────────────────────
+alter table profiles add column if not exists industry text not null default 'auto';
+
 -- ── HEY REX: follow-up date on contacts ──────────────────────────────────────
 -- Run this if you already applied the initial schema:
 alter table contacts add column if not exists follow_up_date date;
+alter table contacts add column if not exists personal_events jsonb default '[]'::jsonb;
+alter table contacts add column if not exists buying_urgency text check (buying_urgency in ('low','medium','high'));
 create policy "Users manage own rex_memory"
   on rex_memory for all using (auth.uid() = user_id);
 
@@ -151,18 +157,21 @@ alter table contacts add column if not exists stage text check (stage in ('prosp
 
 -- ── SEQUENCES ─────────────────────────────────────────────────────────────────
 create table if not exists sequences (
-  id           uuid primary key default gen_random_uuid(),
-  user_id      uuid references profiles(id) on delete cascade,
-  name         text not null,
-  description  text,
-  industry     text not null default 'auto',
-  is_template  boolean not null default false,
-  is_custom    boolean not null default false,
-  created_at   timestamptz default now()
+  id               uuid primary key default gen_random_uuid(),
+  user_id          uuid references profiles(id) on delete cascade,
+  contact_id       uuid references contacts(id) on delete set null,
+  name             text not null,
+  description      text,
+  industry         text not null default 'auto',
+  is_template      boolean not null default false,
+  is_custom        boolean not null default false,
+  is_ai_generated  boolean not null default false,
+  created_at       timestamptz default now()
 );
 
 alter table sequences enable row level security;
-create policy if not exists "Users manage own sequences"
+drop policy if exists "Users manage own sequences" on sequences;
+create policy "Users manage own sequences"
   on sequences for all using (auth.uid() = user_id or user_id is null);
 
 create table if not exists sequence_steps (
@@ -176,8 +185,33 @@ create table if not exists sequence_steps (
 );
 
 alter table sequence_steps enable row level security;
-create policy if not exists "Users manage own sequence_steps"
+drop policy if exists "Users manage own sequence_steps" on sequence_steps;
+create policy "Users manage own sequence_steps"
   on sequence_steps for all using (
     auth.uid() = (select user_id from sequences where id = sequence_id) or
     (select user_id from sequences where id = sequence_id) is null
   );
+
+-- ── SEQUENCE STEP SENT TRACKING ───────────────────────────────────────────────
+alter table sequence_steps add column if not exists sent_at timestamptz;
+
+-- ── CONTACT INTERACTIONS (done log) ──────────────────────────────────────────
+create table if not exists contact_interactions (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references profiles(id) on delete cascade,
+  contact_id   uuid references contacts(id) on delete set null,
+  contact_name text,
+  sequence_id  uuid references sequences(id) on delete set null,
+  step_number  int,
+  channel      text check (channel in ('text','call','email')),
+  message      text,
+  sent_at      timestamptz default now()
+);
+
+alter table contact_interactions enable row level security;
+drop policy if exists "Users manage own interactions" on contact_interactions;
+create policy "Users manage own interactions"
+  on contact_interactions for all using (auth.uid() = user_id);
+
+create index if not exists interactions_user_date
+  on contact_interactions(user_id, sent_at desc);
