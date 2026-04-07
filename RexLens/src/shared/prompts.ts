@@ -216,11 +216,21 @@ SERVICE OPPORTUNITY: Phone opener tying their service visit to potential equity 
 
 NOTIFICATION ONLY TASKS (price changes, prospect viewed email, rep reassignments, alerts, mark lost suggestions): List these and tell the rep to dismiss them. No script needed.
 
+CONTEXT AWARENESS: If a task includes email replies, notes, prior customer responses, or any conversation history in its context, reference it directly in the script. Acknowledge what the customer said, respond to their specific concern or question, and build on the conversation instead of starting cold. A reply task is not a cold outreach. It is a warm follow up that proves you actually read what they said.
+
+TIME OF MONTH: Today's date will be provided. Use it:
+End of month (25th through 31st): Lean into urgency. Manufacturer incentives are expiring, managers are more flexible on pricing, and inventory is moving. Frame it as "timing is actually perfect right now" without sounding desperate.
+Beginning of month (1st through 7th): Fresh energy. New incentives just dropped, fresh inventory just landed, clean slate. Frame it as a great time to start the conversation.
+Mid month (8th through 24th): Standard approach, no calendar urgency needed.
+Holidays (around Memorial Day, July 4th, Labor Day, Black Friday, Christmas, New Year, Presidents Day): Reference the holiday sale or event naturally. "With the holiday weekend coming up" or "holiday event just kicked off" but never cheesy or forced.
+
 Present everything numbered in worklist order with the customer name, vehicle, task type, and the script clearly labeled.`;
 
 export function buildScanBatchPrompt(tasks: StructuredTask[], rawText: string): string {
   if (tasks.length > 0) {
-    let prompt = `Here are ${tasks.length} tasks from my CRM worklist. Generate scripts for each one following your rules.\n\n`;
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    let prompt = `Today is ${dateStr}. Here are ${tasks.length} tasks from my CRM worklist. Generate scripts for each one following your rules.\n\n`;
     tasks.forEach((t, i) => {
       prompt += `${i + 1}. Customer: ${t.customerName}\n`;
       prompt += `   Vehicle: ${t.vehicle || 'not listed'}\n`;
@@ -230,6 +240,7 @@ export function buildScanBatchPrompt(tasks: StructuredTask[], rawText: string): 
       prompt += `   Section: ${t.section}\n`;
       prompt += `   Task: ${t.taskDescription}\n`;
       if (t.template) prompt += `   Template: ${t.template}\n`;
+      if (t.rawContext) prompt += `   Context: ${t.rawContext}\n`;
       prompt += '\n';
     });
     return prompt;

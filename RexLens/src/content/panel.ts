@@ -8,7 +8,6 @@ import type { StructuredTask } from '../shared/types';
 
 const MAX_RESPONSES = 30;
 const MAX_TASKS_PER_BATCH = 30;
-const MAX_TOTAL_TASKS = 150;
 const PANEL_MIN_WIDTH = 340;
 const PANEL_MAX_WIDTH = 720;
 const PANEL_DEFAULT_WIDTH = 460;
@@ -742,15 +741,7 @@ export class RexLensPanel {
       this.state.processedTaskCount = 0;
       this.state.taskQueue = [];
 
-      // Check total task limit
-      const totalNew = Math.min(tasks.length, MAX_TOTAL_TASKS);
-      if (totalNew <= 0) {
-        scanEl.remove();
-        this.appendMessage('system', '150 task limit reached. Please complete current tasks before scanning again.');
-        return;
-      }
-
-      const allTasks = tasks.slice(0, totalNew);
+      const allTasks = tasks;
       const scanSpan = scanEl.querySelector('span:last-child');
       if (scanSpan) scanSpan.textContent = `Found ${allTasks.length} tasks. Generating scripts...`;
 
