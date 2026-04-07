@@ -20,6 +20,20 @@ export interface AuthState {
 
 export type PageType = 'email' | 'crm' | 'linkedin' | 'chat' | 'generic';
 
+export interface StructuredTask {
+  customerName: string;
+  vehicle: string;
+  status: string;
+  source: string;
+  age: string;
+  taskDescription: string;
+  section: string;
+  template: string;
+  phone?: string;
+  email?: string;
+  rawContext?: string;
+}
+
 export interface PageContent {
   type: PageType;
   title: string;
@@ -30,6 +44,8 @@ export interface PageContent {
   contactNames: string[];
   emails: string[];
   phones: string[];
+  structuredTasks?: StructuredTask[];
+  adapterPlatform?: string;
 }
 
 export interface FormField {

@@ -1,5 +1,7 @@
 import type { PageContent, PageType, FormField, ClickableContact } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
+import type { AdapterHelpers } from './adapters/types';
+import { getAdapter } from './adapters/registry';
 
 // ── Page Type Detection ──────────────────────────────────────────────────────
 
@@ -195,20 +197,32 @@ function extractContactInfo(): { names: string[]; emails: string[]; phones: stri
   };
 }
 
+function getAdapterHelpers(): AdapterHelpers {
+  return { querySelectorAllDeep, extractText, cspSafeClick, buildUniqueSelector };
+}
+
 function extractPageContent(): PageContent {
   const type = detectPageType();
   const contactInfo = extractContactInfo();
+  const hostname = window.location.hostname.toLowerCase();
+
+  // Run platform adapter for structured extraction
+  const adapter = getAdapter(hostname);
+  const helpers = getAdapterHelpers();
+  const adapterResult = adapter.extract(helpers);
 
   return {
     type,
     title: document.title,
     url: window.location.href,
-    mainText: extractText(),
+    mainText: adapterResult.tasks.length > 0 ? adapterResult.rawText : extractText(),
     conversations: extractConversations(),
     formFields: detectFormFields(),
     contactNames: contactInfo.names,
     emails: contactInfo.emails,
     phones: contactInfo.phones,
+    structuredTasks: adapterResult.tasks.length > 0 ? adapterResult.tasks : undefined,
+    adapterPlatform: adapter.id,
   };
 }
 
@@ -346,15 +360,22 @@ const PHONE_PATTERN = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
 const EMAIL_PATTERN = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 
 function findClickableContacts(): ClickableContact[] {
-  const pageType = detectPageType();
+  // Prefer adapter-specific clickable detection (e.g. VinSolutions a.viewitemlink)
+  const hostname = window.location.hostname.toLowerCase();
+  const adapter = getAdapter(hostname);
+  if (adapter.findClickables) {
+    const helpers = getAdapterHelpers();
+    const adapterResults = adapter.findClickables(helpers);
+    if (adapterResults.length > 0) return adapterResults;
+  }
 
-  // For email/chat pages, try conversation detection first
+  // Fall back to generic detection
+  const pageType = detectPageType();
   if (pageType === 'email' || pageType === 'chat') {
     const convResults = findClickableConversations();
     if (convResults.length > 0) return convResults;
   }
 
-  // For CRM/generic/linkedin pages (or fallback), use name-link detection
   return findClickableCRMContacts();
 }
 
@@ -936,6 +957,18 @@ chrome.runtime.onMessage.addListener(
             sendResponse({ success: true });
           }
         }, 3000);
+        break;
+      }
+
+      case 'PREPARE_ADAPTER': {
+        const hostname = window.location.hostname.toLowerCase();
+        const adapter = getAdapter(hostname);
+        if (adapter.prepare) {
+          const helpers = getAdapterHelpers();
+          adapter.prepare(helpers).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: true }));
+        } else {
+          sendResponse({ ok: true });
+        }
         break;
       }
     }

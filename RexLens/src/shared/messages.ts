@@ -40,6 +40,10 @@ export interface GoBackMessage {
   type: 'GO_BACK';
 }
 
+export interface PrepareAdapterMessage {
+  type: 'PREPARE_ADAPTER';
+}
+
 // ── Side Panel ↔ Service Worker ──────────────────────────────────────────────
 
 export interface ExtractPageContextMessage {
@@ -88,6 +92,7 @@ export type ExtensionMessage =
   | ClickElementMessage
   | WaitAndExtractMessage
   | GoBackMessage
+  | PrepareAdapterMessage
   | ExtractPageContextMessage
   | ChatMessage
   | DeepReviewMessage

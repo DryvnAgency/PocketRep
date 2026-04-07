@@ -248,7 +248,12 @@ async function runDeepReview(tabId: number): Promise<DeepReviewResult> {
   deepReviewCancelled = false;
 
   try {
-    // First, do a quick page analysis with Haiku to identify leads
+    await ensureContentScript(tabId);
+
+    // Trigger adapter preparation (e.g. VinSolutions clicks "All" view to load all grids)
+    try { await sendToContentScript(tabId, { type: 'PREPARE_ADAPTER' }); } catch {}
+
+    // Extract page content (adapter may provide structured tasks)
     if (!cachedPageContent || cachedPageContent.mainText.length < 50) {
       await extractPageContext();
     }
@@ -257,22 +262,48 @@ async function runDeepReview(tabId: number): Promise<DeepReviewResult> {
       throw new Error('No page content to review. Navigate to a worklist first.');
     }
 
-    // Ask Haiku to identify the leads on the page
-    const cleanedText = stripSensitiveData(cachedPageContent.mainText);
-    const leadIdentification = await callAIProxy({
-      model: HAIKU_MODEL,
-      max_tokens: 1500,
-      system: 'Respond only with valid JSON. No markdown fences.',
-      messages: [{ role: 'user', content: `Identify every person/contact/lead name visible in this page content. Return JSON: { "leads": [{ "name": "First Last" }] }\n\nPage content:\n${cleanedText.slice(0, 5000)}` }],
-    });
+    // ── Identify leads ────────────────────────────────────────────────────
+    // When adapter provides structured tasks, use them directly (skip Haiku)
+    const hasStructuredData = cachedPageContent.structuredTasks && cachedPageContent.structuredTasks.length > 0;
 
-    const cleaned = leadIdentification.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-    let identifiedLeads: { name: string }[] = [];
-    try {
-      const parsed = JSON.parse(cleaned);
-      identifiedLeads = Array.isArray(parsed.leads) ? parsed.leads : [];
-    } catch {
-      throw new Error('Could not identify leads on this page. Try a worklist page.');
+    interface LeadInfo {
+      name: string;
+      vehicle?: string;
+      status?: string;
+      source?: string;
+      taskDescription?: string;
+      section?: string;
+    }
+
+    let identifiedLeads: LeadInfo[] = [];
+
+    if (hasStructuredData) {
+      // Fast path: leads already known from DOM scraping
+      identifiedLeads = cachedPageContent.structuredTasks!.map(t => ({
+        name: t.customerName,
+        vehicle: t.vehicle,
+        status: t.status,
+        source: t.source,
+        taskDescription: t.taskDescription,
+        section: t.section,
+      }));
+    } else {
+      // Slow path: ask Haiku to identify leads from raw text
+      const cleanedText = stripSensitiveData(cachedPageContent.mainText);
+      const leadIdentification = await callAIProxy({
+        model: HAIKU_MODEL,
+        max_tokens: 1500,
+        system: 'Respond only with valid JSON. No markdown fences.',
+        messages: [{ role: 'user', content: `Identify every person/contact/lead name visible in this page content. Return JSON: { "leads": [{ "name": "First Last" }] }\n\nPage content:\n${cleanedText.slice(0, 5000)}` }],
+      });
+
+      const cleaned = leadIdentification.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      try {
+        const parsed = JSON.parse(cleaned);
+        identifiedLeads = Array.isArray(parsed.leads) ? parsed.leads : [];
+      } catch {
+        throw new Error('Could not identify leads on this page. Try a worklist page.');
+      }
     }
 
     if (identifiedLeads.length === 0) {
@@ -281,9 +312,7 @@ async function runDeepReview(tabId: number): Promise<DeepReviewResult> {
 
     const leadsToReview = identifiedLeads.slice(0, MAX_DEEP_REVIEW_LEADS);
     const total = leadsToReview.length;
-    const summaries: { name: string; summary: string; skipped?: boolean }[] = [];
-
-    await ensureContentScript(tabId);
+    const summaries: { name: string; summary: string; skipped?: boolean; vehicle?: string; status?: string; source?: string; taskDescription?: string }[] = [];
 
     // Get clickable contacts
     let clickableContacts: any[] = [];
@@ -314,20 +343,27 @@ async function runDeepReview(tabId: number): Promise<DeepReviewResult> {
         });
 
         if (!clickResult?.success) {
-          summaries.push({ name: lead.name, summary: `Could not click into lead: ${clickResult?.error || 'unknown'}.`, skipped: true });
+          // For structured data, include metadata even if click fails
+          summaries.push({
+            name: lead.name, summary: `Could not click into lead: ${clickResult?.error || 'unknown'}.`, skipped: true,
+            vehicle: lead.vehicle, status: lead.status, source: lead.source, taskDescription: lead.taskDescription,
+          });
           continue;
         }
 
         const pageContent: PageContent | undefined = clickResult.content;
 
         if (!pageContent || !pageContent.mainText || pageContent.mainText.length < 20) {
-          summaries.push({ name: lead.name, summary: 'Page loaded but content too thin.', skipped: true });
+          summaries.push({
+            name: lead.name, summary: 'Page loaded but content too thin.', skipped: true,
+            vehicle: lead.vehicle, status: lead.status, source: lead.source, taskDescription: lead.taskDescription,
+          });
           try { await sendToContentScript(tabId, { type: 'GO_BACK' }); } catch {}
           await new Promise(r => setTimeout(r, 1500));
           continue;
         }
 
-        if (deepReviewCancelled) break; // Check cancel before expensive API call
+        if (deepReviewCancelled) break;
 
         const cleanedLeadText = stripSensitiveData(pageContent.mainText) +
           (pageContent.conversations.length > 0
@@ -342,13 +378,19 @@ async function runDeepReview(tabId: number): Promise<DeepReviewResult> {
           messages: [{ role: 'user', content: prompt }],
         });
 
-        summaries.push({ name: lead.name, summary });
+        summaries.push({
+          name: lead.name, summary,
+          vehicle: lead.vehicle, status: lead.status, source: lead.source, taskDescription: lead.taskDescription,
+        });
 
         try { await sendToContentScript(tabId, { type: 'GO_BACK' }); } catch {}
         await new Promise(r => setTimeout(r, 1500));
 
       } catch (err: any) {
-        summaries.push({ name: lead.name, summary: `Extraction failed: ${err.message || 'unknown'}.`, skipped: true });
+        summaries.push({
+          name: lead.name, summary: `Extraction failed: ${err.message || 'unknown'}.`, skipped: true,
+          vehicle: lead.vehicle, status: lead.status, source: lead.source, taskDescription: lead.taskDescription,
+        });
         try { await sendToContentScript(tabId, { type: 'GO_BACK' }); } catch {}
         await new Promise(r => setTimeout(r, 1500));
       }
@@ -357,7 +399,11 @@ async function runDeepReview(tabId: number): Promise<DeepReviewResult> {
     // Generate game plan with Sonnet
     broadcast({ type: 'DEEP_REVIEW_PROGRESS', payload: { current: total, total, name: 'Building game plan...' } });
 
-    const allSummaries = summaries.map(s => ({ name: s.name, summary: s.summary }));
+    // Pass structured metadata through to game plan prompt when available
+    const allSummaries = summaries.map(s => ({
+      name: s.name, summary: s.summary,
+      vehicle: s.vehicle, status: s.status, source: s.source, taskDescription: s.taskDescription,
+    }));
 
     const gamePlanText = await callAIProxy({
       model: REX_MODEL,
@@ -386,7 +432,7 @@ async function runDeepReview(tabId: number): Promise<DeepReviewResult> {
         play: s.skipped ? 'Could not access — review manually.' : 'Review manually — game plan generation failed.',
         taskType: 'phone',
         script: '',
-        product: '',
+        product: s.vehicle || '',
         skipped: s.skipped,
       }));
     }

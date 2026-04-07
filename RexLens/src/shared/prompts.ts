@@ -4,8 +4,29 @@ export const REX_MODEL = 'claude-sonnet-4-6';
 export const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 export const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/anthropic';
 
+/** Format structured tasks as a compact numbered list for prompts */
+function formatStructuredTasks(page: PageContent): string {
+  if (!page.structuredTasks || page.structuredTasks.length === 0) return '';
+  return page.structuredTasks.map((t, i) =>
+    `${i + 1}. ${t.customerName} | ${t.vehicle || 'no vehicle'} | ${t.status || 'no status'} | Source: ${t.source || 'unknown'} | Age: ${t.age || '?'} | Task: ${t.taskDescription} | Section: ${t.section}${t.template ? ` | Template: ${t.template}` : ''}`
+  ).join('\n');
+}
+
 /** Prompt for Haiku to pre-scan a page and produce a compact summary */
 export function buildPageScanPrompt(page: PageContent): string {
+  const structuredBlock = formatStructuredTasks(page);
+
+  // When adapter provides structured tasks, give Haiku perfect data
+  if (structuredBlock) {
+    return `This is a ${page.adapterPlatform || page.type} worklist with ${page.structuredTasks!.length} tasks extracted from the CRM.
+
+Structured tasks:
+${structuredBlock}
+
+Summarize this worklist: how many leads, breakdown by section/priority, and a one-line summary for each person (name, vehicle, task type, status). Keep it under 800 words.`;
+  }
+
+  // Generic: Haiku infers from raw text
   return `Analyze this page and produce a structured summary. Identify every person/lead/contact, their vehicle or product of interest, task type, and any key context. Be concise.
 
 Page type: ${page.type}
@@ -73,10 +94,18 @@ ${pageContent.slice(0, 6000)}`;
 
 export function buildDeepReviewGamePlanPrompt(
   repName: string,
-  summaries: { name: string; summary: string }[],
+  summaries: { name: string; summary: string; vehicle?: string; status?: string; source?: string; taskDescription?: string }[],
 ): string {
   const summaryText = summaries
-    .map((s, i) => `[${i + 1}] ${s.name}: ${s.summary}`)
+    .map((s, i) => {
+      let line = `[${i + 1}] ${s.name}`;
+      if (s.vehicle) line += ` | Vehicle: ${s.vehicle}`;
+      if (s.status) line += ` | Status: ${s.status}`;
+      if (s.source) line += ` | Source: ${s.source}`;
+      if (s.taskDescription) line += ` | Task: ${s.taskDescription}`;
+      line += `: ${s.summary}`;
+      return line;
+    })
     .join('\n');
 
   return `You are Rex, an elite sales closer and AI coach. You've been doing this for 20 years and you've seen every trick, every objection, every stall tactic. You write like you talk — direct, warm, no corporate BS.
