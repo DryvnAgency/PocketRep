@@ -201,6 +201,46 @@ function getAdapterHelpers(): AdapterHelpers {
   return { querySelectorAllDeep, extractText, cspSafeClick, buildUniqueSelector };
 }
 
+/** Extract VinConnect-specific vehicle/trade detail from a contact detail page */
+function extractVehicleDetail(): string {
+  const host = window.location.hostname.toLowerCase();
+  if (!host.includes('vinsolutions')) return '';
+
+  const parts: string[] = [];
+
+  // Look for VOI (Vehicle of Interest), trade info, equity in iframes
+  const vehicleSelectors = [
+    '[class*="vehicle"], [class*="Vehicle"], [id*="vehicle"], [id*="Vehicle"]',
+    '[class*="trade"], [class*="Trade"], [id*="trade"], [id*="Trade"]',
+    '[class*="equity"], [class*="Equity"]',
+    '[class*="interest"], [class*="Interest"]',
+  ];
+
+  for (const sel of vehicleSelectors) {
+    const els = querySelectorAllDeep(sel);
+    for (const el of els) {
+      const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (text.length > 5 && text.length < 500) {
+        parts.push(text);
+      }
+    }
+  }
+
+  // Also look for service appointment info
+  const serviceEls = querySelectorAllDeep(
+    '[class*="service"], [class*="Service"], [id*="service"], [id*="Service"], ' +
+    '[class*="appointment"], [class*="Appointment"]'
+  );
+  for (const el of serviceEls) {
+    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (text.length > 10 && text.length < 500) {
+      parts.push(text);
+    }
+  }
+
+  return [...new Set(parts)].join('\n').slice(0, 3000);
+}
+
 function extractPageContent(): PageContent {
   const type = detectPageType();
   const contactInfo = extractContactInfo();
@@ -211,11 +251,18 @@ function extractPageContent(): PageContent {
   const helpers = getAdapterHelpers();
   const adapterResult = adapter.extract(helpers);
 
+  // On VinConnect detail pages, append vehicle/trade detail
+  let mainText = adapterResult.tasks.length > 0 ? adapterResult.rawText : extractText();
+  const vehicleDetail = extractVehicleDetail();
+  if (vehicleDetail) {
+    mainText += '\n\nVehicle/Trade Details:\n' + vehicleDetail;
+  }
+
   return {
     type,
     title: document.title,
     url: window.location.href,
-    mainText: adapterResult.tasks.length > 0 ? adapterResult.rawText : extractText(),
+    mainText,
     conversations: extractConversations(),
     formFields: detectFormFields(),
     contactNames: contactInfo.names,
@@ -531,18 +578,23 @@ function extractConversationItem(el: HTMLElement, index: number): ClickableConta
 // listeners without executing the javascript: href.
 
 function cspSafeClick(el: HTMLElement): void {
-  const isJSLink = el.tagName === 'A'
-    && (el as HTMLAnchorElement).href?.startsWith('javascript:');
-  const parentJSLink = el.closest('a[href^="javascript:"]') as HTMLAnchorElement | null;
+  const jsLink = el.tagName === 'A' && (el as HTMLAnchorElement).href?.startsWith('javascript:')
+    ? el as HTMLAnchorElement
+    : el.closest('a[href^="javascript:"]') as HTMLAnchorElement | null;
 
-  if (isJSLink || parentJSLink) {
-    // Dispatch mouse events that trigger CRM click handlers without
-    // executing the javascript: URL via the href attribute
-    const target = isJSLink ? el : (parentJSLink as HTMLElement);
+  if (jsLink) {
+    // Temporarily strip the javascript: href so the browser can't execute it,
+    // then dispatch synthetic events to trigger the CRM's click handlers.
+    const savedHref = jsLink.href;
+    jsLink.removeAttribute('href');
+
     const opts: MouseEventInit = { bubbles: true, cancelable: true, view: window };
-    target.dispatchEvent(new MouseEvent('mousedown', opts));
-    target.dispatchEvent(new MouseEvent('mouseup', opts));
-    target.dispatchEvent(new MouseEvent('click', opts));
+    jsLink.dispatchEvent(new MouseEvent('mousedown', opts));
+    jsLink.dispatchEvent(new MouseEvent('mouseup', opts));
+    jsLink.dispatchEvent(new MouseEvent('click', opts));
+
+    // Restore href after a tick so the DOM stays consistent
+    requestAnimationFrame(() => { jsLink.setAttribute('href', savedHref); });
   } else {
     el.click();
   }
@@ -866,13 +918,13 @@ chrome.runtime.onMessage.addListener(
 
           cspSafeClick(el);
 
-          // Wait 4s for iframe/page navigation to complete, then extract all content
+          // Wait 6s for iframe/page navigation to complete (VinConnect is slow)
           setTimeout(() => {
             try {
               tagFields();
               const content = extractPageContent();
 
-              // If first extraction is thin, wait 2 more seconds and retry (iframe may still be loading)
+              // If first extraction is thin, wait 3 more seconds and retry (iframe may still be loading)
               if (content.mainText.length < 50) {
                 setTimeout(() => {
                   try {
@@ -880,14 +932,14 @@ chrome.runtime.onMessage.addListener(
                     const retryContent = extractPageContent();
                     respond({ success: true, content: retryContent });
                   } catch { respond({ success: false, error: 'Retry extraction failed' }); }
-                }, 2000);
+                }, 3000);
               } else {
                 respond({ success: true, content });
               }
             } catch (e: any) {
               respond({ success: false, error: `Extraction after click failed: ${e.message}` });
             }
-          }, 4000);
+          }, 6000);
 
         } catch (err: any) {
           respond({ success: false, error: err.message });

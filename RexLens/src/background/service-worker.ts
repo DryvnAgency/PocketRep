@@ -337,15 +337,27 @@ async function runDeepReview(tabId: number): Promise<DeepReviewResult> {
           ? { selector: matchedContact.selector, text: lead.name }
           : { selector: '', text: lead.name };
 
-        const clickResult = await sendToContentScript(tabId, {
+        let clickResult = await sendToContentScript(tabId, {
           type: 'CLICK_ELEMENT',
           payload: clickPayload,
         });
 
+        // Retry once after 3s if first click fails
         if (!clickResult?.success) {
-          // For structured data, include metadata even if click fails
+          await new Promise(r => setTimeout(r, 3000));
+          clickResult = await sendToContentScript(tabId, {
+            type: 'CLICK_ELEMENT',
+            payload: clickPayload,
+          });
+        }
+
+        if (!clickResult?.success) {
+          // Fallback: generate summary from worklist data alone instead of skipping
+          const fallbackInfo = [lead.vehicle, lead.status, lead.source, lead.taskDescription].filter(Boolean).join(', ');
           summaries.push({
-            name: lead.name, summary: `Could not click into lead: ${clickResult?.error || 'unknown'}.`, skipped: true,
+            name: lead.name,
+            summary: fallbackInfo ? `Worklist info only: ${fallbackInfo}. Could not access detail page.` : `Could not click into lead: ${clickResult?.error || 'unknown'}.`,
+            skipped: !fallbackInfo, // Only mark as skipped if we have zero info
             vehicle: lead.vehicle, status: lead.status, source: lead.source, taskDescription: lead.taskDescription,
           });
           continue;
@@ -608,11 +620,18 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       if (!authState.hasAccess) return { error: 'Sign in to Rex Lens to use this feature.' };
       const { tasks, rawText } = message.payload as { tasks: StructuredTask[]; rawText: string };
       try {
+        // Get rep name and dealership from storage (set by landing page signup)
+        const storageData = await chrome.storage.sync.get(['repName', 'dealershipName']);
+        const repName = storageData.repName || authState.profile?.full_name || 'admin';
+        const dealershipName = storageData.dealershipName || 'the dealership';
+
         const prompt = buildScanBatchPrompt(tasks, rawText);
+        const system = SCAN_BATCH_SYSTEM
+          + `\n\nThe rep's name is ${repName} and they work at ${dealershipName}. Use their actual name in scripts instead of placeholders.`;
         const reply = await callAIProxy({
           model: REX_MODEL,
           max_tokens: 8000,
-          system: SCAN_BATCH_SYSTEM,
+          system,
           messages: [{ role: 'user', content: prompt }],
         });
         return { reply };

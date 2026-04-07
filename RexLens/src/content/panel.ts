@@ -185,10 +185,10 @@ const PANEL_CSS = /* css */ `
 }
 #rex-pills::-webkit-scrollbar { height: 0; }
 .rex-pill {
-  white-space: nowrap; padding: 5px 14px;
+  white-space: nowrap; padding: 4px 10px;
   border-radius: 20px; border: 1px solid #374151;
   background: transparent; color: #d1d5db;
-  font-size: 12px; cursor: pointer;
+  font-size: 11px; cursor: pointer;
   transition: all 0.18s; flex-shrink: 0;
 }
 .rex-pill:hover {
@@ -669,8 +669,12 @@ export class RexLensPanel {
         return;
       }
 
+      // Fresh scan resets the task counter (queue continues don't)
+      this.state.processedTaskCount = 0;
+      this.state.taskQueue = [];
+
       // Check total task limit
-      const totalNew = Math.min(tasks.length, MAX_TOTAL_TASKS - this.state.processedTaskCount);
+      const totalNew = Math.min(tasks.length, MAX_TOTAL_TASKS);
       if (totalNew <= 0) {
         scanEl.remove();
         this.appendMessage('system', '150 task limit reached. Please complete current tasks before scanning again.');
