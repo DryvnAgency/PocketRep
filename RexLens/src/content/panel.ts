@@ -288,6 +288,41 @@ const PANEL_CSS = /* css */ `
   animation: rex-spin 0.8s linear infinite;
 }
 @keyframes rex-spin { to { transform: rotate(360deg); } }
+
+/* ── Auth Screen ─────────────────────────── */
+#rex-auth {
+  display: none; flex-direction: column; align-items: center;
+  justify-content: center; flex: 1; padding: 32px 24px; gap: 20px;
+}
+#rex-auth.visible { display: flex; }
+.rex-auth-logo { font-size: 28px; font-weight: 700; color: #e94560; letter-spacing: -0.5px; }
+.rex-auth-subtitle {
+  font-size: 11px; color: #6b7280; text-transform: uppercase;
+  letter-spacing: 0.12em; margin-top: -12px;
+}
+.rex-auth-card { width: 100%; max-width: 280px; display: flex; flex-direction: column; gap: 10px; }
+.rex-auth-input {
+  background: #1e293b; border: 1px solid #374151; border-radius: 8px;
+  padding: 10px 14px; color: #e5e7eb; font-size: 13.5px;
+  font-family: inherit; outline: none; width: 100%;
+  transition: border-color 0.15s;
+}
+.rex-auth-input::placeholder { color: #6b7280; }
+.rex-auth-input:focus { border-color: #e94560; }
+.rex-auth-btn {
+  background: linear-gradient(135deg, #e94560, #0f3460);
+  border: none; color: #fff; padding: 10px 16px; border-radius: 8px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: opacity 0.15s; margin-top: 4px;
+}
+.rex-auth-btn:hover { opacity: 0.9; }
+.rex-auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.rex-auth-error { color: #fca5a5; font-size: 12px; text-align: center; display: none; }
+.rex-auth-error.visible { display: block; }
+
+/* ── Main UI Wrapper ─────────────────────── */
+#rex-main { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+#rex-main.visible { display: flex; }
 `;
 
 // ── HTML ────────────────────────────────────────────────────────────────────
@@ -296,31 +331,48 @@ const PANEL_HTML = /* html */ `
 <button id="rex-toggle">R</button>
 <div id="rex-panel">
   <div id="rex-resize"></div>
-  <div id="rex-header">
-    <span class="rex-logo">Rex Lens</span>
-    <span id="rex-counter">0/${MAX_RESPONSES}</span>
-    <button class="rex-hdr-btn" id="rex-minimize-btn" title="Minimize">&minus;</button>
-    <button class="rex-hdr-btn" id="rex-close-btn" title="Close">&times;</button>
+
+  <!-- Auth Screen -->
+  <div id="rex-auth">
+    <span class="rex-auth-logo">Rex Lens</span>
+    <span class="rex-auth-subtitle">AI Sales Coach</span>
+    <div class="rex-auth-card">
+      <input type="text" class="rex-auth-input" id="rex-username" placeholder="Username" autocomplete="username">
+      <input type="password" class="rex-auth-input" id="rex-password" placeholder="Password" autocomplete="current-password">
+      <button class="rex-auth-btn" id="rex-login-btn">Sign In</button>
+      <p class="rex-auth-error" id="rex-auth-error"></p>
+    </div>
   </div>
-  <div id="rex-messages"></div>
-  <div id="rex-queue">
-    <span id="rex-queue-text"></span>
-    <button id="rex-continue-btn">Continue</button>
-  </div>
-  <div id="rex-limit-banner">Session limit reached. Close and reopen Rex Lens to start a new session.</div>
-  <div id="rex-pills">
-    <button class="rex-pill rex-pill-primary" data-action="scan">Scan My Page</button>
-    <button class="rex-pill" data-action="rebuttals">Rebuttals</button>
-    <button class="rex-pill" data-action="email">Email Writer</button>
-    <button class="rex-pill" data-action="text">Text Writer</button>
-    <button class="rex-pill" data-action="phone">Phone Script</button>
-  </div>
-  <div id="rex-file-previews"></div>
-  <div id="rex-input-area">
-    <button id="rex-attach-btn" title="Attach file">&#128206;</button>
-    <textarea id="rex-input" placeholder="Ask Rex Lens anything..." rows="1"></textarea>
-    <button id="rex-send-btn" title="Send">&#10148;</button>
-    <input type="file" id="rex-file-input" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv" style="display:none">
+
+  <!-- Main UI (shown after auth) -->
+  <div id="rex-main">
+    <div id="rex-header">
+      <span class="rex-logo">Rex Lens</span>
+      <span id="rex-counter">0/${MAX_RESPONSES}</span>
+      <button class="rex-hdr-btn" id="rex-logout-btn" title="Sign Out">&#9211;</button>
+      <button class="rex-hdr-btn" id="rex-minimize-btn" title="Minimize">&minus;</button>
+      <button class="rex-hdr-btn" id="rex-close-btn" title="Close">&times;</button>
+    </div>
+    <div id="rex-messages"></div>
+    <div id="rex-queue">
+      <span id="rex-queue-text"></span>
+      <button id="rex-continue-btn">Continue</button>
+    </div>
+    <div id="rex-limit-banner">Session limit reached. Close and reopen Rex Lens to start a new session.</div>
+    <div id="rex-pills">
+      <button class="rex-pill rex-pill-primary" data-action="scan">Scan My Page</button>
+      <button class="rex-pill" data-action="rebuttals">Rebuttals</button>
+      <button class="rex-pill" data-action="email">Email Writer</button>
+      <button class="rex-pill" data-action="text">Text Writer</button>
+      <button class="rex-pill" data-action="phone">Phone Script</button>
+    </div>
+    <div id="rex-file-previews"></div>
+    <div id="rex-input-area">
+      <button id="rex-attach-btn" title="Attach file">&#128206;</button>
+      <textarea id="rex-input" placeholder="Ask Rex Lens anything..." rows="1"></textarea>
+      <button id="rex-send-btn" title="Send">&#10148;</button>
+      <input type="file" id="rex-file-input" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv" style="display:none">
+    </div>
   </div>
 </div>
 `;
@@ -332,12 +384,15 @@ export class RexLensPanel {
   private state: SessionState = { messages: [], taskQueue: [], processedTaskCount: 0, responseCount: 0 };
   private isOpen = false;
   private isSending = false;
+  private isAuthenticated = false;
   private attachedFiles: { file: File; dataUrl?: string }[] = [];
   private panelWidth = PANEL_DEFAULT_WIDTH;
 
   // DOM refs (populated in init)
   private panel!: HTMLElement;
   private toggle!: HTMLElement;
+  private authScreen!: HTMLElement;
+  private mainUI!: HTMLElement;
   private messagesEl!: HTMLElement;
   private inputEl!: HTMLTextAreaElement;
   private sendBtn!: HTMLButtonElement;
@@ -367,6 +422,7 @@ export class RexLensPanel {
     this.bindEvents();
     this.loadState();
     this.listenForBroadcasts();
+    this.checkAuth();
   }
 
   // ── Refs ────────────────────────────────────────────────────────────────
@@ -376,6 +432,8 @@ export class RexLensPanel {
   private bindRefs() {
     this.panel = this.$('rex-panel');
     this.toggle = this.$('rex-toggle');
+    this.authScreen = this.$('rex-auth');
+    this.mainUI = this.$('rex-main');
     this.messagesEl = this.$('rex-messages');
     this.inputEl = this.$('rex-input') as HTMLTextAreaElement;
     this.sendBtn = this.$('rex-send-btn') as HTMLButtonElement;
@@ -395,6 +453,16 @@ export class RexLensPanel {
     this.toggle.addEventListener('click', () => this.togglePanel());
     this.$('rex-minimize-btn').addEventListener('click', () => this.closePanel());
     this.$('rex-close-btn').addEventListener('click', () => this.closePanel());
+
+    // Auth
+    this.$('rex-login-btn').addEventListener('click', () => this.login());
+    this.$('rex-password').addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') this.login();
+    });
+    this.$('rex-username').addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') (this.$('rex-password') as HTMLInputElement).focus();
+    });
+    this.$('rex-logout-btn').addEventListener('click', () => this.logout());
 
     // Send
     this.sendBtn.addEventListener('click', () => this.sendChat());
@@ -436,8 +504,9 @@ export class RexLensPanel {
     this.isOpen = true;
     this.panel.classList.add('open');
     this.toggle.style.display = 'none';
+    this.checkAuth();
     this.scrollToBottom();
-    this.inputEl.focus();
+    if (this.isAuthenticated) this.inputEl.focus();
   }
 
   private closePanel() {
@@ -855,8 +924,10 @@ export class RexLensPanel {
 
   private listenForBroadcasts() {
     chrome.runtime.onMessage.addListener((message) => {
-      if (message.type === 'PAGE_CHANGED') {
-        // Page navigated — optionally notify user
+      if (message.type === 'AUTH_STATE') {
+        this.handleAuthState(message.payload);
+      } else if (message.type === 'TOGGLE_PANEL') {
+        this.togglePanel();
       }
     });
   }
@@ -903,6 +974,76 @@ export class RexLensPanel {
         this.scrollToBottom();
       }
     } catch { /* not available */ }
+  }
+
+  // ── Auth ────────────────────────────────────────────────────────────────
+
+  private async checkAuth() {
+    const state = await this.sendToSW({ type: 'GET_AUTH_STATE' });
+    this.handleAuthState(state);
+  }
+
+  private handleAuthState(state: any) {
+    if (state?.authenticated && state?.hasAccess) {
+      this.isAuthenticated = true;
+      this.authScreen.classList.remove('visible');
+      this.mainUI.classList.add('visible');
+    } else {
+      this.isAuthenticated = false;
+      this.authScreen.classList.add('visible');
+      this.mainUI.classList.remove('visible');
+    }
+  }
+
+  private usernameToEmail(input: string): string {
+    const trimmed = input.trim().toLowerCase();
+    return trimmed.includes('@') ? trimmed : `${trimmed}@pocketrep.app`;
+  }
+
+  private async login() {
+    const usernameEl = this.$('rex-username') as HTMLInputElement;
+    const passwordEl = this.$('rex-password') as HTMLInputElement;
+    const loginBtn = this.$('rex-login-btn') as HTMLButtonElement;
+    const errorEl = this.$('rex-auth-error');
+
+    const username = usernameEl.value.trim();
+    const password = passwordEl.value;
+    if (!username || !password) {
+      errorEl.textContent = 'Enter your username and password.';
+      errorEl.classList.add('visible');
+      return;
+    }
+
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Signing in...';
+    errorEl.classList.remove('visible');
+
+    const result = await this.sendToSW({
+      type: 'AUTH_LOGIN',
+      payload: { email: this.usernameToEmail(username), password },
+    });
+
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Sign In';
+
+    if (result.error) {
+      errorEl.textContent = result.error;
+      errorEl.classList.add('visible');
+      return;
+    }
+
+    this.handleAuthState(result.authState);
+  }
+
+  private async logout() {
+    await this.sendToSW({ type: 'AUTH_LOGOUT' });
+    this.handleAuthState({ authenticated: false });
+    // Clear chat state
+    this.state = { messages: [], taskQueue: [], processedTaskCount: 0, responseCount: 0 };
+    this.messagesEl.innerHTML = '';
+    this.updateCounter();
+    this.updateQueueStatus();
+    this.saveState();
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────

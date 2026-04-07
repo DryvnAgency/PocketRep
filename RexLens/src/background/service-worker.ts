@@ -41,8 +41,15 @@ async function loadProfile(userId: string) {
   authState = { authenticated: true, profile, hasAccess };
 }
 
-function broadcastAuthState() {
-  chrome.runtime.sendMessage({ type: 'AUTH_STATE', payload: authState }).catch(() => {});
+async function broadcastAuthState() {
+  const msg = { type: 'AUTH_STATE', payload: authState };
+  // Broadcast to extension pages (popup, options)
+  chrome.runtime.sendMessage(msg).catch(() => {});
+  // Broadcast to content scripts in all tabs (panel lives here)
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (tab.id) chrome.tabs.sendMessage(tab.id, msg).catch(() => {});
+  }
 }
 
 // ── Content Script Injection Fallback ────────────────────────────────────────
@@ -680,9 +687,13 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   }
 });
 
-// ── Side Panel Behavior ──────────────────────────────────────────────────────
+// ── Extension Icon → Toggle Injected Panel ──────────────────────────────────
 
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab.id) return;
+  await ensureContentScript(tab.id);
+  chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_PANEL' }).catch(() => {});
+});
 
 // ── Init on install / startup ────────────────────────────────────────────────
 

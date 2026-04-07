@@ -94,6 +94,10 @@ export interface ScanBatchMessage {
   payload: { tasks: StructuredTask[]; rawText: string };
 }
 
+export interface TogglePanelMessage {
+  type: 'TOGGLE_PANEL';
+}
+
 export type ExtensionMessage =
   | InsertTextMessage
   | HighlightFieldMessage
@@ -113,4 +117,5 @@ export type ExtensionMessage =
   | AuthStateMessage
   | StatusMessage
   | ScanPageMessage
-  | ScanBatchMessage;
+  | ScanBatchMessage
+  | TogglePanelMessage;

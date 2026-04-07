@@ -20,11 +20,6 @@ const entryPoints = [
     outfile: 'dist/content-script.js',
     format: 'iife', // Content scripts need IIFE
   },
-  {
-    entryPoints: ['src/sidepanel/sidepanel.ts'],
-    outfile: 'dist/sidepanel.js',
-    format: 'iife', // Side panel scripts need IIFE (no type="module")
-  },
 ];
 
 async function run() {

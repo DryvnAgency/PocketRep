@@ -5,7 +5,6 @@
   "description": "AI-powered sales coach that reads your screen. Scans any CRM, email, or web page and coaches you with objection handling, draft responses, and next steps. Works across any industry.",
   "permissions": [
     "activeTab",
-    "sidePanel",
     "storage",
     "scripting"
   ],
@@ -22,9 +21,6 @@
       "all_frames": false
     }
   ],
-  "side_panel": {
-    "default_path": "src/sidepanel/index.html"
-  },
   "action": {
     "default_title": "Open Rex Lens",
     "default_icon": {
