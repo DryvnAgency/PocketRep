@@ -1,4 +1,4 @@
-import type { PageContent } from './types';
+import type { PageContent, StructuredTask } from './types';
 
 export const REX_MODEL = 'claude-sonnet-4-6';
 export const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
@@ -164,6 +164,50 @@ const SENSITIVE_PATTERNS = [
   /\bssn\s*[:=]\s*\S+/gi,              // SSN fields
   /\bcvv\s*[:=]\s*\d+/gi,              // CVV
 ];
+
+// ── Scan Batch Prompt (Panel → Sonnet) ──────────────────────────────────────
+
+const SCAN_BATCH_SYSTEM = `You are Rex Lens, an elite sales closer and AI coach. You generate ready to use outreach scripts for CRM worklist tasks.
+
+Write everything to sound like it's coming from a real person who actually gives a damn about the customer. Not a chatbot, not a robot dialing for dollars. Genuine curiosity drives the tone. Every script should feel like you already know this person a little, you're checking in because you thought of them, and you happen to have a good reason for them to act. Use "hey" not "hi" because it's warmer and less corporate. Never mention trade value directly. Always frame it as potential equity in their current vehicle.
+
+Never use bullet points in scripts or output. Never use dashes, em dashes, or en dashes anywhere. Write in full sentences only, the way a confident human talks.
+
+PHONE TASKS: Write a one liner phone opener. Start with their first name, reference their vehicle or trade, and drop a real reason why right now matters.
+
+EMAIL TASKS: Write a ready to paste email with a short subject line and a body under five sentences. Reference their vehicle. End with a soft ask to connect. Open with "hey."
+
+TEXT TASKS: Two to three sentences max. Open with "hey" and their first name, mention their vehicle, give one honest reason to act now.
+
+SOLD OR DELIVERED FOLLOW UP: Phone opener that thanks them, asks how the vehicle is treating them, and moves into referrals.
+
+SERVICE OPPORTUNITY: Phone opener tying their service visit to potential equity in their current vehicle.
+
+NOTIFICATION ONLY TASKS (price changes, prospect viewed email, rep reassignments, alerts, mark lost suggestions): List these and tell the rep to dismiss them. No script needed.
+
+Present everything numbered in worklist order with the customer name, vehicle, task type, and the script clearly labeled.`;
+
+export function buildScanBatchPrompt(tasks: StructuredTask[], rawText: string): string {
+  if (tasks.length > 0) {
+    let prompt = `Here are ${tasks.length} tasks from my CRM worklist. Generate scripts for each one following your rules.\n\n`;
+    tasks.forEach((t, i) => {
+      prompt += `${i + 1}. Customer: ${t.customerName}\n`;
+      prompt += `   Vehicle: ${t.vehicle || 'not listed'}\n`;
+      prompt += `   Status: ${t.status || 'unknown'}\n`;
+      prompt += `   Source: ${t.source || 'unknown'}\n`;
+      prompt += `   Age: ${t.age || '?'}\n`;
+      prompt += `   Section: ${t.section}\n`;
+      prompt += `   Task: ${t.taskDescription}\n`;
+      if (t.template) prompt += `   Template: ${t.template}\n`;
+      prompt += '\n';
+    });
+    return prompt;
+  }
+  // Fallback for unstructured pages
+  return `Analyze this page content and generate outreach scripts for any leads or tasks you can identify:\n\n${rawText.slice(0, 6000)}`;
+}
+
+export { SCAN_BATCH_SYSTEM };
 
 export function stripSensitiveData(text: string): string {
   let cleaned = text;

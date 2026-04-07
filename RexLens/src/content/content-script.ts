@@ -979,3 +979,8 @@ chrome.runtime.onMessage.addListener(
 
 // Let the service worker know the content script is ready
 chrome.runtime.sendMessage({ type: 'CONTENT_SCRIPT_READY' }).catch(() => {});
+
+// ── Initialize Panel ────────────────────────────────────────────────────────
+
+import { initPanel } from './panel';
+initPanel();

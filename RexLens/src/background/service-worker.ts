@@ -1,6 +1,6 @@
 import { getSupabase, SUPABASE_ANON_KEY } from '../shared/supabase';
-import { buildPageScanPrompt, buildChatSystemPrompt, buildDeepReviewSummaryPrompt, buildDeepReviewGamePlanPrompt, REX_MODEL, HAIKU_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
-import type { Profile, PageContent, AuthState, DeepReviewLead, DeepReviewResult } from '../shared/types';
+import { buildPageScanPrompt, buildChatSystemPrompt, buildDeepReviewSummaryPrompt, buildDeepReviewGamePlanPrompt, buildScanBatchPrompt, SCAN_BATCH_SYSTEM, REX_MODEL, HAIKU_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
+import type { Profile, PageContent, AuthState, DeepReviewLead, DeepReviewResult, StructuredTask } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -589,8 +589,58 @@ async function handleMessage(message: any, _sender: chrome.runtime.MessageSender
       return { ok: true };
     }
 
+    // ── Scan (Panel) ──────────────────────────────────────────────────────
+
+    case 'SCAN_PAGE': {
+      // Get the tab that sent this message (content script panel)
+      const tabId = _sender.tab?.id;
+      if (!tabId) {
+        // Fallback: use active tab
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab?.id) return { error: 'No active tab found.' };
+        return await scanPageForTab(tab.id);
+      }
+      return await scanPageForTab(tabId);
+    }
+
+    case 'SCAN_BATCH': {
+      if (!authState.hasAccess) return { error: 'Sign in to Rex Lens to use this feature.' };
+      const { tasks, rawText } = message.payload as { tasks: StructuredTask[]; rawText: string };
+      try {
+        const prompt = buildScanBatchPrompt(tasks, rawText);
+        const reply = await callAIProxy({
+          model: REX_MODEL,
+          max_tokens: 8000,
+          system: SCAN_BATCH_SYSTEM,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        return { reply };
+      } catch (err: any) {
+        return { error: `Scan failed: ${err.message}` };
+      }
+    }
+
     default:
       return {};
+  }
+}
+
+async function scanPageForTab(tabId: number): Promise<any> {
+  try {
+    await ensureContentScript(tabId);
+    // Prepare adapter (e.g. VinSolutions clicks "All" view)
+    try { await sendToContentScript(tabId, { type: 'PREPARE_ADAPTER' }); } catch {}
+    // Wait for adapter prepare to settle
+    await new Promise(r => setTimeout(r, 500));
+    // Extract page content (adapter provides structured tasks)
+    const content: PageContent = await chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_PAGE' });
+    return {
+      tasks: content.structuredTasks || [],
+      rawText: content.mainText || '',
+      platform: content.adapterPlatform || 'generic',
+    };
+  } catch (err: any) {
+    return { error: `Could not scan page: ${err.message}` };
   }
 }
 

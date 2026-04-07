@@ -1,4 +1,4 @@
-import type { PageContent, AuthState, DeepReviewResult } from './types';
+import type { PageContent, AuthState, DeepReviewResult, StructuredTask } from './types';
 
 // ── Content Script → Service Worker ──────────────────────────────────────────
 
@@ -83,6 +83,17 @@ export interface StatusMessage {
   payload: { status: string; message?: string };
 }
 
+// ── Scan (Panel → Service Worker) ───────────────────────────────────────────
+
+export interface ScanPageMessage {
+  type: 'SCAN_PAGE';
+}
+
+export interface ScanBatchMessage {
+  type: 'SCAN_BATCH';
+  payload: { tasks: StructuredTask[]; rawText: string };
+}
+
 export type ExtensionMessage =
   | InsertTextMessage
   | HighlightFieldMessage
@@ -100,4 +111,6 @@ export type ExtensionMessage =
   | DeepReviewProgressMessage
   | DeepReviewCompleteMessage
   | AuthStateMessage
-  | StatusMessage;
+  | StatusMessage
+  | ScanPageMessage
+  | ScanBatchMessage;
