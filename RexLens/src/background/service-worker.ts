@@ -465,7 +465,7 @@ chrome.runtime.onMessage.addListener(
   }
 );
 
-async function handleMessage(message: any, _sender: chrome.runtime.MessageSender): Promise<any> {
+async function handleMessage(message: any, sender: chrome.runtime.MessageSender): Promise<any> {
   switch (message.type) {
     case 'AUTH_LOGIN': {
       const { email, password } = message.payload;
@@ -592,8 +592,9 @@ async function handleMessage(message: any, _sender: chrome.runtime.MessageSender
     // ── Scan (Panel) ──────────────────────────────────────────────────────
 
     case 'SCAN_PAGE': {
+      if (!authState.hasAccess) return { error: 'Sign in to Rex Lens to use this feature.' };
       // Get the tab that sent this message (content script panel)
-      const tabId = _sender.tab?.id;
+      const tabId = sender.tab?.id;
       if (!tabId) {
         // Fallback: use active tab
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

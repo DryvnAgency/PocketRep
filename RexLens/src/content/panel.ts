@@ -249,6 +249,7 @@ const PANEL_CSS = /* css */ `
   border-radius: 12px; color: #e5e7eb; padding: 8px 14px;
   font-size: 13.5px; font-family: inherit; resize: none;
   max-height: 120px; line-height: 1.45; outline: none;
+  overflow-y: auto;
   transition: border-color 0.15s;
 }
 #rex-input::placeholder { color: #6b7280; }
@@ -677,7 +678,8 @@ export class RexLensPanel {
       }
 
       const allTasks = tasks.slice(0, totalNew);
-      scanEl.querySelector('span:last-child')!.textContent = `Found ${allTasks.length} tasks. Generating scripts...`;
+      const scanSpan = scanEl.querySelector('span:last-child');
+      if (scanSpan) scanSpan.textContent = `Found ${allTasks.length} tasks. Generating scripts...`;
 
       // Store in queue
       this.state.taskQueue = allTasks.slice(MAX_TASKS_PER_BATCH);
@@ -793,7 +795,7 @@ export class RexLensPanel {
     }
     this.filePreviewsEl.classList.add('visible');
 
-    this.attachedFiles.forEach((entry, i) => {
+    this.attachedFiles.forEach((entry) => {
       const thumb = document.createElement('div');
       thumb.className = 'rex-file-thumb';
 
@@ -808,7 +810,8 @@ export class RexLensPanel {
       removeBtn.className = 'rex-file-remove';
       removeBtn.textContent = '\u00d7';
       removeBtn.addEventListener('click', () => {
-        this.attachedFiles.splice(i, 1);
+        const idx = this.attachedFiles.indexOf(entry);
+        if (idx !== -1) this.attachedFiles.splice(idx, 1);
         this.renderFilePreviews();
       });
       thumb.appendChild(removeBtn);
@@ -826,9 +829,23 @@ export class RexLensPanel {
 
   private sendToSW(message: any): Promise<any> {
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage(message, (response) => {
-        resolve(response || { error: 'No response from service worker' });
-      });
+      const timeout = setTimeout(() => {
+        resolve({ error: 'Request timed out (60s). Try again.' });
+      }, 60_000);
+
+      try {
+        chrome.runtime.sendMessage(message, (response) => {
+          clearTimeout(timeout);
+          if (chrome.runtime.lastError) {
+            resolve({ error: chrome.runtime.lastError.message || 'Service worker unavailable' });
+            return;
+          }
+          resolve(response || { error: 'No response from service worker' });
+        });
+      } catch (err: any) {
+        clearTimeout(timeout);
+        resolve({ error: err.message || 'Failed to send message' });
+      }
     });
   }
 
