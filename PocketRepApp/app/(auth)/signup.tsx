@@ -31,7 +31,7 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
   {
     id: 'elite',
     name: 'Elite — Market Leader',
-    price: '$47',
+    price: '$49',
     after: '$79/mo after Apr 30',
     features: [
       'Everything in Pro',
