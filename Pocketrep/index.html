@@ -736,7 +736,7 @@ body.modal-open{overflow:hidden}
                 <li><span class="ck" style="color:var(--gold)">✦</span> Weekly Pipeline Digest</li>
                 <li><span class="ck" style="color:var(--gold)">✦</span> Mass text up to <b style="color:var(--gold2)">100 contacts</b></li>
                 <li><span class="ck" style="color:var(--gold)">✦</span> Priority Rex speed + custom onboarding</li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Rex Lens eligible — <b style="color:var(--gold2)">bundle both for $99/mo</b></li>
+                <li><span class="ck" style="color:var(--gold)">✦</span> Rex Lens eligible — <b style="color:var(--gold2)">bundle both for $69/mo</b></li>
               </ul>
               <a href="#signup" onclick="scrollToForm('elite');return false;" class="plan-btn btn-solid" style="background:var(--gold)">Start Free Trial →</a>
             </div>
@@ -749,7 +749,7 @@ body.modal-open{overflow:hidden}
               <div class="pdesc">AI that reads your screen and coaches in real-time</div>
               <div class="pprice"><span class="amt">$59</span><span class="per">/mo</span></div>
               <div class="ptrial">Chrome extension — works with any CRM</div>
-              <div class="pwas">Or <b>bundle with Elite for $99/mo</b></div>
+              <div class="pwas">Or <b>bundle with Elite for $69/mo</b></div>
               <hr class="pdiv">
               <ul class="plist">
                 <li><span class="ck" style="color:#4F46E5">✦</span> Screen Reading — Rex reads your CRM, email, LinkedIn</li>
@@ -801,7 +801,7 @@ body.modal-open{overflow:hidden}
         <div class="sfp" id="sfp-elite" onclick="sfSelectPlan('elite')"><div class="sfp-badge" style="background:var(--gold);color:var(--ink)">Market Leader</div><div class="sfp-name">Elite</div><div class="sfp-price">$47/mo</div></div>
         <div class="sfp" id="sfp-pro_bundle" onclick="sfSelectPlan('pro_bundle')"><div class="sfp-badge" style="background:#e94560;color:white">Pro + AI</div><div class="sfp-name">Pro + Rex Lens</div><div class="sfp-price">$49/mo</div></div>
         <div class="sfp" id="sfp-rex_lens_standalone" onclick="sfSelectPlan('rex_lens_standalone')"><div class="sfp-badge" style="background:#4F46E5;color:white">AI Screen Coach</div><div class="sfp-name">Rex Lens</div><div class="sfp-price">$59/mo</div></div>
-        <div class="sfp" id="sfp-elite_bundle" onclick="sfSelectPlan('elite_bundle')"><div class="sfp-badge" style="background:var(--gold);color:var(--ink)">Best Value</div><div class="sfp-name">Elite + Rex Lens</div><div class="sfp-price">$99/mo</div></div>
+        <div class="sfp" id="sfp-elite_bundle" onclick="sfSelectPlan('elite_bundle')"><div class="sfp-badge" style="background:var(--gold);color:var(--ink)">Best Value</div><div class="sfp-name">Elite + Rex Lens</div><div class="sfp-price">$69/mo</div></div>
       </div>
       <form class="sf-body" id="signup-form" novalidate>
         <div class="sf-row" style="margin-top:0.85rem">
@@ -927,7 +927,7 @@ body.modal-open{overflow:hidden}
       </div>
       <div class="faq-item">
         <button class="faq-q" onclick="toggleFaq(this)">What is Rex Lens? <span class="faq-arrow">▼</span></button>
-        <div class="faq-a">Rex Lens is a <b>Chrome extension</b> that reads your screen in real-time — your CRM queue, emails, LinkedIn, Podium, Kenect, Matador — and tells you exactly what to say, who to call, and when to follow up. <b>Deep Scan</b> lets it click into 30 contacts at once and generate ready-to-send texts, emails, and call scripts for each one. Get it standalone for <b>$59/mo</b> or bundled with Elite for <b>$99/mo</b>.</div>
+        <div class="faq-a">Rex Lens is a <b>Chrome extension</b> that reads your screen in real-time — your CRM queue, emails, LinkedIn, Podium, Kenect, Matador — and tells you exactly what to say, who to call, and when to follow up. <b>Deep Scan</b> lets it click into 30 contacts at once and generate ready-to-send texts, emails, and call scripts for each one. Get it standalone for <b>$59/mo</b> or bundled with Elite for <b>$69/mo</b>.</div>
       </div>
     </div>
   </div>
@@ -1163,7 +1163,7 @@ function sfSelectPlan(plan){
     trustRow.innerHTML = '<div class="trust-item">Cancel anytime</div><div class="trust-item">Secured by Stripe</div><div class="trust-item">Chrome extension — works with any CRM</div>';
     formTopLabel.textContent = isBundle ? 'Get Elite + Rex Lens Bundle' : 'Get Rex Lens';
     formTopSub.textContent = 'Enter your details and complete checkout on Stripe.';
-    submitBtn.textContent = isBundle ? 'Get Elite + Rex Lens — $99/mo →' : 'Get Rex Lens — $59/mo →';
+    submitBtn.textContent = isBundle ? 'Get Elite + Rex Lens — $69/mo →' : 'Get Rex Lens — $59/mo →';
     consent.innerHTML = 'You\'ll enter card details on Stripe\'s secure checkout. By continuing you agree to our <a href="terms.html">Terms</a> and <a href="privacy.html">Privacy Policy</a>.';
   } else {
     pitchH2.innerHTML = '7 days free.<br>Then yours forever.';

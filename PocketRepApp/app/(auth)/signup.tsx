@@ -67,8 +67,8 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
   {
     id: 'elite_bundle',
     name: 'Elite + Rex Lens Bundle',
-    price: '$99',
-    after: 'Save $39/mo vs separate',
+    price: '$69',
+    after: 'Save $37/mo vs separate',
     features: [
       'Everything in Elite',
       'Rex Lens Chrome extension included',
