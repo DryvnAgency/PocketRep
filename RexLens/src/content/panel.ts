@@ -6,7 +6,6 @@ import type { StructuredTask } from '../shared/types';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const MAX_RESPONSES = 30;
 const MAX_TASKS_PER_BATCH = 30;
 const PANEL_MIN_WIDTH = 340;
 const PANEL_MAX_WIDTH = 720;
@@ -23,7 +22,6 @@ interface SessionState {
   messages: ChatMsg[];
   taskQueue: StructuredTask[];
   processedTaskCount: number;
-  responseCount: number;
 }
 
 // ── CSS ─────────────────────────────────────────────────────────────────────
@@ -347,7 +345,7 @@ const PANEL_HTML = /* html */ `
   <div id="rex-main">
     <div id="rex-header">
       <span class="rex-logo">Rex Lens</span>
-      <span id="rex-counter">0/${MAX_RESPONSES}</span>
+      <span id="rex-counter">0 tasks</span>
       <button class="rex-hdr-btn" id="rex-logout-btn" title="Sign Out">&#9211;</button>
       <button class="rex-hdr-btn" id="rex-minimize-btn" title="Minimize">&minus;</button>
       <button class="rex-hdr-btn" id="rex-close-btn" title="Close">&times;</button>
@@ -357,7 +355,7 @@ const PANEL_HTML = /* html */ `
       <span id="rex-queue-text"></span>
       <button id="rex-continue-btn">Continue</button>
     </div>
-    <div id="rex-limit-banner">Session limit reached. Close and reopen Rex Lens to start a new session.</div>
+    <div id="rex-limit-banner">Daily limit reached — your scripts reset at midnight. Upgrade your plan for a higher limit!</div>
     <div id="rex-pills">
       <button class="rex-pill rex-pill-primary" data-action="scan">Scan My Page</button>
       <button class="rex-pill" data-action="rebuttals">Rebuttals</button>
@@ -380,7 +378,8 @@ const PANEL_HTML = /* html */ `
 
 export class RexLensPanel {
   private shadow: ShadowRoot;
-  private state: SessionState = { messages: [], taskQueue: [], processedTaskCount: 0, responseCount: 0 };
+  private state: SessionState = { messages: [], taskQueue: [], processedTaskCount: 0 };
+  private dailyLimitHit = false;
   private isOpen = false;
   private isSending = false;
   private isAuthenticated = false;
@@ -600,12 +599,16 @@ export class RexLensPanel {
   }
 
   private updateCounter() {
-    this.counterEl.textContent = `${this.state.responseCount}/${MAX_RESPONSES}`;
-    if (this.state.responseCount >= MAX_RESPONSES) {
-      this.limitBanner.classList.add('visible');
-      this.sendBtn.disabled = true;
-      this.inputEl.disabled = true;
-    }
+    const count = this.state.processedTaskCount;
+    this.counterEl.textContent = count > 0 ? `${count} tasks` : '';
+  }
+
+  private showDailyLimit() {
+    this.dailyLimitHit = true;
+    this.limitBanner.textContent = 'Daily limit reached — your scripts reset at midnight. Upgrade your plan for a higher limit!';
+    this.limitBanner.classList.add('visible');
+    this.sendBtn.disabled = true;
+    this.inputEl.disabled = true;
   }
 
   // ── Markdown Rendering ──────────────────────────────────────────────────
@@ -643,7 +646,7 @@ export class RexLensPanel {
 
   private async sendChat() {
     const text = this.inputEl.value.trim();
-    if (!text || this.isSending || this.state.responseCount >= MAX_RESPONSES) return;
+    if (!text || this.isSending || this.dailyLimitHit) return;
 
     this.inputEl.value = '';
     this.inputEl.style.height = 'auto';
@@ -665,19 +668,23 @@ export class RexLensPanel {
     try {
       const result = await this.sendToSW({ type: 'CHAT_MESSAGE', payload: { content: fullText } });
       thinkingEl.remove();
-      if (result.error) {
+      if (result.error?.includes('DAILY_LIMIT') || result.error === 'DAILY_LIMIT') {
+        this.showDailyLimit();
+      } else if (result.error) {
         this.appendMessage('assistant', `Something went wrong: ${result.error}`);
       } else if (result.reply) {
-        this.state.responseCount++;
-        this.updateCounter();
         this.appendMessage('assistant', result.reply);
       }
     } catch (err: any) {
       thinkingEl.remove();
-      this.appendMessage('system', `Error: ${err.message}`);
+      if (err.message === 'DAILY_LIMIT') {
+        this.showDailyLimit();
+      } else {
+        this.appendMessage('system', `Error: ${err.message}`);
+      }
     } finally {
       this.isSending = false;
-      this.sendBtn.disabled = this.state.responseCount >= MAX_RESPONSES;
+      this.sendBtn.disabled = this.dailyLimitHit;
     }
   }
 
@@ -711,7 +718,7 @@ export class RexLensPanel {
   // ── Scan My Page ────────────────────────────────────────────────────────
 
   private async scanPage() {
-    if (this.isSending || this.state.responseCount >= MAX_RESPONSES) return;
+    if (this.isSending || this.dailyLimitHit) return;
 
     this.isSending = true;
     this.sendBtn.disabled = true;
@@ -757,10 +764,11 @@ export class RexLensPanel {
 
       scanEl.remove();
 
-      if (batchResult.error) {
+      if (batchResult.error?.includes('DAILY_LIMIT') || batchResult.error === 'DAILY_LIMIT') {
+        this.showDailyLimit();
+      } else if (batchResult.error) {
         this.appendMessage('system', `Scan failed: ${batchResult.error}`);
       } else {
-        this.state.responseCount++;
         this.state.processedTaskCount += firstBatch.length;
         this.updateCounter();
         this.appendMessage('assistant', batchResult.reply || 'No scripts generated.');
@@ -771,10 +779,14 @@ export class RexLensPanel {
 
     } catch (err: any) {
       scanEl.remove();
-      this.appendMessage('system', `Scan error: ${err.message}`);
+      if (err.message === 'DAILY_LIMIT') {
+        this.showDailyLimit();
+      } else {
+        this.appendMessage('system', `Scan error: ${err.message}`);
+      }
     } finally {
       this.isSending = false;
-      this.sendBtn.disabled = this.state.responseCount >= MAX_RESPONSES;
+      this.sendBtn.disabled = this.dailyLimitHit;
       this.saveState();
     }
   }
@@ -782,7 +794,7 @@ export class RexLensPanel {
   // ── Batch Processing ────────────────────────────────────────────────────
 
   private async processBatch() {
-    if (this.state.taskQueue.length === 0 || this.isSending || this.state.responseCount >= MAX_RESPONSES) return;
+    if (this.state.taskQueue.length === 0 || this.isSending || this.dailyLimitHit) return;
 
     this.isSending = true;
     this.continueBtn.disabled = true;
@@ -799,10 +811,13 @@ export class RexLensPanel {
 
       thinkingEl.remove();
 
-      if (result.error) {
+      if (result.error?.includes('DAILY_LIMIT') || result.error === 'DAILY_LIMIT') {
+        // Put batch back in queue so they can resume tomorrow
+        this.state.taskQueue = [...batch, ...this.state.taskQueue];
+        this.showDailyLimit();
+      } else if (result.error) {
         this.appendMessage('system', `Batch failed: ${result.error}`);
       } else {
-        this.state.responseCount++;
         this.state.processedTaskCount += batch.length;
         this.updateCounter();
         this.appendMessage('assistant', result.reply || 'No scripts generated.');
@@ -811,11 +826,15 @@ export class RexLensPanel {
       this.updateQueueStatus();
     } catch (err: any) {
       thinkingEl.remove();
-      this.appendMessage('system', `Batch error: ${err.message}`);
+      if (err.message === 'DAILY_LIMIT') {
+        this.showDailyLimit();
+      } else {
+        this.appendMessage('system', `Batch error: ${err.message}`);
+      }
     } finally {
       this.isSending = false;
       this.continueBtn.disabled = false;
-      this.sendBtn.disabled = this.state.responseCount >= MAX_RESPONSES;
+      this.sendBtn.disabled = this.dailyLimitHit;
       this.saveState();
     }
   }
@@ -1030,7 +1049,8 @@ export class RexLensPanel {
     await this.sendToSW({ type: 'AUTH_LOGOUT' });
     this.handleAuthState({ authenticated: false });
     // Clear chat state
-    this.state = { messages: [], taskQueue: [], processedTaskCount: 0, responseCount: 0 };
+    this.state = { messages: [], taskQueue: [], processedTaskCount: 0 };
+    this.dailyLimitHit = false;
     this.messagesEl.innerHTML = '';
     this.updateCounter();
     this.updateQueueStatus();

@@ -42,6 +42,17 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
     ],
   },
   {
+    id: 'pro_bundle',
+    name: 'Pro + Rex Lens',
+    price: '$49',
+    after: 'Save $39/mo vs separate',
+    features: [
+      'Everything in Pro',
+      'Rex Lens Chrome extension included',
+      'CRM + AI screen coach at a great price',
+    ],
+  },
+  {
     id: 'rex_lens_standalone',
     name: 'Rex Lens — AI Screen Coach',
     price: '$59',
