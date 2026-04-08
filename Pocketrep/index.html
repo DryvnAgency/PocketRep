@@ -609,138 +609,94 @@ body.modal-open{overflow:hidden}
   </div>
 </div>
 
-<!-- ELITE EDGE -->
-<div class="wrap-sm">
-  <style>
-  .elite-edge-section{margin-top:0}
-  .elite-edge-header{
-    background:linear-gradient(135deg,var(--ink2) 0%,rgba(212,168,67,0.06) 100%);
-    border:1px solid var(--gold-border);border-radius:14px 14px 0 0;
-    padding:1.75rem 1.75rem 1.25rem;
-  }
-  .elite-edge-header .eyebrow{margin-bottom:0.4rem}
-  .elite-edge-header h3{font-size:1.5rem;font-weight:800;color:var(--white);letter-spacing:-0.025em;margin-bottom:0.4rem}
-  .elite-edge-header p{font-size:0.86rem;color:var(--grey2);max-width:460px;line-height:1.6}
-  .elite-table{width:100%;border-collapse:collapse;background:var(--ink2);border:1px solid var(--gold-border);border-top:none;border-radius:0 0 14px 14px;overflow:hidden}
-  .elite-table th{text-align:left;padding:0.75rem 1.25rem;font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--grey);border-bottom:1px solid rgba(255,255,255,0.06)}
-  .elite-table td{padding:0.9rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:top}
-  .elite-table tr:last-child td{border-bottom:none}
-  .elite-table td:first-child{color:var(--gold2);font-weight:700;font-size:0.85rem;white-space:nowrap;width:38%}
-  .elite-table td:last-child{color:var(--grey3);font-size:0.83rem;line-height:1.5}
-  @media(max-width:600px){
-    .elite-table thead{display:none}
-    .elite-table tr{display:block;padding:0.85rem 1rem;border-bottom:1px solid rgba(255,255,255,0.06)}
-    .elite-table tr:last-child{border-bottom:none}
-    .elite-table td{display:block;padding:0;border:none;width:100%}
-    .elite-table td:first-child{color:var(--gold2);font-weight:700;font-size:0.85rem;margin-bottom:0.3rem;white-space:normal}
-    .elite-table td:last-child{color:var(--grey3);font-size:0.82rem;line-height:1.55}
-  }
-  </style>
-  <div class="elite-edge-section">
-    <div class="elite-edge-header">
-      <div class="eyebrow">Elite Only</div>
-      <h3>The Market Leader's Edge</h3>
-      <p>For reps who treat this like a business, not a job. Every feature below is built to make you untouchable in your market.</p>
-    </div>
-    <table class="elite-table">
-      <thead><tr><th>Feature</th><th>The Elite Advantage</th></tr></thead>
-      <tbody>
-        <tr><td>Proximity Alerts</td><td>Your phone vibrates when you're within 500ft of a Red Hot lead. Never drive past a commission again.</td></tr>
-        <tr><td>Rex Lens</td><td>Point your camera at a trade-in, competitor quote, or VIN plate. Rex reads the image and auto-tags year, make, model, trim, specs, and equipment — filed under the right contact instantly.</td></tr>
-        <tr><td>Context-Switching</td><td>Rex automatically shifts his coaching style between Client mode (the close) and Candidate mode (the placement).</td></tr>
-        <tr><td>Cross-Deal Memory</td><td>Rex builds a profile of your selling patterns across all conversations — spots opportunities you'd miss on a busy floor.</td></tr>
-        <tr><td>Custom Onboarding</td><td>Rex interviews you about your industry on day one and builds your personal system prompt. It's not generic. It's yours.</td></tr>
-        <tr><td>Weekly Pipeline Digest</td><td>Every Monday, Rex reviews your week — deals logged, Heat Sheet calls made, and one sharp coaching note to start the week right.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- PRICING CAROUSEL -->
+<!-- PRICING — THREE TIERS -->
 <div class="pricing-bg" id="pricing" style="margin-top:3rem">
   <div class="wrap-sm">
     <div class="eyebrow">Founding Pricing — Ends April 30</div>
     <h2 class="sec-h">Try free for 7 days.<br>Lock your rate forever.</h2>
     <p class="sec-p">Start your trial today. If you stay, you keep the founding rate permanently — even after prices increase on April 30.</p>
 
+    <!-- Countdown timer -->
+    <div class="cd-bar" style="margin-top:1.5rem;margin-bottom:0;border:none;background:transparent;padding:0.5rem 0">
+      <div class="cd-label">Founding pricing closes in</div>
+      <div class="cd-units">
+        <div class="cd-unit"><div class="cd-num" id="cd-d2">--</div><div class="cd-lbl">Days</div></div>
+        <div class="cd-colon">:</div>
+        <div class="cd-unit"><div class="cd-num" id="cd-h2">--</div><div class="cd-lbl">Hrs</div></div>
+        <div class="cd-colon">:</div>
+        <div class="cd-unit"><div class="cd-num" id="cd-m2">--</div><div class="cd-lbl">Min</div></div>
+        <div class="cd-colon">:</div>
+        <div class="cd-unit"><div class="cd-num" id="cd-s2">--</div><div class="cd-lbl">Sec</div></div>
+      </div>
+    </div>
+
     <style>
-    .carousel-wrap{position:relative;margin-top:2rem}
-    .carousel-track-outer{overflow:visible}
-    .carousel-track{
-      display:flex;flex-direction:column;gap:1.25rem;
+    .tier-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.25rem;margin-top:2rem}
+    @media(max-width:860px){
+      .tier-grid{grid-template-columns:1fr;gap:1.25rem}
+      .tier-grid .tier-card:nth-child(1){order:2}
+      .tier-grid .tier-card:nth-child(2){order:3}
+      .tier-grid .tier-card:nth-child(3){order:1}
     }
-    .carousel-slide{
-      width:100%;padding-top:14px;flex-shrink:0;
-    }
-    .carousel-plan{
+    .tier-card{
       background:var(--ink2);border:1px solid rgba(255,255,255,0.07);
-      border-radius:14px;padding:2rem 1.75rem;
-      position:relative;
+      border-radius:14px;padding:2rem 1.75rem;position:relative;
+      display:flex;flex-direction:column;
     }
-    .carousel-plan.feat{
+    .tier-card.popular{
       border:1.5px solid var(--gold);
       background:linear-gradient(155deg,rgba(212,168,67,0.07) 0%,var(--ink2) 55%);
     }
-    .carousel-dots,.carousel-arrows,.carousel-label{display:none}
-    @media(min-width:780px){
-      .carousel-track{flex-direction:row;gap:1.25rem;}
-      .carousel-slide{flex:1;min-width:0;}
-    }
+    .tier-retail{font-size:0.72rem;color:var(--grey);margin-bottom:0.15rem}
+    .tier-retail s{color:#2e2e3a}
+    .tier-tagline{font-size:0.78rem;color:var(--grey2);margin-bottom:1rem;font-style:italic}
+    .tier-includes{font-size:0.82rem;color:var(--grey3);line-height:1.65;margin-bottom:1.5rem;flex:1}
+    .tier-cta{width:100%;padding:0.78rem;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:0.85rem;border-radius:8px;cursor:pointer;transition:all .15s;text-decoration:none;display:block;text-align:center;background:var(--gold);color:var(--ink);border:none}
+    .tier-cta:hover{background:var(--gold2);transform:translateY(-1px)}
     </style>
 
-    <div class="carousel-wrap">
-      <div class="carousel-track-outer">
-        <div class="carousel-track" id="carousel-track">
-
-          <div class="carousel-slide">
-            <div class="carousel-plan feat">
-              <div class="plan-badge">The Closer</div>
-              <div class="pname">Pro</div>
-              <div class="pdesc">Every tool you need to close more</div>
-              <div class="pprice"><span class="amt">$29</span><span class="per">/mo</span></div>
-              <div class="ptrial">7 days free, then $29/mo</div>
-              <div class="pwas">After Apr 30: <s>$49/mo</s> — <b>Save $240/yr</b></div>
-              <hr class="pdiv">
-              <ul class="plist">
-                <li><span class="ck">✓</span> Zero-Entry Logging — just talk, Rex files it</li>
-                <li><span class="ck">✓</span> Predictive Commissions — 3-tier Heat Sheet, 5-at-a-time</li>
-                <li><span class="ck">✓</span> Pre-Call Briefs + one-tap dial</li>
-                <li><span class="ck">✓</span> Context-Switching (Client / Candidate mode)</li>
-                <li><span class="ck">✓</span> Rex AI Rebuttals — built from your notes</li>
-                <li><span class="ck">✓</span> Personalized mass text — 50 contacts</li>
-                <li><span class="ck">✓</span> Full data portability — your book, always</li>
-              </ul>
-              <a href="#signup" onclick="scrollToForm('pro');return false;" class="plan-btn btn-solid">Start Free Trial →</a>
-            </div>
-          </div>
-
-          <div class="carousel-slide">
-            <div class="carousel-plan" style="border:1.5px solid rgba(212,168,67,0.4);background:linear-gradient(155deg,rgba(212,168,67,0.05) 0%,var(--ink2) 55%)">
-              <div class="plan-badge" style="background:var(--gold);color:var(--ink)">Market Leader</div>
-              <div class="pname">Elite</div>
-              <div class="pdesc">For reps who treat this like a business</div>
-              <div class="pprice"><span class="amt">$47</span><span class="per">/mo</span></div>
-              <div class="ptrial">7 days free, then $47/mo</div>
-              <div class="pwas">After Apr 30: <s>$79/mo</s> — <b>Save $384/yr</b></div>
-              <hr class="pdiv">
-              <ul class="plist">
-                <li><span class="ck">✓</span> <b>Everything in Pro</b></li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Proximity Alerts — 500ft trigger on hot leads</li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Map View with Heat-Scored Pins</li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Rex Lens — AI photo vision for field intel</li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Cross-Deal Rex Memory</li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Weekly Pipeline Digest</li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Mass text up to <b style="color:var(--gold2)">100 contacts</b></li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Priority Rex speed + custom onboarding</li>
-              </ul>
-              <a href="#signup" onclick="scrollToForm('elite');return false;" class="plan-btn btn-solid" style="background:var(--gold)">Start Free Trial →</a>
-            </div>
-          </div>
-
-        </div>
+    <div class="tier-grid">
+      <!-- Tier 1: Rex Lens -->
+      <div class="tier-card">
+        <div class="plan-badge">Chrome Extension</div>
+        <div class="pname">Rex Lens</div>
+        <div class="tier-tagline">Fix your morning task list</div>
+        <div class="tier-retail">After Apr 30: <s>$39/mo</s></div>
+        <div class="pprice"><span class="amt">$29</span><span class="per">/mo</span></div>
+        <div class="ptrial">7 days free, then $29/mo</div>
+        <hr class="pdiv">
+        <p class="tier-includes">Chrome extension. Reads your CRM. Ranks your tasks. Tells you who to call first.</p>
+        <a href="#signup" onclick="scrollToForm('rexlens');return false;" class="tier-cta">Start Free Trial →</a>
       </div>
 
+      <!-- Tier 2: PocketRep Pro -->
+      <div class="tier-card">
+        <div class="plan-badge">Mobile App</div>
+        <div class="pname">PocketRep Pro</div>
+        <div class="tier-tagline">Build a book that travels with you</div>
+        <div class="tier-retail">After Apr 30: <s>$49/mo</s></div>
+        <div class="pprice"><span class="amt">$29</span><span class="per">/mo</span></div>
+        <div class="ptrial">7 days free, then $29/mo</div>
+        <hr class="pdiv">
+        <p class="tier-includes">Mobile app. Voice capture. Heat Sheet. Pre-call briefs. AI rebuttals. Your portable book of business.</p>
+        <a href="#signup" onclick="scrollToForm('pro');return false;" class="tier-cta">Start Free Trial →</a>
+      </div>
+
+      <!-- Tier 3: PocketRep Elite -->
+      <div class="tier-card popular">
+        <div class="plan-badge" style="background:var(--gold);color:var(--ink)">Most Popular</div>
+        <div class="pname">PocketRep Elite</div>
+        <div class="tier-tagline">Everything. Locked forever.</div>
+        <div class="tier-retail">After Apr 30: <s>$89/mo</s></div>
+        <div class="pprice"><span class="amt">$59</span><span class="per">/mo</span></div>
+        <div class="ptrial">7 days free, then $59/mo</div>
+        <hr class="pdiv">
+        <p class="tier-includes">Everything in Pro and Rex Lens, plus Proximity Alerts, Map View, AI Vision, Cross-Deal Memory, Weekly Digest, and maximum AI headroom.</p>
+        <a href="#signup" onclick="scrollToForm('elite');return false;" class="tier-cta" style="background:var(--gold)">Start Free Trial →</a>
+      </div>
     </div>
+
+    <p class="p-note" style="margin-top:1.5rem"><b>Founding member benefit:</b> Pro and Rex Lens members can upgrade to Elite at any time for $59/mo, locked forever. Retail upgrades to Elite are $89/mo. <b style="color:var(--gold)">Save $30/mo permanently</b> by signing up before April 30.</p>
 
     <p class="p-note"><b>Cancel anytime during your 7-day trial — you won't be charged.</b> After day 7, your founding rate locks in and never increases.</p>
   </div>
@@ -770,9 +726,10 @@ body.modal-open{overflow:hidden}
         <div class="sfb-top-label">Start Your Free 7-Day Trial</div>
         <div class="sfb-top-sub">Select your plan, fill in your details, and you're in.</div>
       </div>
-      <div class="sf-plans">
-        <div class="sfp active" id="sfp-pro" onclick="sfSelectPlan('pro')"><div class="sfp-badge">The Closer</div><div class="sfp-name">Pro</div><div class="sfp-price">$29/mo</div></div>
-        <div class="sfp" id="sfp-elite" onclick="sfSelectPlan('elite')"><div class="sfp-badge" style="background:var(--gold);color:var(--ink)">Market Leader</div><div class="sfp-name">Elite</div><div class="sfp-price">$47/mo</div></div>
+      <div class="sf-plans" style="gap:0.35rem">
+        <div class="sfp" id="sfp-rexlens" onclick="sfSelectPlan('rexlens')"><div class="sfp-badge">Extension</div><div class="sfp-name">Rex Lens</div><div class="sfp-price">$29/mo</div></div>
+        <div class="sfp active" id="sfp-pro" onclick="sfSelectPlan('pro')"><div class="sfp-badge">App</div><div class="sfp-name">Pro</div><div class="sfp-price">$29/mo</div></div>
+        <div class="sfp" id="sfp-elite" onclick="sfSelectPlan('elite')"><div class="sfp-badge" style="background:var(--gold);color:var(--ink)">Popular</div><div class="sfp-name">Elite</div><div class="sfp-price">$59/mo</div></div>
       </div>
       <form class="sf-body" id="signup-form" novalidate>
         <div class="sf-row" style="margin-top:0.85rem">
@@ -1045,6 +1002,7 @@ select.sf-input option{background:var(--ink3);color:var(--white)}
 
 <footer>
   <p>© 2026 PocketRep.pro — Built for closers &nbsp;·&nbsp; <a href="/privacy">Privacy</a> &nbsp;·&nbsp; <a href="/terms">Terms</a> &nbsp;·&nbsp; <a href="/cancel-policy">Cancel Policy</a></p>
+  <p style="margin-top:0.5rem;font-size:0.58rem;color:#374151;max-width:600px;margin-left:auto;margin-right:auto">PocketRep and Rex Lens are independent tools and are not affiliated with, endorsed by, or sponsored by any third-party CRM, DMS, or software provider. All product names and trademarks are the property of their respective owners.</p>
 </footer>
 
 <script>
@@ -1053,12 +1011,16 @@ function getDeadline(){return new Date(Date.UTC(2026,4,1,4,59,59))}
 function pad(n){return String(Math.max(0,n)).padStart(2,'0')}
 function tick(){
   var diff=getDeadline().getTime()-Date.now();
-  if(diff<=0){['cd-d','cd-h','cd-m','cd-s'].forEach(function(id){document.getElementById(id).textContent='00'});return}
+  if(diff<=0){['cd-d','cd-h','cd-m','cd-s','cd-d2','cd-h2','cd-m2','cd-s2'].forEach(function(id){var el=document.getElementById(id);if(el)el.textContent='00'});return}
   var ts=Math.floor(diff/1000),s=ts%60,tm=Math.floor(ts/60),m=tm%60,th=Math.floor(tm/60),h=th%24,d=Math.floor(th/24);
   document.getElementById('cd-d').textContent=pad(d);
   document.getElementById('cd-h').textContent=pad(h);
   document.getElementById('cd-m').textContent=pad(m);
   document.getElementById('cd-s').textContent=pad(s);
+  var d2=document.getElementById('cd-d2');if(d2)d2.textContent=pad(d);
+  var h2=document.getElementById('cd-h2');if(h2)h2.textContent=pad(h);
+  var m2=document.getElementById('cd-m2');if(m2)m2.textContent=pad(m);
+  var s2=document.getElementById('cd-s2');if(s2)s2.textContent=pad(s);
 }
 tick();setInterval(tick,1000);
 
@@ -1083,8 +1045,9 @@ function pickObj(btn){
 
 // ── STRIPE PAYMENT LINKS ──
 var STRIPE_LINKS = {
-  pro:   'https://buy.stripe.com/5kQeVedUv3gc2857ICcbC02',
-  elite: 'https://buy.stripe.com/14A8wQdUv3gccMJ2oicbC03'
+  rexlens: 'https://buy.stripe.com/5kQeVedUv3gc2857ICcbC02',
+  pro:     'https://buy.stripe.com/5kQeVedUv3gc2857ICcbC02',
+  elite:   'https://buy.stripe.com/14A8wQdUv3gccMJ2oicbC03'
 };
 
 // ── FAQ ──
@@ -1099,7 +1062,7 @@ function toggleFaq(btn){
 var sfPlan='pro';
 function sfSelectPlan(plan){
   sfPlan=plan;
-  ['pro','elite'].forEach(function(p){
+  ['rexlens','pro','elite'].forEach(function(p){
     var el=document.getElementById('sfp-'+p);
     if(el)el.classList.toggle('active',p===plan);
   });
@@ -1114,36 +1077,7 @@ function scrollToForm(plan){
   setTimeout(function(){var f=document.getElementById('sf-name');if(f)f.focus()},500);
 }
 
-// ── CAROUSEL ──
-var carouselIndex=0; // start on Pro
-function carouselRender(){
-  var track=document.getElementById('carousel-track');
-  if(!track)return;
-  // only animate on mobile (carousel-track-outer has overflow:hidden)
-  if(window.innerWidth>=780){return}
-  track.style.transform='translateX(-'+carouselIndex+'00%)';
-  document.querySelectorAll('.carousel-dot').forEach(function(d,i){
-    d.classList.toggle('active',i===carouselIndex);
-  });
-}
-function carouselMove(dir){
-  carouselIndex=Math.max(0,Math.min(1,carouselIndex+dir));
-  carouselRender();
-}
-function carouselGo(i){carouselIndex=i;carouselRender();}
-// touch swipe support
-(function(){
-  var el=document.getElementById('carousel-track');
-  if(!el)return;
-  var startX=0;
-  el.addEventListener('touchstart',function(e){startX=e.touches[0].clientX},{passive:true});
-  el.addEventListener('touchend',function(e){
-    var dx=e.changedTouches[0].clientX-startX;
-    if(Math.abs(dx)>40){carouselMove(dx<0?1:-1)}
-  },{passive:true});
-})();
-// init carousel on Pro
-window.addEventListener('DOMContentLoaded',function(){carouselRender()});
+// ── (carousel removed — replaced by tier grid) ──
 
 // clear errors on input
 ['sf-name','sf-phone','sf-email','sf-industry'].forEach(function(id){
