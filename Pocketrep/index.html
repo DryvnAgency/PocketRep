@@ -461,10 +461,19 @@ body.modal-open{overflow:hidden}
   <div class="hero">
     <div class="hero-glow"></div>
     <div class="trial-pill">✦ 7-Day Free Trial — Card Required, Cancel Anytime</div>
-    <h1>The Assistant You <span class="gold">Talk To.</span><br><span class="dim">The Closer That Never Sleeps.</span></h1>
+    <h1>Built by a car salesman.<br><span class="gold">For car salesmen.</span></h1>
     <p class="hero-sub">
-      Stop losing deals in the parking lot. PocketRep captures every detail from your voice, predicts who's ready to buy, and builds a book of business that moves with your career — deal after deal, store after store.
+      The book of business that's finally yours — not the store's. Voice-first capture. Morning Heat Sheet. Founding rate locked forever if you join before April 30.
     </p>
+    <style>
+    .hero-props{display:flex;gap:1.25rem;justify-content:center;margin:1.25rem auto 1.5rem;max-width:640px;flex-wrap:wrap}
+    .hero-prop{flex:1;min-width:170px;text-align:center;font-size:0.82rem;color:var(--grey3);line-height:1.55;padding:0.65rem 0.5rem;background:var(--surface);border:1px solid rgba(255,255,255,0.05);border-radius:9px}
+    </style>
+    <div class="hero-props">
+      <div class="hero-prop">Wake up knowing the 5 customers ready to buy today</div>
+      <div class="hero-prop">Capture every detail by voice — no typing, no legal pad</div>
+      <div class="hero-prop">Your book moves with you, store to store, career to career</div>
+    </div>
     <div class="hero-cta-wrap">
       <a href="#signup" onclick="scrollToForm();return false;" class="btn-gold">Start Your Free 7-Day Trial →</a>
       <div class="hero-micro">
@@ -483,9 +492,34 @@ body.modal-open{overflow:hidden}
   <div class="proof-sep"></div>
   <div class="proof-stat">Avg. <b>$900+</b> first deal from the Heat Sheet</div>
   <div class="proof-sep"></div>
-  <div class="proof-stat">Works in <b>auto, mortgage, real estate &amp; more</b></div>
+  <div class="proof-stat"><b>One deal</b> pays for 2+ years of Pro</div>
   <div class="proof-sep"></div>
   <div class="proof-stat"><b>Founding rate</b> locked forever after trial</div>
+</div>
+
+<!-- PULL QUOTE -->
+<style>
+.pull-quote-section{
+  background:linear-gradient(155deg,var(--ink2) 0%,rgba(212,168,67,0.04) 100%);
+  border-top:1px solid rgba(255,255,255,0.04);
+  border-bottom:1px solid rgba(255,255,255,0.04);
+  padding:3rem 1.5rem;
+  text-align:center;
+}
+.pull-quote-text{
+  font-size:clamp(1.05rem,2vw,1.3rem);
+  font-style:italic;color:var(--grey3);line-height:1.85;
+  max-width:700px;margin:0 auto 1.25rem;
+  position:relative;
+}
+.pull-quote-text::before{content:'\201C';position:absolute;top:-0.6rem;left:-0.5rem;font-size:3rem;color:var(--gold);opacity:0.3;font-style:normal;font-family:'Bricolage Grotesque',sans-serif;line-height:1}
+.pull-quote-text b{color:var(--white);font-weight:600;font-style:normal}
+.pull-quote-attr{font-size:0.78rem;color:var(--grey);font-weight:600}
+.pull-quote-attr span{color:var(--gold)}
+</style>
+<div class="pull-quote-section">
+  <p class="pull-quote-text">"I left my last store after 6 years and walked out with nothing — no contacts, no history. <b>I lost probably $40k in future deals.</b> PocketRep is the first thing I set up now. My book is mine. Period."</p>
+  <div class="pull-quote-attr"><span>Denise Walcott</span> · Finance Manager · 3rd dealership in 8 years · Atlanta, GA</div>
 </div>
 
 <!-- COUNTDOWN -->
@@ -602,7 +636,7 @@ body.modal-open{overflow:hidden}
             <li>VIN decode pulls full spec sheets — no manual lookups, no typos</li>
             <li>Every photo and its data link directly to the customer's record in your book</li>
           </ul>
-          <div class="elite-perk">📸 Elite: Rex Lens — AI photo vision that turns your camera into a field intel weapon</div>
+          <div class="elite-perk">📸 Also available as standalone Rex Lens extension — $29/mo founding rate</div>
         </div>
       </div>
     </div>
@@ -665,7 +699,14 @@ body.modal-open{overflow:hidden}
         <div class="pprice"><span class="amt">$29</span><span class="per">/mo</span></div>
         <div class="ptrial">7 days free, then $29/mo</div>
         <hr class="pdiv">
-        <p class="tier-includes">Chrome extension. Reads your CRM. Ranks your tasks. Tells you who to call first.</p>
+        <div class="pdesc">Chrome extension. Reads your CRM. Ranks your tasks. Tells you who to call first — every morning, in 30 seconds.</div>
+        <ul class="plist">
+          <li><span class="ck">✓</span> Reads your task list and ranks every lead</li>
+          <li><span class="ck">✓</span> Generates a daily game plan in plain English</li>
+          <li><span class="ck">✓</span> Pulls context from your CRM and your inbox</li>
+          <li><span class="ck">✓</span> Works with your existing system, no migration</li>
+          <li><span class="ck">✓</span> One-click install, no setup</li>
+        </ul>
         <a href="#signup" onclick="scrollToForm('rexlens');return false;" class="tier-cta">Start Free Trial →</a>
       </div>
 
@@ -678,7 +719,15 @@ body.modal-open{overflow:hidden}
         <div class="pprice"><span class="amt">$29</span><span class="per">/mo</span></div>
         <div class="ptrial">7 days free, then $29/mo</div>
         <hr class="pdiv">
-        <p class="tier-includes">Mobile app. Voice capture. Heat Sheet. Pre-call briefs. AI rebuttals. Your portable book of business.</p>
+        <div class="pdesc">Voice-first mobile app. Capture every customer in 30 seconds. Wake up knowing who to call first. Your book — yours forever, no matter where you work.</div>
+        <ul class="plist">
+          <li><span class="ck">✓</span> Zero-Entry Logging — just talk, Rex files it</li>
+          <li><span class="ck">✓</span> 3-Tier Heat Sheet — 5 hot leads every morning</li>
+          <li><span class="ck">✓</span> Pre-Call Briefs + one-tap dial</li>
+          <li><span class="ck">✓</span> Rex AI Rebuttals — built from your notes</li>
+          <li><span class="ck">✓</span> Personalized mass text — 50 contacts</li>
+          <li><span class="ck">✓</span> Full data portability — your book, always</li>
+        </ul>
         <a href="#signup" onclick="scrollToForm('pro');return false;" class="tier-cta">Start Free Trial →</a>
       </div>
 
@@ -691,7 +740,17 @@ body.modal-open{overflow:hidden}
         <div class="pprice"><span class="amt">$59</span><span class="per">/mo</span></div>
         <div class="ptrial">7 days free, then $59/mo</div>
         <hr class="pdiv">
-        <p class="tier-includes">Everything in Pro and Rex Lens, plus Proximity Alerts, Map View, AI Vision, Cross-Deal Memory, Weekly Digest, and maximum AI headroom.</p>
+        <div class="pdesc">Both products + premium features + maximum AI headroom. The full toolkit for reps who treat sales like a business.</div>
+        <ul class="plist">
+          <li><span class="ck">✓</span> <b>Everything in Pro AND Rex Lens</b></li>
+          <li><span class="ck" style="color:var(--gold)">✦</span> Proximity Alerts — 500ft trigger on hot leads</li>
+          <li><span class="ck" style="color:var(--gold)">✦</span> Map View with Heat-Scored Pins</li>
+          <li><span class="ck" style="color:var(--gold)">✦</span> Rapport Vault + AI Photo Vision</li>
+          <li><span class="ck" style="color:var(--gold)">✦</span> Cross-Deal Rex Memory</li>
+          <li><span class="ck" style="color:var(--gold)">✦</span> Weekly Pipeline Digest</li>
+          <li><span class="ck" style="color:var(--gold)">✦</span> Mass text up to 100 contacts</li>
+          <li><span class="ck" style="color:var(--gold)">✦</span> 75% more AI headroom than Pro or Rex Lens alone</li>
+        </ul>
         <a href="#signup" onclick="scrollToForm('elite');return false;" class="tier-cta" style="background:var(--gold)">Start Free Trial →</a>
       </div>
     </div>
@@ -752,8 +811,8 @@ body.modal-open{overflow:hidden}
         <div class="sf-group">
           <label class="sf-label" for="sf-industry">Industry <span>*</span></label>
           <select class="sf-input" id="sf-industry">
-            <option value="" disabled selected>Select your industry</option>
-            <option value="auto">Automotive Sales</option>
+            <option value="" disabled>Select your industry</option>
+            <option value="auto" selected>Automotive Sales</option>
             <option value="mortgage">Mortgage / Lending</option>
             <option value="realestate">Real Estate</option>
             <option value="insurance">Insurance</option>
@@ -804,12 +863,12 @@ body.modal-open{overflow:hidden}
   <div class="eyebrow">Why PocketRep Wins</div>
   <h2 class="sec-h">Built for closers. Not the company.</h2>
   <div class="str-grid">
-    <div class="str"><div class="str-n">01</div><h4>Zero-Entry Logging</h4><p>Talk after every meeting. Rex files the notes. No typing, no forgetting, no losing a deal to a legal pad.</p></div>
-    <div class="str"><div class="str-n">02</div><h4>Predictive Commissions</h4><p>Wake up to the 5 people statistically ready to buy right now — not a random "follow up today" reminder.</p></div>
-    <div class="str"><div class="str-n">03</div><h4>Context-Switching</h4><p>Rex knows if you're closing a client or vetting a candidate. His coaching shifts automatically. You never have to explain the situation.</p></div>
-    <div class="str"><div class="str-n">04</div><h4>You own the data</h4><p>Switch stores, change industries, go independent. Your book moves with you every single time.</p></div>
-    <div class="str"><div class="str-n">05</div><h4>Rex Lens</h4><p>Snap a photo of a trade-in, VIN, or competitor quote. Rex reads it, tags the specs, and files it to the contact. Zero typing.</p></div>
-    <div class="str"><div class="str-n">06</div><h4>ROI in the first deal</h4><p>One Heat Sheet deal covers your Pro sub for over two years. The trial alone will surface that customer.</p></div>
+    <div class="str"><div class="str-n">01</div><h4>You own the data</h4><p>Switch stores, change industries, go independent. Your book moves with you every single time.</p></div>
+    <div class="str"><div class="str-n">02</div><h4>Zero-Entry Logging</h4><p>Talk after every meeting. Rex files the notes. No typing, no forgetting, no losing a deal to a legal pad.</p></div>
+    <div class="str"><div class="str-n">03</div><h4>Predictive Commissions</h4><p>Wake up to the 5 people statistically ready to buy right now — not a random "follow up today" reminder.</p></div>
+    <div class="str"><div class="str-n">04</div><h4>One tool, every career chapter</h4><p>Auto → mortgages → B2B. Your book compounds. The longer you use it, the more it's worth.</p></div>
+    <div class="str"><div class="str-n">05</div><h4>ROI in the first deal</h4><p>One Heat Sheet deal covers your Pro sub for over two years. The trial alone will surface that customer.</p></div>
+    <div class="str"><div class="str-n">06</div><h4>Built for closers, not the company</h4><p>Every CRM your dealership pays for is built for the GM. PocketRep is built for the rep on the floor. Your tool, your data, your career.</p></div>
   </div>
 </div>
 
@@ -843,7 +902,7 @@ body.modal-open{overflow:hidden}
       </div>
       <div class="faq-item">
         <button class="faq-q" onclick="toggleFaq(this)">What does "founding rate" mean exactly? <span class="faq-arrow">▼</span></button>
-        <div class="faq-a">After April 30, public pricing goes to $49/$79. <b>Anyone who signs up before the deadline keeps their founding rate forever</b> — $29/$47 — even as we add features and raise prices for new users. It's our way of rewarding early adopters.</div>
+        <div class="faq-a">After April 30, public pricing goes up: Rex Lens $39/mo, PocketRep Pro $49/mo, PocketRep Elite $89/mo. <b>Anyone who signs up before the deadline keeps their founding rate forever</b> — Rex Lens $29/mo, Pro $29/mo, Elite $59/mo — even as we add features and raise prices for new users. Founding members also get a permanent upgrade discount: if you start on Pro or Rex Lens and later upgrade to Elite, you pay $59/mo instead of the $89 retail price. That discount follows your account forever.</div>
       </div>
       <div class="faq-item">
         <button class="faq-q" onclick="toggleFaq(this)">Does my data actually stay with me if I leave a dealership? <span class="faq-arrow">▼</span></button>
@@ -851,7 +910,15 @@ body.modal-open{overflow:hidden}
       </div>
       <div class="faq-item">
         <button class="faq-q" onclick="toggleFaq(this)">Does it work outside auto sales? <span class="faq-arrow">▼</span></button>
-        <div class="faq-a">Yes — it was built for any high-ticket, relationship-driven sale. <b>Mortgage, real estate, insurance, solar, B2B</b> — if you have a book of customers you sell to repeatedly, PocketRep works. Several founding members use it to bridge auto → mortgage, keeping years of customer relationships active through the transition.</div>
+        <div class="faq-a">Yes. It was built by a car salesman for car sales, but it works for any high-ticket, relationship-driven sale: <b>mortgage, real estate, insurance, solar, B2B</b>. If you have a book of customers you sell to repeatedly, PocketRep works. Several founding members use it to bridge auto → mortgage, keeping years of customer relationships active through the transition.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">What's Rex Lens? <span class="faq-arrow">▼</span></button>
+        <div class="faq-a">Rex Lens is a Chrome extension that sits on top of the CRM you already use. Click one button and it scans your task list, ranks every lead, and tells you exactly who to call first — with a one-line game plan for each. No migration. No new system to learn. It just makes the morning 30 minutes you already spend staring at your task list dramatically more productive. <b>Founding rate is $29/mo, locked forever.</b></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">Can I get both PocketRep and Rex Lens? <span class="faq-arrow">▼</span></button>
+        <div class="faq-a">Yes — that's what Elite is. PocketRep Elite includes the mobile app, the Rex Lens Chrome extension, all premium features (Proximity Alerts, Map View, AI Vision, Cross-Deal Memory, Weekly Digest), and the highest AI headroom of any tier. <b>Founding rate is $59/mo, locked forever.</b> If you start on Pro or Rex Lens alone and upgrade later, you still pay $59 — that's the founding member benefit.</div>
       </div>
     </div>
   </div>
@@ -1114,13 +1181,33 @@ document.getElementById('signup-form').addEventListener('submit',function(e){
   // Save for thank you page personalisation
   try{sessionStorage.setItem('pr_signup',JSON.stringify({name:name,email:email,phone:phone,industry:industry,plan:sfPlan}))}catch(ex){}
 
+  // Build client_reference_id with tier, industry, UTM source, and time on page
+  var timeOnPage = Math.round((Date.now() - window._prPageLoad) / 1000);
+  var utmSource = window._prUtm.source || 'direct';
+  var refId = [name.replace(/\s+/g,'_'), sfPlan, industry, utmSource, timeOnPage+'s'].join('__');
+
   // Build Stripe URL — pre-fill email so customer doesn't type it twice
   var base = STRIPE_LINKS[sfPlan] || STRIPE_LINKS['pro'];
   var stripeUrl = base + '?prefilled_email=' + encodeURIComponent(email)
-                       + '&client_reference_id=' + encodeURIComponent(name.replace(/\s+/g,'_')+'_'+industry);
+                       + '&client_reference_id=' + encodeURIComponent(refId);
 
   window.location.href = stripeUrl;
 });
+
+// ── ANALYTICS: UTM + TIME ON PAGE ──
+window._prPageLoad = Date.now();
+window._prUtm = (function(){
+  var params = new URLSearchParams(window.location.search);
+  var utm = {
+    source: params.get('utm_source') || '',
+    medium: params.get('utm_medium') || '',
+    campaign: params.get('utm_campaign') || '',
+    content: params.get('utm_content') || '',
+    ref: document.referrer || ''
+  };
+  try { sessionStorage.setItem('pr_utm', JSON.stringify(utm)); } catch(e) {}
+  return utm;
+})();
 
 </script>
 </body>
