@@ -660,92 +660,121 @@ body.modal-open{overflow:hidden}
   </div>
 </div>
 
-<!-- PRICING CAROUSEL -->
+<!-- PRICING -->
 <div class="pricing-bg" id="pricing" style="margin-top:3rem">
   <div class="wrap-sm">
     <div class="eyebrow">Founding Pricing — Ends April 30</div>
     <h2 class="sec-h">Try free for 7 days.<br>Lock your rate forever.</h2>
-    <p class="sec-p">Start your trial today. If you stay, you keep the founding rate permanently — even after prices increase on April 30.</p>
+    <p class="sec-p">Start your trial today. Stay past 7 days and your founding rate is locked permanently — even after prices increase on April 30.</p>
+
+    <div class="p-cd-strip">
+      <span class="p-cd-lbl">Founding pricing closes in</span>
+      <span class="p-cd-num" id="pcd-d">--</span><span class="p-cd-u">d</span>
+      <span class="p-cd-num" id="pcd-h">--</span><span class="p-cd-u">h</span>
+      <span class="p-cd-num" id="pcd-m">--</span><span class="p-cd-u">m</span>
+      <span class="p-cd-num" id="pcd-s">--</span><span class="p-cd-u">s</span>
+    </div>
 
     <style>
-    .carousel-wrap{position:relative;margin-top:2rem}
-    .carousel-track-outer{overflow:visible}
-    .carousel-track{
-      display:flex;flex-direction:column;gap:1.25rem;
-    }
-    .carousel-slide{
-      width:100%;padding-top:14px;flex-shrink:0;
-    }
-    .carousel-plan{
-      background:var(--ink2);border:1px solid rgba(255,255,255,0.07);
-      border-radius:14px;padding:2rem 1.75rem;
-      position:relative;
-    }
-    .carousel-plan.feat{
-      border:1.5px solid var(--gold);
-      background:linear-gradient(155deg,rgba(212,168,67,0.07) 0%,var(--ink2) 55%);
-    }
-    .carousel-dots,.carousel-arrows,.carousel-label{display:none}
+    .p-cd-strip{display:flex;align-items:center;gap:5px;justify-content:center;margin:1.25rem 0 0;background:rgba(224,82,82,0.06);border:1px solid rgba(224,82,82,0.15);border-radius:8px;padding:0.5rem 1rem;flex-wrap:wrap}
+    .p-cd-lbl{font-size:0.7rem;color:#f08080;font-weight:600;margin-right:4px}
+    .p-cd-num{font-family:'Bricolage Grotesque',sans-serif;font-size:1.05rem;font-weight:800;color:var(--white);min-width:1.8ch;text-align:center;background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px}
+    .p-cd-u{font-size:0.62rem;color:var(--grey);margin-right:4px}
+    .p-grid-3{display:flex;flex-direction:column;gap:1.25rem;margin-top:1.75rem}
+    .pcard{background:var(--ink2);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:2rem 1.75rem;position:relative;transition:border-color .18s;display:flex;flex-direction:column}
+    .pcard:hover{border-color:rgba(212,168,67,0.2)}
+    .pcard.feat{border:1.5px solid var(--gold);background:linear-gradient(155deg,rgba(212,168,67,0.07) 0%,var(--ink2) 55%)}
+    .pcard-badge{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--ink);font-family:'Bricolage Grotesque',sans-serif;font-size:0.6rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:3px 12px;border-radius:100px;white-space:nowrap}
+    .pc-type{font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.3rem}
+    .pc-name{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.05rem;margin-bottom:0.2rem;letter-spacing:-0.02em;line-height:1.2}
+    .pc-tagline{font-size:0.76rem;color:var(--grey2);margin-bottom:0.9rem;line-height:1.45}
+    .pc-price-row{display:flex;align-items:baseline;gap:5px;margin-bottom:0.18rem}
+    .pc-founding{font-family:'Bricolage Grotesque',sans-serif;font-size:2.4rem;font-weight:800;color:var(--gold);line-height:1;letter-spacing:-0.03em}
+    .pc-per{font-size:0.78rem;color:var(--grey)}
+    .pc-retail{font-size:0.68rem;color:var(--grey);margin-bottom:0.2rem}
+    .pc-retail s{color:#2e2e3a}
+    .pc-lock{font-size:0.67rem;margin-bottom:0.85rem;background:rgba(66,184,131,0.08);border:1px solid rgba(66,184,131,0.18);color:#6ee4a8;padding:2px 8px;border-radius:4px;display:inline-block;font-weight:600}
+    .pc-div{border:none;border-top:1px solid rgba(255,255,255,0.06);margin:0.85rem 0}
+    .pc-list{list-style:none;display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1.25rem;flex:1}
+    .pc-list li{display:flex;align-items:flex-start;gap:7px;font-size:0.79rem;color:#b0b4c0}
+    .pc-ck{color:var(--gold);flex-shrink:0;font-size:0.72rem;margin-top:2px}
+    .pc-star{color:var(--gold);flex-shrink:0;font-size:0.65rem;margin-top:3px}
     @media(min-width:780px){
-      .carousel-track{flex-direction:row;gap:1.25rem;}
-      .carousel-slide{flex:1;min-width:0;}
+      .p-grid-3{flex-direction:row}
+      .pcard{flex:1;min-width:0}
+    }
+    @media(max-width:779px){
+      .pcard.mob-first{order:-1}
     }
     </style>
 
-    <div class="carousel-wrap">
-      <div class="carousel-track-outer">
-        <div class="carousel-track" id="carousel-track">
+    <div class="p-grid-3">
 
-          <div class="carousel-slide">
-            <div class="carousel-plan feat">
-              <div class="plan-badge">The Closer</div>
-              <div class="pname">Pro</div>
-              <div class="pdesc">Every tool you need to close more</div>
-              <div class="pprice"><span class="amt">$29</span><span class="per">/mo</span></div>
-              <div class="ptrial">7 days free, then $29/mo</div>
-              <div class="pwas">After Apr 30: <s>$49/mo</s> — <b>Save $240/yr</b></div>
-              <hr class="pdiv">
-              <ul class="plist">
-                <li><span class="ck">✓</span> Zero-Entry Logging — just talk, Rex files it</li>
-                <li><span class="ck">✓</span> Predictive Commissions — 3-tier Heat Sheet, 5-at-a-time</li>
-                <li><span class="ck">✓</span> Pre-Call Briefs + one-tap dial</li>
-                <li><span class="ck">✓</span> Context-Switching (Client / Candidate mode)</li>
-                <li><span class="ck">✓</span> Rex AI Rebuttals — built from your notes</li>
-                <li><span class="ck">✓</span> Personalized mass text — 50 contacts</li>
-                <li><span class="ck">✓</span> Full data portability — your book, always</li>
-              </ul>
-              <a href="#signup" onclick="scrollToForm('pro');return false;" class="plan-btn btn-solid">Start Free Trial →</a>
-            </div>
-          </div>
+      <!-- Tier 1: Rex Lens -->
+      <div class="pcard" style="padding-top:2rem">
+        <div class="pc-type">Rex Lens</div>
+        <div class="pc-name">Fix your morning task list.</div>
+        <div class="pc-tagline">Chrome extension that reads VINs, competitor quotes, and trade-in photos — and files everything under the right contact automatically.</div>
+        <div class="pc-price-row"><span class="pc-founding">$29</span><span class="pc-per">/mo founding</span></div>
+        <div class="pc-retail">Retail after Apr 30: <s>$39/mo</s> — <b style="color:var(--red)">Save $120/yr</b></div>
+        <div class="pc-lock">7 days free · founding rate locked by Apr 30</div>
+        <hr class="pc-div">
+        <ul class="pc-list">
+          <li><span class="pc-ck">✓</span> VIN decode — full spec sheet in seconds</li>
+          <li><span class="pc-ck">✓</span> Competitor quote parsing (price, terms, trade values)</li>
+          <li><span class="pc-ck">✓</span> Trade-in condition photos → contact record</li>
+          <li><span class="pc-ck">✓</span> Lot photo intel linked to the right customer</li>
+          <li><span class="pc-ck">✓</span> Morning task summary via Rex AI</li>
+        </ul>
+        <a href="#signup" onclick="scrollToForm('rex-lens');return false;" class="plan-btn btn-out">Start Free Trial →</a>
+      </div>
 
-          <div class="carousel-slide">
-            <div class="carousel-plan" style="border:1.5px solid rgba(212,168,67,0.4);background:linear-gradient(155deg,rgba(212,168,67,0.05) 0%,var(--ink2) 55%)">
-              <div class="plan-badge" style="background:var(--gold);color:var(--ink)">Market Leader</div>
-              <div class="pname">Elite + Rex Lens</div>
-              <div class="pdesc">For reps who treat this like a business — includes Rex Lens AI vision</div>
-              <div class="pprice"><span class="amt">$47</span><span class="per">/mo</span></div>
-              <div class="ptrial">7 days free, then $47/mo</div>
-              <div class="pwas">After Apr 30: <s>$79/mo</s> — <b>Save $384/yr</b></div>
-              <hr class="pdiv">
-              <ul class="plist">
-                <li><span class="ck">✓</span> <b>Everything in Pro</b></li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Proximity Alerts — 500ft trigger on hot leads</li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Map View with Heat-Scored Pins</li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Rex Lens — AI photo vision for field intel</li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Cross-Deal Rex Memory</li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Weekly Pipeline Digest</li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Mass text up to <b style="color:var(--gold2)">100 contacts</b></li>
-                <li><span class="ck" style="color:var(--gold)">✦</span> Priority Rex speed + custom onboarding</li>
-              </ul>
-              <a href="#signup" onclick="scrollToForm('elite');return false;" class="plan-btn btn-solid" style="background:var(--gold)">Start Free Trial →</a>
-            </div>
-          </div>
+      <!-- Tier 2: Pro -->
+      <div class="pcard" style="padding-top:2rem">
+        <div class="pc-type">PocketRep Pro</div>
+        <div class="pc-name">Build a book that travels with you.</div>
+        <div class="pc-tagline">The full mobile app. Zero-entry logging, Heat Sheet, AI rebuttals — your entire pipeline in your pocket.</div>
+        <div class="pc-price-row"><span class="pc-founding">$29</span><span class="pc-per">/mo founding</span></div>
+        <div class="pc-retail">Retail after Apr 30: <s>$49/mo</s> — <b style="color:var(--red)">Save $240/yr</b></div>
+        <div class="pc-lock">7 days free · founding rate locked by Apr 30</div>
+        <hr class="pc-div">
+        <ul class="pc-list">
+          <li><span class="pc-ck">✓</span> Zero-Entry Logging — just talk, Rex files it</li>
+          <li><span class="pc-ck">✓</span> 3-tier Heat Sheet — 5-at-a-time focus</li>
+          <li><span class="pc-ck">✓</span> Pre-Call Briefs + one-tap dial</li>
+          <li><span class="pc-ck">✓</span> Rex AI Rebuttals — built from your notes</li>
+          <li><span class="pc-ck">✓</span> Personalized mass text — 50 contacts</li>
+          <li><span class="pc-ck">✓</span> Full data portability — your book, always</li>
+        </ul>
+        <a href="#signup" onclick="scrollToForm('pro');return false;" class="plan-btn btn-out">Start Free Trial →</a>
+      </div>
 
-        </div>
+      <!-- Tier 3: Elite — shown first on mobile -->
+      <div class="pcard feat mob-first">
+        <div class="pcard-badge">Most Popular</div>
+        <div class="pc-type">PocketRep Elite</div>
+        <div class="pc-name">Everything. Locked forever.</div>
+        <div class="pc-tagline">Full app + Rex Lens + every future feature. One founding rate, locked in permanently. The rep running this can't be out-worked.</div>
+        <div class="pc-price-row"><span class="pc-founding">$59</span><span class="pc-per">/mo founding</span></div>
+        <div class="pc-retail">Retail after Apr 30: <s>$89/mo</s> — <b style="color:var(--red)">Save $360/yr</b></div>
+        <div class="pc-lock">7 days free · founding rate locked by Apr 30</div>
+        <hr class="pc-div">
+        <ul class="pc-list">
+          <li><span class="pc-ck">✓</span> <b>Everything in Pro</b></li>
+          <li><span class="pc-star">✦</span> Rex Lens — AI photo vision (VINs, quotes, trades)</li>
+          <li><span class="pc-star">✦</span> Proximity Alerts — 500ft trigger on hot leads</li>
+          <li><span class="pc-star">✦</span> Map View with Heat-Scored Pins</li>
+          <li><span class="pc-star">✦</span> Cross-Deal Rex Memory</li>
+          <li><span class="pc-star">✦</span> Sunday Pipeline Digest + time picker</li>
+          <li><span class="pc-star">✦</span> Mass text up to <b style="color:var(--gold2)">100 contacts</b></li>
+          <li><span class="pc-star">✦</span> Priority Rex speed + custom onboarding</li>
+        </ul>
+        <a href="#signup" onclick="scrollToForm('elite');return false;" class="plan-btn btn-solid">Start Free Trial →</a>
       </div>
 
     </div>
 
+    <p class="p-note" style="margin-top:1.5rem"><b>Already a founding member?</b> You can upgrade or switch tiers at your founding rate any time before April 30 — email hello@pocketrep.pro.</p>
     <p class="p-note"><b>Cancel anytime during your 7-day trial — you won't be charged.</b> After day 7, your founding rate locks in and never increases.</p>
   </div>
 </div>
@@ -775,8 +804,9 @@ body.modal-open{overflow:hidden}
         <div class="sfb-top-sub">Select your plan, fill in your details, and you're in.</div>
       </div>
       <div class="sf-plans">
-        <div class="sfp active" id="sfp-pro" onclick="sfSelectPlan('pro')"><div class="sfp-badge">The Closer</div><div class="sfp-name">Pro</div><div class="sfp-price">$29/mo</div></div>
-        <div class="sfp" id="sfp-elite" onclick="sfSelectPlan('elite')"><div class="sfp-badge" style="background:var(--gold);color:var(--ink)">Market Leader</div><div class="sfp-name">Elite + Rex Lens</div><div class="sfp-price">$47/mo</div></div>
+        <div class="sfp" id="sfp-rex-lens" onclick="sfSelectPlan('rex-lens')"><div class="sfp-badge" style="background:var(--grey);color:var(--ink)">Extension</div><div class="sfp-name">Rex Lens</div><div class="sfp-price">$29/mo</div></div>
+        <div class="sfp active" id="sfp-pro" onclick="sfSelectPlan('pro')"><div class="sfp-badge">Pro</div><div class="sfp-name">PocketRep Pro</div><div class="sfp-price">$29/mo</div></div>
+        <div class="sfp" id="sfp-elite" onclick="sfSelectPlan('elite')"><div class="sfp-badge" style="background:var(--gold);color:var(--ink)">Most Popular</div><div class="sfp-name">Elite</div><div class="sfp-price">$59/mo</div></div>
       </div>
       <form class="sf-body" id="signup-form" novalidate>
         <div class="sf-row" style="margin-top:0.85rem">
@@ -890,7 +920,7 @@ body.modal-open{overflow:hidden}
       </div>
       <div class="faq-item">
         <button class="faq-q" onclick="toggleFaq(this)">What does "founding rate" mean exactly? <span class="faq-arrow">▼</span></button>
-        <div class="faq-a">After April 30, public pricing goes to $49/$79. <b>Anyone who signs up before the deadline keeps their founding rate forever</b> — $29/$47 — even as we add features and raise prices for new users. It's our way of rewarding early adopters.</div>
+        <div class="faq-a">After April 30, public pricing goes to $39/$49/$89. <b>Anyone who signs up before the deadline keeps their founding rate forever</b> — $29/$29/$59 for Rex Lens, Pro, and Elite respectively — even as we add features and raise prices for new users. It's our way of rewarding early adopters.</div>
       </div>
       <div class="faq-item">
         <button class="faq-q" onclick="toggleFaq(this)">Does my data actually stay with me if I leave a dealership? <span class="faq-arrow">▼</span></button>
@@ -1049,6 +1079,7 @@ select.sf-input option{background:var(--ink3);color:var(--white)}
 
 <footer>
   <p>© 2026 PocketRep.pro — Built for closers &nbsp;·&nbsp; <a href="/privacy.html">Privacy</a> &nbsp;·&nbsp; <a href="/terms.html">Terms</a> &nbsp;·&nbsp; <a href="/cancel.html">Cancel Policy</a></p>
+  <p style="margin-top:0.5rem;font-size:0.62rem;color:#1e1e2e">Founding rates ($29/$29/$59/mo for Rex Lens, Pro, Elite) are available to members who start a trial before April 30, 2026 and remain active. Retail rates ($39/$49/$89/mo) apply to new sign-ups after April 30, 2026. Founding rate is locked for the life of a continuous active subscription. All plans include a 7-day free trial; cancel before day 7 and you will not be charged. Prices in USD. Billed monthly. Cancel anytime.</p>
 </footer>
 
 <script>
@@ -1057,12 +1088,11 @@ function getDeadline(){return new Date(Date.UTC(2026,4,1,4,59,59))}
 function pad(n){return String(Math.max(0,n)).padStart(2,'0')}
 function tick(){
   var diff=getDeadline().getTime()-Date.now();
-  if(diff<=0){['cd-d','cd-h','cd-m','cd-s'].forEach(function(id){document.getElementById(id).textContent='00'});return}
+  var ids=[['cd-d','pcd-d'],['cd-h','pcd-h'],['cd-m','pcd-m'],['cd-s','pcd-s']];
+  if(diff<=0){ids.forEach(function(pair){pair.forEach(function(id){var el=document.getElementById(id);if(el)el.textContent='00'})});return}
   var ts=Math.floor(diff/1000),s=ts%60,tm=Math.floor(ts/60),m=tm%60,th=Math.floor(tm/60),h=th%24,d=Math.floor(th/24);
-  document.getElementById('cd-d').textContent=pad(d);
-  document.getElementById('cd-h').textContent=pad(h);
-  document.getElementById('cd-m').textContent=pad(m);
-  document.getElementById('cd-s').textContent=pad(s);
+  var vals=[pad(d),pad(h),pad(m),pad(s)];
+  ids.forEach(function(pair,i){pair.forEach(function(id){var el=document.getElementById(id);if(el)el.textContent=vals[i]})});
 }
 tick();setInterval(tick,1000);
 
@@ -1087,8 +1117,9 @@ function pickObj(btn){
 
 // ── STRIPE PAYMENT LINKS ──
 var STRIPE_LINKS = {
-  pro:   'https://buy.stripe.com/5kQeVedUv3gc2857ICcbC02',
-  elite: 'https://buy.stripe.com/14A8wQdUv3gccMJ2oicbC03'
+  'rex-lens': 'https://buy.stripe.com/5kQeVedUv3gc2857ICcbC02',
+  pro:        'https://buy.stripe.com/5kQeVedUv3gc2857ICcbC02',
+  elite:      'https://buy.stripe.com/14A8wQdUv3gccMJ2oicbC03'
 };
 
 // ── FAQ ──
@@ -1103,7 +1134,7 @@ function toggleFaq(btn){
 var sfPlan='pro';
 function sfSelectPlan(plan){
   sfPlan=plan;
-  ['pro','elite'].forEach(function(p){
+  ['rex-lens','pro','elite'].forEach(function(p){
     var el=document.getElementById('sfp-'+p);
     if(el)el.classList.toggle('active',p===plan);
   });
