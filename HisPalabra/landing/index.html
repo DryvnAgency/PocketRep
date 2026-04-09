@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>His Palabra — The Word in Your Language</title>
+<meta name="description" content="Free Bible app for Gen Z. KJV in Gen Z slang. City community. Duolingo-style learning. No ads. No paywall. Scripture first.">
+<meta property="og:title" content="His Palabra — The Word in Your Language">
+<meta property="og:description" content="Free Bible app. KJV + slang. City community. Gamified learning. No ads ever.">
+<meta property="og:type" content="website">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#080810;--s1:#10101C;--s2:#181828;--border:#252540;--text:#EEEDF8;--muted:#6868A0;--gold:#F5C842;--green:#4ADE80}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.page{max-width:720px;margin:0 auto;padding:60px 24px 80px}
+
+.hero{text-align:center;padding:40px 0 60px}
+.cross{font-size:56px;margin-bottom:20px;display:block}
+h1{font-family:'Playfair Display',serif;font-size:clamp(36px,6vw,56px);font-weight:700;line-height:1.05;margin-bottom:16px}
+h1 em{font-style:italic;color:var(--gold)}
+.hero p{font-size:16px;color:var(--muted);max-width:440px;margin:0 auto 32px;line-height:1.7}
+.pills{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:40px}
+.pill{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--muted)}
+.pill-gold{border-color:rgba(245,200,66,.3);color:var(--gold)}
+.pill-green{border-color:rgba(74,222,128,.3);color:var(--green)}
+
+.store-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:24px}
+.store-btn{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:14px 24px;font-size:14px;font-weight:700;color:var(--text);text-decoration:none;transition:all .15s}
+.store-btn:hover{border-color:var(--gold);color:var(--gold)}
+
+.divider{height:1px;background:var(--border);margin:48px 0}
+
+/* Mission */
+.mission{text-align:center;padding:20px 0}
+.mission h2{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;margin-bottom:12px}
+.mission h2 span{color:var(--gold)}
+.mission p{font-size:15px;color:var(--muted);max-width:500px;margin:0 auto;line-height:1.8}
+
+/* Verse */
+.verse-card{background:linear-gradient(135deg,rgba(245,200,66,.1),rgba(245,200,66,.03));border:1px solid rgba(245,200,66,.25);border-radius:16px;padding:28px;margin:40px 0;text-align:center;position:relative}
+.verse-card::before{content:'"';position:absolute;left:20px;top:10px;font-size:60px;color:var(--gold);opacity:.15;font-family:'Playfair Display',serif}
+.verse-text{font-family:'Playfair Display',serif;font-size:18px;font-style:italic;line-height:1.7;margin-bottom:10px}
+.verse-ref{font-size:12px;font-weight:700;color:var(--gold)}
+
+/* Features */
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:40px 0}
+.feature{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center}
+.feature-icon{font-size:28px;margin-bottom:10px;display:block}
+.feature h3{font-size:14px;font-weight:800;margin-bottom:4px}
+.feature p{font-size:12px;color:var(--muted);line-height:1.5}
+
+/* Donate */
+.donate{background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.25);border-radius:16px;padding:32px;text-align:center;margin:40px 0}
+.donate h2{font-family:'Playfair Display',serif;font-size:24px;color:var(--gold);margin-bottom:8px}
+.donate p{font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.7}
+.donate-btn{display:inline-block;background:var(--gold);color:#080810;font-size:16px;font-weight:800;padding:14px 32px;border-radius:12px;text-decoration:none;transition:opacity .15s}
+.donate-btn:hover{opacity:.9}
+.donate-amounts{display:flex;gap:8px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+.donate-amt{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;color:var(--text)}
+
+/* Footer */
+.footer{border-top:1px solid var(--border);margin-top:48px;padding-top:20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.footer p{font-size:11px;color:#383858}
+.footer a{color:#6868A0;text-decoration:none}
+.footer a:hover{color:var(--gold)}
+
+@media(max-width:480px){.page{padding:40px 16px 60px}.hero{padding:20px 0 40px}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="hero">
+  <span class="cross">✝️</span>
+  <h1>His <em>Palabra</em></h1>
+  <p>The Word of God — free, faithful, and finally in a language your generation can actually hear. No ads. No paywall. Scripture first.</p>
+  <div class="pills">
+    <span class="pill pill-gold">📖 KJV + Gen Z Slang</span>
+    <span class="pill pill-green">📍 City Community</span>
+    <span class="pill pill-gold">🎮 Gamified Learning</span>
+    <span class="pill pill-green">🆓 100% Free</span>
+    <span class="pill">🇪🇸 Coming: Español</span>
+  </div>
+  <div class="store-btns">
+    <a href="#" class="store-btn">📱 App Store — Coming Soon</a>
+    <a href="#" class="store-btn">🤖 Google Play — Coming Soon</a>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="verse-card">
+  <div class="verse-text">"Fr fr, God loved this world so hard that He gave up His one and only Son — so that whoever puts their trust in Him won't be cooked, but gets eternal life. No cap."</div>
+  <div class="verse-ref">— John 3:16 · His Palabra</div>
+</div>
+
+<div class="mission">
+  <h2>The Bible, <span>But Make It Speak</span></h2>
+  <p>Every verse of the King James Bible — accurately translated into the language Gen Z actually uses. Not dumbed down. Not watered down. The same truth, delivered in a voice you recognize. Plus city-based community, Duolingo-style learning with XP and streaks, and zero ads — ever.</p>
+</div>
+
+<div class="features">
+  <div class="feature">
+    <span class="feature-icon">📖</span>
+    <h3>Full KJV Bible</h3>
+    <p>All 66 books. Toggle between slang and original KJV with one tap.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">🗣️</span>
+    <h3>Gen Z Slang</h3>
+    <p>Theologically accurate translations in the language you actually speak.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">📍</span>
+    <h3>City Community</h3>
+    <p>Join your city's Bible group. No DMs. No creeps. Just your people.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">🎮</span>
+    <h3>Learn & Earn XP</h3>
+    <p>Duolingo-style devotionals. Quizzes. Streaks. Leaderboards. Actually learn the Word.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">🆓</span>
+    <h3>Free Forever</h3>
+    <p>No ads. No paywall. The Word should be free. Supported by donations.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">🇪🇸</span>
+    <h3>Español Coming</h3>
+    <p>Reina Valera 1909 + Spanish slang. One app, two languages, one community.</p>
+  </div>
+</div>
+
+<div class="donate">
+  <h2>Support the Mission 🙏</h2>
+  <p>This app is free because the Word of God should be. If it's blessed you, consider blessing someone else by keeping it alive.</p>
+  <a href="https://ko-fi.com/hispalabra" class="donate-btn" target="_blank" rel="noopener">Support His Palabra</a>
+  <div class="donate-amounts">
+    <span class="donate-amt">$2</span>
+    <span class="donate-amt">$5</span>
+    <span class="donate-amt">$10</span>
+    <span class="donate-amt">$25</span>
+  </div>
+</div>
+
+<div class="footer">
+  <p>&copy; 2026 His Palabra · <a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a></p>
+  <p>"Freely you have received — freely give." — Matthew 10:8</p>
+</div>
+
+</div>
+</body>
+</html>
