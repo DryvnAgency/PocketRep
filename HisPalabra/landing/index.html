@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#080810;--s1:#10101C;--s2:#181828;--border:#252540;--text:#EEEDF8;--muted:#6868A0;--gold:#F5C842;--green:#4ADE80}
+:root{--bg:#080810;--s1:#10101C;--s2:#181828;--s3:#202035;--border:#252540;--text:#EEEDF8;--muted:#6868A0;--gold:#F5C842;--green:#4ADE80;--red:#F87171}
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
 .page{max-width:720px;margin:0 auto;padding:60px 24px 80px}
 
@@ -31,13 +31,76 @@ h1 em{font-style:italic;color:var(--gold)}
 
 .divider{height:1px;background:var(--border);margin:48px 0}
 
+/* Auth Card */
+.auth-card{background:linear-gradient(135deg,rgba(245,200,66,.06),rgba(192,132,252,.03));border:1px solid var(--border);border-radius:16px;padding:32px;margin:40px 0}
+.auth-card h2{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;margin-bottom:6px;text-align:center}
+.auth-card h2 span{color:var(--gold)}
+.auth-card .sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px}
+
+.auth-tabs{display:flex;gap:4px;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:20px}
+.auth-tab{flex:1;background:transparent;border:none;color:var(--muted);font-family:inherit;font-size:13px;font-weight:700;padding:10px;border-radius:7px;cursor:pointer;transition:all .15s}
+.auth-tab.active{background:var(--s3);color:var(--text)}
+
+.auth-form{display:flex;flex-direction:column;gap:12px}
+.auth-form label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:-8px}
+.auth-form input{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:14px 16px;color:var(--text);font-family:inherit;font-size:14px;transition:border-color .15s}
+.auth-form input:focus{outline:none;border-color:var(--gold)}
+.auth-form input::placeholder{color:#4a4a70}
+
+.btn-primary{background:var(--gold);color:#080810;border:none;border-radius:10px;padding:14px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;transition:opacity .15s;margin-top:4px}
+.btn-primary:hover:not(:disabled){opacity:.9}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:10px;padding:10px 16px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s}
+.btn-ghost:hover{color:var(--text);border-color:var(--muted)}
+
+.auth-msg{font-size:13px;padding:10px 14px;border-radius:8px;margin-top:8px;text-align:center;display:none}
+.auth-msg.error{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--red);display:block}
+.auth-msg.success{background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:var(--green);display:block}
+.auth-msg.info{background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.3);color:#60A5FA;display:block}
+
+/* Logged-in Scripture Reader */
+.reader-card{background:linear-gradient(135deg,rgba(245,200,66,.08),rgba(74,222,128,.03));border:1px solid rgba(245,200,66,.25);border-radius:16px;padding:28px;margin:40px 0;display:none}
+.reader-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.reader-greeting{font-size:13px;color:var(--muted)}
+.reader-greeting strong{color:var(--gold);font-weight:700}
+
+.reader-controls{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.reader-controls select,.reader-controls input{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:inherit;font-size:13px;font-weight:600}
+.reader-controls select{flex:1;min-width:140px;cursor:pointer}
+.reader-controls select:focus,.reader-controls input:focus{outline:none;border-color:var(--gold)}
+.reader-controls input{width:70px;text-align:center}
+.reader-controls button{background:var(--gold);color:#080810;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;transition:opacity .15s}
+.reader-controls button:hover:not(:disabled){opacity:.9}
+.reader-controls button:disabled{opacity:.5;cursor:not-allowed}
+
+.reader-title{font-family:'Playfair Display',serif;font-size:24px;font-weight:700;margin-bottom:4px}
+.reader-title span{color:var(--gold)}
+.reader-subtitle{font-size:12px;color:var(--muted);margin-bottom:20px;text-transform:uppercase;letter-spacing:.5px}
+
+.verses{max-height:500px;overflow-y:auto;padding-right:8px}
+.verses::-webkit-scrollbar{width:8px}
+.verses::-webkit-scrollbar-track{background:var(--s1);border-radius:4px}
+.verses::-webkit-scrollbar-thumb{background:var(--s3);border-radius:4px}
+.verses::-webkit-scrollbar-thumb:hover{background:var(--border)}
+
+.verse{padding:12px 0;border-bottom:1px solid rgba(37,37,64,.5);font-family:'Playfair Display',serif;font-size:16px;line-height:1.8}
+.verse:last-child{border-bottom:none}
+.verse-num{display:inline-block;font-family:'Inter',sans-serif;font-size:11px;font-weight:800;color:var(--gold);vertical-align:super;margin-right:6px}
+
+.reader-loading{text-align:center;padding:40px 0;color:var(--muted);font-size:13px}
+.reader-loading::before{content:'📖';display:block;font-size:32px;margin-bottom:12px;animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+
+.reader-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
+
 /* Mission */
 .mission{text-align:center;padding:20px 0}
 .mission h2{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;margin-bottom:12px}
 .mission h2 span{color:var(--gold)}
 .mission p{font-size:15px;color:var(--muted);max-width:500px;margin:0 auto;line-height:1.8}
 
-/* Verse */
+/* Verse card (public) */
 .verse-card{background:linear-gradient(135deg,rgba(245,200,66,.1),rgba(245,200,66,.03));border:1px solid rgba(245,200,66,.25);border-radius:16px;padding:28px;margin:40px 0;text-align:center;position:relative}
 .verse-card::before{content:'"';position:absolute;left:20px;top:10px;font-size:60px;color:var(--gold);opacity:.15;font-family:'Playfair Display',serif}
 .verse-text{font-family:'Playfair Display',serif;font-size:18px;font-style:italic;line-height:1.7;margin-bottom:10px}
@@ -65,7 +128,7 @@ h1 em{font-style:italic;color:var(--gold)}
 .footer a{color:#6868A0;text-decoration:none}
 .footer a:hover{color:var(--gold)}
 
-@media(max-width:480px){.page{padding:40px 16px 60px}.hero{padding:20px 0 40px}}
+@media(max-width:480px){.page{padding:40px 16px 60px}.hero{padding:20px 0 40px}.auth-card,.reader-card{padding:24px 20px}}
 </style>
 </head>
 <body>
@@ -85,6 +148,52 @@ h1 em{font-style:italic;color:var(--gold)}
   <div class="store-btns">
     <a href="#" class="store-btn">📱 App Store — Coming Soon</a>
     <a href="#" class="store-btn">🤖 Google Play — Coming Soon</a>
+  </div>
+</div>
+
+<!-- Auth Card (shows when logged out) -->
+<div class="auth-card" id="auth-card">
+  <h2>Read the <span>Word</span> Now</h2>
+  <p class="sub">Sign up free to start reading the Bible. No credit card. Ever.</p>
+
+  <div class="auth-tabs">
+    <button class="auth-tab active" data-tab="login" id="tab-login">Log In</button>
+    <button class="auth-tab" data-tab="signup" id="tab-signup">Sign Up</button>
+  </div>
+
+  <form class="auth-form" id="auth-form" autocomplete="off">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" placeholder="you@email.com" required autocomplete="email">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" placeholder="At least 6 characters" required minlength="6" autocomplete="current-password">
+
+    <button type="submit" class="btn-primary" id="auth-submit">Log In</button>
+  </form>
+
+  <div class="auth-msg" id="auth-msg"></div>
+</div>
+
+<!-- Scripture Reader (shows when logged in) -->
+<div class="reader-card" id="reader-card">
+  <div class="reader-header">
+    <div class="reader-greeting">Signed in as <strong id="user-email">—</strong></div>
+    <button class="btn-ghost" id="logout-btn">Log Out</button>
+  </div>
+
+  <div class="reader-controls">
+    <select id="book-select"></select>
+    <input type="number" id="chapter-input" value="1" min="1">
+    <button id="load-btn">Load</button>
+  </div>
+
+  <div class="reader-title">
+    <span id="reader-book">—</span> <span id="reader-chapter">—</span>
+  </div>
+  <div class="reader-subtitle" id="reader-meta">King James Version</div>
+
+  <div id="verses-container">
+    <div class="reader-empty">Pick a book and chapter, then hit Load.</div>
   </div>
 </div>
 
@@ -151,5 +260,204 @@ h1 em{font-style:italic;color:var(--gold)}
 </div>
 
 </div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+
+const SUPABASE_URL = 'https://cljdpcfscszaryqjwswy.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsamRwY2ZzY3N6YXJ5cWp3c3d5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3Mzk2MzMsImV4cCI6MjA5MTMxNTYzM30.NQapKca3rVpHmoDF3B-CFCZb13uUPBwvZpzRz75XLC8';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true }
+});
+
+// 66-book Bible structure (id, name, chapter_count)
+const BOOKS = [
+  [1,'Genesis',50],[2,'Exodus',40],[3,'Leviticus',27],[4,'Numbers',36],[5,'Deuteronomy',34],
+  [6,'Joshua',24],[7,'Judges',21],[8,'Ruth',4],[9,'1 Samuel',31],[10,'2 Samuel',24],
+  [11,'1 Kings',22],[12,'2 Kings',25],[13,'1 Chronicles',29],[14,'2 Chronicles',36],[15,'Ezra',10],
+  [16,'Nehemiah',13],[17,'Esther',10],[18,'Job',42],[19,'Psalms',150],[20,'Proverbs',31],
+  [21,'Ecclesiastes',12],[22,'Song of Solomon',8],[23,'Isaiah',66],[24,'Jeremiah',52],[25,'Lamentations',5],
+  [26,'Ezekiel',48],[27,'Daniel',12],[28,'Hosea',14],[29,'Joel',3],[30,'Amos',9],
+  [31,'Obadiah',1],[32,'Jonah',4],[33,'Micah',7],[34,'Nahum',3],[35,'Habakkuk',3],
+  [36,'Zephaniah',3],[37,'Haggai',2],[38,'Zechariah',14],[39,'Malachi',4],
+  [40,'Matthew',28],[41,'Mark',16],[42,'Luke',24],[43,'John',21],[44,'Acts',28],
+  [45,'Romans',16],[46,'1 Corinthians',16],[47,'2 Corinthians',13],[48,'Galatians',6],[49,'Ephesians',6],
+  [50,'Philippians',4],[51,'Colossians',4],[52,'1 Thessalonians',5],[53,'2 Thessalonians',3],[54,'1 Timothy',6],
+  [55,'2 Timothy',4],[56,'Titus',3],[57,'Philemon',1],[58,'Hebrews',13],[59,'James',5],
+  [60,'1 Peter',5],[61,'2 Peter',3],[62,'1 John',5],[63,'2 John',1],[64,'3 John',1],
+  [65,'Jude',1],[66,'Revelation',22]
+];
+
+// DOM refs
+const $ = id => document.getElementById(id);
+const authCard = $('auth-card');
+const readerCard = $('reader-card');
+const tabLogin = $('tab-login');
+const tabSignup = $('tab-signup');
+const authForm = $('auth-form');
+const authSubmit = $('auth-submit');
+const authMsg = $('auth-msg');
+const passwordInput = $('password');
+const emailInput = $('email');
+const userEmailEl = $('user-email');
+const logoutBtn = $('logout-btn');
+const bookSelect = $('book-select');
+const chapterInput = $('chapter-input');
+const loadBtn = $('load-btn');
+const versesContainer = $('verses-container');
+const readerBook = $('reader-book');
+const readerChapter = $('reader-chapter');
+
+let mode = 'login';
+let currentBook = 1;
+
+// Initialize book dropdown
+BOOKS.forEach(([id, name, chapters]) => {
+  const opt = document.createElement('option');
+  opt.value = id;
+  opt.textContent = name;
+  opt.dataset.chapters = chapters;
+  bookSelect.appendChild(opt);
+});
+
+function setAuthMsg(text, type = 'info') {
+  authMsg.textContent = text;
+  authMsg.className = 'auth-msg ' + type;
+  if (!text) authMsg.style.display = 'none';
+}
+
+function switchTab(newMode) {
+  mode = newMode;
+  tabLogin.classList.toggle('active', mode === 'login');
+  tabSignup.classList.toggle('active', mode === 'signup');
+  authSubmit.textContent = mode === 'login' ? 'Log In' : 'Create Account';
+  passwordInput.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
+  setAuthMsg('');
+}
+
+tabLogin.addEventListener('click', () => switchTab('login'));
+tabSignup.addEventListener('click', () => switchTab('signup'));
+
+authForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  if (!email || !password) return;
+
+  authSubmit.disabled = true;
+  authSubmit.textContent = mode === 'login' ? 'Logging in…' : 'Creating account…';
+  setAuthMsg('');
+
+  try {
+    if (mode === 'login') {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      // onAuthStateChange will handle UI update
+    } else {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      if (data.user && !data.session) {
+        setAuthMsg('Check your email to confirm your account, then log in.', 'success');
+        switchTab('login');
+      }
+    }
+  } catch (err) {
+    setAuthMsg(err.message || 'Something went wrong. Try again.', 'error');
+  } finally {
+    authSubmit.disabled = false;
+    authSubmit.textContent = mode === 'login' ? 'Log In' : 'Create Account';
+  }
+});
+
+logoutBtn.addEventListener('click', async () => {
+  await supabase.auth.signOut();
+});
+
+bookSelect.addEventListener('change', () => {
+  currentBook = Number(bookSelect.value);
+  chapterInput.value = 1;
+  chapterInput.max = bookSelect.selectedOptions[0]?.dataset.chapters || 150;
+});
+
+loadBtn.addEventListener('click', loadChapter);
+chapterInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') loadChapter();
+});
+
+async function loadChapter() {
+  const bookId = Number(bookSelect.value);
+  const chapter = Number(chapterInput.value);
+  const bookName = bookSelect.selectedOptions[0]?.textContent || '';
+  if (!bookId || !chapter) return;
+
+  loadBtn.disabled = true;
+  loadBtn.textContent = '…';
+  versesContainer.innerHTML = '<div class="reader-loading">Loading the Word…</div>';
+
+  try {
+    const { data, error } = await supabase
+      .from('verses')
+      .select('verse_number, text_kjv, text_slang')
+      .eq('book_id', bookId)
+      .eq('chapter', chapter)
+      .order('verse_number');
+
+    if (error) throw error;
+
+    readerBook.textContent = bookName;
+    readerChapter.textContent = chapter;
+
+    if (!data || data.length === 0) {
+      versesContainer.innerHTML = `<div class="reader-empty">No verses found for ${bookName} ${chapter}.<br><span style="font-size:11px">(The full KJV import is still in progress. Try Genesis 1 or another early book.)</span></div>`;
+      return;
+    }
+
+    const html = data.map(v => {
+      const text = v.text_slang || v.text_kjv;
+      return `<div class="verse"><span class="verse-num">${v.verse_number}</span>${text}</div>`;
+    }).join('');
+    versesContainer.innerHTML = `<div class="verses">${html}</div>`;
+  } catch (err) {
+    versesContainer.innerHTML = `<div class="reader-empty" style="color:var(--red)">Couldn't load verses: ${err.message || err}</div>`;
+  } finally {
+    loadBtn.disabled = false;
+    loadBtn.textContent = 'Load';
+  }
+}
+
+// Auth state management
+function showLoggedIn(session) {
+  authCard.style.display = 'none';
+  readerCard.style.display = 'block';
+  userEmailEl.textContent = session.user.email;
+}
+
+function showLoggedOut() {
+  authCard.style.display = 'block';
+  readerCard.style.display = 'none';
+  emailInput.value = '';
+  passwordInput.value = '';
+  setAuthMsg('');
+}
+
+// Bootstrap: check existing session
+(async () => {
+  const { data } = await supabase.auth.getSession();
+  if (data.session) {
+    showLoggedIn(data.session);
+  } else {
+    showLoggedOut();
+  }
+})();
+
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN' && session) {
+    showLoggedIn(session);
+  } else if (event === 'SIGNED_OUT') {
+    showLoggedOut();
+  }
+});
+</script>
 </body>
 </html>
