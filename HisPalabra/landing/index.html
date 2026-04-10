@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>His Palabra — The Word in Your Language</title>
+<meta name="description" content="Free Bible app for Gen Z. KJV in Gen Z slang. City community. Duolingo-style learning. No ads. No paywall. Scripture first.">
+<meta property="og:title" content="His Palabra — The Word in Your Language">
+<meta property="og:description" content="Free Bible app. KJV + slang. City community. Gamified learning. No ads ever.">
+<meta property="og:type" content="website">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#080810;--s1:#12121F;--s2:#1C1C30;--s3:#26263C;--border:#3F3866;--text:#F3F2FA;--muted:#a78bfa;--muted-soft:#c4b5fd;--lavender:#ddd6fe;--gold:#F5C842;--green:#4ADE80;--red:#F87171}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.page{max-width:720px;margin:0 auto;padding:60px 24px 80px}
+
+.hero{text-align:center;padding:40px 0 60px}
+.cross{font-size:56px;margin-bottom:20px;display:block}
+h1{font-family:'Playfair Display',serif;font-size:clamp(36px,6vw,56px);font-weight:700;line-height:1.05;margin-bottom:16px}
+h1 em{font-style:italic;color:var(--gold)}
+.hero p{font-size:16px;color:var(--muted);max-width:440px;margin:0 auto 32px;line-height:1.7}
+.pills{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:40px}
+.pill{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--muted)}
+.pill-gold{border-color:rgba(245,200,66,.3);color:var(--gold)}
+.pill-green{border-color:rgba(74,222,128,.3);color:var(--green)}
+
+.store-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:24px}
+.store-btn{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:14px 24px;font-size:14px;font-weight:700;color:var(--text);text-decoration:none;transition:all .15s}
+.store-btn:hover{border-color:var(--gold);color:var(--gold)}
+
+.divider{height:1px;background:var(--border);margin:48px 0}
+
+/* Auth Card */
+.auth-card{background:linear-gradient(135deg,rgba(245,200,66,.06),rgba(167,139,250,.08));border:1px solid var(--border);border-radius:16px;padding:32px;margin:40px 0}
+.auth-card h2{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;margin-bottom:6px;text-align:center}
+.auth-card h2 span{color:var(--gold)}
+.auth-card .sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px}
+
+.auth-tabs{display:flex;gap:4px;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:20px}
+.auth-tab{flex:1;background:transparent;border:none;color:var(--muted);font-family:inherit;font-size:13px;font-weight:700;padding:10px;border-radius:7px;cursor:pointer;transition:all .15s}
+.auth-tab.active{background:var(--s3);color:var(--text)}
+
+.auth-form{display:flex;flex-direction:column;gap:12px}
+.auth-form label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:-8px}
+.auth-form input{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:14px 16px;color:var(--text);font-family:inherit;font-size:14px;transition:border-color .15s}
+.auth-form input:focus{outline:none;border-color:var(--gold)}
+.auth-form input::placeholder{color:var(--muted-soft)}
+
+.btn-primary{background:var(--gold);color:#080810;border:none;border-radius:10px;padding:14px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;transition:opacity .15s;margin-top:4px}
+.btn-primary:hover:not(:disabled){opacity:.9}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:10px;padding:10px 16px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s}
+.btn-ghost:hover{color:var(--text);border-color:var(--muted)}
+
+.auth-msg{font-size:13px;padding:10px 14px;border-radius:8px;margin-top:8px;text-align:center;display:none}
+.auth-msg.error{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--red);display:block}
+.auth-msg.success{background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:var(--green);display:block}
+.auth-msg.info{background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.3);color:#60A5FA;display:block}
+
+/* Logged-in Scripture Reader */
+.reader-card{background:linear-gradient(135deg,rgba(245,200,66,.08),rgba(74,222,128,.03));border:1px solid rgba(245,200,66,.25);border-radius:16px;padding:28px;margin:40px 0;display:none}
+.reader-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.reader-greeting{font-size:13px;color:var(--muted)}
+.reader-greeting strong{color:var(--gold);font-weight:700}
+
+.reader-controls{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.reader-controls select,.reader-controls input{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:inherit;font-size:13px;font-weight:600}
+.reader-controls select{flex:1;min-width:140px;cursor:pointer}
+.reader-controls select:focus,.reader-controls input:focus{outline:none;border-color:var(--gold)}
+.reader-controls input{width:70px;text-align:center}
+.reader-controls button{background:var(--gold);color:#080810;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;transition:opacity .15s}
+.reader-controls button:hover:not(:disabled){opacity:.9}
+.reader-controls button:disabled{opacity:.5;cursor:not-allowed}
+
+.reader-title{font-family:'Playfair Display',serif;font-size:24px;font-weight:700;margin-bottom:4px}
+.reader-title span{color:var(--gold)}
+.reader-subtitle{font-size:12px;color:var(--muted);margin-bottom:20px;text-transform:uppercase;letter-spacing:.5px}
+
+.verses{max-height:500px;overflow-y:auto;padding-right:8px}
+.verses::-webkit-scrollbar{width:8px}
+.verses::-webkit-scrollbar-track{background:var(--s1);border-radius:4px}
+.verses::-webkit-scrollbar-thumb{background:var(--s3);border-radius:4px}
+.verses::-webkit-scrollbar-thumb:hover{background:var(--border)}
+
+.verse{padding:12px 0;border-bottom:1px solid rgba(167,139,250,.15);font-family:'Playfair Display',serif;font-size:16px;line-height:1.8}
+.verse:last-child{border-bottom:none}
+.verse-num{display:inline-block;font-family:'Inter',sans-serif;font-size:11px;font-weight:800;color:var(--gold);vertical-align:super;margin-right:6px}
+
+.reader-loading{text-align:center;padding:40px 0;color:var(--muted);font-size:13px}
+.reader-loading::before{content:'📖';display:block;font-size:32px;margin-bottom:12px;animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+
+.reader-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
+
+/* Mission */
+.mission{text-align:center;padding:20px 0}
+.mission h2{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;margin-bottom:12px}
+.mission h2 span{color:var(--gold)}
+.mission p{font-size:15px;color:var(--muted);max-width:500px;margin:0 auto;line-height:1.8}
+
+/* Verse card (public) */
+.verse-card{background:linear-gradient(135deg,rgba(245,200,66,.1),rgba(245,200,66,.03));border:1px solid rgba(245,200,66,.25);border-radius:16px;padding:28px;margin:40px 0;text-align:center;position:relative}
+.verse-card::before{content:'"';position:absolute;left:20px;top:10px;font-size:60px;color:var(--gold);opacity:.15;font-family:'Playfair Display',serif}
+.verse-text{font-family:'Playfair Display',serif;font-size:18px;font-style:italic;line-height:1.7;margin-bottom:10px}
+.verse-ref{font-size:12px;font-weight:700;color:var(--gold)}
+
+/* Features */
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:40px 0}
+.feature{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center}
+.feature-icon{font-size:28px;margin-bottom:10px;display:block}
+.feature h3{font-size:14px;font-weight:800;margin-bottom:4px}
+.feature p{font-size:12px;color:var(--muted);line-height:1.5}
+
+/* Donate */
+.donate{background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.25);border-radius:16px;padding:32px;text-align:center;margin:40px 0}
+.donate h2{font-family:'Playfair Display',serif;font-size:24px;color:var(--gold);margin-bottom:8px}
+.donate p{font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.7}
+.donate-btn{display:inline-block;background:var(--gold);color:#080810;font-size:16px;font-weight:800;padding:14px 32px;border-radius:12px;text-decoration:none;transition:opacity .15s}
+.donate-btn:hover{opacity:.9}
+.donate-amounts{display:flex;gap:8px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+.donate-amt{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;color:var(--text)}
+
+/* Footer */
+.footer{border-top:1px solid var(--border);margin-top:48px;padding-top:20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.footer p{font-size:11px;color:var(--muted-soft)}
+.footer a{color:var(--muted);text-decoration:none}
+.footer a:hover{color:var(--gold)}
+
+@media(max-width:480px){.page{padding:40px 16px 60px}.hero{padding:20px 0 40px}.auth-card,.reader-card{padding:24px 20px}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="hero">
+  <span class="cross">✝️</span>
+  <h1>His <em>Palabra</em></h1>
+  <p>The Word of God — free, faithful, and finally in a language your generation can actually hear. No ads. No paywall. Scripture first.</p>
+  <div class="pills">
+    <span class="pill pill-gold">📖 KJV + Gen Z Slang</span>
+    <span class="pill pill-green">📍 City Community</span>
+    <span class="pill pill-gold">🎮 Gamified Learning</span>
+    <span class="pill pill-green">🆓 100% Free</span>
+    <span class="pill">🇪🇸 Coming: Español</span>
+  </div>
+  <div class="store-btns">
+    <a href="#" class="store-btn">📱 App Store — Coming Soon</a>
+    <a href="#" class="store-btn">🤖 Google Play — Coming Soon</a>
+  </div>
+</div>
+
+<!-- Auth Card (shows when logged out) -->
+<div class="auth-card" id="auth-card">
+  <h2>Read the <span>Word</span> Now</h2>
+  <p class="sub">Sign up free to start reading the Bible. No credit card. Ever.</p>
+
+  <div class="auth-tabs">
+    <button class="auth-tab active" data-tab="login" id="tab-login">Log In</button>
+    <button class="auth-tab" data-tab="signup" id="tab-signup">Sign Up</button>
+  </div>
+
+  <form class="auth-form" id="auth-form" autocomplete="off">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" placeholder="you@email.com" required autocomplete="email">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" placeholder="At least 6 characters" required minlength="6" autocomplete="current-password">
+
+    <button type="submit" class="btn-primary" id="auth-submit">Log In</button>
+  </form>
+
+  <div class="auth-msg" id="auth-msg"></div>
+</div>
+
+<!-- Scripture Reader (shows when logged in) -->
+<div class="reader-card" id="reader-card">
+  <div class="reader-header">
+    <div class="reader-greeting">Signed in as <strong id="user-email">—</strong></div>
+    <button class="btn-ghost" id="logout-btn">Log Out</button>
+  </div>
+
+  <div class="reader-controls">
+    <select id="book-select"></select>
+    <input type="number" id="chapter-input" value="1" min="1">
+    <button id="load-btn">Load</button>
+  </div>
+
+  <div class="reader-title">
+    <span id="reader-book">—</span> <span id="reader-chapter">—</span>
+  </div>
+  <div class="reader-subtitle" id="reader-meta">King James Version</div>
+
+  <div id="verses-container">
+    <div class="reader-empty">Pick a book and chapter, then hit Load.</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="verse-card">
+  <div class="verse-text">"Fr fr, God loved this world so hard that He gave up His one and only Son — so that whoever puts their trust in Him won't be cooked, but gets eternal life. No cap."</div>
+  <div class="verse-ref">— John 3:16 · His Palabra</div>
+</div>
+
+<div class="mission">
+  <h2>The Bible, <span>But Make It Speak</span></h2>
+  <p>Every verse of the King James Bible — accurately translated into the language Gen Z actually uses. Not dumbed down. Not watered down. The same truth, delivered in a voice you recognize. Plus city-based community, Duolingo-style learning with XP and streaks, and zero ads — ever.</p>
+</div>
+
+<div class="features">
+  <div class="feature">
+    <span class="feature-icon">📖</span>
+    <h3>Full KJV Bible</h3>
+    <p>All 66 books. Toggle between slang and original KJV with one tap.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">🗣️</span>
+    <h3>Gen Z Slang</h3>
+    <p>Theologically accurate translations in the language you actually speak.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">📍</span>
+    <h3>City Community</h3>
+    <p>Join your city's Bible group. No DMs. No creeps. Just your people.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">🎮</span>
+    <h3>Learn & Earn XP</h3>
+    <p>Duolingo-style devotionals. Quizzes. Streaks. Leaderboards. Actually learn the Word.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">🆓</span>
+    <h3>Free Forever</h3>
+    <p>No ads. No paywall. The Word should be free. Supported by donations.</p>
+  </div>
+  <div class="feature">
+    <span class="feature-icon">🇪🇸</span>
+    <h3>Español Coming</h3>
+    <p>Reina Valera 1909 + Spanish slang. One app, two languages, one community.</p>
+  </div>
+</div>
+
+<div class="donate">
+  <h2>Support the Mission 🙏</h2>
+  <p>This app is free because the Word of God should be. If it's blessed you, consider blessing someone else by keeping it alive.</p>
+  <a href="https://ko-fi.com/hispalabra" class="donate-btn" target="_blank" rel="noopener">Support His Palabra</a>
+  <div class="donate-amounts">
+    <span class="donate-amt">$2</span>
+    <span class="donate-amt">$5</span>
+    <span class="donate-amt">$10</span>
+    <span class="donate-amt">$25</span>
+  </div>
+</div>
+
+<div class="footer">
+  <p>&copy; 2026 His Palabra · <a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a></p>
+  <p>"Freely you have received — freely give." — Matthew 10:8</p>
+</div>
+
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+
+const SUPABASE_URL = 'https://cljdpcfscszaryqjwswy.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsamRwY2ZzY3N6YXJ5cWp3c3d5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3Mzk2MzMsImV4cCI6MjA5MTMxNTYzM30.NQapKca3rVpHmoDF3B-CFCZb13uUPBwvZpzRz75XLC8';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true }
+});
+
+// 66-book Bible structure (id, name, chapter_count)
+const BOOKS = [
+  [1,'Genesis',50],[2,'Exodus',40],[3,'Leviticus',27],[4,'Numbers',36],[5,'Deuteronomy',34],
+  [6,'Joshua',24],[7,'Judges',21],[8,'Ruth',4],[9,'1 Samuel',31],[10,'2 Samuel',24],
+  [11,'1 Kings',22],[12,'2 Kings',25],[13,'1 Chronicles',29],[14,'2 Chronicles',36],[15,'Ezra',10],
+  [16,'Nehemiah',13],[17,'Esther',10],[18,'Job',42],[19,'Psalms',150],[20,'Proverbs',31],
+  [21,'Ecclesiastes',12],[22,'Song of Solomon',8],[23,'Isaiah',66],[24,'Jeremiah',52],[25,'Lamentations',5],
+  [26,'Ezekiel',48],[27,'Daniel',12],[28,'Hosea',14],[29,'Joel',3],[30,'Amos',9],
+  [31,'Obadiah',1],[32,'Jonah',4],[33,'Micah',7],[34,'Nahum',3],[35,'Habakkuk',3],
+  [36,'Zephaniah',3],[37,'Haggai',2],[38,'Zechariah',14],[39,'Malachi',4],
+  [40,'Matthew',28],[41,'Mark',16],[42,'Luke',24],[43,'John',21],[44,'Acts',28],
+  [45,'Romans',16],[46,'1 Corinthians',16],[47,'2 Corinthians',13],[48,'Galatians',6],[49,'Ephesians',6],
+  [50,'Philippians',4],[51,'Colossians',4],[52,'1 Thessalonians',5],[53,'2 Thessalonians',3],[54,'1 Timothy',6],
+  [55,'2 Timothy',4],[56,'Titus',3],[57,'Philemon',1],[58,'Hebrews',13],[59,'James',5],
+  [60,'1 Peter',5],[61,'2 Peter',3],[62,'1 John',5],[63,'2 John',1],[64,'3 John',1],
+  [65,'Jude',1],[66,'Revelation',22]
+];
+
+// DOM refs
+const $ = id => document.getElementById(id);
+const authCard = $('auth-card');
+const readerCard = $('reader-card');
+const tabLogin = $('tab-login');
+const tabSignup = $('tab-signup');
+const authForm = $('auth-form');
+const authSubmit = $('auth-submit');
+const authMsg = $('auth-msg');
+const passwordInput = $('password');
+const emailInput = $('email');
+const userEmailEl = $('user-email');
+const logoutBtn = $('logout-btn');
+const bookSelect = $('book-select');
+const chapterInput = $('chapter-input');
+const loadBtn = $('load-btn');
+const versesContainer = $('verses-container');
+const readerBook = $('reader-book');
+const readerChapter = $('reader-chapter');
+
+let mode = 'login';
+let currentBook = 1;
+
+// Initialize book dropdown
+BOOKS.forEach(([id, name, chapters]) => {
+  const opt = document.createElement('option');
+  opt.value = id;
+  opt.textContent = name;
+  opt.dataset.chapters = chapters;
+  bookSelect.appendChild(opt);
+});
+
+function setAuthMsg(text, type = 'info') {
+  authMsg.textContent = text;
+  authMsg.className = 'auth-msg ' + type;
+  if (!text) authMsg.style.display = 'none';
+}
+
+function switchTab(newMode) {
+  mode = newMode;
+  tabLogin.classList.toggle('active', mode === 'login');
+  tabSignup.classList.toggle('active', mode === 'signup');
+  authSubmit.textContent = mode === 'login' ? 'Log In' : 'Create Account';
+  passwordInput.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
+  setAuthMsg('');
+}
+
+tabLogin.addEventListener('click', () => switchTab('login'));
+tabSignup.addEventListener('click', () => switchTab('signup'));
+
+authForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  if (!email || !password) return;
+
+  authSubmit.disabled = true;
+  authSubmit.textContent = mode === 'login' ? 'Logging in…' : 'Creating account…';
+  setAuthMsg('');
+
+  try {
+    if (mode === 'login') {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      // onAuthStateChange will handle UI update
+    } else {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      if (data.user && !data.session) {
+        setAuthMsg('Check your email to confirm your account, then log in.', 'success');
+        switchTab('login');
+      }
+    }
+  } catch (err) {
+    setAuthMsg(err.message || 'Something went wrong. Try again.', 'error');
+  } finally {
+    authSubmit.disabled = false;
+    authSubmit.textContent = mode === 'login' ? 'Log In' : 'Create Account';
+  }
+});
+
+logoutBtn.addEventListener('click', async () => {
+  await supabase.auth.signOut();
+});
+
+bookSelect.addEventListener('change', () => {
+  currentBook = Number(bookSelect.value);
+  chapterInput.value = 1;
+  chapterInput.max = bookSelect.selectedOptions[0]?.dataset.chapters || 150;
+});
+
+loadBtn.addEventListener('click', loadChapter);
+chapterInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') loadChapter();
+});
+
+async function loadChapter() {
+  const bookId = Number(bookSelect.value);
+  const chapter = Number(chapterInput.value);
+  const bookName = bookSelect.selectedOptions[0]?.textContent || '';
+  if (!bookId || !chapter) return;
+
+  loadBtn.disabled = true;
+  loadBtn.textContent = '…';
+  versesContainer.innerHTML = '<div class="reader-loading">Loading the Word…</div>';
+
+  try {
+    const { data, error } = await supabase
+      .from('verses')
+      .select('verse_number, text_kjv, text_slang')
+      .eq('book_id', bookId)
+      .eq('chapter', chapter)
+      .order('verse_number');
+
+    if (error) throw error;
+
+    readerBook.textContent = bookName;
+    readerChapter.textContent = chapter;
+
+    if (!data || data.length === 0) {
+      versesContainer.innerHTML = `<div class="reader-empty">No verses found for ${bookName} ${chapter}.<br><span style="font-size:11px">(The full KJV import is still in progress. Try Genesis 1 or another early book.)</span></div>`;
+      return;
+    }
+
+    const html = data.map(v => {
+      const text = v.text_slang || v.text_kjv;
+      return `<div class="verse"><span class="verse-num">${v.verse_number}</span>${text}</div>`;
+    }).join('');
+    versesContainer.innerHTML = `<div class="verses">${html}</div>`;
+  } catch (err) {
+    versesContainer.innerHTML = `<div class="reader-empty" style="color:var(--red)">Couldn't load verses: ${err.message || err}</div>`;
+  } finally {
+    loadBtn.disabled = false;
+    loadBtn.textContent = 'Load';
+  }
+}
+
+// Auth state management
+function showLoggedIn(session) {
+  authCard.style.display = 'none';
+  readerCard.style.display = 'block';
+  userEmailEl.textContent = session.user.email;
+}
+
+function showLoggedOut() {
+  authCard.style.display = 'block';
+  readerCard.style.display = 'none';
+  emailInput.value = '';
+  passwordInput.value = '';
+  setAuthMsg('');
+}
+
+// Bootstrap: check existing session
+(async () => {
+
+  // Handle email confirmation callback from Supabase
+  async function handleEmailConfirmation() {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const type = params.get('type');
+      const code = params.get('code');
+      
+      if (type === 'signup' && code) {
+            try {
+                    const { data, error } = await supabase.auth.verifyOtp({
+                              type: 'email',
+                              email: new URLSearchParams(window.location.search).get('email') || '',
+                              token: code
+                    });
+                    
+                    if (error) throw error;
+                    
+                    // Clear the URL parameters after successful verification
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    
+                    // Trigger auth state change to reload user session
+                    const { data: session } = await supabase.auth.getSession();
+                    if (session?.session) {
+                              showLoggedIn(session.session);
+                    }
+            } catch (error) {
+                    console.error('Email confirmation failed:', error.message);
+            }
+      }
+  }
+  
+  // Handle recovery token
+  async function handleRecoveryToken() {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const type = params.get('type');
+      const code = params.get('code');
+      
+      if (type === 'recovery' && code) {
+            try {
+                    const { data, error } = await supabase.auth.verifyOtp({
+                              type: 'recovery',
+                              token: code
+                    });
+                    
+                    if (error) throw error;
+                    
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    const { data: session } = await supabase.auth.getSession();
+                    if (session?.session) {
+                              showLoggedIn(session.session);
+                    }
+            } catch (error) {
+                    console.error('Recovery token verification failed:', error.message);
+            }
+      }
+  }
+  
+  const { data } = await supabase.auth.getSession();
+  if (data.session) {
+    showLoggedIn(data.session);
+  } else {
+    showLoggedOut();
+  }
+})();
+
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN' && session) {
+    showLoggedIn(session);
+  } else if (event === 'SIGNED_OUT') {
+    showLoggedOut();
+  }
+});
+</script>
+</bo
+  
+  // Initialize email confirmation handlers on page load
+  handleEmailConfirmation();
+  handleRecoveryToken();dy>
+</html>

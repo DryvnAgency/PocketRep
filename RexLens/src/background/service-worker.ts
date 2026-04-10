@@ -112,6 +112,10 @@ async function callAIProxy(body: Record<string, unknown>): Promise<string> {
     throw new Error(`AI proxy returned ${res.status} with non-JSON response`);
   }
 
+  if (json.error?.type === 'DAILY_LIMIT') {
+    throw new Error('DAILY_LIMIT');
+  }
+
   if (json.type === 'error' || json.error) {
     const msg = json.error?.message || json.error?.type || JSON.stringify(json.error || json);
     throw new Error(`Anthropic API error: ${msg}`);

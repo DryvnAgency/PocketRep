@@ -31,7 +31,7 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
   {
     id: 'elite',
     name: 'Elite — Market Leader',
-    price: '$47',
+    price: '$49',
     after: '$79/mo after Apr 30',
     features: [
       'Everything in Pro',
@@ -39,6 +39,17 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
       'Cross-Deal Rex Memory',
       'Rex Lens — AI Photo Vision',
       'Weekly Pipeline Digest',
+    ],
+  },
+  {
+    id: 'pro_bundle',
+    name: 'Pro + Rex Lens',
+    price: '$49',
+    after: 'Save $39/mo vs separate',
+    features: [
+      'Everything in Pro',
+      'Rex Lens Chrome extension included',
+      'CRM + AI screen coach at a great price',
     ],
   },
   {
@@ -56,8 +67,8 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
   {
     id: 'elite_bundle',
     name: 'Elite + Rex Lens Bundle',
-    price: '$99',
-    after: 'Save $39/mo vs separate',
+    price: '$69',
+    after: 'Save $37/mo vs separate',
     features: [
       'Everything in Elite',
       'Rex Lens Chrome extension included',

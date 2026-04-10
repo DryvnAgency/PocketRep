@@ -1,4 +1,4 @@
-export type Plan = 'pro' | 'elite' | 'rex_lens_standalone' | 'elite_bundle';
+export type Plan = 'pro' | 'elite' | 'pro_bundle' | 'rex_lens_standalone' | 'elite_bundle';
 export type HeatTier = 'hot' | 'warm' | 'watch';
 
 export type IndustryKey = 'auto' | 'mortgage' | 'realestate' | 'hvac' | 'staffing' | 'd2d' | 'roofing' | 'fence' | 'insurance' | 'solar' | 'b2b' | 'other';
