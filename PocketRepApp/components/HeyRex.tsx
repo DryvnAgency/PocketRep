@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Animated, Modal, ScrollView, ActivityIndicator,
-  Pressable, Alert, Platform, TextInput, PanResponder,
+  Pressable, Alert, Platform, TextInput, PanResponder, AppState,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { useRouter, useSegments } from 'expo-router';
@@ -49,6 +49,19 @@ let BuiltInKeyword: any = null;
 try {
   ({ PorcupineManager, BuiltInKeyword } = require('@picovoice/porcupine-react-native'));
 } catch {}
+
+let Speech: any = null;
+try { Speech = require('expo-speech'); } catch {}
+
+let AsyncStorage: any = null;
+try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
+
+// AsyncStorage keys for Hey Rex settings
+const HR_ENABLED_KEY    = 'hey_rex_enabled';
+const HR_SENSITIVITY_KEY = 'hey_rex_sensitivity';
+const HR_CONFIRM_KEY    = 'hey_rex_confirm_outloud';
+const HR_PAUSED_KEY     = 'hey_rex_paused_until';
+const HR_BACKGROUND_KEY = 'hey_rex_background';
 
 type Stage = 'idle' | 'listening' | 'processing' | 'done';
 
@@ -103,6 +116,10 @@ export default function HeyRex() {
   const wakeManagerRef = useRef<any>(null);
   const startListeningRef = useRef<() => void>(() => {});
   const [wakeReady, setWakeReady] = useState(false);
+  // Hey Rex settings (loaded from AsyncStorage)
+  const [heyRexEnabled, setHeyRexEnabled] = useState(false);
+  const heyRexSensitivityRef = useRef(0.5);
+  const heyRexConfirmRef = useRef(true);
   const router = useRouter();
   const segments = useSegments();
   // Hide the orb when already on the Rex tab
@@ -120,22 +137,58 @@ export default function HeyRex() {
   // Keep startListeningRef current so the wake word callback never has a stale closure
   useEffect(() => { startListeningRef.current = startListening; });
 
-  // Init Porcupine wake word on mount (native only)
+  // Load Hey Rex settings from AsyncStorage; re-run when app becomes active
+  useEffect(() => {
+    async function loadSettings() {
+      if (!AsyncStorage) return;
+      try {
+        const [enabled, sensitivity, confirm, pausedUntil] = await Promise.all([
+          AsyncStorage.getItem(HR_ENABLED_KEY),
+          AsyncStorage.getItem(HR_SENSITIVITY_KEY),
+          AsyncStorage.getItem(HR_CONFIRM_KEY),
+          AsyncStorage.getItem(HR_PAUSED_KEY),
+        ]);
+        const isPaused = pausedUntil ? Date.now() < parseInt(pausedUntil, 10) : false;
+        const isEnabled = enabled === 'true' && !isPaused;
+        heyRexSensitivityRef.current = sensitivity ? parseFloat(sensitivity) : 0.5;
+        heyRexConfirmRef.current = confirm !== 'false';
+        setHeyRexEnabled(isEnabled);
+      } catch {}
+    }
+    loadSettings();
+    const sub = AppState.addEventListener('change', s => { if (s === 'active') loadSettings(); });
+    return () => sub.remove();
+  }, []);
+
+  // Start or stop Porcupine whenever the enabled flag changes
   useEffect(() => {
     if (isWeb || !PICOVOICE_KEY || !PorcupineManager) return;
 
+    if (!heyRexEnabled) {
+      wakeManagerRef.current?.stop().catch(() => {});
+      setWakeReady(false);
+      return;
+    }
+
     async function initWakeWord() {
+      // Tear down any existing manager before creating a new one
+      if (wakeManagerRef.current) {
+        try { await wakeManagerRef.current.stop(); } catch {}
+        wakeManagerRef.current = null;
+      }
       try {
+        // ← swap fromBuiltInKeywords → fromKeywordPaths once hey-rex.ppn files arrive
+        // and change [BuiltInKeyword.PORCUPINE] to the path require() of the .ppn files
         const mgr = await PorcupineManager.fromBuiltInKeywords(
           PICOVOICE_KEY,
-          [BuiltInKeyword.PORCUPINE], // ← swap to fromKeywordPaths() once hey-rex.ppn is ready
+          [BuiltInKeyword.PORCUPINE],
           (_index: number) => {
-            // Wake word detected — hand off to startListening
             wakeManagerRef.current?.stop().catch(() => {});
             setWakeReady(false);
             startListeningRef.current();
           },
           (err: Error) => console.warn('Rex wake word error:', err),
+          [heyRexSensitivityRef.current],
         );
         await mgr.start();
         wakeManagerRef.current = mgr;
@@ -150,15 +203,15 @@ export default function HeyRex() {
       wakeManagerRef.current?.delete();
       wakeManagerRef.current = null;
     };
-  }, []);
+  }, [heyRexEnabled]);
 
   // Restart wake word whenever recording session ends and HeyRex goes back to idle
   useEffect(() => {
-    if (stage !== 'idle' || isWeb || !wakeManagerRef.current) return;
+    if (stage !== 'idle' || isWeb || !heyRexEnabled || !wakeManagerRef.current) return;
     wakeManagerRef.current.start()
       .then(() => setWakeReady(true))
       .catch(() => {});
-  }, [stage]);
+  }, [stage, heyRexEnabled]);
 
   useEffect(() => {
     if (stage === 'listening') {
@@ -516,6 +569,29 @@ Return this exact JSON shape:
     }
 
     setSaved(true);
+
+    // Audible confirmation when Hey Rex is active and "confirm out loud" is on
+    if (heyRexConfirmRef.current && Speech && !isWeb) {
+      const followUpStr = followUpDate
+        ? `Follow-up scheduled for ${formatDateForSpeech(followUpDate)}.`
+        : '';
+      const who = parsed.customer_name;
+      const action = parsed.contact_id ? 'updated' : 'logged';
+      Speech.speak(`Got it. ${who} ${action}. ${followUpStr}`.trim(), {
+        language: 'en-US',
+        rate: 0.92,
+        pitch: 0.85,
+      });
+    }
+  }
+
+  function formatDateForSpeech(dateStr: string): string {
+    try {
+      const d = new Date(dateStr + 'T12:00:00');
+      return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    } catch {
+      return dateStr;
+    }
   }
 
   async function generatePersonalizedSequence(
@@ -644,8 +720,14 @@ Return format (JSON array):
           >
             <Text style={s.orbIcon}>{orbIcon}</Text>
           </TouchableOpacity>
+          {/* Gold listening dot — visible when wake word detection is active */}
+          {wakeReady && stage === 'idle' && (
+            <View style={s.wakeReadyDot} />
+          )}
           {stage === 'idle' && (
-            <Text style={s.orbLabel}>{wakeReady ? '👂 Listening…' : 'Hey Rex'}</Text>
+            <Text style={[s.orbLabel, wakeReady && s.orbLabelActive]}>
+              {wakeReady ? '● Listening' : 'Hey Rex'}
+            </Text>
           )}
         </Animated.View>
       ) : (
@@ -850,6 +932,13 @@ const s = StyleSheet.create({
   },
   orbIcon: { fontSize: 22 },
   orbLabel: { fontSize: 9, fontWeight: '700', color: colors.gold, letterSpacing: 0.5, marginTop: 4, textTransform: 'uppercase' },
+  orbLabelActive: { color: colors.green },
+  wakeReadyDot: {
+    position: 'absolute', top: 2, right: 2,
+    width: 9, height: 9, borderRadius: 5,
+    backgroundColor: colors.green,
+    borderWidth: 1.5, borderColor: colors.ink,
+  },
   // Show Rex restore pill (when orb is hidden)
   showRexPill: {
     position: 'absolute', bottom: 96, left: 20, zIndex: 999,

@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Modal, Pressable,
-  StyleSheet, Alert, ActivityIndicator, Linking, Platform,
+  StyleSheet, Alert, ActivityIndicator, Linking, Platform, Switch,
 } from 'react-native';
+import HeyRexOnboarding from '@/components/HeyRexOnboarding';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
@@ -14,6 +15,14 @@ let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
 
 const DIGEST_TIME_KEY = 'pocketrep_digest_time';
+
+// Hey Rex AsyncStorage keys (must match HeyRex.tsx)
+const HR_ENABLED_KEY     = 'hey_rex_enabled';
+const HR_SENSITIVITY_KEY = 'hey_rex_sensitivity';
+const HR_CONFIRM_KEY     = 'hey_rex_confirm_outloud';
+const HR_PAUSED_KEY      = 'hey_rex_paused_until';
+const HR_BACKGROUND_KEY  = 'hey_rex_background';
+const HR_ONBOARDED_KEY   = 'hey_rex_onboarded';
 
 const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
 const REX_MODEL = 'claude-haiku-4-5-20251001';
@@ -28,10 +37,18 @@ export default function MoreScreen() {
   const [pickerHour, setPickerHour] = useState(9);   // 1–12
   const [pickerAmPm, setPickerAmPm] = useState<'AM' | 'PM'>('AM');
   const [pickerMinute, setPickerMinute] = useState(0); // 0,15,30,45
+  // Hey Rex settings state
+  const [hrEnabled, setHrEnabled] = useState(false);
+  const [hrSensitivity, setHrSensitivity] = useState<'low' | 'medium' | 'high'>('medium');
+  const [hrConfirm, setHrConfirm] = useState(true);
+  const [hrBackground, setHrBackground] = useState(true);
+  const [hrPaused, setHrPaused] = useState(false);
+  const [showHrOnboarding, setShowHrOnboarding] = useState(false);
 
   useFocusEffect(useCallback(() => {
     loadProfile();
     loadDigestTime();
+    loadHrSettings();
   }, []));
 
   async function loadProfile() {
@@ -69,6 +86,61 @@ export default function MoreScreen() {
     const h = dt.hour % 12 || 12;
     const m = String(dt.minute).padStart(2, '0');
     return `${h}:${m} ${ampm}`;
+  }
+
+  async function loadHrSettings() {
+    if (!AsyncStorage) return;
+    try {
+      const [enabled, sensitivity, confirm, paused, background] = await Promise.all([
+        AsyncStorage.getItem(HR_ENABLED_KEY),
+        AsyncStorage.getItem(HR_SENSITIVITY_KEY),
+        AsyncStorage.getItem(HR_CONFIRM_KEY),
+        AsyncStorage.getItem(HR_PAUSED_KEY),
+        AsyncStorage.getItem(HR_BACKGROUND_KEY),
+      ]);
+      setHrEnabled(enabled === 'true');
+      setHrSensitivity((sensitivity as any) ?? 'medium');
+      setHrConfirm(confirm !== 'false');
+      setHrBackground(background !== 'false');
+      setHrPaused(paused ? Date.now() < parseInt(paused, 10) : false);
+    } catch {}
+  }
+
+  async function toggleHrEnabled(value: boolean) {
+    setHrEnabled(value);
+    await AsyncStorage?.setItem(HR_ENABLED_KEY, String(value));
+    if (value) {
+      const onboarded = await AsyncStorage?.getItem(HR_ONBOARDED_KEY);
+      if (!onboarded) setShowHrOnboarding(true);
+    }
+  }
+
+  async function setHrSensitivityAndSave(val: 'low' | 'medium' | 'high') {
+    const map = { low: 0.3, medium: 0.5, high: 0.7 };
+    setHrSensitivity(val);
+    await AsyncStorage?.setItem(HR_SENSITIVITY_KEY, String(map[val]));
+  }
+
+  async function toggleHrConfirm(value: boolean) {
+    setHrConfirm(value);
+    await AsyncStorage?.setItem(HR_CONFIRM_KEY, String(value));
+  }
+
+  async function toggleHrBackground(value: boolean) {
+    setHrBackground(value);
+    await AsyncStorage?.setItem(HR_BACKGROUND_KEY, String(value));
+  }
+
+  async function pauseHrListening() {
+    const until = Date.now() + 30 * 60 * 1000;
+    await AsyncStorage?.setItem(HR_PAUSED_KEY, String(until));
+    setHrPaused(true);
+    Alert.alert('Hey Rex paused', 'Rex will stop listening for 30 minutes.');
+  }
+
+  async function resumeHrListening() {
+    await AsyncStorage?.removeItem(HR_PAUSED_KEY);
+    setHrPaused(false);
   }
 
   async function signOut() {
@@ -185,6 +257,114 @@ export default function MoreScreen() {
           </Text>
         </View>
       ) : null}
+
+      {/* ── Hey Rex Voice Activation ── */}
+      <Text style={s.section}>Hey Rex Voice Activation</Text>
+
+      {/* Master toggle */}
+      <View style={s.row}>
+        <View style={s.rowLeft}>
+          <Text style={s.rowIcon}>🎙</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.rowTitle}>Enable Hey Rex</Text>
+            <Text style={s.rowSub}>Hands-free wake word — say "Hey Rex" to log a note</Text>
+          </View>
+        </View>
+        <Switch
+          value={hrEnabled}
+          onValueChange={toggleHrEnabled}
+          trackColor={{ false: colors.ink4, true: colors.goldBorder }}
+          thumbColor={hrEnabled ? colors.gold : colors.grey2}
+        />
+      </View>
+
+      {hrEnabled && (
+        <>
+          {/* Wake word sensitivity */}
+          <View style={[s.row, { flexDirection: 'column', alignItems: 'flex-start', gap: 8 }]}>
+            <View style={s.rowLeft}>
+              <Text style={s.rowIcon}>📶</Text>
+              <View>
+                <Text style={s.rowTitle}>Wake Word Sensitivity</Text>
+                <Text style={s.rowSub}>Higher = more responsive but more false triggers</Text>
+              </View>
+            </View>
+            <View style={s.hrChipRow}>
+              {(['low', 'medium', 'high'] as const).map(level => (
+                <TouchableOpacity
+                  key={level}
+                  style={[s.hrChip, hrSensitivity === level && s.hrChipActive]}
+                  onPress={() => setHrSensitivityAndSave(level)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[s.hrChipText, hrSensitivity === level && s.hrChipTextActive]}>
+                    {level.charAt(0).toUpperCase() + level.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Confirm actions out loud */}
+          <View style={s.row}>
+            <View style={s.rowLeft}>
+              <Text style={s.rowIcon}>🔊</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.rowTitle}>Confirm Actions Out Loud</Text>
+                <Text style={s.rowSub}>Rex speaks confirmation after logging a note</Text>
+              </View>
+            </View>
+            <Switch
+              value={hrConfirm}
+              onValueChange={toggleHrConfirm}
+              trackColor={{ false: colors.ink4, true: colors.goldBorder }}
+              thumbColor={hrConfirm ? colors.gold : colors.grey2}
+            />
+          </View>
+
+          {/* Background listening */}
+          <View style={s.row}>
+            <View style={s.rowLeft}>
+              <Text style={s.rowIcon}>📱</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.rowTitle}>Background Listening</Text>
+                <Text style={s.rowSub}>Listen when app is in background or screen is off</Text>
+              </View>
+            </View>
+            <Switch
+              value={hrBackground}
+              onValueChange={toggleHrBackground}
+              trackColor={{ false: colors.ink4, true: colors.goldBorder }}
+              thumbColor={hrBackground ? colors.gold : colors.grey2}
+            />
+          </View>
+
+          {/* Pause / Resume */}
+          {hrPaused ? (
+            <TouchableOpacity style={s.row} onPress={resumeHrListening} activeOpacity={0.8}>
+              <View style={s.rowLeft}>
+                <Text style={s.rowIcon}>▶️</Text>
+                <View>
+                  <Text style={[s.rowTitle, { color: colors.gold }]}>Resume Listening</Text>
+                  <Text style={s.rowSub}>Rex is currently paused</Text>
+                </View>
+              </View>
+              <Text style={s.rowArrow}>→</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={s.row} onPress={pauseHrListening} activeOpacity={0.8}>
+              <View style={s.rowLeft}>
+                <Text style={s.rowIcon}>⏸️</Text>
+                <View>
+                  <Text style={s.rowTitle}>Pause Listening for 30 Min</Text>
+                  <Text style={s.rowSub}>For private conversations</Text>
+                </View>
+              </View>
+              <Text style={s.rowArrow}>→</Text>
+            </TouchableOpacity>
+          )}
+        </>
+      )}
 
       {/* Weekly Digest — Elite only */}
       <Text style={s.section}>Performance</Text>
@@ -342,6 +522,15 @@ export default function MoreScreen() {
       {/* Footer */}
       <Text style={s.footer}>PocketRep · The rep's edge, not the store's</Text>
 
+      {/* Hey Rex Onboarding */}
+      <HeyRexOnboarding
+        visible={showHrOnboarding}
+        onDone={async () => {
+          setShowHrOnboarding(false);
+          await AsyncStorage?.setItem(HR_ONBOARDED_KEY, 'true');
+        }}
+      />
+
       {/* Sunday Digest Time Picker Modal */}
       <Modal visible={showDigestPicker} animationType="fade" transparent>
         <Pressable style={s.dpOverlay} onPress={() => setShowDigestPicker(false)}>
@@ -494,6 +683,15 @@ const s = StyleSheet.create({
   rexLensTitle: { fontSize: 14, fontWeight: '700', color: colors.white, marginBottom: 2 },
   rexLensSub: { fontSize: 11, color: colors.grey2, lineHeight: 16 },
   rexLensLink: { color: colors.gold, fontSize: 13, fontWeight: '700', textAlign: 'right' },
+  // Hey Rex chip selector
+  hrChipRow: { flexDirection: 'row', gap: 8, paddingLeft: 44 },
+  hrChip: {
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 6,
+  },
+  hrChipActive: { backgroundColor: colors.goldBg, borderColor: colors.goldBorder },
+  hrChipText: { color: colors.grey2, fontSize: 13, fontWeight: '600' },
+  hrChipTextActive: { color: colors.gold },
   // Digest time picker modal
   dpOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
   dpSheet: {
