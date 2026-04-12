@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Animated, Modal, ScrollView, ActivityIndicator,
@@ -7,6 +7,7 @@ import {
 import { Audio } from 'expo-av';
 import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { useWakeWord } from '@/lib/useWakeWord';
 import { colors, radius, spacing } from '@/constants/theme';
 import { scheduleContactReminders, requestNotificationPermission, type PersonalEvent } from '@/lib/notifications';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
@@ -22,33 +23,13 @@ import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 //   6. Rex returns a deal game plan on how to move it forward
 //
 // True hands-free wake word ("Hey Rex" with no tap):
-//   → Add @picovoice/porcupine-react-native + custom "Hey Rex" keyword
-//   → picovoice.ai/console — free tier, runs fully on-device, no battery drain
+//   → useWakeWord hook in lib/useWakeWord.ts
+//   → Uses @react-native-voice/voice (SFSpeechRecognizer on iOS, Android SpeechRecognizer on Android)
+//   → Fuzzy-matches phonetic "hey rex" variants; restart loop handles OS timeouts
 
 // API keys are now server-side only — calls go through the Supabase Edge Function proxy
 const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 const REX_MODEL = 'claude-haiku-4-5-20251001';
-
-// ── Wake word (Porcupine) ─────────────────────────────────────────────────────
-// Get a free Access Key at picovoice.ai/console → add to .env as EXPO_PUBLIC_PICOVOICE_KEY
-//
-// PLACEHOLDER: currently uses built-in "Porcupine" wake word for testing.
-// To activate the real "Hey Rex" trigger:
-//   1. Go to picovoice.ai/console → Wake Word → Create "Hey Rex"
-//   2. Download .ppn files for iOS (arm64) and Android (arm64-v8a + armeabi-v7a)
-//   3. Drop them in assets/keywords/  (e.g. hey-rex_ios.ppn, hey-rex_android.ppn)
-//   4. Change HEYREX_KEYWORD_PATH to: Platform.OS === 'ios'
-//        ? require('../assets/keywords/hey-rex_ios.ppn')
-//        : require('../assets/keywords/hey-rex_android.ppn')
-//   5. Swap fromBuiltInKeywords → fromKeywordPaths in initWakeWord() below
-const PICOVOICE_KEY = process.env.EXPO_PUBLIC_PICOVOICE_KEY ?? '';
-
-// Lazy-load so a missing package never crashes the app
-let PorcupineManager: any = null;
-let BuiltInKeyword: any = null;
-try {
-  ({ PorcupineManager, BuiltInKeyword } = require('@picovoice/porcupine-react-native'));
-} catch {}
 
 let Speech: any = null;
 try { Speech = require('expo-speech'); } catch {}
@@ -113,9 +94,7 @@ export default function HeyRex() {
     onPanResponderMove: Animated.event([null, { dx: orbPos.x, dy: orbPos.y }], { useNativeDriver: false }),
     onPanResponderRelease: () => { orbPos.flattenOffset(); },
   })).current;
-  const wakeManagerRef = useRef<any>(null);
   const startListeningRef = useRef<() => void>(() => {});
-  const [wakeReady, setWakeReady] = useState(false);
   // Hey Rex settings (loaded from AsyncStorage)
   const [heyRexEnabled, setHeyRexEnabled] = useState(false);
   const heyRexSensitivityRef = useRef(0.5);
@@ -160,57 +139,16 @@ export default function HeyRex() {
     return () => sub.remove();
   }, []);
 
-  // Start or stop Porcupine whenever the enabled flag changes
+  // Wake word hook — fires startListeningRef when "Hey Rex" is heard
+  const onWakeWordDetected = useCallback(() => { startListeningRef.current(); }, []);
+  const { isListening: wakeReady, reset: resetWakeWord, stop: stopWakeWord } = useWakeWord({
+    enabled: heyRexEnabled,
+    onDetected: onWakeWordDetected,
+  });
+
+  // Restart wake word after each recording session ends
   useEffect(() => {
-    if (isWeb || !PICOVOICE_KEY || !PorcupineManager) return;
-
-    if (!heyRexEnabled) {
-      wakeManagerRef.current?.stop().catch(() => {});
-      setWakeReady(false);
-      return;
-    }
-
-    async function initWakeWord() {
-      // Tear down any existing manager before creating a new one
-      if (wakeManagerRef.current) {
-        try { await wakeManagerRef.current.stop(); } catch {}
-        wakeManagerRef.current = null;
-      }
-      try {
-        // ← swap fromBuiltInKeywords → fromKeywordPaths once hey-rex.ppn files arrive
-        // and change [BuiltInKeyword.PORCUPINE] to the path require() of the .ppn files
-        const mgr = await PorcupineManager.fromBuiltInKeywords(
-          PICOVOICE_KEY,
-          [BuiltInKeyword.PORCUPINE],
-          (_index: number) => {
-            wakeManagerRef.current?.stop().catch(() => {});
-            setWakeReady(false);
-            startListeningRef.current();
-          },
-          (err: Error) => console.warn('Rex wake word error:', err),
-          [heyRexSensitivityRef.current],
-        );
-        await mgr.start();
-        wakeManagerRef.current = mgr;
-        setWakeReady(true);
-      } catch (e) {
-        console.warn('Wake word init failed (check EXPO_PUBLIC_PICOVOICE_KEY):', e);
-      }
-    }
-    initWakeWord();
-
-    return () => {
-      wakeManagerRef.current?.delete();
-      wakeManagerRef.current = null;
-    };
-  }, [heyRexEnabled]);
-
-  // Restart wake word whenever recording session ends and HeyRex goes back to idle
-  useEffect(() => {
-    if (stage !== 'idle' || isWeb || !heyRexEnabled || !wakeManagerRef.current) return;
-    wakeManagerRef.current.start()
-      .then(() => setWakeReady(true))
-      .catch(() => {});
+    if (stage === 'idle' && heyRexEnabled) resetWakeWord();
   }, [stage, heyRexEnabled]);
 
   useEffect(() => {
@@ -260,11 +198,8 @@ export default function HeyRex() {
     }
 
     try {
-      // Release mic from Porcupine before expo-av takes it
-      if (wakeManagerRef.current) {
-        try { await wakeManagerRef.current.stop(); } catch {}
-        setWakeReady(false);
-      }
+      // Release mic from wake word recognition before expo-av takes it
+      await stopWakeWord();
 
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
