@@ -414,7 +414,7 @@ async function loadChapter() {
     }
 
     const html = data.map(v => {
-      const text = v.text_slang || v.text_kjv;
+      const text = v.text_kjv;
       return `<div class="verse"><span class="verse-num">${v.verse_number}</span>${text}</div>`;
     }).join('');
     versesContainer.innerHTML = `<div class="verses">${html}</div>`;
