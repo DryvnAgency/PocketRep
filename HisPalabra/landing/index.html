@@ -443,6 +443,63 @@ function showLoggedOut() {
 
 // Bootstrap: check existing session
 (async () => {
+
+  // Handle email confirmation callback from Supabase
+  async function handleEmailConfirmation() {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const type = params.get('type');
+      const code = params.get('code');
+      
+      if (type === 'signup' && code) {
+            try {
+                    const { data, error } = await supabase.auth.verifyOtp({
+                              type: 'email',
+                              email: new URLSearchParams(window.location.search).get('email') || '',
+                              token: code
+                    });
+                    
+                    if (error) throw error;
+                    
+                    // Clear the URL parameters after successful verification
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    
+                    // Trigger auth state change to reload user session
+                    const { data: session } = await supabase.auth.getSession();
+                    if (session?.session) {
+                              showLoggedIn(session.session);
+                    }
+            } catch (error) {
+                    console.error('Email confirmation failed:', error.message);
+            }
+      }
+  }
+  
+  // Handle recovery token
+  async function handleRecoveryToken() {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const type = params.get('type');
+      const code = params.get('code');
+      
+      if (type === 'recovery' && code) {
+            try {
+                    const { data, error } = await supabase.auth.verifyOtp({
+                              type: 'recovery',
+                              token: code
+                    });
+                    
+                    if (error) throw error;
+                    
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    const { data: session } = await supabase.auth.getSession();
+                    if (session?.session) {
+                              showLoggedIn(session.session);
+                    }
+            } catch (error) {
+                    console.error('Recovery token verification failed:', error.message);
+            }
+      }
+  }
+  
   const { data } = await supabase.auth.getSession();
   if (data.session) {
     showLoggedIn(data.session);
@@ -459,5 +516,9 @@ supabase.auth.onAuthStateChange((event, session) => {
   }
 });
 </script>
-</body>
+</bo
+  
+  // Initialize email confirmation handlers on page load
+  handleEmailConfirmation();
+  handleRecoveryToken();dy>
 </html>
