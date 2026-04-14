@@ -9,8 +9,7 @@
       "ios": { "simulator": true },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "",
-        "EXPO_PUBLIC_PICOVOICE_KEY": ""
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": ""
       }
     },
     "preview": {
@@ -18,8 +17,7 @@
       "channel": "preview",
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "",
-        "EXPO_PUBLIC_PICOVOICE_KEY": ""
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": ""
       }
     },
     "production": {
@@ -27,8 +25,7 @@
       "channel": "production",
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "",
-        "EXPO_PUBLIC_PICOVOICE_KEY": ""
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": ""
       }
     }
   },
