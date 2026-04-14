@@ -74,6 +74,14 @@ h1 em{font-style:italic;color:var(--gold)}
 .reader-controls button:hover:not(:disabled){opacity:.9}
 .reader-controls button:disabled{opacity:.5;cursor:not-allowed}
 
+/* Version toggle */
+.version-toggle{display:flex;gap:4px;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:16px}
+.version-toggle button{flex:1;background:transparent;border:none;color:var(--muted);font-family:inherit;font-size:12px;font-weight:700;padding:10px;border-radius:7px;cursor:pointer;transition:all .15s}
+.version-toggle button.active{background:var(--s3);color:var(--gold)}
+.version-toggle button:disabled{opacity:.4;cursor:not-allowed}
+.verse.slang{font-family:'Inter',sans-serif;font-size:15px;font-style:normal}
+.verse-note{font-size:11px;color:var(--muted-soft);font-style:italic;margin-left:4px}
+
 .reader-title{font-family:'Playfair Display',serif;font-size:24px;font-weight:700;margin-bottom:4px}
 .reader-title span{color:var(--gold)}
 .reader-subtitle{font-size:12px;color:var(--muted);margin-bottom:20px;text-transform:uppercase;letter-spacing:.5px}
@@ -187,10 +195,15 @@ h1 em{font-style:italic;color:var(--gold)}
     <button id="load-btn">Load</button>
   </div>
 
+  <div class="version-toggle" role="tablist" aria-label="Bible version">
+    <button type="button" id="ver-slang" class="active" aria-pressed="true">🗣️ Slang</button>
+    <button type="button" id="ver-kjv" aria-pressed="false">📖 KJV</button>
+  </div>
+
   <div class="reader-title">
     <span id="reader-book">—</span> <span id="reader-chapter">—</span>
   </div>
-  <div class="reader-subtitle" id="reader-meta">King James Version</div>
+  <div class="reader-subtitle" id="reader-meta">Slang Translation</div>
 
   <div id="verses-container">
     <div class="reader-empty">Pick a book and chapter, then hit Load.</div>
@@ -308,9 +321,14 @@ const loadBtn = $('load-btn');
 const versesContainer = $('verses-container');
 const readerBook = $('reader-book');
 const readerChapter = $('reader-chapter');
+const readerMeta = $('reader-meta');
+const verSlangBtn = $('ver-slang');
+const verKjvBtn = $('ver-kjv');
 
 let mode = 'login';
 let currentBook = 1;
+let currentVersion = 'slang'; // 'slang' | 'kjv'
+let lastChapterData = null;   // cached verses for the currently-loaded chapter
 
 // Initialize book dropdown
 BOOKS.forEach(([id, name, chapters]) => {
@@ -385,6 +403,45 @@ chapterInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') loadChapter();
 });
 
+verSlangBtn.addEventListener('click', () => setVersion('slang'));
+verKjvBtn.addEventListener('click', () => setVersion('kjv'));
+
+function setVersion(v) {
+  if (v === currentVersion) return;
+  currentVersion = v;
+  verSlangBtn.classList.toggle('active', v === 'slang');
+  verKjvBtn.classList.toggle('active', v === 'kjv');
+  verSlangBtn.setAttribute('aria-pressed', v === 'slang');
+  verKjvBtn.setAttribute('aria-pressed', v === 'kjv');
+  readerMeta.textContent = v === 'slang' ? 'Slang Translation' : 'King James Version';
+  if (lastChapterData) renderVerses(lastChapterData);
+}
+
+function renderVerses(data) {
+  const bookName = readerBook.textContent;
+  const chapter = readerChapter.textContent;
+  if (!data || data.length === 0) {
+    versesContainer.innerHTML = `<div class="reader-empty">No verses found for ${bookName} ${chapter}.</div>`;
+    return;
+  }
+  const html = data.map(v => {
+    let text, cls = 'verse', note = '';
+    if (currentVersion === 'slang') {
+      if (v.text_slang) {
+        text = v.text_slang;
+        cls += ' slang';
+      } else {
+        text = v.text_kjv;
+        note = '<span class="verse-note">(slang coming soon)</span>';
+      }
+    } else {
+      text = v.text_kjv;
+    }
+    return `<div class="${cls}"><span class="verse-num">${v.verse_number}</span>${text}${note}</div>`;
+  }).join('');
+  versesContainer.innerHTML = `<div class="verses">${html}</div>`;
+}
+
 async function loadChapter() {
   const bookId = Number(bookSelect.value);
   const chapter = Number(chapterInput.value);
@@ -408,16 +465,8 @@ async function loadChapter() {
     readerBook.textContent = bookName;
     readerChapter.textContent = chapter;
 
-    if (!data || data.length === 0) {
-      versesContainer.innerHTML = `<div class="reader-empty">No verses found for ${bookName} ${chapter}.<br><span style="font-size:11px">(The full KJV import is still in progress. Try Genesis 1 or another early book.)</span></div>`;
-      return;
-    }
-
-    const html = data.map(v => {
-      const text = v.text_kjv;
-      return `<div class="verse"><span class="verse-num">${v.verse_number}</span>${text}</div>`;
-    }).join('');
-    versesContainer.innerHTML = `<div class="verses">${html}</div>`;
+    lastChapterData = data || [];
+    renderVerses(lastChapterData);
   } catch (err) {
     versesContainer.innerHTML = `<div class="reader-empty" style="color:var(--red)">Couldn't load verses: ${err.message || err}</div>`;
   } finally {
@@ -516,9 +565,5 @@ supabase.auth.onAuthStateChange((event, session) => {
   }
 });
 </script>
-</bo
-  
-  // Initialize email confirmation handlers on page load
-  handleEmailConfirmation();
-  handleRecoveryToken();dy>
+</body>
 </html>
