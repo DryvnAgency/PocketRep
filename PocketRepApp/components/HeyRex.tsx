@@ -63,7 +63,7 @@ interface ParsedIntake {
   lease_end_date: string | null;   // ISO 'YYYY-MM-DD'
   personal_events: PersonalEvent[];
   buying_urgency: 'low' | 'medium' | 'high';
-  suggested_sequence: string | null;
+  sequence_type: 'sold' | 'lease' | 'unsold' | null;
 }
 
 interface GeneratedStep {
@@ -368,7 +368,7 @@ Return this exact JSON shape:
           lease_end_date: null,
           personal_events: [],
           buying_urgency: 'medium',
-          suggested_sequence: null,
+          sequence_type: null,
         };
       }
 
@@ -407,7 +407,7 @@ Return this exact JSON shape:
     try {
       const today = new Date().toISOString().split('T')[0];
       const industryLabel = INDUSTRY_CONFIG[userIndustry]?.label ?? 'Sales';
-      const systemPrompt = `You are Rex, a sales intake AI for a ${industryLabel} rep.\nYour job: extract ALL key info and return a JSON object ONLY — no other text, no markdown.\n\nToday's date: ${today}\nIndustry: ${industryLabel}\nContacts in their book: ${contactList}\n\nReturn this exact JSON shape:\n{\n  "customer_name": "Full name mentioned",\n  "contact_id": "the id from the contacts list if name matches, or null",\n  "phone": "phone number mentioned or null",\n  "interests": "what they want / are interested in",\n  "objections": "objections or hesitations mentioned",\n  "follow_up_in_days": number or null,\n  "follow_up_note": "brief reminder of what to say/do on follow-up",\n  "updated_notes": "2-4 sentences of clean notes, present tense, no filler",\n  "game_plan": "2-3 sentence game plan — specific angle, what to lead with next call, one risk to avoid",\n  "vehicle_interest": "specific item/product they are interested in, or null",\n  "lease_end_date": "YYYY-MM-DD if a contract/lease end date is mentioned, or null",\n  "personal_events": [{ "type": "baby_due|anniversary|birthday|other", "date": "YYYY-MM-DD" }],\n  "buying_urgency": "low|medium|high based on timeline and intent signals",\n  "suggested_sequence": "best matching sequence name or null — choose from: New Prospect Nurture | Last Month Sold Customer | Sold Customer Retention | Homeowner Equity Check | Closed Sale Follow-Up | Rate Drop Alert | Closed Loan Follow-Up | After Service Follow-Up"\n}`;
+      const systemPrompt = `You are Rex, a sales intake AI for a ${industryLabel} rep.\nYour job: extract ALL key info and return a JSON object ONLY — no other text, no markdown.\n\nToday's date: ${today}\nIndustry: ${industryLabel}\nContacts in their book: ${contactList}\n\nReturn this exact JSON shape:\n{\n  "customer_name": "Full name mentioned",\n  "contact_id": "the id from the contacts list if name matches, or null",\n  "phone": "phone number mentioned or null",\n  "interests": "what they want / are interested in",\n  "objections": "objections or hesitations mentioned",\n  "follow_up_in_days": number or null,\n  "follow_up_note": "brief reminder of what to say/do on follow-up",\n  "updated_notes": "2-4 sentences of clean notes, present tense, no filler",\n  "game_plan": "2-3 sentence game plan — specific angle, what to lead with next call, one risk to avoid",\n  "vehicle_interest": "specific item/product they are interested in, or null",\n  "lease_end_date": "YYYY-MM-DD if a contract/lease end date is mentioned, or null",\n  "personal_events": [{ "type": "baby_due|anniversary|birthday|other", "date": "YYYY-MM-DD" }],\n  "buying_urgency": "low|medium|high based on timeline and intent signals",\n  "sequence_type": "sold if they just bought, lease if they have or are ending a lease, unsold if they didn't buy or are still deciding, null if unclear"\n}`;
 
       const rr = await fetch(`${AI_PROXY_URL}/anthropic`, {
         method: 'POST',
@@ -418,7 +418,7 @@ Return this exact JSON shape:
       const raw = rj.content?.[0]?.text ?? '{}';
       let intake: ParsedIntake;
       try { intake = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? '{}'); }
-      catch { intake = { customer_name: 'Unknown', contact_id: null, phone: null, interests: text, objections: '', follow_up_in_days: null, follow_up_note: '', updated_notes: text, game_plan: "Rex couldn't fully parse that.", vehicle_interest: null, lease_end_date: null, personal_events: [], buying_urgency: 'medium', suggested_sequence: null }; }
+      catch { intake = { customer_name: 'Unknown', contact_id: null, phone: null, interests: text, objections: '', follow_up_in_days: null, follow_up_note: '', updated_notes: text, game_plan: "Rex couldn't fully parse that.", vehicle_interest: null, lease_end_date: null, personal_events: [], buying_urgency: 'medium', sequence_type: null }; }
       setParsed(intake);
       setStage('saving');
       saveToContact(intake);
@@ -493,47 +493,12 @@ Return this exact JSON shape:
       { user_id: user.id, role: 'assistant', content: `Game plan for ${p.customer_name}: ${p.game_plan}` },
     ]);
 
-    // Auto-assign suggested sequence template to this contact
-    if (savedContactId && p.suggested_sequence) {
-      try {
-        const { data: tmpl } = await supabase
-          .from('sequences')
-          .select('id, name')
-          .eq('user_id', user.id)
-          .eq('is_template', true)
-          .ilike('name', `%${p.suggested_sequence}%`)
-          .limit(1)
-          .single();
-
-        if (tmpl) {
-          const { data: steps } = await supabase
-            .from('sequence_steps')
-            .select('step_number, delay_days, channel, message_template, ai_personalize')
-            .eq('sequence_id', tmpl.id);
-
-          const { data: newSeq } = await supabase
-            .from('sequences')
-            .insert({ user_id: user.id, contact_id: savedContactId, name: tmpl.name, is_template: false, is_custom: false })
-            .select('id')
-            .single();
-
-          if (newSeq && steps?.length) {
-            await supabase.from('sequence_steps').insert(
-              steps.map(step => ({ ...step, sequence_id: newSeq.id }))
-            );
-          }
-        }
-      } catch (e) {
-        console.warn('Rex auto-sequence error:', e);
-      }
-    }
-
-    // Generate AI sequence + schedule notifications in background
+    // Generate AI sequence (cadence-enforced) + schedule notifications in background
     if (savedContactId) {
       setGeneratingSeq(true);
       try {
         const [steps, notifCount] = await Promise.all([
-          generatePersonalizedSequence(p, user.id, savedContactId),
+          generatePersonalizedSequence(p, user.id, savedContactId, p.sequence_type),
           scheduleNotifications(savedContactId, p.customer_name, followUpDate, p),
         ]);
         setGeneratedSteps(steps);
@@ -577,31 +542,45 @@ Return this exact JSON shape:
     intake: ParsedIntake,
     userId: string,
     contactId: string,
+    sequenceType: 'sold' | 'lease' | 'unsold' | null,
   ): Promise<GeneratedStep[]> {
+    const cadenceMap: Record<string, number[]> = {
+      sold:   [1, 3, 8, 18, 29, 90, 180, 365],
+      lease:  [1, 3, 9, 18, 30, 90, 180, 365],
+      unsold: [1, 3, 7, 14, 30, 60],
+    };
+    const cadence = cadenceMap[sequenceType ?? 'unsold'];
+    const seqLabel = sequenceType === 'sold' ? 'Sold Customer'
+      : sequenceType === 'lease' ? 'Lease Customer'
+      : 'Unsold Prospect';
+
     const prompt = `
-The sales rep just logged a customer. Build a personalized follow-up sequence for this specific person.
+You are Rex, a sales follow-up AI. Write a personalized follow-up sequence for this specific customer.
 Return a JSON array ONLY — no markdown, no other text.
 
-Customer details:
-- Name: ${intake.customer_name}
-- Interested in: ${intake.vehicle_interest ?? intake.interests}
-- Notes: ${intake.updated_notes}
-- Lease/contract ends: ${intake.lease_end_date ?? 'unknown'}
-- Personal events: ${intake.personal_events.length ? JSON.stringify(intake.personal_events) : 'none'}
-- Buying urgency: ${intake.buying_urgency}
-- Rep follow-up note: ${intake.follow_up_note}
+Customer: ${intake.customer_name}
+Vehicle interest: ${intake.vehicle_interest ?? intake.interests}
+Notes: ${intake.updated_notes}
+Objections: ${intake.objections}
+Sequence type: ${seqLabel}
+Lease end date: ${intake.lease_end_date ?? 'none'}
+Personal events: ${intake.personal_events.length ? JSON.stringify(intake.personal_events) : 'none'}
+Buying urgency: ${intake.buying_urgency}
+Rep follow-up note: ${intake.follow_up_note}
 
-Rules:
-- 4 to 7 steps total
-- Space them out based on urgency and lease timeline
-- Messages must be specific to THIS person — use their name, vehicle interest, and personal events
-- Natural, conversational tone — not corporate or generic
-- Mix channels: mostly text, one call, maybe one email
-- Each message should move the deal forward one step
+You MUST write exactly ${cadence.length} steps using EXACTLY these delay_days in order: ${cadence.join(', ')}
+Each message must:
+- Be specific to this person — use their name and vehicle interest (not generic)
+- Fit the timeframe (day 1 = warm welcome, day 90+ = long-term loyalty/renewal)
+- For unsold: address their specific objections, move the deal forward
+- For lease: reference lease end date and renewal when relevant
+- Sound like a real human rep texting, not corporate copy
+- Be 1-3 sentences, SMS-length
+Mix channels: mostly text, include one call step
 
-Return format (JSON array):
+Return format (JSON array — exactly ${cadence.length} items):
 [
-  { "delay_days": 0, "channel": "text", "message": "Hey [name], ..." },
+  { "delay_days": ${cadence[0]}, "channel": "text", "message": "..." },
   ...
 ]
 `.trim();
@@ -628,8 +607,8 @@ Return format (JSON array):
       const { data: seq } = await supabase.from('sequences').insert({
         user_id: userId,
         contact_id: contactId,
-        name: `Follow-up: ${intake.customer_name}`,
-        description: `AI-generated from voice intake. ${intake.vehicle_interest ? `Interested in: ${intake.vehicle_interest}.` : ''}`,
+        name: `${seqLabel} — ${intake.customer_name}`,
+        description: `${seqLabel} sequence. ${intake.vehicle_interest ? `Interested in: ${intake.vehicle_interest}.` : ''} ${intake.objections ? `Objections: ${intake.objections}.` : ''}`.trim(),
         industry: 'auto',
         is_template: false,
         is_custom: true,
@@ -849,6 +828,17 @@ Return format (JSON array):
                   </View>
                 ) : null}
 
+                {/* Sequence type badge */}
+                {parsed.sequence_type && (
+                  <View style={s.seqTypeBadge}>
+                    <Text style={s.seqTypeBadgeText}>
+                      {parsed.sequence_type === 'sold' ? '🤝 Sold sequence' :
+                       parsed.sequence_type === 'lease' ? '🔑 Lease sequence' :
+                       '🎯 Unsold sequence'} assigned
+                    </Text>
+                  </View>
+                )}
+
                 {/* Game plan */}
                 <View style={s.gamePlanBox}>
                   <Text style={s.gamePlanLabel}>🎯 Rex's Game Plan</Text>
@@ -995,6 +985,12 @@ const s = StyleSheet.create({
   followUpIcon: { fontSize: 16, marginTop: 1 },
   followUpLabel: { color: colors.gold2, fontWeight: '700', fontSize: 13 },
   followUpNote: { color: colors.grey3, fontSize: 12, marginTop: 2 },
+  seqTypeBadge: {
+    flexDirection: 'row', alignSelf: 'flex-start',
+    backgroundColor: 'rgba(212,168,67,0.12)', borderWidth: 1, borderColor: 'rgba(212,168,67,0.3)',
+    borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 4, marginBottom: spacing.md,
+  },
+  seqTypeBadgeText: { color: colors.gold, fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
   gamePlanBox: {
     backgroundColor: colors.ink3, borderWidth: 1, borderColor: 'rgba(212,168,67,0.2)',
     borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.lg,

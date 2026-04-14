@@ -246,6 +246,51 @@ const TEMPLATES: Sequence[] = [
       { id: 't14s5', sequence_id: 'tpl_14', step_number: 5, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, last follow-up — I don\'t want to be in your inbox if the timing isn\'t right. If you\'re still interested, the 30% federal tax credit is available now and I can still lock in your current roof conditions for installation. Just let me know either way.', ai_personalize: false },
     ],
   },
+
+  // ── SOLD / LEASE / UNSOLD ─────────────────────────────────────────────────
+  {
+    id: 'tpl_sold', name: 'Sold Customer Follow-Up', industry: 'auto',
+    description: '8-touch sold customer sequence — Day 1 through 1 year.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 'ts1s1', sequence_id: 'tpl_sold', step_number: 1, delay_days: 1,   channel: 'text', message_template: "Hey {{first_name}}! Congrats again on the new {{vehicle}}. So excited for you — you're going to love it. Anything I can help with as you get settled in?", ai_personalize: false },
+      { id: 'ts1s2', sequence_id: 'tpl_sold', step_number: 2, delay_days: 3,   channel: 'text', message_template: "Hey {{first_name}}, checking in on day 3 — how's the {{vehicle_make}} treating you?", ai_personalize: false },
+      { id: 'ts1s3', sequence_id: 'tpl_sold', step_number: 3, delay_days: 8,   channel: 'text', message_template: "Hey {{first_name}}! Hope you're settling in nicely. Any questions come up? I'm always a text away.", ai_personalize: false },
+      { id: 'ts1s4', sequence_id: 'tpl_sold', step_number: 4, delay_days: 18,  channel: 'call', message_template: '18-day check-in call for {{first_name}}. Ask how the vehicle is treating them, address any concerns, and ask for a referral.', ai_personalize: false },
+      { id: 'ts1s5', sequence_id: 'tpl_sold', step_number: 5, delay_days: 29,  channel: 'text', message_template: 'Hey {{first_name}}, almost a month in — hope everything is going smooth with the {{vehicle}}!', ai_personalize: false },
+      { id: 'ts1s6', sequence_id: 'tpl_sold', step_number: 6, delay_days: 90,  channel: 'text', message_template: 'Hey {{first_name}}! 3 months with your {{vehicle_make}} — still loving it? Shout if you ever need anything.', ai_personalize: false },
+      { id: 'ts1s7', sequence_id: 'tpl_sold', step_number: 7, delay_days: 180, channel: 'text', message_template: 'Hey {{first_name}}, 6 months already! Hope the {{vehicle}} is treating you well. Any service needs coming up?', ai_personalize: false },
+      { id: 'ts1s8', sequence_id: 'tpl_sold', step_number: 8, delay_days: 365, channel: 'text', message_template: "Happy 1-year anniversary {{first_name}}! Can't believe it's been a year with your {{vehicle}}. Let me know if it's time to talk about an upgrade 🚗", ai_personalize: false },
+    ],
+  },
+  {
+    id: 'tpl_lease', name: 'Lease Customer Follow-Up', industry: 'auto',
+    description: '8-touch lease customer sequence with renewal touchpoints.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 'tl1s1', sequence_id: 'tpl_lease', step_number: 1, delay_days: 1,   channel: 'text', message_template: "Hey {{first_name}}! So glad we got you into the {{vehicle}}. Enjoy every mile — you're going to love it!", ai_personalize: false },
+      { id: 'tl1s2', sequence_id: 'tpl_lease', step_number: 2, delay_days: 3,   channel: 'text', message_template: 'Hey {{first_name}}, hope the {{vehicle_make}} is treating you well. Let me know if any questions pop up!', ai_personalize: false },
+      { id: 'tl1s3', sequence_id: 'tpl_lease', step_number: 3, delay_days: 9,   channel: 'text', message_template: 'Hey {{first_name}}, just checking in on the {{vehicle}}. Everything going smooth?', ai_personalize: false },
+      { id: 'tl1s4', sequence_id: 'tpl_lease', step_number: 4, delay_days: 18,  channel: 'call', message_template: 'Call {{first_name}} — 18-day lease check-in. Ask about satisfaction, any concerns. Start planting the renewal seed.', ai_personalize: false },
+      { id: 'tl1s5', sequence_id: 'tpl_lease', step_number: 5, delay_days: 30,  channel: 'text', message_template: 'Hey {{first_name}}! One month in — hope the {{vehicle_make}} is everything you hoped for!', ai_personalize: false },
+      { id: 'tl1s6', sequence_id: 'tpl_lease', step_number: 6, delay_days: 90,  channel: 'text', message_template: "Hey {{first_name}}, 3 months in on the lease. Just a heads up — we're starting to see great deals on next year's models. Let me know when you want to chat options!", ai_personalize: false },
+      { id: 'tl1s7', sequence_id: 'tpl_lease', step_number: 7, delay_days: 180, channel: 'text', message_template: "Hey {{first_name}}, we're getting closer to the halfway point on your lease. Start thinking about what's next — I have early looks at some great options for you.", ai_personalize: false },
+      { id: 'tl1s8', sequence_id: 'tpl_lease', step_number: 8, delay_days: 365, channel: 'call', message_template: "Year 1 lease call with {{first_name}}. Discuss renewal timeline, equity position, what's new on the lot. Time to plant the upgrade.", ai_personalize: false },
+    ],
+  },
+  {
+    id: 'tpl_unsold', name: 'Unsold Customer Follow-Up', industry: 'auto',
+    description: '6-touch unsold prospect sequence to move the deal forward.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 'tu1s1', sequence_id: 'tpl_unsold', step_number: 1, delay_days: 1,  channel: 'text', message_template: "Hey {{first_name}}, great meeting you today! I've been thinking about what you mentioned — I think I have a solution. When's a good time to connect?", ai_personalize: false },
+      { id: 'tu1s2', sequence_id: 'tpl_unsold', step_number: 2, delay_days: 3,  channel: 'text', message_template: "Hey {{first_name}}, still thinking about you and the {{vehicle}}. What would make it work for you?", ai_personalize: false },
+      { id: 'tu1s3', sequence_id: 'tpl_unsold', step_number: 3, delay_days: 7,  channel: 'call', message_template: 'Call {{first_name}} — one week follow-up. Address their main objection directly. Come with a new angle or new inventory.', ai_personalize: false },
+      { id: 'tu1s4', sequence_id: 'tpl_unsold', step_number: 4, delay_days: 14, channel: 'text', message_template: "Hey {{first_name}}, 2 weeks out — just want you to know I'm still keeping an eye out for the right deal for you.", ai_personalize: false },
+      { id: 'tu1s5', sequence_id: 'tpl_unsold', step_number: 5, delay_days: 30, channel: 'text', message_template: "Hey {{first_name}}, month out — things change fast on the lot. Any chance you're ready to revisit?", ai_personalize: false },
+      { id: 'tu1s6', sequence_id: 'tpl_unsold', step_number: 6, delay_days: 60, channel: 'text', message_template: "Hey {{first_name}}, checking back in after 60 days. Still here if you're ever ready to make a move 🤝", ai_personalize: false },
+    ],
+  },
 ];
 
 type ScreenView = 'list' | 'detail' | 'create';
