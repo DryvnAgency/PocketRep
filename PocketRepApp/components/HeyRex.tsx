@@ -33,6 +33,8 @@ const REX_MODEL = 'claude-haiku-4-5-20251001';
 
 let Speech: any = null;
 try { Speech = require('expo-speech'); } catch {}
+let Haptics: any = null;
+try { Haptics = require('expo-haptics'); } catch {}
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
@@ -44,7 +46,7 @@ const HR_CONFIRM_KEY    = 'hey_rex_confirm_outloud';
 const HR_PAUSED_KEY     = 'hey_rex_paused_until';
 const HR_BACKGROUND_KEY = 'hey_rex_background';
 
-type Stage = 'idle' | 'listening' | 'processing' | 'done';
+type Stage = 'idle' | 'listening' | 'processing' | 'saving' | 'done';
 
 interface ParsedIntake {
   customer_name: string;
@@ -61,6 +63,7 @@ interface ParsedIntake {
   lease_end_date: string | null;   // ISO 'YYYY-MM-DD'
   personal_events: PersonalEvent[];
   buying_urgency: 'low' | 'medium' | 'high';
+  suggested_sequence: string | null;
 }
 
 interface GeneratedStep {
@@ -365,11 +368,13 @@ Return this exact JSON shape:
           lease_end_date: null,
           personal_events: [],
           buying_urgency: 'medium',
+          suggested_sequence: null,
         };
       }
 
       setParsed(intake);
-      setStage('done');
+      setStage('saving');
+      saveToContact(intake);
 
     } catch (e) {
       console.warn('Hey Rex error:', e);
@@ -402,7 +407,7 @@ Return this exact JSON shape:
     try {
       const today = new Date().toISOString().split('T')[0];
       const industryLabel = INDUSTRY_CONFIG[userIndustry]?.label ?? 'Sales';
-      const systemPrompt = `You are Rex, a sales intake AI for a ${industryLabel} rep.\nYour job: extract ALL key info and return a JSON object ONLY — no other text, no markdown.\n\nToday's date: ${today}\nIndustry: ${industryLabel}\nContacts in their book: ${contactList}\n\nReturn this exact JSON shape:\n{\n  "customer_name": "Full name mentioned",\n  "contact_id": "the id from the contacts list if name matches, or null",\n  "phone": "phone number mentioned or null",\n  "interests": "what they want / are interested in",\n  "objections": "objections or hesitations mentioned",\n  "follow_up_in_days": number or null,\n  "follow_up_note": "brief reminder of what to say/do on follow-up",\n  "updated_notes": "2-4 sentences of clean notes, present tense, no filler",\n  "game_plan": "2-3 sentence game plan — specific angle, what to lead with next call, one risk to avoid",\n  "vehicle_interest": "specific item/product they are interested in, or null",\n  "lease_end_date": "YYYY-MM-DD if a contract/lease end date is mentioned, or null",\n  "personal_events": [{ "type": "baby_due|anniversary|birthday|other", "date": "YYYY-MM-DD" }],\n  "buying_urgency": "low|medium|high based on timeline and intent signals"\n}`;
+      const systemPrompt = `You are Rex, a sales intake AI for a ${industryLabel} rep.\nYour job: extract ALL key info and return a JSON object ONLY — no other text, no markdown.\n\nToday's date: ${today}\nIndustry: ${industryLabel}\nContacts in their book: ${contactList}\n\nReturn this exact JSON shape:\n{\n  "customer_name": "Full name mentioned",\n  "contact_id": "the id from the contacts list if name matches, or null",\n  "phone": "phone number mentioned or null",\n  "interests": "what they want / are interested in",\n  "objections": "objections or hesitations mentioned",\n  "follow_up_in_days": number or null,\n  "follow_up_note": "brief reminder of what to say/do on follow-up",\n  "updated_notes": "2-4 sentences of clean notes, present tense, no filler",\n  "game_plan": "2-3 sentence game plan — specific angle, what to lead with next call, one risk to avoid",\n  "vehicle_interest": "specific item/product they are interested in, or null",\n  "lease_end_date": "YYYY-MM-DD if a contract/lease end date is mentioned, or null",\n  "personal_events": [{ "type": "baby_due|anniversary|birthday|other", "date": "YYYY-MM-DD" }],\n  "buying_urgency": "low|medium|high based on timeline and intent signals",\n  "suggested_sequence": "best matching sequence name or null — choose from: New Prospect Nurture | Last Month Sold Customer | Sold Customer Retention | Homeowner Equity Check | Closed Sale Follow-Up | Rate Drop Alert | Closed Loan Follow-Up | After Service Follow-Up"\n}`;
 
       const rr = await fetch(`${AI_PROXY_URL}/anthropic`, {
         method: 'POST',
@@ -413,9 +418,10 @@ Return this exact JSON shape:
       const raw = rj.content?.[0]?.text ?? '{}';
       let intake: ParsedIntake;
       try { intake = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? '{}'); }
-      catch { intake = { customer_name: 'Unknown', contact_id: null, phone: null, interests: text, objections: '', follow_up_in_days: null, follow_up_note: '', updated_notes: text, game_plan: "Rex couldn't fully parse that.", vehicle_interest: null, lease_end_date: null, personal_events: [], buying_urgency: 'medium' }; }
+      catch { intake = { customer_name: 'Unknown', contact_id: null, phone: null, interests: text, objections: '', follow_up_in_days: null, follow_up_note: '', updated_notes: text, game_plan: "Rex couldn't fully parse that.", vehicle_interest: null, lease_end_date: null, personal_events: [], buying_urgency: 'medium', suggested_sequence: null }; }
       setParsed(intake);
-      setStage('done');
+      setStage('saving');
+      saveToContact(intake);
     } catch (e) {
       console.warn('Hey Rex web error:', e);
       setStage('idle');
@@ -430,51 +436,52 @@ Return this exact JSON shape:
     await processTextInput(text);
   }
 
-  async function saveToContact() {
-    if (!parsed) return;
+  async function saveToContact(intakeArg?: ParsedIntake) {
+    const p = intakeArg ?? parsed;
+    if (!p) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     // Build follow-up date
     let followUpDate: string | null = null;
-    if (parsed.follow_up_in_days) {
+    if (p.follow_up_in_days) {
       const d = new Date();
-      d.setDate(d.getDate() + parsed.follow_up_in_days);
+      d.setDate(d.getDate() + p.follow_up_in_days);
       followUpDate = d.toISOString().split('T')[0];
     }
 
     const noteWithPlan = [
-      parsed.updated_notes,
-      parsed.vehicle_interest ? `Looking at: ${parsed.vehicle_interest}` : '',
-      parsed.follow_up_note ? `Follow-up: ${parsed.follow_up_note}` : '',
+      p.updated_notes,
+      p.vehicle_interest ? `Looking at: ${p.vehicle_interest}` : '',
+      p.follow_up_note ? `Follow-up: ${p.follow_up_note}` : '',
     ].filter(Boolean).join('\n');
 
-    let savedContactId = parsed.contact_id;
+    let savedContactId = p.contact_id;
 
-    if (parsed.contact_id) {
+    if (p.contact_id) {
       // Update existing contact
       await supabase.from('contacts').update({
         notes: noteWithPlan,
         last_contact_date: new Date().toISOString().split('T')[0],
         follow_up_date: followUpDate,
-        ...(parsed.lease_end_date ? { lease_end_date: parsed.lease_end_date } : {}),
-        personal_events: parsed.personal_events ?? [],
-        buying_urgency: parsed.buying_urgency ?? null,
-      }).eq('id', parsed.contact_id);
+        ...(p.lease_end_date ? { lease_end_date: p.lease_end_date } : {}),
+        personal_events: p.personal_events ?? [],
+        buying_urgency: p.buying_urgency ?? null,
+      }).eq('id', p.contact_id);
     } else {
       // Create new contact from voice intake
-      const nameParts = parsed.customer_name.trim().split(' ');
+      const nameParts = p.customer_name.trim().split(' ');
       const { data: newContact } = await supabase.from('contacts').insert({
         user_id: user.id,
-        first_name: nameParts[0] ?? parsed.customer_name,
+        first_name: nameParts[0] ?? p.customer_name,
         last_name: nameParts.slice(1).join(' ') || '',
-        phone: parsed.phone ?? '',
+        phone: p.phone ?? '',
         notes: noteWithPlan,
         last_contact_date: new Date().toISOString().split('T')[0],
         follow_up_date: followUpDate,
-        lease_end_date: parsed.lease_end_date ?? null,
-        personal_events: parsed.personal_events ?? [],
-        buying_urgency: parsed.buying_urgency ?? null,
+        lease_end_date: p.lease_end_date ?? null,
+        personal_events: p.personal_events ?? [],
+        buying_urgency: p.buying_urgency ?? null,
         stage: 'prospect',
       }).select('id').single();
       savedContactId = newContact?.id ?? null;
@@ -483,16 +490,51 @@ Return this exact JSON shape:
     // Save to rex_messages log
     await supabase.from('rex_messages').insert([
       { user_id: user.id, role: 'user', content: `[Voice Intake] ${transcript}` },
-      { user_id: user.id, role: 'assistant', content: `Game plan for ${parsed.customer_name}: ${parsed.game_plan}` },
+      { user_id: user.id, role: 'assistant', content: `Game plan for ${p.customer_name}: ${p.game_plan}` },
     ]);
+
+    // Auto-assign suggested sequence template to this contact
+    if (savedContactId && p.suggested_sequence) {
+      try {
+        const { data: tmpl } = await supabase
+          .from('sequences')
+          .select('id, name')
+          .eq('user_id', user.id)
+          .eq('is_template', true)
+          .ilike('name', `%${p.suggested_sequence}%`)
+          .limit(1)
+          .single();
+
+        if (tmpl) {
+          const { data: steps } = await supabase
+            .from('sequence_steps')
+            .select('step_number, delay_days, channel, message_template, ai_personalize')
+            .eq('sequence_id', tmpl.id);
+
+          const { data: newSeq } = await supabase
+            .from('sequences')
+            .insert({ user_id: user.id, contact_id: savedContactId, name: tmpl.name, is_template: false, is_custom: false })
+            .select('id')
+            .single();
+
+          if (newSeq && steps?.length) {
+            await supabase.from('sequence_steps').insert(
+              steps.map(step => ({ ...step, sequence_id: newSeq.id }))
+            );
+          }
+        }
+      } catch (e) {
+        console.warn('Rex auto-sequence error:', e);
+      }
+    }
 
     // Generate AI sequence + schedule notifications in background
     if (savedContactId) {
       setGeneratingSeq(true);
       try {
         const [steps, notifCount] = await Promise.all([
-          generatePersonalizedSequence(parsed, user.id, savedContactId),
-          scheduleNotifications(savedContactId, parsed.customer_name, followUpDate, parsed),
+          generatePersonalizedSequence(p, user.id, savedContactId),
+          scheduleNotifications(savedContactId, p.customer_name, followUpDate, p),
         ]);
         setGeneratedSteps(steps);
         setReminderCount(notifCount);
@@ -503,15 +545,17 @@ Return this exact JSON shape:
       }
     }
 
+    Haptics?.notificationAsync?.('success') ?? Haptics?.impactAsync?.('medium');
     setSaved(true);
+    setStage('done');
 
     // Audible confirmation when Hey Rex is active and "confirm out loud" is on
     if (heyRexConfirmRef.current && Speech && !isWeb) {
       const followUpStr = followUpDate
         ? `Follow-up scheduled for ${formatDateForSpeech(followUpDate)}.`
         : '';
-      const who = parsed.customer_name;
-      const action = parsed.contact_id ? 'updated' : 'logged';
+      const who = p.customer_name;
+      const action = p.contact_id ? 'updated' : 'logged';
       Speech.speak(`Got it. ${who} ${action}. ${followUpStr}`.trim(), {
         language: 'en-US',
         rate: 0.92,
@@ -631,10 +675,15 @@ Return format (JSON array):
 
   const orbBg = stage === 'listening' ? colors.red
     : stage === 'processing' ? colors.orange
+    : stage === 'saving' ? colors.orange
     : stage === 'done' ? colors.green
     : colors.gold;
 
-  const orbIcon = stage === 'listening' ? '⏹' : stage === 'processing' ? '…' : stage === 'done' ? '✓' : '🎙';
+  const orbIcon = stage === 'listening' ? '⏹'
+    : stage === 'processing' ? '…'
+    : stage === 'saving' ? '💾'
+    : stage === 'done' ? '✓'
+    : '🎙';
 
   if (onRexTab) return null;
 
@@ -648,7 +697,12 @@ Return format (JSON array):
         >
           <TouchableOpacity
             style={[s.orb, { backgroundColor: orbBg }]}
-            onPress={stage === 'idle' ? startListening : stage === 'listening' ? stopListening : () => setShowSheet(true)}
+            onPress={() => {
+              Haptics?.impactAsync('medium');
+              if (stage === 'idle') startListening();
+              else if (stage === 'listening') stopListening();
+              else setShowSheet(true);
+            }}
             onLongPress={() => setOrbHidden(true)}
             delayLongPress={500}
             activeOpacity={0.85}
@@ -836,8 +890,12 @@ Return format (JSON array):
                     <View style={[s.btnPrimary, { backgroundColor: colors.green }]}>
                       <Text style={s.btnPrimaryText}>✓ Saved to Book</Text>
                     </View>
+                  ) : stage === 'saving' ? (
+                    <View style={[s.btnPrimary, { backgroundColor: colors.ink3 }]}>
+                      <ActivityIndicator color={colors.gold} size="small" />
+                    </View>
                   ) : (
-                    <TouchableOpacity style={s.btnPrimary} onPress={saveToContact} activeOpacity={0.85}>
+                    <TouchableOpacity style={s.btnPrimary} onPress={() => saveToContact()} activeOpacity={0.85}>
                       <Text style={s.btnPrimaryText}>
                         {parsed.contact_id ? 'Save to Contact →' : 'Create Contact →'}
                       </Text>

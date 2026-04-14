@@ -13,6 +13,8 @@ let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
 let ExpoContacts: any = null;
 try { ExpoContacts = require('expo-contacts'); } catch {}
+let Haptics: any = null;
+try { Haptics = require('expo-haptics'); } catch {}
 const MASS_TEXT_KEY = 'pocketrep_mass_text_v1';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -248,6 +250,7 @@ export default function ContactsScreen() {
   const [showCsvModal, setShowCsvModal] = useState(false);
   const [csvText, setCsvText] = useState('');
   const [csvPreview, setCsvPreview] = useState<any[]>([]);
+  const [menuContact, setMenuContact] = useState<Contact | null>(null);
   const [csvImporting, setCsvImporting] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -665,7 +668,11 @@ export default function ContactsScreen() {
           renderItem={({ item: c, index }) => (
             <FadeIn delay={Math.min(index, 20) * 30}>
               <SwipeableRow onEdit={() => openEdit(c)} onDelete={() => deleteContact(c)}>
-                <ContactRow contact={c} onPress={() => openEdit(c)} />
+                <ContactRow
+                  contact={c}
+                  onPress={() => openEdit(c)}
+                  onMenu={() => setMenuContact(c)}
+                />
               </SwipeableRow>
             </FadeIn>
           )}
@@ -710,6 +717,59 @@ export default function ContactsScreen() {
             <View style={{ height: 32 }} />
           </View>
         </View>
+      </Modal>
+
+      {/* Contact Actions Sheet (meatball menu) */}
+      <Modal visible={!!menuContact} animationType="slide" transparent statusBarTranslucent>
+        <TouchableOpacity style={ac.overlay} activeOpacity={1} onPress={() => setMenuContact(null)}>
+          <TouchableOpacity style={ac.sheet} activeOpacity={1} onPress={() => {}}>
+            <View style={m.handle} />
+            {menuContact && (
+              <>
+                <Text style={ac.name}>{menuContact.first_name} {menuContact.last_name}</Text>
+                {menuContact.phone ? (
+                  <>
+                    <TouchableOpacity style={ac.row} onPress={() => {
+                      Haptics?.impactAsync('medium');
+                      setMenuContact(null);
+                      Linking.openURL(`tel:${menuContact.phone}`);
+                    }}>
+                      <Text style={ac.rowIcon}>📞</Text>
+                      <Text style={ac.rowText}>Call {menuContact.phone}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={ac.row} onPress={() => {
+                      Haptics?.impactAsync('medium');
+                      setMenuContact(null);
+                      Linking.openURL(`sms:${menuContact.phone}`);
+                    }}>
+                      <Text style={ac.rowIcon}>💬</Text>
+                      <Text style={ac.rowText}>Text {menuContact.phone}</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+                <TouchableOpacity style={ac.row} onPress={() => {
+                  Haptics?.impactAsync('light');
+                  const c = menuContact;
+                  setMenuContact(null);
+                  openEdit(c);
+                }}>
+                  <Text style={ac.rowIcon}>✏️</Text>
+                  <Text style={ac.rowText}>Edit Contact</Text>
+                </TouchableOpacity>
+                <View style={ac.divider} />
+                <TouchableOpacity style={ac.row} onPress={() => {
+                  Haptics?.impactAsync('heavy');
+                  const c = menuContact;
+                  setMenuContact(null);
+                  deleteContact(c);
+                }}>
+                  <Text style={ac.rowIcon}>🗑</Text>
+                  <Text style={[ac.rowText, { color: colors.red }]}>Delete Contact</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       {/* Phone Import Modal */}
@@ -925,7 +985,7 @@ const STAGE_COLORS: Record<Stage, { color: string; bg: string; border: string }>
 };
 
 // ── Contact row ───────────────────────────────────────────────────────────────
-function ContactRow({ contact: c, onPress }: { contact: Contact; onPress: () => void }) {
+function ContactRow({ contact: c, onPress, onMenu }: { contact: Contact; onPress: () => void; onMenu: () => void }) {
   const vehicle = [c.vehicle_year, c.vehicle_make, c.vehicle_model].filter(Boolean).join(' ');
   const cfg = c.heat_tier ? heatConfig[c.heat_tier] : null;
   const stage = (c as any).stage as Stage | undefined;
@@ -938,7 +998,14 @@ function ContactRow({ contact: c, onPress }: { contact: Contact; onPress: () => 
         <View style={r.info}>
           <Text style={r.name}>{c.first_name} {c.last_name}</Text>
           {vehicle ? <Text style={r.vehicle}>{vehicle}</Text> : null}
-          {c.phone ? <Text style={r.phone}>{c.phone}</Text> : null}
+          {c.phone ? (
+            <TouchableOpacity onPress={() => {
+              Haptics?.impactAsync('light');
+              Linking.openURL(`tel:${c.phone}`);
+            }} hitSlop={{ top: 6, bottom: 6, left: 0, right: 20 }}>
+              <Text style={r.phoneTap}>{c.phone}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 4 }}>
@@ -952,6 +1019,13 @@ function ContactRow({ contact: c, onPress }: { contact: Contact; onPress: () => 
             <Text style={[r.tierText, { color: stageCfg.color }]}>{stage}</Text>
           </View>
         ) : null}
+        <TouchableOpacity
+          style={r.menuBtn}
+          onPress={() => { Haptics?.impactAsync('light'); onMenu(); }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={r.menuDot}>⋮</Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -1067,9 +1141,11 @@ const r = StyleSheet.create({
   info: { flex: 1 },
   name: { fontSize: 14, fontWeight: '700', color: colors.white },
   vehicle: { fontSize: 11, color: colors.grey2, marginTop: 1 },
-  phone: { fontSize: 11, color: colors.grey, marginTop: 1 },
   tierPill: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 2 },
   tierText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
+  phoneTap: { fontSize: 11, color: colors.gold, marginTop: 1 },
+  menuBtn: { marginTop: 4, padding: 2 },
+  menuDot: { fontSize: 18, color: colors.grey2, fontWeight: '700', lineHeight: 18 },
 });
 
 const m = StyleSheet.create({
@@ -1135,6 +1211,20 @@ const imp = StyleSheet.create({
     borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 8,
     color: colors.white, fontSize: 13,
   },
+});
+
+const ac = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' },
+  sheet: {
+    backgroundColor: colors.ink2, borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    paddingHorizontal: spacing.lg, paddingBottom: 36, paddingTop: spacing.md,
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.07)',
+  },
+  name: { fontSize: 15, fontWeight: '700', color: colors.white, textAlign: 'center', marginBottom: spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
+  rowIcon: { fontSize: 18, width: 28, textAlign: 'center' },
+  rowText: { fontSize: 15, color: colors.white, fontWeight: '500' },
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.07)', marginVertical: 4 },
 });
 
 const csv = StyleSheet.create({
