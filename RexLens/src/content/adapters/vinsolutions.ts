@@ -91,6 +91,16 @@ function scrapeGrid(leftDoc: Document, gridId: string, section: string): Structu
       }
     }
 
+    // Cell 7: notes or additional info (if present)
+    const cell7Text = cells[7]?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    // Cell 8: email preview or reply snippet (if present)
+    const cell8Text = cells[8]?.textContent?.replace(/\s+/g, ' ').trim() || '';
+
+    const contextParts: string[] = [];
+    if (updated) contextParts.push(`Updated: ${updated}`);
+    if (cell7Text) contextParts.push(cell7Text);
+    if (cell8Text) contextParts.push(cell8Text);
+
     tasks.push({
       customerName,
       vehicle,
@@ -100,7 +110,7 @@ function scrapeGrid(leftDoc: Document, gridId: string, section: string): Structu
       taskDescription,
       section,
       template,
-      rawContext: updated ? `Updated: ${updated}` : '',
+      rawContext: contextParts.join(' | ') || '',
     });
   }
 

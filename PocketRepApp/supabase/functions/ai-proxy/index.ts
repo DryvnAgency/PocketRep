@@ -1,188 +1,227 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+/**
+ * Rex Lens AI Proxy — Supabase Edge Function (Gemini 2.5 Flash)
+ *
+ * Sits between the Chrome extension and Google's Gemini API.
+ * - Verifies JWT auth
+ * - Enforces per-plan daily cost caps
+ * - Translates Anthropic-style bodies → Gemini format (extension stays unchanged)
+ * - Logs usage to daily_ai_usage table
+ *
+ * Deploy:
+ *   supabase secrets set GEMINI_API_KEY=...
+ *   supabase functions deploy ai-proxy
+ */
 
-const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') ?? '';
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-const PLAN_DAILY_CAPS: Record<string, number> = {
-  pro: 100,
-  elite: 100,
-  pro_bundle: 150,
-  rex_lens_standalone: 175,
-  elite_bundle: 200,
+// Gemini pricing per 1M tokens (USD)
+const PRICING: Record<string, { input: number; output: number }> = {
+  'gemini-2.5-flash':      { input: 0.30, output: 2.50 },
+  'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
 };
+const DEFAULT_PRICING = { input: 0.30, output: 2.50 };
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+// Daily cost cap per plan (in cents)
+const DAILY_CAP_CENTS: Record<string, number> = {
+  rex_lens: 100,
+  pro: 100,
+  elite: 200,
 };
+const DEFAULT_CAP_CENTS = 100;
+
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
   });
 }
 
-async function getUserFromAuth(req: Request): Promise<{ userId: string; plan: string } | null> {
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: string | Array<{ type: string; text?: string }>;
+}
+
+function extractText(content: AnthropicMessage['content']): string {
+  if (typeof content === 'string') return content;
+  return content
+    .filter((p) => p.type === 'text' && p.text)
+    .map((p) => p.text!)
+    .join('\n');
+}
+
+function anthropicToGemini(body: Record<string, unknown>) {
+  const system = typeof body.system === 'string' ? body.system : '';
+  const messages = (body.messages as AnthropicMessage[]) || [];
+  const maxTokens = typeof body.max_tokens === 'number' ? body.max_tokens : 2048;
+
+  const contents = messages.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: extractText(m.content) }],
+  }));
+
+  const geminiBody: Record<string, unknown> = {
+    contents,
+    generationConfig: { maxOutputTokens: maxTokens },
+  };
+  if (system) {
+    geminiBody.system_instruction = { parts: [{ text: system }] };
+  }
+  return geminiBody;
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() });
+  if (req.method === 'GET') return jsonResponse({ status: 'ok', service: 'ai-proxy', model: 'gemini-2.5-flash' });
+  if (req.method !== 'POST') {
+    return jsonResponse({ error: { type: 'invalid_request', message: 'POST required' } }, 405);
+  }
+
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+  if (!GEMINI_API_KEY) {
+    return jsonResponse({ error: { type: 'server_error', message: 'GEMINI_API_KEY not configured' } }, 500);
+  }
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) return null;
+  if (!authHeader) {
+    return jsonResponse({ error: { type: 'auth_error', message: 'Missing authorization' } }, 401);
+  }
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
   const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return null;
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) {
+    return jsonResponse({ error: { type: 'auth_error', message: 'Invalid or expired token' } }, 401);
+  }
 
+  // ── Plan lookup ───────────────────────────────────────────────────────────
   const { data: profile } = await supabase
     .from('profiles')
     .select('plan')
     .eq('id', user.id)
     .single();
 
-  return { userId: user.id, plan: profile?.plan || 'pro' };
-}
+  const plan = profile?.plan || 'pro';
+  const capCents = DAILY_CAP_CENTS[plan] ?? DEFAULT_CAP_CENTS;
 
-async function checkAndIncrementUsage(userId: string, plan: string): Promise<boolean> {
-  const cap = PLAN_DAILY_CAPS[plan] ?? PLAN_DAILY_CAPS.pro;
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  const today = new Date().toISOString().split('T')[0];
-
+  // ── Daily usage check ─────────────────────────────────────────────────────
+  const today = new Date().toISOString().slice(0, 10);
   const { data: usage } = await supabase
     .from('daily_ai_usage')
-    .select('request_count')
-    .eq('user_id', userId)
+    .select('cost_cents')
+    .eq('user_id', user.id)
     .eq('usage_date', today)
     .single();
 
-  const currentCount = usage?.request_count ?? 0;
-  if (currentCount >= cap) return false;
-
-  await supabase.rpc('increment_daily_usage', {
-    p_user_id: userId,
-    p_input_tokens: 0,
-    p_output_tokens: 0,
-    p_cost_cents: 0,
-  });
-
-  return true;
-}
-
-async function handleGemini(req: Request): Promise<Response> {
-  if (!GEMINI_API_KEY) {
-    return jsonResponse({ error: { type: 'config_error', message: 'GEMINI_API_KEY not configured' } }, 500);
+  const currentCostCents = Number(usage?.cost_cents ?? 0);
+  if (currentCostCents >= capCents) {
+    return jsonResponse({
+      error: {
+        type: 'DAILY_LIMIT',
+        message: `Daily limit reached ($${(capCents / 100).toFixed(2)}/day on your ${plan} plan). Resets at midnight.`,
+      },
+    }, 429);
   }
 
-  const user = await getUserFromAuth(req);
-  if (!user) {
-    return jsonResponse({ error: { type: 'auth_error', message: 'Authentication required' } }, 401);
+  // ── Parse Anthropic-style request ─────────────────────────────────────────
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return jsonResponse({ error: { type: 'invalid_request', message: 'Invalid JSON body' } }, 400);
   }
 
-  const allowed = await checkAndIncrementUsage(user.userId, user.plan);
-  if (!allowed) {
-    return jsonResponse({ type: 'error', error: { type: 'DAILY_LIMIT', message: 'Daily AI limit reached. Resets at midnight.' } }, 429);
+  const rawModel = (body.model as string) || 'gemini-2.5-flash';
+  // Accept legacy Anthropic model names — map to Gemini
+  const model =
+    rawModel.startsWith('claude-') || rawModel.startsWith('gemini-')
+      ? (rawModel.startsWith('claude-') ? 'gemini-2.5-flash' : rawModel)
+      : rawModel;
+
+  const geminiBody = anthropicToGemini(body);
+
+  // ── Call Gemini ───────────────────────────────────────────────────────────
+  let geminiRes: Response;
+  try {
+    geminiRes = await fetch(`${GEMINI_BASE}/${model}:generateContent`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': GEMINI_API_KEY,
+      },
+      body: JSON.stringify(geminiBody),
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return jsonResponse({ error: { type: 'proxy_error', message: `Failed to reach Gemini: ${message}` } }, 502);
   }
-
-  const body = await req.json();
-  const { model, max_tokens, system, messages } = body;
-
-  const geminiModel = model || 'gemini-2.5-flash';
-
-  const contents = (messages || []).map((m: { role: string; content: string }) => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
-  }));
-
-  const geminiBody: Record<string, unknown> = {
-    contents,
-    generationConfig: {
-      maxOutputTokens: max_tokens || 1500,
-    },
-  };
-
-  if (system) {
-    geminiBody.systemInstruction = { parts: [{ text: system }] };
-  }
-
-  const url = `${GEMINI_BASE}/${geminiModel}:generateContent?key=${GEMINI_API_KEY}`;
-
-  const geminiRes = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(geminiBody),
-  });
 
   const geminiJson = await geminiRes.json();
 
   if (!geminiRes.ok || geminiJson.error) {
-    const errMsg = geminiJson.error?.message || JSON.stringify(geminiJson.error || geminiJson);
-    return jsonResponse({ type: 'error', error: { type: 'api_error', message: errMsg } }, geminiRes.status || 500);
+    return jsonResponse({ error: geminiJson.error ?? geminiJson }, geminiRes.status);
   }
 
-  const text = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (text === undefined || text === null) {
-    return jsonResponse({ type: 'error', error: { type: 'empty_response', message: 'Gemini returned no content' } }, 502);
+  // ── Extract text + usage ──────────────────────────────────────────────────
+  const candidate = geminiJson.candidates?.[0];
+  const parts = candidate?.content?.parts ?? [];
+  const text = parts.map((p: { text?: string }) => p.text ?? '').join('');
+
+  if (!text) {
+    return jsonResponse({ error: { type: 'empty_response', message: 'Gemini returned no text', raw: geminiJson } }, 502);
   }
 
-  return jsonResponse({ content: [{ text }] });
-}
+  const promptTokens = geminiJson.usageMetadata?.promptTokenCount ?? 0;
+  const outputTokens = geminiJson.usageMetadata?.candidatesTokenCount ?? 0;
 
-async function handleWhisper(req: Request): Promise<Response> {
-  if (!OPENAI_API_KEY) {
-    return jsonResponse({ error: { type: 'config_error', message: 'OPENAI_API_KEY not configured' } }, 500);
-  }
-
-  const user = await getUserFromAuth(req);
-  if (!user) {
-    return jsonResponse({ error: { type: 'auth_error', message: 'Authentication required' } }, 401);
-  }
-
-  const formData = await req.formData();
-  const audioFile = formData.get('file');
-  if (!audioFile) {
-    return jsonResponse({ error: { type: 'bad_request', message: 'No audio file provided' } }, 400);
-  }
-
-  const whisperForm = new FormData();
-  whisperForm.append('file', audioFile);
-  whisperForm.append('model', 'whisper-1');
-
-  const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-    body: whisperForm,
-  });
-
-  const whisperJson = await whisperRes.json();
-  return jsonResponse(whisperJson, whisperRes.status);
-}
-
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS_HEADERS });
-  }
-
-  const url = new URL(req.url);
-  const path = url.pathname.split('/').pop();
-
-  if (req.method === 'GET') {
-    return new Response('ai-proxy OK', { status: 200, headers: CORS_HEADERS });
-  }
+  // ── Log usage ─────────────────────────────────────────────────────────────
+  const pricing = PRICING[model] ?? DEFAULT_PRICING;
+  const costUsd = (promptTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
+  const costCents = costUsd * 100;
 
   try {
-    if (path === 'gemini') {
-      return await handleGemini(req);
-    } else if (path === 'whisper') {
-      return await handleWhisper(req);
-    } else if (path === 'anthropic') {
-      return jsonResponse({ type: 'error', error: { type: 'deprecated', message: 'Anthropic endpoint deprecated. Use /gemini.' } }, 410);
-    } else {
-      return await handleGemini(req);
-    }
-  } catch (err: any) {
-    return jsonResponse({ type: 'error', error: { type: 'internal_error', message: err.message || 'Unknown error' } }, 500);
+    await supabase.rpc('increment_daily_usage', {
+      p_user_id: user.id,
+      p_date: today,
+      p_input_tokens: promptTokens,
+      p_output_tokens: outputTokens,
+      p_cost_cents: costCents,
+    });
+  } catch {
+    // Fallback: direct upsert
+    await supabase
+      .from('daily_ai_usage')
+      .upsert(
+        {
+          user_id: user.id,
+          usage_date: today,
+          input_tokens: promptTokens,
+          output_tokens: outputTokens,
+          cost_cents: costCents,
+          request_count: 1,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,usage_date' }
+      );
   }
+
+  // ── Return in Anthropic-compatible envelope ───────────────────────────────
+  return jsonResponse({
+    content: [{ type: 'text', text }],
+    usage: { input_tokens: promptTokens, output_tokens: outputTokens },
+    model,
+  });
 });
