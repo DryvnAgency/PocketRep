@@ -7,8 +7,6 @@ declare global {
     interface ProcessEnv {
       readonly EXPO_PUBLIC_SUPABASE_URL: string;
       readonly EXPO_PUBLIC_SUPABASE_ANON_KEY: string;
-      readonly EXPO_PUBLIC_ANTHROPIC_KEY: string;
-      readonly EXPO_PUBLIC_OPENAI_KEY: string;
       readonly EXPO_PUBLIC_AI_PROXY_URL: string;
       readonly EXPO_PUBLIC_PICOVOICE_KEY: string;
     }

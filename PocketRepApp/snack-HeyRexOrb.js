@@ -188,11 +188,11 @@ function HeyRexOrb({ user, activeTab }) {
     const AI_PROXY = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 
     try {
-      const res = await fetch(`${AI_PROXY}/anthropic`, {
+      const res = await fetch(`${AI_PROXY}/gemini`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
+          model: 'gemini-2.5-flash',
           max_tokens: 500,
           system:
             'You are Rex, a 30-year-old top sales closer and coach. ' +

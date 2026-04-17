@@ -15,8 +15,8 @@ try { AsyncStorage = require('@react-native-async-storage/async-storage').defaul
 
 const DIGEST_TIME_KEY = 'pocketrep_digest_time';
 
-const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
-const REX_MODEL = 'claude-haiku-4-5-20251001';
+const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
+const REX_MODEL = 'gemini-2.5-flash';
 
 export default function MoreScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -109,10 +109,6 @@ export default function MoreScreen() {
   }
 
   async function buildDigest() {
-    if (!ANTHROPIC_KEY) {
-      Alert.alert('Anthropic key needed', 'Add ANTHROPIC_KEY to .env for the weekly digest.');
-      return;
-    }
     setDigestLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setDigestLoading(false); return; }
@@ -130,9 +126,10 @@ export default function MoreScreen() {
     const newContacts = contacts?.length ?? 0;
     const rexConvos = Math.round((msgs?.length ?? 0) / 2);
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`${AI_PROXY_URL}/gemini`, {
       method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${session?.access_token ?? ''}` },
       body: JSON.stringify({
         model: REX_MODEL,
         max_tokens: 350,

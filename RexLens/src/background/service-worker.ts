@@ -83,7 +83,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 // ── AI Calls ─────────────────────────────────────────────────────────────────
 
-const AI_TIMEOUT_MS = 60_000; // 60 second timeout — proxy chain (extension → Supabase Edge → Anthropic) needs headroom
+const AI_TIMEOUT_MS = 60_000; // 60 second timeout — proxy chain (extension → Supabase Edge → Google Gemini) needs headroom
 
 async function callAIProxy(body: Record<string, unknown>): Promise<string> {
   const headers = await getAuthHeaders();
@@ -114,7 +114,7 @@ async function callAIProxy(body: Record<string, unknown>): Promise<string> {
 
   if (json.type === 'error' || json.error) {
     const msg = json.error?.message || json.error?.type || JSON.stringify(json.error || json);
-    throw new Error(`Anthropic API error: ${msg}`);
+    throw new Error(`AI proxy error: ${msg}`);
   }
 
   if (!res.ok) {

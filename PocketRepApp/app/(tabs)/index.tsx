@@ -13,8 +13,7 @@ import { requestNotificationPermission, scheduleContactReminders } from '@/lib/n
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
 
-const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
-const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://api.anthropic.com';
+const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 const NOTIF_CHECK_KEY = 'pocketrep_notif_check_v1';
 
 // ── Heat score engine (runs client-side, no server needed) ──────────────────
@@ -145,19 +144,6 @@ export default function HeatSheetScreen() {
     setBriefText('');
     setBriefLoading(true);
 
-    if (!ANTHROPIC_KEY) {
-      setBriefText(
-        `Pre-call brief for ${contact.first_name} ${contact.last_name}:\n\n` +
-        `• Heat signal: ${contact.heat_reason ?? 'in your book'}\n` +
-        `• Vehicle: ${[contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ') || 'not logged'}\n` +
-        `• Last contacted: ${contact.last_contact_date ?? 'never'}\n` +
-        `• Notes: ${contact.notes ?? 'none logged'}\n\n` +
-        `Add your ANTHROPIC_KEY to get AI-generated briefs.`
-      );
-      setBriefLoading(false);
-      return;
-    }
-
     const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ');
     const prompt =
       `You are Rex, an AI sales assistant for a top automotive sales rep. ` +
@@ -172,15 +158,15 @@ export default function HeatSheetScreen() {
       `Bullets: why they're hot, what to lead with, one risk to avoid, suggested first line to open the call.`;
 
     try {
-      const res = await fetch(`${AI_PROXY_URL}/v1/messages`, {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${AI_PROXY_URL}/gemini`, {
         method: 'POST',
         headers: {
-          'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token ?? ''}`,
         },
         body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
+          model: 'gemini-2.5-flash',
           max_tokens: 400,
           messages: [{ role: 'user', content: prompt }],
         }),
