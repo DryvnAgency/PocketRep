@@ -1,12 +1,20 @@
 -- PocketRep Schema
 -- Run this in Supabase → SQL Editor → New Query
+--
+-- ── PLAN MIGRATION (run once to migrate existing users from 5-plan → 3-plan) ─
+-- Run these BEFORE applying the new CHECK constraint:
+--   update profiles set plan='elite'    where plan in ('pro_bundle','elite_bundle');
+--   update profiles set plan='rex_lens' where plan='rex_lens_standalone';
+--   alter table profiles drop constraint if exists profiles_plan_check;
+--   alter table profiles add  constraint profiles_plan_check
+--     check (plan in ('rex_lens','pro','elite'));
 
 -- ── PROFILES ─────────────────────────────────────────────────────────────────
 create table if not exists profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
   email        text not null,
   full_name    text not null default '',
-  plan         text not null default 'pro' check (plan in ('pro','elite','rex_lens_standalone','elite_bundle')),
+  plan         text not null default 'pro' check (plan in ('rex_lens','pro','elite')),
   industry     text not null default 'auto',
   trial_ends_at timestamptz,
   stripe_customer_id text,
@@ -24,8 +32,14 @@ declare
   _plan text;
 begin
   _plan := coalesce(new.raw_user_meta_data->>'plan', 'pro');
-  -- Validate plan value
-  if _plan not in ('pro', 'elite', 'rex_lens_standalone', 'elite_bundle') then
+  -- Map legacy plan names to new 3-tier structure
+  if _plan in ('pro_bundle', 'elite_bundle') then
+    _plan := 'elite';
+  elsif _plan = 'rex_lens_standalone' then
+    _plan := 'rex_lens';
+  end if;
+  -- Validate against final plan set
+  if _plan not in ('rex_lens', 'pro', 'elite') then
     _plan := 'pro';
   end if;
 
@@ -34,9 +48,7 @@ begin
     new.id,
     new.email,
     _plan,
-    case when _plan in ('rex_lens_standalone', 'elite_bundle') then null
-         else now() + interval '7 days'
-    end
+    now() + interval '7 days'
   );
   return new;
 end;
@@ -215,3 +227,41 @@ create policy "Users manage own interactions"
 
 create index if not exists interactions_user_date
   on contact_interactions(user_id, sent_at desc);
+
+-- ── DAILY AI USAGE (Rex Lens cost tracking) ──────────────────────────────────
+create table if not exists daily_ai_usage (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references profiles(id) on delete cascade,
+  usage_date    date not null default current_date,
+  input_tokens  int not null default 0,
+  output_tokens int not null default 0,
+  cost_cents    numeric(8,2) not null default 0,
+  request_count int not null default 0,
+  updated_at    timestamptz default now(),
+  unique(user_id, usage_date)
+);
+
+alter table daily_ai_usage enable row level security;
+create policy "Users read own usage"
+  on daily_ai_usage for select using (auth.uid() = user_id);
+
+-- Atomic increment function (called by ai-proxy edge function)
+create or replace function increment_daily_usage(
+  p_user_id uuid,
+  p_date date,
+  p_input_tokens int,
+  p_output_tokens int,
+  p_cost_cents numeric
+)
+returns void language plpgsql security definer as $$
+begin
+  insert into daily_ai_usage (user_id, usage_date, input_tokens, output_tokens, cost_cents, request_count)
+  values (p_user_id, p_date, p_input_tokens, p_output_tokens, p_cost_cents, 1)
+  on conflict (user_id, usage_date) do update set
+    input_tokens  = daily_ai_usage.input_tokens + excluded.input_tokens,
+    output_tokens = daily_ai_usage.output_tokens + excluded.output_tokens,
+    cost_cents    = daily_ai_usage.cost_cents + excluded.cost_cents,
+    request_count = daily_ai_usage.request_count + 1,
+    updated_at    = now();
+end;
+$$;
