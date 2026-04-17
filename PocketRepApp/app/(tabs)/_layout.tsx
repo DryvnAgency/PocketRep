@@ -37,33 +37,31 @@ export default function TabLayout() {
         <Tabs.Screen
           name="contacts"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon icon="👥" label="Book" focused={focused} />,
-          }}
-        />
-        <Tabs.Screen
-          name="deals"
-          options={{
-            tabBarIcon: ({ focused }) => <TabIcon icon="💰" label="Deals" focused={focused} />,
-          }}
-        />
-        <Tabs.Screen
-          name="sequences"
-          options={{
-            tabBarIcon: ({ focused }) => <TabIcon icon="📋" label="Sequences" focused={focused} />,
+            tabBarIcon: ({ focused }) => <TabIcon icon="👤" label="Book" focused={focused} />,
           }}
         />
         <Tabs.Screen
           name="rex"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon icon="🧠" label="Rex" focused={focused} />,
+            tabBarIcon: ({ focused }) => <TabIcon icon="🎤" label="Rex" focused={focused} />,
           }}
         />
         <Tabs.Screen
-          name="more"
+          name="metrics"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon icon="⚙️" label="More" focused={focused} />,
+            tabBarIcon: ({ focused }) => <TabIcon icon="📊" label="Metrics" focused={focused} />,
           }}
         />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            tabBarIcon: ({ focused }) => <TabIcon icon="⚙️" label="Profile" focused={focused} />,
+          }}
+        />
+        {/* Hidden routes — accessible but not in tab bar */}
+        <Tabs.Screen name="deals" options={{ href: null }} />
+        <Tabs.Screen name="sequences" options={{ href: null }} />
+        <Tabs.Screen name="more" options={{ href: null }} />
       </Tabs>
       {/* HeyRex must be AFTER Tabs so it renders on top in z-order */}
       <HeyRex />
