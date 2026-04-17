@@ -1,12 +1,20 @@
 -- PocketRep Schema
 -- Run this in Supabase → SQL Editor → New Query
+--
+-- ── PLAN MIGRATION (run once to migrate existing users from 5-plan → 3-plan) ─
+-- Run these BEFORE applying the new CHECK constraint:
+--   update profiles set plan='elite'    where plan in ('pro_bundle','elite_bundle');
+--   update profiles set plan='rex_lens' where plan='rex_lens_standalone';
+--   alter table profiles drop constraint if exists profiles_plan_check;
+--   alter table profiles add  constraint profiles_plan_check
+--     check (plan in ('rex_lens','pro','elite'));
 
 -- ── PROFILES ─────────────────────────────────────────────────────────────────
 create table if not exists profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
   email        text not null,
   full_name    text not null default '',
-  plan         text not null default 'pro' check (plan in ('pro','elite','pro_bundle','rex_lens_standalone','elite_bundle')),
+  plan         text not null default 'pro' check (plan in ('rex_lens','pro','elite')),
   industry     text not null default 'auto',
   trial_ends_at timestamptz,
   stripe_customer_id text,
@@ -24,8 +32,14 @@ declare
   _plan text;
 begin
   _plan := coalesce(new.raw_user_meta_data->>'plan', 'pro');
-  -- Validate plan value
-  if _plan not in ('pro', 'elite', 'pro_bundle', 'rex_lens_standalone', 'elite_bundle') then
+  -- Map legacy plan names to new 3-tier structure
+  if _plan in ('pro_bundle', 'elite_bundle') then
+    _plan := 'elite';
+  elsif _plan = 'rex_lens_standalone' then
+    _plan := 'rex_lens';
+  end if;
+  -- Validate against final plan set
+  if _plan not in ('rex_lens', 'pro', 'elite') then
     _plan := 'pro';
   end if;
 
@@ -34,9 +48,7 @@ begin
     new.id,
     new.email,
     _plan,
-    case when _plan in ('pro_bundle', 'rex_lens_standalone', 'elite_bundle') then null
-         else now() + interval '7 days'
-    end
+    now() + interval '7 days'
   );
   return new;
 end;

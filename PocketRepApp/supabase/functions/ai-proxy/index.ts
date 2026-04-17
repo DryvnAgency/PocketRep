@@ -1,38 +1,33 @@
 /**
- * Rex Lens AI Proxy — Supabase Edge Function
+ * Rex Lens AI Proxy — Supabase Edge Function (Gemini 2.5 Flash)
  *
- * Sits between the Chrome extension and the Anthropic API.
+ * Sits between the Chrome extension and Google's Gemini API.
  * - Verifies JWT auth
  * - Enforces per-plan daily cost caps
+ * - Translates Anthropic-style bodies → Gemini format (extension stays unchanged)
  * - Logs usage to daily_ai_usage table
  *
  * Deploy:
- *   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+ *   supabase secrets set GEMINI_API_KEY=...
  *   supabase functions deploy ai-proxy
- *
- * URL: https://<project-ref>.supabase.co/functions/v1/ai-proxy/anthropic
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_VERSION = '2023-06-01';
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-// Model pricing per 1M tokens (USD)
+// Gemini pricing per 1M tokens (USD)
 const PRICING: Record<string, { input: number; output: number }> = {
-  'claude-sonnet-4-6':         { input: 3.00, output: 15.00 },
-  'claude-sonnet-4-5-20250514': { input: 3.00, output: 15.00 },
-  'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00 },
+  'gemini-2.5-flash':      { input: 0.30, output: 2.50 },
+  'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
 };
-const DEFAULT_PRICING = { input: 3.00, output: 15.00 };
+const DEFAULT_PRICING = { input: 0.30, output: 2.50 };
 
 // Daily cost cap per plan (in cents)
 const DAILY_CAP_CENTS: Record<string, number> = {
+  rex_lens: 100,
   pro: 100,
-  elite: 100,
-  pro_bundle: 150,
-  rex_lens_standalone: 175,
-  elite_bundle: 200,
+  elite: 200,
 };
 const DEFAULT_CAP_CENTS = 100;
 
@@ -51,26 +46,52 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: string | Array<{ type: string; text?: string }>;
+}
+
+function extractText(content: AnthropicMessage['content']): string {
+  if (typeof content === 'string') return content;
+  return content
+    .filter((p) => p.type === 'text' && p.text)
+    .map((p) => p.text!)
+    .join('\n');
+}
+
+function anthropicToGemini(body: Record<string, unknown>) {
+  const system = typeof body.system === 'string' ? body.system : '';
+  const messages = (body.messages as AnthropicMessage[]) || [];
+  const maxTokens = typeof body.max_tokens === 'number' ? body.max_tokens : 2048;
+
+  const contents = messages.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: extractText(m.content) }],
+  }));
+
+  const geminiBody: Record<string, unknown> = {
+    contents,
+    generationConfig: { maxOutputTokens: maxTokens },
+  };
+  if (system) {
+    geminiBody.system_instruction = { parts: [{ text: system }] };
+  }
+  return geminiBody;
+}
+
 Deno.serve(async (req: Request) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders() });
-  }
-
-  if (req.method === 'GET') {
-    return jsonResponse({ status: 'ok', service: 'ai-proxy' });
-  }
-
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() });
+  if (req.method === 'GET') return jsonResponse({ status: 'ok', service: 'ai-proxy', model: 'gemini-2.5-flash' });
   if (req.method !== 'POST') {
     return jsonResponse({ error: { type: 'invalid_request', message: 'POST required' } }, 405);
   }
 
-  const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!ANTHROPIC_API_KEY) {
-    return jsonResponse({ error: { type: 'server_error', message: 'API key not configured' } }, 500);
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+  if (!GEMINI_API_KEY) {
+    return jsonResponse({ error: { type: 'server_error', message: 'GEMINI_API_KEY not configured' } }, 500);
   }
 
-  // ── Auth: extract user from JWT ──────────────────────────────────────────
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
     return jsonResponse({ error: { type: 'auth_error', message: 'Missing authorization' } }, 401);
@@ -80,15 +101,13 @@ Deno.serve(async (req: Request) => {
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-  // Verify the JWT and get user
   const token = authHeader.replace('Bearer ', '');
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
   if (authError || !user) {
     return jsonResponse({ error: { type: 'auth_error', message: 'Invalid or expired token' } }, 401);
   }
 
-  // ── Look up plan ─────────────────────────────────────────────────────────
+  // ── Plan lookup ───────────────────────────────────────────────────────────
   const { data: profile } = await supabase
     .from('profiles')
     .select('plan')
@@ -98,11 +117,11 @@ Deno.serve(async (req: Request) => {
   const plan = profile?.plan || 'pro';
   const capCents = DAILY_CAP_CENTS[plan] ?? DEFAULT_CAP_CENTS;
 
-  // ── Check daily usage ────────────────────────────────────────────────────
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  // ── Daily usage check ─────────────────────────────────────────────────────
+  const today = new Date().toISOString().slice(0, 10);
   const { data: usage } = await supabase
     .from('daily_ai_usage')
-    .select('cost_cents, request_count')
+    .select('cost_cents')
     .eq('user_id', user.id)
     .eq('usage_date', today)
     .single();
@@ -117,7 +136,7 @@ Deno.serve(async (req: Request) => {
     }, 429);
   }
 
-  // ── Forward to Anthropic ─────────────────────────────────────────────────
+  // ── Parse Anthropic-style request ─────────────────────────────────────────
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -125,65 +144,84 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: { type: 'invalid_request', message: 'Invalid JSON body' } }, 400);
   }
 
-  const model = (body.model as string) || 'claude-sonnet-4-6';
+  const rawModel = (body.model as string) || 'gemini-2.5-flash';
+  // Accept legacy Anthropic model names — map to Gemini
+  const model =
+    rawModel.startsWith('claude-') || rawModel.startsWith('gemini-')
+      ? (rawModel.startsWith('claude-') ? 'gemini-2.5-flash' : rawModel)
+      : rawModel;
 
-  let anthropicRes: Response;
+  const geminiBody = anthropicToGemini(body);
+
+  // ── Call Gemini ───────────────────────────────────────────────────────────
+  let geminiRes: Response;
   try {
-    anthropicRes = await fetch(ANTHROPIC_API_URL, {
+    geminiRes = await fetch(`${GEMINI_BASE}/${model}:generateContent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': ANTHROPIC_VERSION,
+        'x-goog-api-key': GEMINI_API_KEY,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(geminiBody),
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return jsonResponse({ error: { type: 'proxy_error', message: `Failed to reach Anthropic: ${message}` } }, 502);
+    return jsonResponse({ error: { type: 'proxy_error', message: `Failed to reach Gemini: ${message}` } }, 502);
   }
 
-  const anthropicJson = await anthropicRes.json();
+  const geminiJson = await geminiRes.json();
 
-  // If Anthropic returned an error, pass it through
-  if (!anthropicRes.ok || anthropicJson.type === 'error') {
-    return jsonResponse(anthropicJson, anthropicRes.status);
+  if (!geminiRes.ok || geminiJson.error) {
+    return jsonResponse({ error: geminiJson.error ?? geminiJson }, geminiRes.status);
   }
 
-  // ── Log usage ────────────────────────────────────────────────────────────
-  const inputTokens = anthropicJson.usage?.input_tokens ?? 0;
-  const outputTokens = anthropicJson.usage?.output_tokens ?? 0;
+  // ── Extract text + usage ──────────────────────────────────────────────────
+  const candidate = geminiJson.candidates?.[0];
+  const parts = candidate?.content?.parts ?? [];
+  const text = parts.map((p: { text?: string }) => p.text ?? '').join('');
+
+  if (!text) {
+    return jsonResponse({ error: { type: 'empty_response', message: 'Gemini returned no text', raw: geminiJson } }, 502);
+  }
+
+  const promptTokens = geminiJson.usageMetadata?.promptTokenCount ?? 0;
+  const outputTokens = geminiJson.usageMetadata?.candidatesTokenCount ?? 0;
+
+  // ── Log usage ─────────────────────────────────────────────────────────────
   const pricing = PRICING[model] ?? DEFAULT_PRICING;
-  const costUsd = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
+  const costUsd = (promptTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
   const costCents = costUsd * 100;
 
-  // Upsert: create row if first request today, otherwise increment
-  await supabase.rpc('increment_daily_usage', {
-    p_user_id: user.id,
-    p_date: today,
-    p_input_tokens: inputTokens,
-    p_output_tokens: outputTokens,
-    p_cost_cents: costCents,
-  }).catch(() => {
-    // Non-blocking: don't fail the request if usage logging fails
-    // Fallback: try direct upsert
-    supabase
+  try {
+    await supabase.rpc('increment_daily_usage', {
+      p_user_id: user.id,
+      p_date: today,
+      p_input_tokens: promptTokens,
+      p_output_tokens: outputTokens,
+      p_cost_cents: costCents,
+    });
+  } catch {
+    // Fallback: direct upsert
+    await supabase
       .from('daily_ai_usage')
       .upsert(
         {
           user_id: user.id,
           usage_date: today,
-          input_tokens: inputTokens,
+          input_tokens: promptTokens,
           output_tokens: outputTokens,
           cost_cents: costCents,
           request_count: 1,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id,usage_date' }
-      )
-      .then(() => {});
-  });
+      );
+  }
 
-  // ── Return Anthropic response ────────────────────────────────────────────
-  return jsonResponse(anthropicJson);
+  // ── Return in Anthropic-compatible envelope ───────────────────────────────
+  return jsonResponse({
+    content: [{ type: 'text', text }],
+    usage: { input_tokens: promptTokens, output_tokens: outputTokens },
+    model,
+  });
 });

@@ -538,32 +538,31 @@ footer a{color:#444;text-decoration:none}
     }catch(e){}
   }
   if(firstName)document.getElementById('greeting').textContent='Welcome to the book, '+firstName+'.';
-  var planLabels={solo:'Solo Member',pro:'Pro Member',elite:'Elite Member',rex_lens_standalone:'Rex Lens Member',elite_bundle:'Elite + Rex Lens Member'};
+  var planLabels={rex_lens:'Rex Lens Member',pro:'Pro Member',elite:'Elite Member'};
   var chip=document.getElementById('nav-plan-label');
   if(chip&&planLabels[plan])chip.textContent=planLabels[plan];
   if(email){var ev=document.getElementById('acct-email-val');if(ev)ev.textContent=email;}
 
-  // ── REX LENS / BUNDLE PLAN OVERRIDES ──
-  var isLens = plan === 'rex_lens_standalone';
-  var isBundle = plan === 'elite_bundle';
-  var hasLens = isLens || isBundle;
+  // ── REX LENS / ELITE PLAN OVERRIDES ──
+  var hasLens = (plan === 'rex_lens' || plan === 'elite');
 
   if(hasLens){
+    var isElite = plan === 'elite';
     // Hero
     document.getElementById('hero-badge-text').textContent = 'Payment confirmed — you\'re in';
-    document.getElementById('hero-headline').innerHTML = isBundle
-      ? 'Elite + Rex Lens.<br><span>You got the full stack.</span>'
+    document.getElementById('hero-headline').innerHTML = isElite
+      ? 'PocketRep Elite.<br><span>You got the full stack.</span>'
       : 'Rex Lens is yours.<br><span>Let\'s get it installed.</span>';
-    document.getElementById('hero-sub').innerHTML = isBundle
+    document.getElementById('hero-sub').innerHTML = isElite
       ? '<b>Install the Chrome extension below, then download the PocketRep app.</b> Your Elite account and Rex Lens are both live. Open your CRM and let Rex read the screen.'
       : '<b>Install the Chrome extension below, sign in, and open your CRM.</b> Rex will start reading your screen and coaching you in real-time. Deep Scan your first 30 contacts in under 2 minutes.';
 
-    // Download section — show Chrome Web Store + app buttons for bundle
-    document.getElementById('dl-eyebrow').textContent = isBundle ? 'Install Extension + Get The App' : 'Install The Extension';
-    document.getElementById('dl-heading').innerHTML = isBundle
+    // Download section
+    document.getElementById('dl-eyebrow').textContent = isElite ? 'Install Extension + Get The App' : 'Install The Extension';
+    document.getElementById('dl-heading').innerHTML = isElite
       ? 'Install Rex Lens.<br>Then grab the app.'
       : 'Add Rex Lens to Chrome.<br>Takes 10 seconds.';
-    document.getElementById('dl-desc').textContent = isBundle
+    document.getElementById('dl-desc').textContent = isElite
       ? 'Install the Rex Lens Chrome extension first, then download PocketRep on your phone. Sign into both with your registration email — everything is already linked.'
       : 'Click below to add Rex Lens to Chrome. Once installed, click the extension icon, sign in with your registration email, and open any CRM or email tab. Rex takes it from there.';
 
@@ -571,16 +570,16 @@ footer a{color:#444;text-decoration:none}
       + '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="color:#4F46E5"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 7.5A4.5 4.5 0 0 0 8.1 10H2.6" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M14.25 16.4A4.5 4.5 0 0 0 16.5 12h5.4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M9.75 16.4A4.5 4.5 0 0 1 8.1 14l-2.7 4.7" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>'
       + '<div class="dl-btn-text"><div class="dl-small">Add to</div><div class="dl-big">Chrome</div></div></a>';
 
-    if(isBundle){
+    if(isElite){
       btnsHtml += document.getElementById('app-store-btn').outerHTML + document.getElementById('google-play-btn').outerHTML;
     }
     document.getElementById('dl-buttons').innerHTML = btnsHtml;
 
     // What's Next steps
-    document.getElementById('next-eyebrow').textContent = isBundle ? 'Your Setup Checklist' : 'Get Started in 3 Steps';
-    document.getElementById('next-heading').textContent = isBundle ? 'Set up everything in 5 minutes' : 'You\'ll be scanning in 2 minutes';
+    document.getElementById('next-eyebrow').textContent = isElite ? 'Your Setup Checklist' : 'Get Started in 3 Steps';
+    document.getElementById('next-heading').textContent = isElite ? 'Set up everything in 5 minutes' : 'You\'ll be scanning in 2 minutes';
 
-    var lensSteps = isBundle
+    var lensSteps = isElite
       ? '<div class="step"><div class="step-num">Step 1</div><h4>Install Rex Lens</h4><p>Click "Add to Chrome" above. Pin the extension so it\'s always one click away.</p></div>'
         + '<div class="step"><div class="step-num">Step 2</div><h4>Download the app</h4><p>Grab PocketRep from the App Store or Google Play. Sign in with your registration email.</p></div>'
         + '<div class="step"><div class="step-num">Step 3</div><h4>Open your CRM</h4><p>Navigate to VinSolutions, DealerSocket, Salesforce — whatever you use. Click the Rex Lens icon and hit Scan Page.</p></div>'

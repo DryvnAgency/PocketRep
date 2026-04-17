@@ -17,8 +17,20 @@ function usernameToEmail(username: string) {
 
 const PLANS: { id: Plan; name: string; price: string; after: string; features: string[] }[] = [
   {
+    id: 'rex_lens',
+    name: 'Rex Lens',
+    price: '$29',
+    after: '$39/mo after Apr 30',
+    features: [
+      'Chrome extension — reads your CRM in real-time',
+      'Deep Scan — action plans for 30 contacts at once',
+      'Draft texts, emails, call scripts — ready to send',
+      'Works with VinSolutions, DealerSocket, Salesforce, HubSpot',
+    ],
+  },
+  {
     id: 'pro',
-    name: 'Pro — The Closer',
+    name: 'PocketRep Pro — The Closer',
     price: '$29',
     after: '$49/mo after Apr 30',
     features: [
@@ -30,49 +42,14 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
   },
   {
     id: 'elite',
-    name: 'Elite — Market Leader',
-    price: '$49',
-    after: '$79/mo after Apr 30',
-    features: [
-      'Everything in Pro',
-      'Proximity Alerts — 500ft trigger on hot leads',
-      'Cross-Deal Rex Memory',
-      'Rex Lens — AI Photo Vision',
-      'Weekly Pipeline Digest',
-    ],
-  },
-  {
-    id: 'pro_bundle',
-    name: 'Pro + Rex Lens',
-    price: '$49',
-    after: 'Save $39/mo vs separate',
-    features: [
-      'Everything in Pro',
-      'Rex Lens Chrome extension included',
-      'CRM + AI screen coach at a great price',
-    ],
-  },
-  {
-    id: 'rex_lens_standalone',
-    name: 'Rex Lens — AI Screen Coach',
+    name: 'PocketRep Elite — Everything',
     price: '$59',
-    after: 'Chrome extension only',
+    after: '$89/mo after Apr 30',
     features: [
-      'Reads your CRM, email, LinkedIn in real-time',
-      'Deep Scan — action plans for 30 contacts at once',
-      'Draft texts, emails, call scripts — ready to send',
-      'Works with VinSolutions, DealerSocket, Salesforce, HubSpot',
-    ],
-  },
-  {
-    id: 'elite_bundle',
-    name: 'Elite + Rex Lens Bundle',
-    price: '$69',
-    after: 'Save $37/mo vs separate',
-    features: [
-      'Everything in Elite',
-      'Rex Lens Chrome extension included',
-      'Best value — full CRM + AI screen coach',
+      'Everything in Pro + Rex Lens',
+      'Proximity Alerts — 500ft trigger on hot leads',
+      'Cross-Deal Rex Memory + AI Vision',
+      'Weekly Pipeline Digest + max AI headroom',
     ],
   },
 ];
@@ -84,7 +61,7 @@ export default function SignupScreen() {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [plan, setPlan] = useState<Plan>('pro');
+  const [plan, setPlan] = useState<Plan>('elite');
   const [loading, setLoading] = useState(false);
 
   async function handleSignup() {
@@ -205,7 +182,7 @@ export default function SignupScreen() {
               >
                 {p.id === 'elite' && (
                   <View style={s.popularBadge}>
-                    <Text style={s.popularBadgeText}>MARKET LEADER</Text>
+                    <Text style={s.popularBadgeText}>MOST POPULAR</Text>
                   </View>
                 )}
                 <View style={s.planTop}>
@@ -257,7 +234,7 @@ export default function SignupScreen() {
             <Text style={s.summaryChipText}>{INDUSTRY_CONFIG[industry]?.icon} {INDUSTRY_CONFIG[industry]?.label}</Text>
           </View>
           <View style={s.summaryChip}>
-            <Text style={s.summaryChipText}>{plan === 'elite' ? '⭐ Elite' : '🔥 Pro'}</Text>
+            <Text style={s.summaryChipText}>{plan === 'elite' ? '⭐ Elite' : plan === 'rex_lens' ? '🔗 Rex Lens' : '🔥 Pro'}</Text>
           </View>
         </View>
 
