@@ -10,9 +10,9 @@ import { colors, radius, spacing } from '@/constants/theme';
 import type { Contact, RexMessage, RexMemory, Profile } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 
-// ── Model: Haiku for speed + cost on every Rex call ──────────────────────────
-const REX_MODEL = 'claude-haiku-4-5-20251001';
-const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
+// ── Model: Gemini 2.5 Flash for speed + cost on every Rex call ──────────────
+const REX_MODEL = 'gemini-2.5-flash';
+const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 
 // Lazy-load expo-image-picker so a missing package never crashes the app
 let ImagePicker: any = null;
@@ -225,8 +225,8 @@ export default function RexScreen() {
   async function send() {
     const text = input.trim();
     if ((!text && !pendingImage) || loading) return;
-    if (!ANTHROPIC_KEY) {
-      alert('Add your ANTHROPIC_KEY to .env to activate Rex.');
+    if (!AI_PROXY_URL) {
+      alert('AI proxy not configured.');
       return;
     }
 
@@ -282,13 +282,12 @@ export default function RexScreen() {
     ];
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${AI_PROXY_URL}/gemini`, {
         method: 'POST',
         headers: {
-          'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
-          'anthropic-dangerous-direct-browser-access': 'true',
+          'Authorization': `Bearer ${session?.access_token ?? ''}`,
         },
         body: JSON.stringify({
           model: REX_MODEL,
@@ -299,7 +298,7 @@ export default function RexScreen() {
       });
 
       const json = await res.json();
-      const rawReply = json.content?.[0]?.text ?? 'Rex hit an error. Check your API key.';
+      const rawReply = json.content?.[0]?.text ?? 'Rex hit an error. Try again.';
 
       // Detect action intent from Rex reply
       const action = parseRexAction(rawReply);
@@ -346,14 +345,14 @@ export default function RexScreen() {
 
   // Summarise conversation into Rex memory (Elite)
   async function buildMemory(userId: string, count: number) {
-    if (!ANTHROPIC_KEY) return;
     const { data: allMsgs } = await supabase.from('rex_messages').select('role,content').eq('user_id', userId).order('created_at').limit(30);
     if (!allMsgs) return;
 
     const transcript = allMsgs.map(m => `${m.role === 'user' ? 'Rep' : 'Rex'}: ${m.content}`).join('\n');
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`${AI_PROXY_URL}/gemini`, {
       method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
+      headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${session?.access_token ?? ''}` },
       body: JSON.stringify({
         model: REX_MODEL,
         max_tokens: 300,
@@ -370,14 +369,14 @@ export default function RexScreen() {
 
   // Fetch proactive coach card when a contact is selected
   async function fetchProactiveCoach(contact: Contact) {
-    if (!ANTHROPIC_KEY) return;
     setProactiveCoach(null);
     try {
       const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ');
       const prompt = `In 2 sentences max, give the rep their immediate game plan for ${contact.first_name} ${contact.last_name}. Vehicle: ${vehicle || 'unknown'}. Lease end: ${contact.lease_end_date ?? 'unknown'}. Notes: ${contact.notes ?? 'none'}. Be direct — what to do next and the one thing to lead with.`;
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${AI_PROXY_URL}/gemini`, {
         method: 'POST',
-        headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
+        headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${session?.access_token ?? ''}` },
         body: JSON.stringify({ model: REX_MODEL, max_tokens: 150, messages: [{ role: 'user', content: prompt }] }),
       });
       const rj = await res.json();
@@ -532,19 +531,17 @@ export default function RexScreen() {
   }
 
   async function fetchAiRebuttal(key: string, objection: string, fallback: string, newAngle = false) {
-    if (!ANTHROPIC_KEY) { setAiRebuttals(prev => ({ ...prev, [key]: fallback })); return; }
     setAiLoading(key);
     try {
       const prompt = newAngle
         ? `Give me a DIFFERENT fresh angle for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences.\n\nObjection: "${objection}"`
         : `Give me a sharp, specific rebuttal for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences.\n\nObjection: "${objection}"`;
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${AI_PROXY_URL}/gemini`, {
         method: 'POST',
         headers: {
-          'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
-          'anthropic-dangerous-direct-browser-access': 'true',
+          'Authorization': `Bearer ${session?.access_token ?? ''}`,
         },
         body: JSON.stringify({ model: REX_MODEL, max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
       });

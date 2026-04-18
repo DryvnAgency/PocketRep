@@ -2,7 +2,7 @@ import type { PageContent, StructuredTask } from './types';
 
 export const REX_MODEL = 'gemini-2.5-flash';
 export const HAIKU_MODEL = 'gemini-2.5-flash';
-export const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/anthropic';
+export const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/gemini';
 
 /** Format structured tasks as a compact numbered list for prompts */
 function formatStructuredTasks(page: PageContent): string {
