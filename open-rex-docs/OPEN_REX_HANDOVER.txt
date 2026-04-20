@@ -6,8 +6,15 @@ Give this entire document to anyone continuing development on Open Rex.
 ## WHO YOU ARE
 
 You are continuing development on Open Rex. Open Rex is a NEW, SEPARATE product
-from PocketRep and Rex Lens. Do not confuse them. Read this entire document
-before touching any code.
+from PocketRep, Rex Lens, and His Palabra. Four distinct products from the
+same founder — do not confuse them, do not share code bases, do not share
+repos. Read this entire document before touching any code.
+
+Sibling products (for context only — Open Rex is separate from all of them):
+  - PocketRep — React Native mobile CRM for sales reps
+  - Rex Lens — Chrome extension that coaches reps live on their CRM screen
+  - His Palabra — [TODO: get description from founder]
+  - Open Rex — THIS PRODUCT. Dealership customer-DB reactivation SMS agent.
 
 ## WHAT THIS IS
 

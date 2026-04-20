@@ -7,9 +7,10 @@ Staged in PocketRep repo at /open-rex-docs/ — move to dedicated Open Rex repo.
 1. PRODUCT OVERVIEW
 ================================================================================
 
-Open Rex is the third product in the PocketRep family, separate from PocketRep
-(mobile CRM) and Rex Lens (live rep coach). Open Rex is a dealership customer-
-database reactivation agent.
+Open Rex is a standalone product in the same founder's portfolio, separate
+from PocketRep (mobile CRM), Rex Lens (live rep coach), and His Palabra
+([TODO: description]). Four distinct products, four distinct repos. Open Rex
+is a dealership customer-database reactivation agent.
 
 Workflow in one paragraph:
   The dealer opens their CRM in Chrome. Open Rex's extension walks the
