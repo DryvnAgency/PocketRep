@@ -261,7 +261,7 @@ Trigger: handle_new_user() creates profile on signup with plan + 7-day trial
 ================================================================================
 
 Model: Gemini 2.5 Flash (via Supabase edge function proxy)
-Proxy URL: https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/anthropic
+Proxy URL: https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/gemini
 Auth: JWT from Supabase Auth (user must be logged in)
 
 Request flow:
@@ -321,14 +321,10 @@ Tone: Confident, direct, no fluff. "Built for closers."
    public by design, RLS enforces security), but should use build-time env
    vars instead of hardcoding.
 
-2. AI_PROXY_URL PATH MISMATCH: prompts.ts has path ending in "/anthropic"
-   but the proxy now calls Gemini. The path still works (edge function ignores
-   the trailing path segment), but it's misleading. Consider renaming the
-   route.
+2. AI_PROXY_URL PATH: Updated to end in "/gemini" (was "/anthropic"). Fixed.
 
-3. PRIVACY POLICY REFERENCES ANTHROPIC/OPENAI: privacy.html mentions
-   "Anthropic and OpenAI" as AI providers. Should be updated to mention
-   Google/Gemini since the switch.
+3. PRIVACY POLICY: Updated to reference Google Gemini (was Anthropic/OpenAI).
+   Fixed.
 
 4. eas.json PLACEHOLDERS: Apple Team ID, App Store Connect ID, and Google
    service account key are all placeholder values. Must be filled before

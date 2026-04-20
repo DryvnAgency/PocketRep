@@ -1,0 +1,201 @@
+================================================================================
+HANDOVER PROMPT — Rex Lens + PocketRep
+Give this entire document to anyone continuing development.
+================================================================================
+
+## WHO YOU ARE
+
+You are continuing development on PocketRep and Rex Lens. You need to understand both products completely before touching any code.
+
+## WHAT THIS IS
+
+PocketRep is a two-product AI sales coaching suite:
+
+1. **PocketRep** — A React Native (Expo) mobile CRM app for high-ticket sales reps. It lets them manage contacts, track deals, run follow-up sequences, and talk to "Rex" — an AI sales coach that knows their full book of business. Key features: voice logging ("Hey Rex" wake word via Porcupine), 3-tier Heat Sheet (hot/warm/watch leads), pre-call briefs, AI rebuttals, personalized mass texting, proximity alerts (Elite only), and full data portability so reps keep their book when they leave a dealership.
+
+2. **Rex Lens** — A Chrome extension (Manifest V3) that reads the rep's CRM, email, and LinkedIn in real-time and generates ready-to-send phone scripts, email drafts, and text messages for every lead on screen. It injects a dark-themed floating panel via Shadow DOM. One click on "Scan My Page" reads every task on a VinSolutions worklist (or any CRM page) and produces personalized scripts for each contact in batches of 30. "Deep Scan" clicks into individual lead records and generates a prioritized game plan.
+
+## WHO IT'S FOR
+
+Any rep in a high-ticket, relationship-driven sales role: automotive, mortgage, real estate, insurance, solar, HVAC, B2B, staffing, roofing, fencing, door-to-door. The primary launch market is auto sales reps using VinSolutions.
+
+## WHY IT EXISTS
+
+Sales reps drown in CRM tasks. They open VinSolutions to 200+ follow-ups and don't know who to call first, what to say, or how to handle replies. They lose deals because follow-ups fall through the cracks. When they leave a dealership, they lose their entire customer book because it lives in the dealer's system.
+
+PocketRep gives them a portable CRM they own. Rex Lens gives them instant scripts so they spend time selling, not staring at their worklist.
+
+## CURRENT STATE (as of April 2026)
+
+**What's shipped (code complete, on main branch):**
+- Landing page at pocketrep.pro (Vercel) — 3-tier pricing with countdown timer
+- Rex Lens Chrome extension V21 — auth, chat, scan, batch scripts, deep review
+- Mobile app — contacts, deals, sequences, Rex chat, HeyRex voice, notifications
+- AI proxy edge function (Supabase) — Gemini 2.5 Flash with daily cost caps
+- Database schema — 9 tables with RLS, atomic usage tracking
+
+**What needs deployment (code done, infrastructure pending):**
+- Set GEMINI_API_KEY secret in Supabase
+- Deploy ai-proxy edge function: `supabase functions deploy ai-proxy`
+- Run plan migration SQL (converts old 5-plan users to 3-plan structure)
+- Run daily_ai_usage table creation SQL
+- Update Stripe Payment Link prices to match new tiers
+- Submit Rex Lens to Chrome Web Store
+
+**What's not built yet:**
+- App Store / Google Play submission (eas.json has placeholder credentials)
+- Stripe webhooks (cancel, upgrade, downgrade, payment failures)
+- Additional CRM adapters (DealerSocket, Salesforce, HubSpot — promised in marketing)
+- Contact import/export
+- Analytics dashboard
+- Admin panel
+
+## PLAN STRUCTURE
+
+| Plan ID    | Name             | Founding | Retail (Apr 30+) | Daily AI Cap |
+|------------|------------------|----------|------------------|--------------|
+| rex_lens   | Rex Lens         | $29/mo   | $39/mo           | $1.00/day    |
+| pro        | PocketRep Pro    | $29/mo   | $49/mo           | $1.00/day    |
+| elite      | PocketRep Elite  | $59/mo   | $89/mo           | $2.00/day    |
+
+All plans: 7-day free trial, card required via Stripe, founding rate locked permanently for pre-April-30 signups. Elite includes everything in Pro + Rex Lens.
+
+## TECH STACK
+
+- **Landing page:** Static HTML/CSS/JS on Vercel
+- **Mobile app:** Expo SDK / React Native / TypeScript / Expo Router
+- **Chrome extension:** Manifest V3 / TypeScript / esbuild / Shadow DOM
+- **Backend:** Supabase (PostgreSQL + Auth + Edge Functions + RLS)
+  - Project: fwvrauqdoevwmwwqlfav.supabase.co
+- **AI:** Google Gemini 2.5 Flash via Supabase edge function proxy
+  - Proxy URL: .../functions/v1/ai-proxy/gemini
+  - Extension sends Anthropic-format bodies; proxy translates to Gemini format
+  - Returns Anthropic-shaped envelope so extension code stays clean
+- **Payments:** Stripe Checkout (payment links, not embedded)
+- **Voice:** Porcupine wake word + expo-av for recording
+- **Notifications:** expo-notifications (local push)
+
+## AI PERSONALITY — "REX"
+
+Rex is a 30-year-old elite sales closer. Sharp, direct, always advancing the deal. Key rules:
+
+- Give the ACTUAL WORDS to say, not generic advice
+- 2-4 sentences max unless walking through a game plan
+- Use "hey" not "hi" — warmer, less corporate
+- Never use bullet points, dashes, em-dashes, or en-dashes. Full sentences only.
+- Never mention "trade value" — always frame as "potential equity in their current vehicle"
+- Reference vehicles by name ("their Camry at 87k — repairs start stacking")
+- Reference VOI by name ("that Civic Sport holds its value") to build excitement
+- Parse everything on screen: VOI, trade-in, deal stage, buying signals, blockers
+
+Script rules by task type:
+- PHONE: One-liner opener. First name, vehicle reference, urgency reason.
+- EMAIL: Short subject + body <5 sentences. Open with "hey." Ready to paste.
+- TEXT: 2-3 sentences. "Hey" + first name, vehicle, one reason to act.
+- SOLD FOLLOW-UP: Thanks them, asks how vehicle's treating them, moves into referrals.
+- SERVICE: Ties service visit to equity conversation.
+- NOTIFICATION-ONLY: List and tell rep to dismiss. No script.
+
+Time-of-month awareness:
+- End of month (25-31): Urgency. Incentives expiring, managers flexible.
+- Beginning (1-7): Fresh energy. New incentives, fresh inventory.
+- Mid-month (8-24): Standard, no calendar urgency.
+- Holidays: Reference naturally, never cheesy.
+
+## DATABASE SCHEMA (9 tables)
+
+- **profiles** — User accounts (plan, industry, trial_ends_at, stripe_customer_id)
+- **contacts** — Customer records (50+ fields: vehicle info, heat scoring, rapport, location)
+- **deals** — Pipeline (front/back gross, closed_at)
+- **rex_messages** — AI chat history (per-contact threads)
+- **rex_memory** — Cross-deal AI memory (Elite only)
+- **sequences** — Follow-up campaign definitions
+- **sequence_steps** — Individual steps (channel, delay, template, sent tracking)
+- **contact_interactions** — Outreach log
+- **daily_ai_usage** — Per-user/per-day AI token + cost tracking
+
+All tables RLS-scoped to auth.uid(). Trigger `handle_new_user()` creates profile on signup. Trigger `increment_daily_usage()` atomically tracks AI costs.
+
+## EXTENSION ARCHITECTURE (Rex Lens)
+
+Three layers:
+1. **service-worker.ts** (707 lines) — Auth, AI calls, deep review orchestration, chat history, tab tracking
+2. **content-script.ts** (1039 lines) — DOM extraction, page type detection, adapter system, deep scan navigation, text insertion
+3. **panel.ts** (1077 lines) — Shadow DOM UI, chat interface, auth screen, task batching, file upload, markdown rendering
+
+Platform adapters:
+- **vinsolutions.ts** — Deep scraper for VinConnect RadGrid tables in nested iframes (5 grid sections)
+- **gmail.ts** — Email thread extraction
+- **outlook.ts** — Email thread extraction
+- **generic.ts** — Fallback (raw text extraction)
+
+Communication flow:
+```
+Panel → sendToSW() → service-worker.ts → callAIProxy() → Supabase Edge Function → Gemini API
+                                         ↕
+                   content-script.ts ← message handlers (EXTRACT_PAGE, SCAN_PAGE, etc.)
+```
+
+## DESIGN SYSTEM
+
+Extension panel:
+- Primary Red: #e94560 | Deep Blue: #0f3460 | Gradient: linear-gradient(135deg, #e94560, #0f3460)
+- Dark BG: #111827 | Card BG: #1e293b | Border: #374151
+- Text: #e5e7eb (primary) | #9ca3af (muted) | #6b7280 (dim)
+
+Landing page:
+- Gold: #d4a843 (accent, badges, CTAs) | Gold2: #f0c060
+- Ink: #0c0c0e through #23232b (dark backgrounds)
+- Fonts: Bricolage Grotesque (headings), Instrument Sans (body)
+
+Tone: Confident, direct, no fluff. "Built for closers."
+
+## KEY FILES TO READ FIRST
+
+If you're working on:
+- **AI behavior/prompts:** RexLens/src/shared/prompts.ts
+- **Extension logic:** RexLens/src/background/service-worker.ts
+- **Panel UI:** RexLens/src/content/panel.ts
+- **Page scraping:** RexLens/src/content/content-script.ts + adapters/
+- **Database:** PocketRepApp/sql/schema.sql
+- **AI proxy/billing:** PocketRepApp/supabase/functions/ai-proxy/index.ts
+- **Mobile app screens:** PocketRepApp/app/(tabs)/*.tsx
+- **Landing page:** Pocketrep/index.html
+- **Data models:** PocketRepApp/lib/types.ts + RexLens/src/shared/types.ts
+- **Full project overview:** PROJECT_MASTER_CONTEXT.txt (root of repo)
+
+## KNOWN ISSUES
+
+1. Supabase anon key is hardcoded in multiple files (expected for Supabase, RLS enforces security)
+2. eas.json has placeholder Apple/Google credentials — must fill before app store submission
+3. .env.example still references Anthropic/OpenAI keys — should reference Gemini
+4. messageQueue.ts doesn't handle rex_lens plan (extension-only, no mobile app access)
+5. Countdown timer deadline hardcoded to May 1, 2026 UTC — update if founding period extends
+
+## WHAT TO BUILD NEXT (priority order)
+
+1. Deploy Gemini proxy + run DB migrations (blocks Rex Lens)
+2. Update Stripe prices to match new 3-tier structure (blocks billing)
+3. Submit to Chrome Web Store (blocks user acquisition)
+4. Set up App Store / Google Play credentials and first EAS build
+5. Build Stripe webhooks for subscription lifecycle
+6. Build DealerSocket + Salesforce adapters (promised in marketing)
+7. Contact import/export
+8. Analytics dashboard
+
+## IMPORTANT DECISIONS ALREADY MADE
+
+- Gemini 2.5 Flash over Anthropic Claude (10x cheaper, fast enough)
+- Daily dollar caps over per-session response limits (server-enforced, plan-tiered)
+- Proxy translates at boundary (extension code stays Anthropic-format, proxy converts)
+- Shadow DOM for panel injection (isolates from host page CSS)
+- VinSolutions is the primary CRM target (deep adapter), others get generic fallback
+- "Founding rate" pricing model — early users locked at lower price permanently
+- 3-plan structure replaces original 5-plan (rex_lens, pro, elite only)
+- All plans get 7-day free trial with card required
+- No bullet points or dashes in any AI output — full sentences only
+- Never mention "trade value" — always "potential equity in their current vehicle"
+
+================================================================================
+END OF HANDOVER
+================================================================================
