@@ -1,0 +1,1019 @@
+================================================================================
+HIS PALABRA — COMPLETE PROJECT HANDOFF CONTEXT
+================================================================================
+Generated: 2026-04-20
+Project Path: /home/user/PocketRep/HisPalabra/
+Repository: dryvnagency/pocketrep (monorepo — HisPalabra is one project inside)
+
+================================================================================
+PART 1: PRODUCT VISION, PURPOSE & ARCHITECTURE
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+WHY HIS PALABRA EXISTS
+────────────────────────────────────────────────────────────────────────────────
+
+His Palabra (Spanish for "His Word") exists because traditional Bible
+translations — even "modern" ones like NIV or NLT — still read like textbooks
+to Gen Z. Young people aged 16-30 consume language through TikTok, group chats,
+tweets, and memes. They speak in a register built from slang markers like
+"no cap", "fr fr", "deadass", "lowkey", "bussin", and "goated." No Bible app
+speaks their language.
+
+His Palabra solves this by presenting EVERY verse of the Bible in TWO forms:
+  1. KJV (King James Version) — the classic, authoritative, public-domain text
+  2. Gen Z Slang — the same verse re-voiced in heavy Urban Dictionary register
+
+This is NOT a paraphrase. It's NOT "casual English." It's a full register swap
+into the actual language Gen Z uses daily, while preserving every proper noun,
+every theological concept, and every verse's meaning.
+
+The entire 31,102-verse Bible has been translated into Gen Z slang and stored
+in a Supabase PostgreSQL database. The app and translations are complete.
+
+Example of the dual translation:
+  KJV:   "The Lord is my shepherd; I shall not want."
+  Slang: "The Lord got me fr — I'm never out here lacking, no cap."
+
+  KJV:   "In the beginning God created the heaven and the earth."
+  Slang: "Okay so straight up, in the beginning God created the heavens
+          and the earth. That's it. That's how it started."
+
+────────────────────────────────────────────────────────────────────────────────
+TARGET AUDIENCE
+────────────────────────────────────────────────────────────────────────────────
+
+Primary:   Gen Z Christians and faith-curious (16-28)
+Secondary: Youth pastors, campus ministry leaders, parents engaging their kids
+Tertiary:  Anyone intimidated by traditional Bible translations
+
+────────────────────────────────────────────────────────────────────────────────
+SLANG TRANSLATION RULES (CRITICAL — APPLIES TO ALL CONTENT)
+────────────────────────────────────────────────────────────────────────────────
+
+DO:
+  - Use Gen Z markers: "fr", "no cap", "deadass", "ngl", "lowkey", "bruh"
+  - Use quality words: "bussin", "fire", "goated", "slay", "mid", "W/L"
+  - Conversational tone (like a group chat or TikTok caption)
+  - PRESERVE all proper nouns (Moses, David, Jerusalem, Jesus, Babylon)
+  - PRESERVE all theological content (covenant, salvation, sin, grace)
+  - CAPITALIZE "G" in God always ("on God" not "on god")
+
+DON'T:
+  - Use profanity (must be app-store safe)
+  - Change the meaning of Scripture
+  - Rename biblical figures
+  - Delete theological concepts
+  - Be disrespectful to the text
+
+────────────────────────────────────────────────────────────────────────────────
+APP IDENTITY
+────────────────────────────────────────────────────────────────────────────────
+
+App Name:        His Palabra
+Tagline:         "The Word, but make it Gen Z"
+Alt taglines:    "Scripture that hits different" / "God's Word no cap"
+Bundle ID:       org.hispalabra.app (both iOS and Android)
+URL Scheme:      hispalabra
+Dark Mode:       Always (userInterfaceStyle: "dark")
+Splash BG:       #080810
+
+────────────────────────────────────────────────────────────────────────────────
+TECH STACK
+────────────────────────────────────────────────────────────────────────────────
+
+Layer         | Technology              | Version
+─────────────┼─────────────────────────┼──────────
+Framework     | React Native            | 0.81.5
+Platform      | Expo                    | ~54.0.33
+Routing       | Expo Router             | ^55.0.11 (file-based)
+Language      | TypeScript              | ~5.9.2
+State         | Zustand                 | ^5.0.12
+Backend       | Supabase                | ^2.103.0
+Auth Storage  | expo-secure-store       | ^55.0.13 (native) / localStorage (web)
+Notifications | expo-notifications      | ^55.0.18
+Styling       | StyleSheet.create       | (NativeWind installed but unused)
+Fonts         | expo-font + Google Fonts| Inter (5 weights) + Playfair Display (2)
+Navigation    | react-native-screens    | ^4.24.0
+Gestures      | react-native-gesture-handler | ^2.31.1
+Safe Area     | react-native-safe-area-context | ^5.7.0
+URL Polyfill  | react-native-url-polyfill | ^3.0.0
+Browser       | expo-web-browser        | ^55.0.14
+
+────────────────────────────────────────────────────────────────────────────────
+DATABASE (SUPABASE)
+────────────────────────────────────────────────────────────────────────────────
+
+Supabase Project ID:  cljdpcfscszaryqjwswy
+Supabase URL:         https://cljdpcfscszaryqjwswy.supabase.co
+Auth:                 Email + password (Supabase Auth)
+
+TABLES USED BY THE APP:
+
+1. verses (31,102 rows — the entire KJV Bible + Gen Z slang translation)
+   ┌─────────────┬──────┬──────────────────────────────────────────────┐
+   │ Column       │ Type │ Description                                  │
+   ├─────────────┼──────┼──────────────────────────────────────────────┤
+   │ id           │ int  │ Primary key                                  │
+   │ book_id      │ int  │ 1-66 (Genesis=1 through Revelation=66)       │
+   │ chapter      │ int  │ Chapter number                               │
+   │ verse_number │ int  │ Verse number within chapter                  │
+   │ text_kjv     │ text │ King James Version text (source of truth)    │
+   │ text_slang   │ text │ Gen Z / Urban Dictionary slang translation   │
+   └─────────────┴──────┴──────────────────────────────────────────────┘
+
+2. profiles (user profiles, created on signup)
+   ┌──────────────────────┬─────────┬────────────────────────────────────┐
+   │ Column                │ Type    │ Description                        │
+   ├──────────────────────┼─────────┼────────────────────────────────────┤
+   │ id                    │ uuid    │ Matches auth.users.id              │
+   │ email                 │ text    │ User email                         │
+   │ username              │ text    │ Unique username (lowercase)        │
+   │ display_name          │ text    │ Display name                       │
+   │ age_range             │ text    │ "14-17","18-21","22-25","26-28","29+" │
+   │ city_group_id         │ uuid    │ FK to city_groups                  │
+   │ avatar_color          │ text    │ Hex color for avatar               │
+   │ xp_total              │ int     │ Total experience points            │
+   │ current_streak        │ int     │ Current daily streak               │
+   │ longest_streak        │ int     │ All-time best streak               │
+   │ last_active_date      │ text    │ ISO date of last activity          │
+   │ default_bible_mode    │ text    │ "slang" or "kjv"                   │
+   │ font_size             │ text    │ "small", "medium", "large"         │
+   │ notifications_enabled │ bool    │ Push notification preference       │
+   │ onboarding_done       │ bool    │ Has user completed onboarding?     │
+   └──────────────────────┴─────────┴────────────────────────────────────┘
+
+3. city_groups (community groups by city)
+   ┌──────────────┬──────┬─────────────────────────────┐
+   │ Column        │ Type │ Description                 │
+   ├──────────────┼──────┼─────────────────────────────┤
+   │ id            │ uuid │ Primary key                 │
+   │ name          │ text │ City name                   │
+   │ slug          │ text │ URL-safe slug               │
+   │ member_count  │ int  │ Number of members           │
+   │ is_active     │ bool │ Whether city is joinable    │
+   └──────────────┴──────┴─────────────────────────────┘
+
+4. community_messages (realtime city group chat)
+   ┌────────────────┬──────┬──────────────────────────────────────────┐
+   │ Column          │ Type │ Description                              │
+   ├────────────────┼──────┼──────────────────────────────────────────┤
+   │ id              │ uuid │ Primary key                              │
+   │ city_group_id   │ uuid │ FK to city_groups                        │
+   │ user_id         │ uuid │ FK to profiles                           │
+   │ content         │ text │ Message body                             │
+   │ message_type    │ text │ "chat", "prayer_request", "praise_report"│
+   │ verse_ref       │ text │ Optional verse reference                 │
+   │ is_deleted      │ bool │ Soft delete flag                         │
+   │ created_at      │ ts   │ Timestamp                                │
+   └────────────────┴──────┴──────────────────────────────────────────┘
+
+5. verse_of_day (daily featured verse)
+   ┌──────────────┬──────┬──────────────────────────────────┐
+   │ Column        │ Type │ Description                      │
+   ├──────────────┼──────┼──────────────────────────────────┤
+   │ display_date  │ date │ The date this verse is featured  │
+   │ verse_id      │ int  │ FK to verses                     │
+   │ reflection    │ text │ Optional daily reflection text   │
+   └──────────────┴──────┴──────────────────────────────────┘
+
+6. lessons (gamified devotional lessons)
+   ┌──────────────┬──────┬──────────────────────────────────┐
+   │ Column        │ Type │ Description                      │
+   ├──────────────┼──────┼──────────────────────────────────┤
+   │ id            │ int  │ Primary key                      │
+   │ title         │ text │ Lesson title                     │
+   │ description   │ text │ Short description                │
+   │ category      │ text │ Lesson category                  │
+   │ difficulty    │ text │ Difficulty level                 │
+   │ xp_reward     │ int  │ XP earned for completion         │
+   │ lesson_order  │ int  │ Display order                    │
+   │ is_active     │ bool │ Whether lesson is published      │
+   │ content       │ json │ Array of lesson steps (see below)│
+   └──────────────┴──────┴──────────────────────────────────┘
+
+   Lesson step types in content JSON:
+     { type: "hook",      text: "..." }           — Opening hook
+     { type: "verse",     ref: "...", slang: "...", kjv: "..." } — Scripture
+     { type: "breakdown", text: "..." }           — Explanation
+     { type: "realtalk",  text: "..." }           — Application
+
+7. quizzes (quiz attached to each lesson)
+   ┌─────────────────┬──────┬─────────────────────────────────────────┐
+   │ Column           │ Type │ Description                             │
+   ├─────────────────┼──────┼─────────────────────────────────────────┤
+   │ id               │ int  │ Primary key                             │
+   │ lesson_id        │ int  │ FK to lessons                           │
+   │ questions        │ json │ Array of {question, options[], correct_index, explanation} │
+   │ xp_reward        │ int  │ Bonus XP for passing                    │
+   │ pass_threshold   │ int  │ Minimum % to pass                       │
+   └─────────────────┴──────┴─────────────────────────────────────────┘
+
+8. lesson_completions (tracks which lessons a user finished)
+   ┌──────────────┬──────┬──────────────────────────────────┐
+   │ Column        │ Type │ Description                      │
+   ├──────────────┼──────┼──────────────────────────────────┤
+   │ user_id       │ uuid │ FK to profiles                   │
+   │ lesson_id     │ int  │ FK to lessons                    │
+   │ quiz_score    │ int  │ Score percentage                 │
+   │ xp_earned     │ int  │ Total XP earned                  │
+   └──────────────┴──────┴──────────────────────────────────┘
+
+SUPABASE RPC FUNCTIONS (called from app code):
+  - award_xp(p_user_id uuid, p_amount int) — adds XP to user profile
+  - update_streak(p_user_id uuid) — updates daily streak logic
+
+SUPABASE REALTIME:
+  - community_messages table has realtime enabled for INSERT events
+  - Used by city.tsx to show live chat messages
+
+────────────────────────────────────────────────────────────────────────────────
+DESIGN SYSTEM (constants/theme.ts)
+────────────────────────────────────────────────────────────────────────────────
+
+COLORS:
+  bg:      #080810  — Main app background (near-black with blue tint)
+  s1:      #10101C  — Surface level 1 (cards, tab bar)
+  s2:      #181828  — Surface level 2 (inputs, elevated cards)
+  s3:      #202035  — Surface level 3 (pressed states)
+  border:  #252540  — All borders and dividers
+  text:    #EEEDF8  — Primary text (off-white)
+  muted:   #6868A0  — Secondary text (labels, metadata)
+  dim:     #383858  — Disabled text, placeholders
+  gold:    #F5C842  — PRIMARY ACCENT (CTAs, headers, highlights, active tabs)
+  green:   #4ADE80  — Success, completed states
+  red:     #F87171  — Errors, destructive actions
+  orange:  #FB923C  — Warnings, hook labels
+  blue:    #60A5FA  — Info, prayer request tags
+  purple:  #C084FC  — Quiz accent
+  pink:    #F472B6  — Unused currently
+  teal:    #2DD4BF  — Unused currently
+
+FONTS:
+  display:       PlayfairDisplay_700Bold        — App title, chapter headings, verse display
+  displayItalic: PlayfairDisplay_400Regular_Italic — KJV verse text in reader
+  body:          Inter_400Regular               — Body text, descriptions
+  bodyMedium:    Inter_500Medium                — Subtle emphasis
+  bodySemiBold:  Inter_600SemiBold              — Labels, buttons, links
+  bodyBold:      Inter_700Bold                  — Bold text, stats
+  bodyBlack:     Inter_900Black                 — Unused currently
+  mono:          JetBrainsMono_400Regular       — DEFINED BUT NOT LOADED (bug)
+
+FONT SIZES: xs=10, sm=12, base=14, md=16, lg=18, xl=22, 2xl=28, 3xl=36, 4xl=48
+SPACING:    xs=4, sm=8, md=12, lg=16, xl=20, 2xl=24, 3xl=32, 4xl=40, 5xl=48
+RADII:      sm=6, md=10, lg=14, xl=16, 2xl=20, full=9999
+
+────────────────────────────────────────────────────────────────────────────────
+ROUTING ARCHITECTURE (Expo Router — file-based)
+────────────────────────────────────────────────────────────────────────────────
+
+The app uses conditional routing in app/_layout.tsx:
+  - No session?           → Show (auth) stack (welcome/login/signup)
+  - Session but no onboarding? → Show onboarding flow
+  - Session + onboarding done? → Show (tabs) main app
+
+Route tree:
+  /                           → app/_layout.tsx (root — auth check + font loading)
+  ├── /(auth)/                → app/(auth)/_layout.tsx (Stack navigator)
+  │   ├── /welcome            → welcome.tsx (landing with Get Started / Login)
+  │   ├── /login              → login.tsx (email + password)
+  │   ├── /signup             → signup.tsx (email + password, 6-char min)
+  │   └── /onboarding/        → onboarding/_layout.tsx (Stack)
+  │       ├── /profile-setup  → profile-setup.tsx (name, username, age range)
+  │       ├── /city-select    → city-select.tsx (pick city from Supabase list)
+  │       └── /starting-point → starting-point.tsx (pick where to start)
+  │
+  ├── /(tabs)/                → app/(tabs)/_layout.tsx (Tab navigator, 5 tabs)
+  │   ├── / (Home)            → index.tsx (greeting, streak, verse of day, actions)
+  │   ├── /bible              → bible.tsx (book list → chapter grid)
+  │   ├── /learn              → learn.tsx (lesson list with XP)
+  │   ├── /city               → city.tsx (realtime group chat)
+  │   └── /me                 → me.tsx (profile, stats, settings, sign out)
+  │
+  ├── /bible/[book]/[chapter] → bible/[book]/[chapter].tsx (verse reader)
+  └── /learn/[lessonId]       → learn/[lessonId].tsx (lesson + quiz)
+
+
+================================================================================
+PART 2: COMPLETE FILE INVENTORY (every file, what it does, where it is)
+================================================================================
+
+All paths are relative to /home/user/PocketRep/HisPalabra/
+
+────────────────────────────────────────────────────────────────────────────────
+ROOT CONFIG FILES
+────────────────────────────────────────────────────────────────────────────────
+
+package.json
+  App name "hispalabra", version 1.0.0, entry point index.ts.
+  Scripts: start, android, ios, web (all via expo start).
+  17 dependencies, 3 devDependencies. Private: true.
+
+tsconfig.json
+  Extends expo/tsconfig.base. Strict mode enabled.
+
+app.json
+  Expo config. Name: "His Palabra". Slug: "his-palabra".
+  Portrait locked. Dark mode always. New Architecture enabled.
+  Bundle ID: org.hispalabra.app (iOS + Android).
+  Splash background: #080810. Typed routes experiment enabled.
+  Plugins: expo-router, expo-secure-store, expo-font.
+
+.env
+  EXPO_PUBLIC_SUPABASE_URL — Supabase project URL
+  EXPO_PUBLIC_SUPABASE_ANON_KEY — Supabase anonymous JWT key
+  (Do NOT commit this file or share the key publicly)
+
+.gitignore
+  Ignores: node_modules, .expo, dist, web-build, native builds,
+  .env files, .DS_Store, debug logs, typescript build info.
+
+index.ts
+  Expo entry point. Calls registerRootComponent(App).
+  This is the bootstrap file — Expo Router takes over from here.
+
+App.tsx
+  UNUSED boilerplate from Expo template. Expo Router's app/_layout.tsx
+  is the actual root component. This file can be deleted.
+
+────────────────────────────────────────────────────────────────────────────────
+CORE APP FILES — app/ directory
+────────────────────────────────────────────────────────────────────────────────
+
+app/_layout.tsx (ROOT LAYOUT — most important file)
+  The app shell. Does three critical things:
+  1. Loads all fonts (Inter 5 weights + Playfair Display 2 weights)
+  2. Initializes auth via useAuthStore().initialize()
+  3. Conditional routing:
+     - No session → shows (auth) stack
+     - Session but onboarding_done=false → shows onboarding
+     - Session + onboarding complete → shows (tabs)
+  Shows loading spinner while fonts and auth initialize.
+  StatusBar set to "light" (white text on dark bg).
+  Stack animation: slide_from_right.
+
+────────────────────────────────────────────────────────────────────────────────
+AUTH FLOW — app/(auth)/
+────────────────────────────────────────────────────────────────────────────────
+
+app/(auth)/_layout.tsx
+  Stack navigator wrapper for auth screens.
+  No header, dark background, slide_from_right animation.
+
+app/(auth)/welcome.tsx
+  First screen new users see. Shows:
+  - Cross emoji (✝️) at 56px
+  - "His Palabra" in gold Playfair Display at 42px
+  - "The Word of God in the language you actually speak"
+  - "Free forever. No ads. Scripture first."
+  - Gold "Get Started" button → navigates to /signup
+  - Secondary "I already have an account" → navigates to /login
+
+app/(auth)/login.tsx
+  Email + password login form. Uses KeyboardAvoidingView for iOS.
+  Calls useAuthStore().signIn(). Shows Alert on error.
+  Link to signup screen at bottom.
+  Input styling: dark surface (s1) with border, 12px border radius.
+
+app/(auth)/signup.tsx
+  Email + password signup form. Identical layout to login.
+  Validates password >= 6 characters.
+  Calls useAuthStore().signUp(). Shows Alert on error.
+  Link to login screen at bottom.
+
+────────────────────────────────────────────────────────────────────────────────
+ONBOARDING FLOW — app/(auth)/onboarding/
+────────────────────────────────────────────────────────────────────────────────
+
+app/(auth)/onboarding/_layout.tsx
+  Stack navigator for onboarding steps.
+  Same styling as auth layout (dark bg, no header, slide animation).
+
+app/(auth)/onboarding/profile-setup.tsx (Step 1 of 3)
+  Collects: display name, username, age range.
+  Progress dots: [ACTIVE] [dim] [dim]
+  Username auto-lowercased and stripped to [a-z0-9_].
+  Age range options: "14-17", "18-21", "22-25", "26-28", "29+"
+  Shown as selectable pills in a flex-wrap row.
+  Saves via updateProfile(), navigates to city-select.
+
+app/(auth)/onboarding/city-select.tsx (Step 2 of 3)
+  Fetches active city_groups from Supabase, shows as selectable cards.
+  Each card shows city name, member count, pin emoji.
+  Selected card gets gold border highlight.
+  Progress dots: [GREEN done] [ACTIVE] [dim]
+  Saves city_group_id via updateProfile(), navigates to starting-point.
+
+app/(auth)/onboarding/starting-point.tsx (Step 3 of 3)
+  Four options for where to start:
+  1. "Start at Genesis" → /(tabs)/bible
+  2. "Show me the classics" → /(tabs)/bible
+  3. "I want to learn" → /(tabs)/learn
+  4. "I want community" → /(tabs)/city
+  Sets onboarding_done=true via updateProfile().
+  Uses router.replace() so user can't navigate back to onboarding.
+
+────────────────────────────────────────────────────────────────────────────────
+MAIN APP TABS — app/(tabs)/
+────────────────────────────────────────────────────────────────────────────────
+
+app/(tabs)/_layout.tsx
+  Tab navigator with 5 tabs using emoji icons:
+  1. Home 🏠 — index.tsx
+  2. Bible 📖 — bible.tsx
+  3. Learn 🎮 — learn.tsx
+  4. City 📍 — city.tsx
+  5. Me 👤 — me.tsx
+  Tab bar: 85px height, s1 background, border-top, gold active tint.
+  Labels: Inter_600SemiBold at 10px.
+
+app/(tabs)/index.tsx (HOME SCREEN)
+  The main dashboard. Shows:
+  - Time-based greeting ("Good morning/afternoon/evening, {name} 🙏")
+  - App name "His Palabra" in gold Playfair Display
+  - Streak card: fire emoji, current streak, longest streak, XP badge
+  - Verse of the Day card:
+    * Fetches from verse_of_day table (joined with verses + bible_books)
+    * Filtered by today's date
+    * Toggle between KJV and Slang display
+    * Falls back to Genesis 1:1 if no verse set for today
+    * Shows optional reflection text
+    * Shows verse reference (Book Chapter:Verse)
+  - Three quick action cards in a row:
+    * Read (📖) → /(tabs)/bible
+    * Learn (🎮) → /(tabs)/learn
+    * City (📍) → /(tabs)/city
+
+app/(tabs)/bible.tsx (BIBLE BOOK LIST + CHAPTER PICKER)
+  Two states managed via selectedBook:
+
+  STATE 1 — Book List (selectedBook = null):
+    - Header: "The Bible" + "66 books. The Word of God."
+    - SectionList with two sections: "Old Testament" (39 books), "New Testament" (27 books)
+    - Each row: book name, chapter count, arrow
+    - Tap book → sets selectedBook, switches to State 2
+
+  STATE 2 — Chapter Grid (selectedBook set):
+    - Header: "← Books" back button + book name
+    - FlatList with numColumns=5 showing chapter numbers
+    - Each chapter is a square button (aspect ratio 1:1)
+    - Tap chapter → navigates to /bible/{bookId}/{chapter}
+
+app/(tabs)/learn.tsx (LESSON LIST)
+  - Header: "Learn" + "His Palabra Devotionals"
+  - Stats bar with 3 cells: Streak 🔥, Total XP ⚡, Completed ✅
+  - Fetches lessons from Supabase (is_active=true, ordered by lesson_order)
+  - Fetches lesson_completions for current user
+  - Each lesson card shows:
+    * Lesson number (or ✓ if completed)
+    * Title and description
+    * XP reward badge (+{n} XP)
+    * Completed lessons have 0.6 opacity
+  - Tap lesson → navigates to /learn/{lessonId}
+
+app/(tabs)/city.tsx (COMMUNITY CHAT — realtime)
+  Two states:
+
+  STATE 1 — No City (profile.city_group_id is null):
+    - Shows "No city selected" placeholder with pin emoji
+    - Message to select city in settings
+
+  STATE 2 — Active Chat:
+    - Header: green dot + "{CityName} Bible Fam" + pin emoji
+    - FlatList (inverted) of messages from community_messages table
+    - Each message shows:
+      * Avatar (first 2 letters of username, colored by avatar_color)
+      * @username + timestamp
+      * Message type tag if prayer_request (🙏 blue) or praise_report (🎉 green)
+      * Message bubble (s2 background, rounded, top-left corner sharp)
+    - Supabase Realtime subscription: listens for INSERT on community_messages
+      filtered by city_group_id. On new message, fetches sender profile and
+      prepends to message list.
+    - Input bar at bottom: TextInput (max 500 chars, multiline) + Send button
+    - Send button is gold, disabled when empty
+    - KeyboardAvoidingView for iOS
+
+app/(tabs)/me.tsx (PROFILE & SETTINGS)
+  - Avatar: rounded square with user's avatar_color, first 2 letters of name
+  - Display name + @username
+  - Stats grid (3 cards): XP ⚡, Streak 🔥, Best Streak 🏆
+  - Donate card: "Support the Mission" — opens hispalabra.org/donate via WebBrowser
+  - Settings section (6 rows, ALL PLACEHOLDER — no navigation wired):
+    * Edit Profile 👤
+    * Notifications 🔔
+    * Bible Display 📖
+    * Change City 📍
+    * Privacy Policy 🔒
+    * About His Palabra ✝️
+  - Sign Out button (red tint, calls signOut())
+  - "His Palabra v1.0.0" at bottom
+
+────────────────────────────────────────────────────────────────────────────────
+DYNAMIC SCREENS — app/bible/ and app/learn/
+────────────────────────────────────────────────────────────────────────────────
+
+app/bible/[book]/[chapter].tsx (CHAPTER VERSE READER)
+  The core Bible reading experience. Dynamic route params: book (book_id), chapter.
+
+  - Header: "← {BookName}" back button, "Chapter {N}", mode toggle button
+  - Mode toggle switches between "🗣️ Slang" and "📜 KJV"
+  - Fetches verses from Supabase: SELECT id, verse_number, text_kjv, text_slang
+    WHERE book_id={book} AND chapter={chapter} ORDER BY verse_number
+  - Loading state: centered ActivityIndicator in gold
+  - Chapter heading: "{BookName} {Chapter}" in gold Playfair Display
+  - If mode=slang but no verse has text_slang, shows yellow banner:
+    "Slang translation coming soon for this chapter. Showing KJV."
+  - Verse display: each verse is a Pressable row with:
+    * Gold verse number (11px bold, 28px wide, right-aligned)
+    * Verse text (16px, line-height 28)
+    * KJV mode uses Playfair Display italic at 75% opacity
+    * Slang mode uses Inter regular at full opacity
+  - Chapter navigation at bottom:
+    * "← Ch {N-1}" if not first chapter
+    * "Ch {N+1} →" if not last chapter
+    * Uses router.replace() to swap chapters without stacking
+
+app/learn/[lessonId].tsx (LESSON DETAIL + QUIZ)
+  Multi-phase screen with three modes:
+
+  MODE 1 — Devotional Steps:
+    - Header: "← Lessons" back, lesson title, XP badge
+    - Step progress bar: gold dots for completed steps, dim for upcoming,
+      purple dot at end for quiz
+    - Step content changes by type:
+      * "hook" — orange label "🎣 THE HOOK" + italic quote text
+      * "verse" — gold card with "📖 HIS PALABRA" label, KJV/Slang toggle,
+        verse text in Playfair Display, verse reference
+      * "breakdown" — blue label "💡 THE BREAKDOWN" + explanation text
+      * "realtalk" — green card "🔥 REAL TALK" + application text
+    - Nav bar: "← Back" (secondary) and "Next →" (gold primary)
+    - Last step shows "Take the Quiz ❓" button (purple) instead of Next
+
+  MODE 2 — Quiz:
+    - Header: "← Back" + "Question {N}/{Total}"
+    - Question text in bold 17px
+    - 4 option cards (A/B/C/D) with letter badges
+    - Tap answer: correct turns green with ✓, wrong turns red
+    - Shows explanation below after answering
+    - Auto-advances to next question after 1.5 seconds
+
+  MODE 3 — Quiz Results:
+    - Trophy 🏆 (passed) or Book 📖 (failed) emoji at 56px
+    - "You passed!" or "Keep studying!"
+    - Score: "{correct}/{total} correct"
+    - XP earned badge (lesson XP + quiz bonus if passed)
+    - "Back to Lessons" button
+    - Records completion: upserts lesson_completions, calls award_xp RPC,
+      calls update_streak RPC, refreshes profile
+
+────────────────────────────────────────────────────────────────────────────────
+CONSTANTS — constants/
+────────────────────────────────────────────────────────────────────────────────
+
+constants/theme.ts
+  Exports: Colors, Fonts, FontSizes, Spacing, Radii (all as const objects).
+  This is the single source of truth for the entire design system.
+  Every screen imports Colors and Fonts from here.
+  See "DESIGN SYSTEM" section in Part 1 for full values.
+
+constants/bible.ts
+  Exports:
+  - BibleBook interface: { id, name, abbr, testament, chapters }
+  - BIBLE_BOOKS: array of all 66 books with metadata
+  - OT_BOOKS: filtered to testament='OT' (39 books)
+  - NT_BOOKS: filtered to testament='NT' (27 books)
+  - getBookById(id): finds book by numeric ID (1-66)
+  - getBookByName(name): finds book by name (case-insensitive)
+
+  Book IDs match the Supabase verses.book_id column:
+    1=Genesis, 2=Exodus ... 39=Malachi, 40=Matthew ... 66=Revelation
+
+────────────────────────────────────────────────────────────────────────────────
+SERVICES — lib/ and stores/
+────────────────────────────────────────────────────────────────────────────────
+
+lib/supabase.ts
+  Creates and exports the Supabase client singleton.
+  Platform-aware auth storage adapter:
+    - Native (iOS/Android): uses expo-secure-store (encrypted keychain)
+    - Web: uses localStorage
+  Config: autoRefreshToken=true, persistSession=true, detectSessionInUrl=false.
+  Imports react-native-url-polyfill for React Native compatibility.
+
+stores/authStore.ts
+  Zustand store managing all auth and profile state.
+
+  State:
+    session: Session | null — Supabase session
+    user: User | null — Supabase auth user
+    profile: Profile | null — App profile from profiles table
+    loading: boolean — Initial load state
+    initialized: boolean — Has initialize() completed?
+
+  Actions:
+    initialize() — Gets existing session, fetches profile, sets up
+                    onAuthStateChange listener. Called once in _layout.tsx.
+    signUp(email, password) — Creates account via Supabase Auth
+    signIn(email, password) — Signs in via Supabase Auth
+    signOut() — Signs out, clears all state
+    fetchProfile() — SELECT * FROM profiles WHERE id = user.id
+    updateProfile(updates) — UPDATE profiles SET ... WHERE id = user.id
+                              Also updates local state optimistically.
+
+────────────────────────────────────────────────────────────────────────────────
+LANDING SITE — landing/
+────────────────────────────────────────────────────────────────────────────────
+
+landing/index.html
+  Full static landing page with embedded Supabase client (loaded via CDN).
+  Features:
+  - Auth UI: Login/Sign Up tabs with email/password forms
+  - Logged-in state: Bible book selector, chapter input, version toggle
+  - Bible verse viewer showing both slang and KJV
+  - Features section (6 cards describing app capabilities)
+  - Donate card linking to Ko-fi
+  - Footer with privacy/terms links
+  - Responsive dark design matching app theme
+  - CSS variables for color system
+
+landing/privacy.html
+  Privacy policy. Covers: data collected (email, username, city, age range,
+  reading progress), data NOT collected (real name, phone, location, contacts),
+  COPPA compliance (13+ only), data storage (Supabase US servers, TLS +
+  at-rest encryption), no data selling, community chat visibility, donation
+  processing via third parties.
+
+landing/terms.html
+  Terms of Service. Covers: app description, KJV public domain status,
+  account age requirement (13+), community guidelines (respect, no spam/hate),
+  no DMs by design, IP rights (His Palabra owns name/logo/design/translations),
+  voluntary donations.
+
+landing/vercel.json
+  Vercel deployment config for landing site.
+  Security headers: X-Frame-Options DENY, X-Content-Type-Options nosniff,
+  Referrer-Policy strict-origin-when-cross-origin.
+
+────────────────────────────────────────────────────────────────────────────────
+ASSETS — assets/
+────────────────────────────────────────────────────────────────────────────────
+
+assets/icon.png           — App icon (used in app.json)
+assets/adaptive-icon.png  — Android adaptive icon foreground
+assets/splash-icon.png    — Splash screen icon
+assets/favicon.png        — Web favicon
+
+
+================================================================================
+PART 3: FEATURE STATUS, KNOWN ISSUES & BUGS
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+FEATURE STATUS MATRIX
+────────────────────────────────────────────────────────────────────────────────
+
+FULLY BUILT AND FUNCTIONAL:
+  [✅] Auth — email/password signup + login via Supabase Auth
+  [✅] Onboarding — 3-step flow (profile → city → starting point)
+  [✅] Home Screen — greeting, streak, XP, verse of the day, quick actions
+  [✅] Bible Book List — OT/NT sections, chapter grid picker
+  [✅] Bible Chapter Reader — verse display with Slang/KJV toggle
+  [✅] Chapter Navigation — prev/next chapter buttons
+  [✅] Learn Screen — lesson list with XP badges, completion tracking
+  [✅] Lesson Detail — multi-step devotional (hook/verse/breakdown/realtalk)
+  [✅] Quiz System — multiple choice, scoring, XP awards, pass/fail
+  [✅] City Chat — realtime group messaging via Supabase Realtime
+  [✅] Message Types — chat, prayer_request, praise_report with tags
+  [✅] Profile Screen — avatar, stats, display name, username
+  [✅] Sign Out — clears session and profile state
+  [✅] Donate Link — opens external browser to hispalabra.org/donate
+  [✅] XP System — earned from lessons + quizzes, stored in profile
+  [✅] Streak System — tracked via RPC, displayed on home + learn + profile
+  [✅] Bible Data — 31,102 verses (KJV + Gen Z slang) in Supabase
+  [✅] Landing Page — static HTML with auth + verse viewer
+  [✅] Privacy Policy — full legal page
+  [✅] Terms of Service — full legal page
+  [✅] Platform Auth Storage — SecureStore (native) / localStorage (web)
+  [✅] Dark Theme — consistent design system across all screens
+  [✅] Zustand State — auth, profile, session management
+  [✅] Font System — Inter (5 weights) + Playfair Display (2 weights)
+
+PARTIALLY BUILT (needs work):
+  [🔶] Settings — 6 settings rows are displayed in me.tsx but none have
+       navigation or functionality. They are visual placeholders only.
+       Missing: Edit Profile screen, Notification settings screen,
+       Bible Display preferences screen, Change City screen,
+       Privacy Policy viewer (in-app), About screen.
+  [🔶] Verse of the Day — works but depends on verse_of_day table having
+       an entry for today's date. If no entry exists, shows hardcoded
+       Genesis 1:1 fallback. No admin tool to populate daily entries.
+  [🔶] Gen Z Translations — all 31,102 text_slang columns are populated.
+       ~45 books were fully hand-rewritten in heavy Gen Z slang.
+       Remaining large books (some of Torah, Chronicles, Psalms, Isaiah,
+       Jeremiah, Ezekiel) have modern English base with Gen Z markers
+       appended — these could be deeper-rewritten for consistency.
+
+NOT YET BUILT (planned features from DESIGN-BRIEF.md):
+  [❌] Bible Search — full-text search across KJV and slang. No search
+       screen exists. This is the #1 missing core feature.
+  [❌] Bookmarks & Highlights — save verses, color-coded highlights,
+       personal notes. No database tables or UI for this.
+  [❌] Verse Sharing — generate card-style images or copy text for
+       social media (Instagram Stories, TikTok, iMessage).
+  [❌] Reading Plans — curated plans like "Genesis Speedrun" or
+       "Psalms for Bad Days". No schema or UI.
+  [❌] Verse of the Day Widget — iOS/Android home screen widget.
+  [❌] Push Notifications — expo-notifications is installed but
+       no notification logic is implemented anywhere.
+  [❌] Offline Mode — no caching of verses for offline reading.
+  [❌] Side-by-Side View — design brief mentions dual-pane view
+       showing KJV and slang simultaneously. Current reader only
+       toggles between them.
+  [❌] Verse Tap Actions — design brief describes tap-verse for
+       bookmark/highlight/share/copy/note action bar. Not built.
+  [❌] Chapter Swipe — design brief mentions swipe left/right to
+       change chapters. Current nav uses buttons only.
+  [❌] Font Size Setting — profile has font_size field but no
+       UI to change it and reader doesn't use it.
+  [❌] Bible Display Mode Setting — profile has default_bible_mode
+       field ("slang"/"kjv") but reader always defaults to "slang"
+       regardless of profile preference.
+
+────────────────────────────────────────────────────────────────────────────────
+KNOWN BUGS & ISSUES
+────────────────────────────────────────────────────────────────────────────────
+
+BUG 1: DUPLICATE ONBOARDING DIRECTORY
+  Path: app/(auth)/onboarding/onboarding/
+  There is a nested duplicate of the entire onboarding flow:
+    app/(auth)/onboarding/onboarding/_layout.tsx    (duplicate)
+    app/(auth)/onboarding/onboarding/city-select.tsx (duplicate)
+    app/(auth)/onboarding/onboarding/profile-setup.tsx (duplicate)
+    app/(auth)/onboarding/onboarding/starting-point.tsx (duplicate)
+  These are exact copies of the files one level up. The duplicates
+  should be deleted. The correct files are in app/(auth)/onboarding/.
+
+BUG 2: NATIVEWIND INSTALLED BUT NOT CONFIGURED
+  package.json has nativewind@4.2.3 and tailwindcss@3.3.2 as dependencies,
+  but there is NO tailwind.config.js, NO babel plugin config, and NO
+  metro.config.js to enable NativeWind. All styling uses StyleSheet.create.
+  Either: remove nativewind+tailwindcss from package.json, or configure
+  them properly if you want to use Tailwind classes.
+
+BUG 3: MONO FONT DEFINED BUT NEVER LOADED
+  constants/theme.ts defines: mono: 'JetBrainsMono_400Regular'
+  But app/_layout.tsx never loads JetBrains Mono in useFonts().
+  If any screen tries to use Fonts.mono, it will show system fallback
+  or crash on some platforms. Either load the font or remove the reference.
+
+BUG 4: UNUSED App.tsx
+  Root App.tsx is boilerplate from Expo template. Expo Router's
+  app/_layout.tsx is the actual entry point. App.tsx is dead code.
+
+BUG 5: EMPTY SCAFFOLD DIRECTORIES
+  These directories exist but contain no files:
+    components/bible/
+    components/chat/
+    components/home/
+    components/learn/
+    components/profile/
+    components/ui/
+    hooks/
+    scripts/
+    sql/
+    app/learn/quiz/
+    app/profile/
+  They appear to be scaffolded for future use but are currently empty.
+
+BUG 6: SETTINGS NOT WIRED
+  me.tsx displays 6 settings rows but none have onPress navigation.
+  Tapping any settings row does nothing. Each needs a destination screen.
+
+BUG 7: PROFILE FONT_SIZE AND DEFAULT_BIBLE_MODE IGNORED
+  The profiles table has font_size and default_bible_mode columns.
+  The authStore fetches them. But no screen reads these values:
+  - Bible reader always defaults mode to "slang" (line 25 of [chapter].tsx)
+  - No screen applies font_size to verse text
+
+BUG 8: ASYNC STORAGE UNUSED DEPENDENCY
+  @react-native-async-storage/async-storage is in package.json but
+  never imported or used anywhere. Can be removed.
+
+
+================================================================================
+PART 4: PRIORITY NEXT STEPS, FRESH CHAT GUIDE & MONETIZATION
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+PRIORITY BUILD ORDER (recommended)
+────────────────────────────────────────────────────────────────────────────────
+
+PRIORITY 1 — CLEANUP (quick wins, < 1 hour total)
+  1. Delete app/(auth)/onboarding/onboarding/ (duplicate directory)
+  2. Delete App.tsx (unused boilerplate)
+  3. Remove nativewind + tailwindcss from package.json (or configure them)
+  4. Remove @react-native-async-storage/async-storage from package.json
+  5. Remove JetBrainsMono reference from theme.ts (or load the font)
+  6. Delete empty scaffold directories (components/*, hooks/, scripts/, sql/)
+  7. Wire default_bible_mode from profile to chapter reader default
+  8. Wire font_size from profile to verse text styling
+
+PRIORITY 2 — BIBLE SEARCH (the #1 missing core feature)
+  Every Bible app has search. Users expect it. Build:
+  - New tab or screen for search
+  - Full-text search across text_kjv and text_slang columns
+  - Search results showing verse snippet + book/chapter/verse reference
+  - Tap result → navigate to that chapter, scroll to verse
+  - Recent searches (local storage)
+  - Consider: Supabase full-text search (tsvector) or ILIKE for simplicity
+
+PRIORITY 3 — BOOKMARKS & HIGHLIGHTS
+  Users will want to save verses they love. Build:
+  - New Supabase table: bookmarks (user_id, verse_id, color, note, created_at)
+  - Tap-and-hold or tap verse → action sheet (bookmark, highlight, copy, share)
+  - Bookmarks screen accessible from profile or a new tab
+  - Color options: gold, green, blue, purple, pink
+  - Optional personal note on each bookmark
+
+PRIORITY 4 — VERSE SHARING
+  Gen Z shares everything. This is free marketing. Build:
+  - Tap verse → "Share" action
+  - Generate styled card image with verse text + reference
+  - Dark background, gold accent, His Palabra branding
+  - Share to Instagram Stories, iMessage, general share sheet
+  - Copy as text option
+
+PRIORITY 5 — SETTINGS SCREENS
+  Wire up the 6 placeholder settings in me.tsx:
+  - Edit Profile: change display name, username, age range
+  - Notifications: toggle push notifications (wire expo-notifications)
+  - Bible Display: set default mode (slang/kjv), font size (small/med/large)
+  - Change City: re-select city group
+  - Privacy Policy: in-app WebView or link to landing/privacy.html
+  - About: app version, credits, links
+
+PRIORITY 6 — PUSH NOTIFICATIONS
+  expo-notifications is already installed. Build:
+  - Request permission on first launch or from settings
+  - Register for push token, store in profiles table
+  - Daily verse notification (server-side via Supabase Edge Function or cron)
+  - Notification tap → opens app to verse of the day
+
+PRIORITY 7 — READING PLANS (future)
+  Curated multi-day reading plans:
+  - New tables: reading_plans, reading_plan_days, user_plan_progress
+  - Plans like "Genesis Speedrun (7 days)", "Psalms for Bad Days (30 days)"
+  - Daily progress tracking with streak integration
+
+PRIORITY 8 — DEEP GEN Z REWRITE OF REMAINING BOOKS
+  ~45 books have full hand-rewritten Gen Z slang.
+  Remaining large books (portions of Torah, Chronicles, Psalms, Isaiah,
+  Jeremiah, Ezekiel) have modern English + Gen Z markers.
+  These could be fully rewritten for consistent voice across all 31,102 verses.
+
+────────────────────────────────────────────────────────────────────────────────
+FILES TO ATTACH WHEN STARTING A FRESH CHAT
+────────────────────────────────────────────────────────────────────────────────
+
+For maximum context in a new conversation, attach these files in this order:
+
+1. PROJECT_MASTER_CONTEXT.txt  ← THIS FILE (complete project state)
+2. DESIGN-BRIEF.md             ← Design direction, visual spec, brand identity
+3. constants/theme.ts          ← Full design system (colors, fonts, spacing)
+4. constants/bible.ts          ← Bible book data model (66 books, IDs, chapters)
+5. stores/authStore.ts         ← Auth + profile state shape (Zustand)
+6. app/_layout.tsx             ← Root routing logic (auth flow, font loading)
+
+These 6 files give any AI assistant or developer enough context to:
+  - Understand what the app is and why it exists
+  - Know every feature's status (built, partial, planned)
+  - Match the existing design system perfectly
+  - Query the correct Supabase tables with correct column names
+  - Maintain the established code patterns and architecture
+  - Know where every file lives and what it does
+
+────────────────────────────────────────────────────────────────────────────────
+MONETIZATION PLAN
+────────────────────────────────────────────────────────────────────────────────
+
+FREE TIER (current scope):
+  - Full 31,102-verse Bible (both KJV and slang translations)
+  - Daily verse on home screen
+  - Bible search
+  - Lesson devotionals with quizzes
+  - City community chat
+  - XP and streak tracking
+
+PREMIUM TIER ($2.99/month — future):
+  - Reading plans
+  - Bookmarks & highlights with sync
+  - Personal verse notes
+  - Home screen widget (verse of the day)
+  - Offline Bible download
+  - Custom themes
+  - Ad-free (if ads are ever added to free tier)
+
+ONE-TIME PURCHASES (future):
+  - Premium shareable verse card templates
+
+DONATIONS:
+  - Ko-fi link already wired in me.tsx and landing page
+  - "Support the Mission" card in profile screen
+
+────────────────────────────────────────────────────────────────────────────────
+DEVELOPMENT ENVIRONMENT
+────────────────────────────────────────────────────────────────────────────────
+
+To run the app:
+  cd /home/user/PocketRep/HisPalabra
+  npm install        (if node_modules missing)
+  npx expo start     (starts dev server)
+  Press 'w' for web, 'i' for iOS simulator, 'a' for Android emulator
+
+Supabase dashboard:
+  Project: cljdpcfscszaryqjwswy
+  URL: https://cljdpcfscszaryqjwswy.supabase.co
+  Access via Supabase MCP tools (execute_sql, list_tables, etc.)
+
+Git:
+  Repository: dryvnagency/pocketrep
+  HisPalabra is one project inside this monorepo
+  Other projects in repo: PocketRepApp, Pocketrep, RexLens
+
+────────────────────────────────────────────────────────────────────────────────
+COMPLETE FILE TREE (quick reference)
+────────────────────────────────────────────────────────────────────────────────
+
+HisPalabra/
+├── .env                                          [Supabase credentials]
+├── .gitignore                                    [Git ignore rules]
+├── App.tsx                                       [UNUSED — delete]
+├── DESIGN-BRIEF.md                               [Design spec document]
+├── PROJECT_MASTER_CONTEXT.txt                    [THIS FILE]
+├── app.json                                      [Expo configuration]
+├── index.ts                                      [Expo entry point]
+├── package.json                                  [Dependencies & scripts]
+├── package-lock.json                             [Dependency lockfile]
+├── tsconfig.json                                 [TypeScript config]
+│
+├── app/
+│   ├── _layout.tsx                               [ROOT: auth check + fonts]
+│   │
+│   ├── (auth)/
+│   │   ├── _layout.tsx                           [Auth stack navigator]
+│   │   ├── welcome.tsx                           [Welcome screen + CTAs]
+│   │   ├── login.tsx                             [Email/password login]
+│   │   ├── signup.tsx                            [Email/password signup]
+│   │   └── onboarding/
+│   │       ├── _layout.tsx                       [Onboarding stack]
+│   │       ├── profile-setup.tsx                 [Step 1: name/username/age]
+│   │       ├── city-select.tsx                   [Step 2: pick city]
+│   │       ├── starting-point.tsx                [Step 3: where to start]
+│   │       └── onboarding/                       [BUG: DUPLICATE — DELETE]
+│   │           ├── _layout.tsx
+│   │           ├── city-select.tsx
+│   │           ├── profile-setup.tsx
+│   │           └── starting-point.tsx
+│   │
+│   ├── (tabs)/
+│   │   ├── _layout.tsx                           [5-tab navigator]
+│   │   ├── index.tsx                             [Home: greeting+streak+VOTD]
+│   │   ├── bible.tsx                             [Book list + chapter grid]
+│   │   ├── learn.tsx                             [Lesson list with XP]
+│   │   ├── city.tsx                              [Realtime community chat]
+│   │   └── me.tsx                                [Profile + settings]
+│   │
+│   ├── bible/
+│   │   └── [book]/
+│   │       └── [chapter].tsx                     [Verse reader: slang/KJV]
+│   │
+│   └── learn/
+│       └── [lessonId].tsx                        [Lesson detail + quiz]
+│
+├── constants/
+│   ├── theme.ts                                  [Colors, Fonts, Spacing]
+│   └── bible.ts                                  [66 books metadata]
+│
+├── lib/
+│   └── supabase.ts                               [Supabase client + storage]
+│
+├── stores/
+│   └── authStore.ts                              [Zustand: auth + profile]
+│
+├── landing/
+│   ├── index.html                                [Landing page + web reader]
+│   ├── privacy.html                              [Privacy policy]
+│   ├── terms.html                                [Terms of service]
+│   └── vercel.json                               [Vercel deploy config]
+│
+└── assets/
+    ├── icon.png                                  [App icon]
+    ├── adaptive-icon.png                         [Android adaptive icon]
+    ├── splash-icon.png                           [Splash screen icon]
+    └── favicon.png                               [Web favicon]
+
+================================================================================
+END OF HANDOFF DOCUMENT
+================================================================================
+
+Scripture that hits different. No cap. 🙏
