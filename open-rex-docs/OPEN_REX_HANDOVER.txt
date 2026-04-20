@@ -13,7 +13,8 @@ repos. Read this entire document before touching any code.
 Sibling products (for context only — Open Rex is separate from all of them):
   - PocketRep — React Native mobile CRM for sales reps
   - Rex Lens — Chrome extension that coaches reps live on their CRM screen
-  - His Palabra — [TODO: get description from founder]
+  - His Palabra — Faith-based app. Zero overlap with Open Rex. Do not pull
+    code, assets, or features across.
   - Open Rex — THIS PRODUCT. Dealership customer-DB reactivation SMS agent.
 
 ## WHAT THIS IS
