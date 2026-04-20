@@ -59,6 +59,29 @@ npm run dev  # http://localhost:3000
 Scaffold. Extension scrapes VinSolutions list view. Backend exposes
 draft + send endpoints. Twilio wired via env vars.
 
+## LLM provider
+
+Current: **Gemini 2.5 Flash** via Google AI Studio free tier (~15 req/min,
+~1M tokens/day). Sized for dealer-pilot volume (hundreds of SMS drafts/day).
+
+**Why not Claude Max:** A Claude Max subscription covers claude.com and
+Claude Code only. The Anthropic API is separately billed per token, and
+Anthropic's Consumer Terms explicitly forbid using OAuth tokens from
+Pro/Max accounts in external products. There's no supported path to
+power this backend from Max.
+
+**Swap path (when pilot outgrows the free tier):**
+`open-rex/backend/src/lib/gemini.ts` is the only file that changes.
+Replace `@google/generative-ai` with `@anthropic-ai/sdk`, switch the
+model to `claude-haiku-4-5-20251001`, and rename the env var from
+`GEMINI_API_KEY` to `ANTHROPIC_API_KEY`. The `generateText({system,
+user, temperature, maxOutputTokens})` signature stays the same so
+`draft-generator.ts` and its callers are unchanged. At current pricing,
+Claude Haiku 4.5 is ~$0.00025 per SMS vs Gemini paid ~$0.00047.
+
+When to swap: Gemini free-tier 429s becoming frequent, or draft
+quality needs a bump.
+
 ### Known TODOs before first real send
 
 - **10DLC A2P approval**: Twilio requires registered brand + campaign

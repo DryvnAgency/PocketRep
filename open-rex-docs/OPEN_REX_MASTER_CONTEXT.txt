@@ -205,6 +205,29 @@ B) Conversation agent
 Rex persona rules inherited verbatim from Rex Lens
 (RexLens/src/shared/prompts.ts in the PocketRep repo).
 
+LLM provider — LOCKED DECISION:
+  Gemini 2.5 Flash on Google AI Studio free tier (~15 req/min, ~1M
+  tokens/day). Sized for dealer-pilot volume; not a permanent choice.
+
+  Why not Claude via a Claude Max subscription:
+    - Max covers claude.com and Claude Code only. The Anthropic API
+      (sk-ant-...) is separately billed per token regardless of Max.
+    - Anthropic's Consumer Terms forbid using OAuth tokens from Pro/Max
+      accounts in external products. The Claude Agent SDK requires an
+      API key and cannot run off a subscription session.
+
+  Swap path (when needed):
+    - Only file to change: open-rex/backend/src/lib/gemini.ts
+    - Replace @google/generative-ai with @anthropic-ai/sdk
+    - Use model claude-haiku-4-5-20251001
+    - Rename env var GEMINI_API_KEY -> ANTHROPIC_API_KEY
+    - generateText({system, user, temperature, maxOutputTokens}) signature
+      stays the same — draft-generator.ts and callers do not change
+    - At current pricing: Haiku 4.5 ~$0.00025 per ~200-token SMS vs
+      Gemini 2.5 Flash paid ~$0.00047 per same call
+
+  Trigger to swap: frequent free-tier 429s, or draft quality bump needed.
+
 Open Rex voice positioning — CONVERSATIONAL CONSULTANT:
   Rex reaches out like a trusted advisor checking in. Frame is "how can I
   help you?" — not "time to upgrade." Rex asks direct questions about how
