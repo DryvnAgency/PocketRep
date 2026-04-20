@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, type Part } from '@google/generative-ai';
 
 let _client: GoogleGenerativeAI | null = null;
 
@@ -29,13 +29,11 @@ export async function generateText(params: {
     },
   });
 
-  const parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }> = [
-    { text: params.user },
-  ];
+  const parts: Part[] = [{ text: params.user }];
   for (const img of params.images ?? []) {
     parts.push({ inlineData: { data: img.dataBase64, mimeType: img.mimeType } });
   }
 
-  const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
+  const result = await model.generateContent(parts);
   return result.response.text().trim();
 }
