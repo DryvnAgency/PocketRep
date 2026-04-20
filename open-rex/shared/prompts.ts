@@ -75,6 +75,56 @@ Return only the SMS body. No preamble, no labels, no markdown.`;
   return { system, user };
 }
 
+const REGEN_FROM_NOTES_RULES = `REGENERATE FROM REP NOTES:
+
+The rep has added context about what they want the next message to say. They may
+have also attached an image (a screenshot of a prior text thread, a photo of a
+vehicle, handwritten notes from a sales call). Use every detail they give you.
+
+Your job: write one SMS in Rex voice that reflects the rep's intent exactly.
+
+- Honor any specific facts the rep gives you (price, vehicle, day, their name).
+- If the rep mentions a topic to steer toward, steer there — but keep the
+  conversational-consultant frame ("checking in on you and the <vehicle>",
+  direct question, no pitch).
+- If an image is attached, read it carefully. Extract customer names, vehicle
+  details, prior message text, or anything else concrete, and weave it in
+  naturally where it helps.
+- Still open with "Hey <FirstName>,". Still one direct question. Still no
+  banned phrases.
+- Do NOT write multiple options. One SMS only.`;
+
+export function buildRegenerateFromNotesPrompt(params: {
+  firstName: string;
+  vehicle: string | null;
+  repNotes: string;
+  hasImage: boolean;
+}): { system: string; user: string } {
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const system = `${CORE_VOICE_RULES}\n\n${REGEN_FROM_NOTES_RULES}\n\nToday is ${dateStr}.`;
+
+  const user = `Write an SMS for this customer based on the rep's notes${
+    params.hasImage ? ' and the attached image' : ''
+  }.
+
+Customer: ${params.firstName}
+Vehicle: ${params.vehicle || 'unknown'}
+
+Rep notes:
+${params.repNotes.trim()}
+
+Return only the SMS body. No preamble, no labels, no markdown.`;
+
+  return { system, user };
+}
+
 export function buildReplyPrompt(conversation: Conversation): { system: string; user: string } {
   const today = new Date();
   const dateStr = today.toLocaleDateString('en-US', {

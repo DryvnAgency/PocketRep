@@ -1,5 +1,6 @@
 import './globals.css';
 import type { ReactNode } from 'react';
+import Sidebar from './Sidebar';
 
 export const metadata = {
   title: 'Open Rex',
@@ -9,17 +10,18 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>
-        <div className="max-w-6xl mx-auto px-6 py-8">
-          <header className="mb-8 flex items-center justify-between">
-            <h1 className="text-2xl font-semibold">Open Rex</h1>
-            <nav className="flex gap-6 text-sm">
-              <a href="/" className="hover:underline">Dashboard</a>
-              <a href="/customers" className="hover:underline">Customers</a>
-              <a href="/drafts" className="hover:underline">Drafts</a>
-            </nav>
-          </header>
-          <main>{children}</main>
+        <div className="flex min-h-screen">
+          <Sidebar />
+          <main className="flex-1 min-w-0 min-h-screen">{children}</main>
         </div>
       </body>
     </html>

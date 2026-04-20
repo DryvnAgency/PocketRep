@@ -10,9 +10,12 @@ function getClient(): GoogleGenerativeAI {
   return _client;
 }
 
+export type ImagePart = { mimeType: string; dataBase64: string };
+
 export async function generateText(params: {
   system: string;
   user: string;
+  images?: ImagePart[];
   temperature?: number;
   maxOutputTokens?: number;
 }): Promise<string> {
@@ -25,6 +28,14 @@ export async function generateText(params: {
       maxOutputTokens: params.maxOutputTokens ?? 400,
     },
   });
-  const result = await model.generateContent(params.user);
+
+  const parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }> = [
+    { text: params.user },
+  ];
+  for (const img of params.images ?? []) {
+    parts.push({ inlineData: { data: img.dataBase64, mimeType: img.mimeType } });
+  }
+
+  const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
   return result.response.text().trim();
 }
