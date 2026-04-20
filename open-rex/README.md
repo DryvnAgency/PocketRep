@@ -44,17 +44,20 @@ draft + send endpoints. Twilio wired via env vars.
 
 ### Known TODOs before first real send
 
-- **VinSolutions phone/email scrape**: list view only exposes names +
-  vehicles. To actually send SMS the adapter needs to click into each
-  customer detail panel and scrape phone/email. See
-  `extension/src/adapters/vinsolutions.ts`.
 - **10DLC A2P approval**: Twilio requires registered brand + campaign
   before sending marketing SMS to consumers. Takes 2-6 weeks. Keep
   TWILIO_MESSAGING_SERVICE_SID env var empty until approved.
 - **Dashboard auth**: currently a shared bearer secret. Swap for real
   auth (Supabase Auth or Clerk) post-MVP.
-- **Phone normalization**: inbound webhook matches customers by exact
-  phone string. Needs E.164 normalization on both scrape and webhook.
+- **Inbound phone normalization**: the scraper now normalizes scraped
+  phones to E.164 (`+1XXXXXXXXXX`). Confirm Twilio inbound `From`
+  matches; adjust webhook lookup if your carrier delivers a different
+  format.
 - **Scheduling**: no cron yet. Drafts are generated on-demand via POST
   /api/drafts. Add a scheduled worker (Vercel Cron or Supabase pg_cron)
   to pick dormant customers and generate drafts nightly.
+- **Phone/email scrape fallbacks**: detail-page fetch uses `mailto:`,
+  `tel:`, then labeled-phone regex. If your VinSolutions tenant renders
+  contact details via XHR after page load, the fetched HTML won't
+  contain them — in that case, swap the fetch approach for a
+  headless-click DOM extraction.
