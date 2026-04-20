@@ -8,6 +8,10 @@ const sharedConfig = {
   target: 'es2020',
   format: 'esm',
   minify: !isWatch,
+    define: {
+          'process.env.SUPABASE_ANON_KEY': JSON.stringify(process.env.SUPABASE_ANON_KEY || ''),
+          'process.env.SUPABASE_URL': JSON.stringify(process.env.SUPABASE_URL || ''),
+    },
 };
 
 const entryPoints = [
