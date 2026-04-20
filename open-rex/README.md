@@ -30,12 +30,29 @@ cd backend
 npm install
 npm run dev  # http://localhost:3000
 
-# 4. Build + load extension in Chrome
-cd ../extension
-npm install
-npm run build
-# Chrome → chrome://extensions → Load unpacked → select extension/
+# 4. Load extension in Chrome (two options)
+#    A) Prebuilt zip (fastest):
+#       - Download open-rex/extension/open-rex-extension-v0.1.0.zip
+#       - Unzip it
+#       - Chrome → chrome://extensions → enable Developer Mode
+#         → Load unpacked → point to the unzipped folder
+#    B) Build from source:
+#       cd ../extension && npm install && npm run build
+#       Chrome → chrome://extensions → Load unpacked → select extension/
 ```
+
+### Extension config after loading
+1. Right-click the Open Rex action icon → Manage Extension → Service Worker
+   → paste into console:
+   ```js
+   await chrome.storage.local.set({
+     backendUrl: 'http://localhost:3000',
+     dealerId: 'your-dealer-id',
+     authSecret: '<matches DASHBOARD_AUTH_SECRET in backend/.env.local>',
+   });
+   ```
+2. Open VinSolutions worklist in Chrome, click the Open Rex icon (or
+   Cmd/Ctrl+Shift+O). Badge will show upload count.
 
 ## Status
 

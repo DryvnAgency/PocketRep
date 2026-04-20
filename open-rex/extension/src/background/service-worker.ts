@@ -11,7 +11,7 @@ async function getConfig(): Promise<{ backendUrl: string; dealerId: string; auth
   };
 }
 
-async function scrapeActiveTab(): Promise<{ customers: ScrapedCustomer[]; platform: string }> {
+async function scrapeActiveTab(): Promise<{ customers: ScrapedCustomer[]; platform: ScrapePayload['platform'] }> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url) throw new Error('no active tab');
 
