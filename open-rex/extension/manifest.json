@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Open Rex — Dealership Reactivation",
+  "version": "0.1.0",
+  "description": "Scrapes dormant customer records from the dealership CRM and hands them to Open Rex for SMS reactivation.",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": [
+    "https://*.vinsolutions.com/*",
+    "https://*.tekion.com/*",
+    "https://*.cdk.com/*",
+    "https://*.dealersocket.com/*"
+  ],
+  "background": {
+    "service_worker": "dist/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.vinsolutions.com/*",
+        "https://*.tekion.com/*",
+        "https://*.cdk.com/*",
+        "https://*.dealersocket.com/*"
+      ],
+      "js": ["dist/content-script.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_title": "Open Rex — Scrape CRM"
+  },
+  "commands": {
+    "scrape-crm": {
+      "suggested_key": { "default": "Ctrl+Shift+O", "mac": "Command+Shift+O" },
+      "description": "Scrape customer records from the current CRM tab"
+    }
+  }
+}

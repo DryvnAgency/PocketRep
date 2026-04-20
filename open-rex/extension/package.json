@@ -1,0 +1,16 @@
+{
+  "name": "open-rex-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open Rex Chrome extension — scrapes dealer CRM for SMS reactivation.",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.304",
+    "esbuild": "^0.25.2",
+    "typescript": "^5.8.2"
+  }
+}
