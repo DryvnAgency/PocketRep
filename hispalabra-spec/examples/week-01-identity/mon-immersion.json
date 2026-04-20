@@ -1,0 +1,104 @@
+{
+  "id": "devo_2026-04-20_identity",
+  "date": "2026-04-20",
+  "week": { "slug": "identity", "day": 1, "of": 7 },
+  "engine": "IMMERSION",
+  "title": "You are not your algorithm",
+  "anchorVerse": {
+    "ref": "Psalm 139:14",
+    "kjv": "I will praise thee; for I am fearfully and wonderfully made: marvellous are thy works; and that my soul knoweth right well.",
+    "genZ": "TODO: replace from Gen Z KJV corpus"
+  },
+  "themeWords": ["fearfully made", "imago dei", "known"],
+  "screens": [
+    {
+      "kind": "INTRO",
+      "verse": {
+        "ref": "Psalm 139:14",
+        "kjv": "I will praise thee; for I am fearfully and wonderfully made: marvellous are thy works; and that my soul knoweth right well.",
+        "genZ": "TODO: replace from Gen Z KJV corpus"
+      },
+      "whyToday": "Your feed decided what you are before you opened it this morning. This week we start somewhere else."
+    },
+    {
+      "kind": "SELECT_IMAGE",
+      "prompt": "Which one lands closest to today's verse?",
+      "choices": [
+        { "id": "a", "image": "asset://identity/fingerprint.png", "label": "A fingerprint" },
+        { "id": "b", "image": "asset://identity/mirror-crack.png", "label": "A cracked mirror" },
+        { "id": "c", "image": "asset://identity/follower-count.png", "label": "A follower count" },
+        { "id": "d", "image": "asset://identity/shadow.png", "label": "A long shadow" }
+      ],
+      "answer": "a"
+    },
+    {
+      "kind": "TRANSLATE_TAP",
+      "source": "I will praise thee; for I am fearfully and wonderfully made.",
+      "targetLanguage": "genZ",
+      "chips": ["TODO", "replace", "from", "Gen", "Z", "KJV", "corpus", "distractor-1", "distractor-2"],
+      "answer": ["TODO", "replace", "from", "Gen", "Z", "KJV", "corpus"]
+    },
+    {
+      "kind": "EXEGESIS_REVEAL",
+      "points": [
+        {
+          "headline": "Fearfully means awe, not scary",
+          "body": "The Hebrew pala means set apart, distinguished. You weren't built generic. You were built specific on purpose.",
+          "crossRef": {
+            "ref": "Genesis 1:27",
+            "kjv": "So God created man in his own image, in the image of God created he him; male and female created he them.",
+            "genZ": "TODO: replace from Gen Z KJV corpus"
+          }
+        },
+        {
+          "headline": "Your soul already knows",
+          "body": "The end of the verse says your soul knows this right well. That means some part of you already senses this before the feed can touch it.",
+          "crossRef": {
+            "ref": "Jeremiah 1:5",
+            "kjv": "Before I formed thee in the belly I knew thee; and before thou camest forth out of the womb I sanctified thee.",
+            "genZ": "TODO: replace from Gen Z KJV corpus"
+          }
+        },
+        {
+          "headline": "Made is in the past tense",
+          "body": "You're not a draft. Not a beta version. Fearfully made is already complete. Your becoming is real, but the made is finished.",
+          "crossRef": {
+            "ref": "Ephesians 2:10",
+            "kjv": "For we are his workmanship, created in Christ Jesus unto good works, which God hath before ordained that we should walk in them.",
+            "genZ": "TODO: replace from Gen Z KJV corpus"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "FILL_BLANK",
+      "sentence": "I am ___ and wonderfully made.",
+      "blankIndex": 2,
+      "choices": ["fearfully", "perfectly", "carefully", "eventually"],
+      "answer": "fearfully"
+    },
+    {
+      "kind": "RECITATION",
+      "verse": {
+        "ref": "Psalm 139:14",
+        "kjv": "I will praise thee; for I am fearfully and wonderfully made: marvellous are thy works; and that my soul knoweth right well.",
+        "genZ": "TODO: replace from Gen Z KJV corpus"
+      },
+      "mode": "either"
+    },
+    {
+      "kind": "QUIZ",
+      "question": "If your soul already knows you were fearfully made, what does that ask you to do today?",
+      "choices": [
+        "Post something to prove it",
+        "Pause before believing what the feed says about you",
+        "Memorize the verse",
+        "Tell someone else"
+      ],
+      "answer": "Pause before believing what the feed says about you"
+    }
+  ],
+  "mentorPersona": { "name": "Marcus", "voice": "gen-z-pastoral" },
+  "xpReward": 20,
+  "unlocks": "devo_2026-04-21_identity"
+}

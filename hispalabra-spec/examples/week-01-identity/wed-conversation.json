@@ -1,0 +1,67 @@
+{
+  "id": "devo_2026-04-22_identity",
+  "date": "2026-04-22",
+  "week": { "slug": "identity", "day": 3, "of": 7 },
+  "engine": "CONVERSATION",
+  "title": "The post you almost wrote",
+  "anchorVerse": {
+    "ref": "Psalm 139:14",
+    "kjv": "I will praise thee; for I am fearfully and wonderfully made: marvellous are thy works; and that my soul knoweth right well.",
+    "genZ": "TODO: replace from Gen Z KJV corpus"
+  },
+  "themeWords": ["comparison", "known", "performance"],
+  "screens": [
+    {
+      "kind": "CHAT_OPENER",
+      "mentorLine": "Saw you draft a post three times last night and not hit send. What were you going to say?"
+    },
+    {
+      "kind": "CHAT_REPLY",
+      "replyChips": [
+        {
+          "id": "r_honest",
+          "text": "I wanted it to land a certain way and I got in my head about it.",
+          "tone": "honest"
+        },
+        {
+          "id": "r_surface",
+          "text": "Lol you were watching that closely? It was nothing.",
+          "tone": "surface"
+        },
+        {
+          "id": "r_deflect",
+          "text": "Just wasn't feeling it, not a big deal.",
+          "tone": "deflect"
+        }
+      ]
+    },
+    {
+      "kind": "CHAT_MENTOR_RESPONSE",
+      "branches": {
+        "honest": "Yeah. That loop is real. The thing that gets me is when I catch myself writing for the version of me I want people to think I am. Like I'm auditioning for my own life.",
+        "surface": "Ha, not watching, just noticed. Can I ask though, what was the version of you in that post? Like who were you trying to be on the page?",
+        "deflect": "That's solid, just one thought. You redrafted it three times. Something about it mattered. Not a big deal is fine, but I don't buy it yet."
+      }
+    },
+    {
+      "kind": "VERSE_DROP",
+      "verse": {
+        "ref": "Psalm 139:14",
+        "kjv": "I will praise thee; for I am fearfully and wonderfully made: marvellous are thy works; and that my soul knoweth right well.",
+        "genZ": "TODO: replace from Gen Z KJV corpus"
+      }
+    },
+    {
+      "kind": "OPEN_REPLY",
+      "prompt": "If your soul already knows you're fearfully made, what does the post you almost wrote change?",
+      "input": "either"
+    },
+    {
+      "kind": "WRAP_TAKEAWAY",
+      "prompt": "One line you want to remember next time you're drafting for approval:"
+    }
+  ],
+  "mentorPersona": { "name": "Marcus", "voice": "gen-z-pastoral" },
+  "xpReward": 15,
+  "unlocks": "devo_2026-04-23_identity"
+}

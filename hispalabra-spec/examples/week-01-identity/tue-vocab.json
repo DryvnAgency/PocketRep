@@ -1,0 +1,180 @@
+{
+  "id": "devo_2026-04-21_identity",
+  "date": "2026-04-21",
+  "week": { "slug": "identity", "day": 2, "of": 7 },
+  "engine": "VOCAB",
+  "title": "4 words for identity week",
+  "anchorVerse": {
+    "ref": "Psalm 139:14",
+    "kjv": "I will praise thee; for I am fearfully and wonderfully made: marvellous are thy works; and that my soul knoweth right well.",
+    "genZ": "TODO: replace from Gen Z KJV corpus"
+  },
+  "themeWords": ["pala", "yada", "tselem", "nephesh"],
+  "screens": [
+    {
+      "kind": "MATCH_PAIRS",
+      "pairs": [
+        { "left": "pala", "right": "set apart on purpose, not generic" },
+        { "left": "yada", "right": "known the way your closest friend knows you" },
+        { "left": "tselem", "right": "image of, carrying someone's likeness" },
+        { "left": "nephesh", "right": "your whole self, not just your soul" }
+      ]
+    },
+
+    {
+      "kind": "WORD_REVEAL",
+      "word": {
+        "lemma": "pala",
+        "phonetic": "pah-LAH",
+        "genZDef": "Set apart, singled out. Not generic, not mass-produced.",
+        "homeVerse": {
+          "ref": "Psalm 139:14",
+          "kjv": "I will praise thee; for I am fearfully and wonderfully made.",
+          "genZ": "TODO: replace from Gen Z KJV corpus"
+        }
+      }
+    },
+    {
+      "kind": "MEMORY_TRICK",
+      "lemma": "pala",
+      "trick": "Pala is like a custom order vs a stock item. The feed treats you like a stock item. God placed a custom order."
+    },
+    {
+      "kind": "TRANSLATE_TAP",
+      "source": "I am fearfully and wonderfully made.",
+      "targetLanguage": "genZ",
+      "chips": ["TODO", "Gen", "Z", "corpus", "distractor-1", "distractor-2"],
+      "answer": ["TODO", "Gen", "Z", "corpus"]
+    },
+    {
+      "kind": "MASTERY_QUIZ",
+      "lemma": "pala",
+      "items": [
+        { "question": "What does pala mean?", "choices": ["Perfect", "Set apart", "Finished", "Praised"], "answer": "Set apart" },
+        { "question": "How is pala pronounced?", "choices": ["PAY-luh", "pah-LAH", "PAH-luh", "puh-LAY"], "answer": "pah-LAH" },
+        { "question": "I am ___ and wonderfully made.", "choices": ["perfectly", "fearfully", "carefully", "eventually"], "answer": "fearfully" },
+        { "question": "Which scenario shows pala?", "choices": ["Mass-produced on a line", "Hand-written letter to one person", "A viral meme", "A generic gift card"], "answer": "Hand-written letter to one person" }
+      ],
+      "gate": { "required": 4 }
+    },
+
+    {
+      "kind": "WORD_REVEAL",
+      "word": {
+        "lemma": "yada",
+        "phonetic": "yah-DAH",
+        "genZDef": "Known fully, not surface-known. The way a close friend clocks you walking in.",
+        "homeVerse": {
+          "ref": "Psalm 139:1",
+          "kjv": "O LORD, thou hast searched me, and known me.",
+          "genZ": "TODO: replace from Gen Z KJV corpus"
+        }
+      }
+    },
+    {
+      "kind": "MEMORY_TRICK",
+      "lemma": "yada",
+      "trick": "Yada is the difference between someone who follows you and someone who's read every text you ever sent them."
+    },
+    {
+      "kind": "TRANSLATE_TAP",
+      "source": "O LORD, thou hast searched me, and known me.",
+      "targetLanguage": "genZ",
+      "chips": ["TODO", "Gen", "Z", "corpus", "distractor-1", "distractor-2"],
+      "answer": ["TODO", "Gen", "Z", "corpus"]
+    },
+    {
+      "kind": "MASTERY_QUIZ",
+      "lemma": "yada",
+      "items": [
+        { "question": "What does yada mean?", "choices": ["Surface-known", "Forgotten", "Fully known", "Noticed once"], "answer": "Fully known" },
+        { "question": "How is yada pronounced?", "choices": ["YAY-duh", "yah-DAH", "YAH-duh", "yuh-DAY"], "answer": "yah-DAH" },
+        { "question": "Thou hast searched me, and ___ me.", "choices": ["kept", "seen", "known", "found"], "answer": "known" },
+        { "question": "Which scenario shows yada?", "choices": ["A follower you've never met", "A friend who knows your tells", "A stranger on the train", "An ex you ghosted"], "answer": "A friend who knows your tells" }
+      ],
+      "gate": { "required": 4 }
+    },
+
+    {
+      "kind": "WORD_REVEAL",
+      "word": {
+        "lemma": "tselem",
+        "phonetic": "TSEH-lem",
+        "genZDef": "Image of, likeness of. What you're carrying that's not yours but bears God's signature.",
+        "homeVerse": {
+          "ref": "Genesis 1:27",
+          "kjv": "So God created man in his own image, in the image of God created he him.",
+          "genZ": "TODO: replace from Gen Z KJV corpus"
+        }
+      }
+    },
+    {
+      "kind": "MEMORY_TRICK",
+      "lemma": "tselem",
+      "trick": "Tselem is the maker's mark on a piece of jewelry. You can't see it unless you flip it over, but it's why the thing is valuable."
+    },
+    {
+      "kind": "TRANSLATE_TAP",
+      "source": "In the image of God created he him.",
+      "targetLanguage": "genZ",
+      "chips": ["TODO", "Gen", "Z", "corpus", "distractor-1", "distractor-2"],
+      "answer": ["TODO", "Gen", "Z", "corpus"]
+    },
+    {
+      "kind": "MASTERY_QUIZ",
+      "lemma": "tselem",
+      "items": [
+        { "question": "What does tselem mean?", "choices": ["Reflection", "Image", "Copy", "Photo"], "answer": "Image" },
+        { "question": "How is tselem pronounced?", "choices": ["tuh-SELM", "TSEH-lem", "TSEE-lem", "SEL-em"], "answer": "TSEH-lem" },
+        { "question": "In the ___ of God created he him.", "choices": ["likeness", "image", "form", "name"], "answer": "image" },
+        { "question": "Which scenario shows tselem?", "choices": ["A knockoff hoodie", "A signed rookie card", "A screenshot", "A group photo"], "answer": "A signed rookie card" }
+      ],
+      "gate": { "required": 4 }
+    },
+
+    {
+      "kind": "WORD_REVEAL",
+      "word": {
+        "lemma": "nephesh",
+        "phonetic": "NEH-fesh",
+        "genZDef": "Your whole self, not just your soul. Body, breath, mind, appetite, all of it at once.",
+        "homeVerse": {
+          "ref": "Psalm 139:14",
+          "kjv": "That my soul knoweth right well.",
+          "genZ": "TODO: replace from Gen Z KJV corpus"
+        }
+      }
+    },
+    {
+      "kind": "MEMORY_TRICK",
+      "lemma": "nephesh",
+      "trick": "Nephesh is what's still you when you turn your phone off. Not an upload. Not a profile. The whole actual you."
+    },
+    {
+      "kind": "TRANSLATE_TAP",
+      "source": "That my soul knoweth right well.",
+      "targetLanguage": "genZ",
+      "chips": ["TODO", "Gen", "Z", "corpus", "distractor-1", "distractor-2"],
+      "answer": ["TODO", "Gen", "Z", "corpus"]
+    },
+    {
+      "kind": "MASTERY_QUIZ",
+      "lemma": "nephesh",
+      "items": [
+        { "question": "What does nephesh mean?", "choices": ["Just the soul", "Just the body", "The whole self", "The mind alone"], "answer": "The whole self" },
+        { "question": "How is nephesh pronounced?", "choices": ["NUH-fesh", "NEH-fesh", "NEE-fesh", "nuh-FESH"], "answer": "NEH-fesh" },
+        { "question": "My ___ knoweth right well.", "choices": ["heart", "soul", "spirit", "mind"], "answer": "soul" },
+        { "question": "Which scenario shows nephesh?", "choices": ["Scrolling with headphones in", "Eating dinner with your phone face down", "A perfect selfie", "A voice memo to a friend"], "answer": "Eating dinner with your phone face down" }
+      ],
+      "gate": { "required": 4 }
+    },
+
+    {
+      "kind": "WRAP_TAKEAWAY",
+      "prompt": "Of pala, yada, tselem, nephesh, which one did you need to hear today?"
+    }
+  ],
+  "mentorPersona": { "name": "Marcus", "voice": "gen-z-coach" },
+  "xpReward": 30,
+  "unlocks": "devo_2026-04-22_identity"
+}

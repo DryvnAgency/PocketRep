@@ -1,0 +1,403 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hispalabra.org/schemas/lesson.schema.json",
+  "title": "HisPalabra Devotional Lesson",
+  "description": "Compiled shape for a single Duolingo-style devotional lesson. Engine field selects which screen flow the app renders.",
+  "type": "object",
+  "required": ["id", "date", "week", "engine", "title", "anchorVerse", "themeWords", "screens", "mentorPersona", "xpReward"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^devo_\\d{4}-\\d{2}-\\d{2}_[a-z0-9-]+$",
+      "description": "devo_YYYY-MM-DD_theme-slug"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "week": {
+      "type": "object",
+      "required": ["slug", "day", "of"],
+      "additionalProperties": false,
+      "properties": {
+        "slug": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "day": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "of": { "type": "integer", "const": 7 }
+      }
+    },
+    "engine": {
+      "type": "string",
+      "enum": ["IMMERSION", "CONVERSATION", "VOCAB", "ROLEPLAY"]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 60
+    },
+    "anchorVerse": { "$ref": "#/$defs/verse" },
+    "themeWords": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": { "type": "string" }
+    },
+    "screens": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "#/$defs/screen" }
+    },
+    "mentorPersona": {
+      "type": "object",
+      "required": ["name", "voice"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "voice": { "type": "string", "enum": ["gen-z-pastoral", "gen-z-coach", "gen-z-big-sis", "gen-z-older-brother"] }
+      }
+    },
+    "xpReward": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 100
+    },
+    "unlocks": {
+      "type": ["string", "null"],
+      "description": "ID of the next lesson to unlock, or null if end of week."
+    }
+  },
+  "$defs": {
+    "verse": {
+      "type": "object",
+      "required": ["ref", "kjv", "genZ"],
+      "additionalProperties": false,
+      "properties": {
+        "ref": { "type": "string", "description": "Book chapter:verse — e.g. Psalm 139:14" },
+        "kjv": { "type": "string" },
+        "genZ": { "type": "string", "description": "From user's Gen Z KJV corpus. Placeholder allowed during draft." }
+      }
+    },
+    "screen": {
+      "oneOf": [
+        { "$ref": "#/$defs/screenIntro" },
+        { "$ref": "#/$defs/screenSelectImage" },
+        { "$ref": "#/$defs/screenTranslateTap" },
+        { "$ref": "#/$defs/screenExegesisReveal" },
+        { "$ref": "#/$defs/screenFillBlank" },
+        { "$ref": "#/$defs/screenRecitation" },
+        { "$ref": "#/$defs/screenQuiz" },
+        { "$ref": "#/$defs/screenChatOpener" },
+        { "$ref": "#/$defs/screenChatReply" },
+        { "$ref": "#/$defs/screenChatMentorResponse" },
+        { "$ref": "#/$defs/screenVerseDrop" },
+        { "$ref": "#/$defs/screenOpenReply" },
+        { "$ref": "#/$defs/screenWrapTakeaway" },
+        { "$ref": "#/$defs/screenWordReveal" },
+        { "$ref": "#/$defs/screenMatchPairs" },
+        { "$ref": "#/$defs/screenMemoryTrick" },
+        { "$ref": "#/$defs/screenMasteryQuiz" },
+        { "$ref": "#/$defs/screenSceneCard" },
+        { "$ref": "#/$defs/screenMentorFeedback" }
+      ]
+    },
+    "screenIntro": {
+      "type": "object",
+      "required": ["kind", "verse", "whyToday"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "INTRO" },
+        "verse": { "$ref": "#/$defs/verse" },
+        "whyToday": { "type": "string", "maxLength": 140 }
+      }
+    },
+    "screenSelectImage": {
+      "type": "object",
+      "required": ["kind", "prompt", "choices", "answer"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "SELECT_IMAGE" },
+        "prompt": { "type": "string" },
+        "choices": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["id", "image", "label"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "image": { "type": "string", "description": "Asset path or URL" },
+              "label": { "type": "string" }
+            }
+          }
+        },
+        "answer": { "type": "string", "description": "Matching choice id" }
+      }
+    },
+    "screenTranslateTap": {
+      "type": "object",
+      "required": ["kind", "source", "targetLanguage", "chips", "answer"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "TRANSLATE_TAP" },
+        "source": { "type": "string", "description": "KJV text to rebuild" },
+        "targetLanguage": { "type": "string", "enum": ["genZ", "kjv"] },
+        "chips": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "answer": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ordered chip sequence that forms the correct rebuild"
+        }
+      }
+    },
+    "screenExegesisReveal": {
+      "type": "object",
+      "required": ["kind", "points"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "EXEGESIS_REVEAL" },
+        "points": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["headline", "body", "crossRef"],
+            "additionalProperties": false,
+            "properties": {
+              "headline": { "type": "string" },
+              "body": { "type": "string" },
+              "crossRef": { "$ref": "#/$defs/verse" }
+            }
+          }
+        }
+      }
+    },
+    "screenFillBlank": {
+      "type": "object",
+      "required": ["kind", "sentence", "blankIndex", "choices", "answer"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "FILL_BLANK" },
+        "sentence": { "type": "string", "description": "Use ___ for blank" },
+        "blankIndex": { "type": "integer" },
+        "choices": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "type": "string" }
+        },
+        "answer": { "type": "string" }
+      }
+    },
+    "screenRecitation": {
+      "type": "object",
+      "required": ["kind", "verse", "mode"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "RECITATION" },
+        "verse": { "$ref": "#/$defs/verse" },
+        "mode": { "type": "string", "enum": ["read", "speak", "either"] }
+      }
+    },
+    "screenQuiz": {
+      "type": "object",
+      "required": ["kind", "question", "choices", "answer"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "QUIZ" },
+        "question": { "type": "string" },
+        "choices": { "type": "array", "minItems": 2, "items": { "type": "string" } },
+        "answer": { "type": "string" }
+      }
+    },
+    "screenChatOpener": {
+      "type": "object",
+      "required": ["kind", "mentorLine"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "CHAT_OPENER" },
+        "mentorLine": { "type": "string" }
+      }
+    },
+    "screenChatReply": {
+      "type": "object",
+      "required": ["kind", "replyChips"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "CHAT_REPLY" },
+        "replyChips": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["id", "text", "tone"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "text": { "type": "string" },
+              "tone": { "type": "string", "enum": ["honest", "surface", "deflect"] }
+            }
+          }
+        }
+      }
+    },
+    "screenChatMentorResponse": {
+      "type": "object",
+      "required": ["kind", "branches"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "CHAT_MENTOR_RESPONSE" },
+        "branches": {
+          "type": "object",
+          "required": ["honest", "surface", "deflect"],
+          "additionalProperties": false,
+          "properties": {
+            "honest": { "type": "string" },
+            "surface": { "type": "string" },
+            "deflect": { "type": "string" }
+          }
+        }
+      }
+    },
+    "screenVerseDrop": {
+      "type": "object",
+      "required": ["kind", "verse"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "VERSE_DROP" },
+        "verse": { "$ref": "#/$defs/verse" }
+      }
+    },
+    "screenOpenReply": {
+      "type": "object",
+      "required": ["kind", "prompt", "input"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "OPEN_REPLY" },
+        "prompt": { "type": "string" },
+        "input": { "type": "string", "enum": ["text", "voice", "either"] }
+      }
+    },
+    "screenWrapTakeaway": {
+      "type": "object",
+      "required": ["kind", "prompt"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "WRAP_TAKEAWAY" },
+        "prompt": { "type": "string", "description": "Prompt user writes their own 1-line takeaway" }
+      }
+    },
+    "screenWordReveal": {
+      "type": "object",
+      "required": ["kind", "word"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "WORD_REVEAL" },
+        "word": {
+          "type": "object",
+          "required": ["lemma", "phonetic", "genZDef", "homeVerse"],
+          "additionalProperties": false,
+          "properties": {
+            "lemma": { "type": "string" },
+            "phonetic": { "type": "string" },
+            "genZDef": { "type": "string", "maxLength": 120 },
+            "homeVerse": { "$ref": "#/$defs/verse" }
+          }
+        }
+      }
+    },
+    "screenMatchPairs": {
+      "type": "object",
+      "required": ["kind", "pairs"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "MATCH_PAIRS" },
+        "pairs": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["left", "right"],
+            "additionalProperties": false,
+            "properties": {
+              "left": { "type": "string" },
+              "right": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "screenMemoryTrick": {
+      "type": "object",
+      "required": ["kind", "lemma", "trick"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "MEMORY_TRICK" },
+        "lemma": { "type": "string" },
+        "trick": { "type": "string", "maxLength": 180 }
+      }
+    },
+    "screenMasteryQuiz": {
+      "type": "object",
+      "required": ["kind", "lemma", "items", "gate"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "MASTERY_QUIZ" },
+        "lemma": { "type": "string" },
+        "items": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["question", "choices", "answer"],
+            "additionalProperties": false,
+            "properties": {
+              "question": { "type": "string" },
+              "choices": { "type": "array", "minItems": 3, "items": { "type": "string" } },
+              "answer": { "type": "string" }
+            }
+          }
+        },
+        "gate": {
+          "type": "object",
+          "required": ["required"],
+          "additionalProperties": false,
+          "properties": {
+            "required": { "type": "integer", "const": 4, "description": "4-of-4 to advance" }
+          }
+        }
+      }
+    },
+    "screenSceneCard": {
+      "type": "object",
+      "required": ["kind", "illustration", "setup", "stakes"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "SCENE_CARD" },
+        "illustration": { "type": "string", "description": "Asset path or URL" },
+        "setup": { "type": "string" },
+        "stakes": { "type": "string", "maxLength": 140 }
+      }
+    },
+    "screenMentorFeedback": {
+      "type": "object",
+      "required": ["kind", "reactNatural", "reframe", "betterLine", "anchorVerseRef"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "MENTOR_FEEDBACK" },
+        "reactNatural": { "type": "string" },
+        "reframe": { "type": "string" },
+        "betterLine": { "type": "string" },
+        "anchorVerseRef": { "type": "string", "description": "Scripture ref that grounds the reframe" }
+      }
+    }
+  }
+}
