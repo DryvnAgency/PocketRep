@@ -1,0 +1,324 @@
+================================================================================
+PROJECT MASTER CONTEXT — Open Rex
+Generated: 2026-04-20
+Staged in PocketRep repo at /open-rex-docs/ — move to dedicated Open Rex repo.
+================================================================================
+
+1. PRODUCT OVERVIEW
+================================================================================
+
+Open Rex is the third product in the PocketRep family, separate from PocketRep
+(mobile CRM) and Rex Lens (live rep coach). Open Rex is a dealership customer-
+database reactivation agent.
+
+Workflow in one paragraph:
+  The dealer opens their CRM in Chrome. Open Rex's extension walks the
+  customer list and profile pages, extracting name, phone, vehicle, last
+  purchase, last contact, and consent status. The backend sends the records to
+  Gemini 2.5 Flash, which drafts a personalized, compliance-aware SMS per
+  customer — varied phrasing, contractions, casual rhythm, banned-word filter,
+  timeframe- and holiday-aware context. The owner reviews drafts in a web
+  dashboard, approves the campaign, and the always-on backend scheduler sends
+  100-200 texts/day via Twilio 10DLC A2P, respecting quiet hours and STOP
+  keywords. Inbound replies flow into a Gemini conversation loop that runs
+  back-and-forth with each lead until appointment intent is detected, at which
+  point the backend texts the owner's phone with name, number, and proposed
+  time. The owner enters the appointment into their CRM manually — Open Rex
+  does not write back to the CRM.
+
+Target users: dealership owner-operators and sales managers running used-car
+and new-car stores. Primary launch market matches PocketRep: automotive
+dealers on VinSolutions and similar CRMs.
+
+Positioning: Rex Lens coaches the rep live on their screen. Open Rex
+reactivates the dealer's dormant customer base via personalized SMS drips
+with no rep in the loop.
+
+--------------------------------------------------------------------------------
+
+2. PLAN STRUCTURE & PRICING
+================================================================================
+
+[TODO: not decided]
+
+Reference starting point (Rex Lens tiers from PocketRep):
+  rex_lens: $29 founding / $39 retail per month
+  pro:      $29 founding / $49 retail per month
+  elite:    $59 founding / $89 retail per month
+
+Open Rex will likely need dealership-scale pricing (per-seat or per-number),
+not per-rep pricing. [TODO: design pricing model]
+
+--------------------------------------------------------------------------------
+
+3. TECH STACK
+================================================================================
+
+Baseline inherited from Rex Lens + PocketRep:
+  - Supabase (Postgres + Auth + Edge Functions + RLS)
+  - Gemini 2.5 Flash via Supabase edge function proxy
+    (extension sends Anthropic-format bodies; proxy translates to Gemini)
+  - Vercel (dashboard hosting)
+  - Chrome Extension Manifest V3, TypeScript, esbuild, Shadow DOM
+  - Stripe Checkout for billing (payment links)
+
+Open Rex-specific additions:
+  - Twilio Messaging API + 10DLC A2P brand + campaign registration per dealer
+  - Scheduler / queue for drip sends  [TODO: Supabase cron + edge functions
+    vs BullMQ vs Temporal]
+  - Inbound webhook handler for Twilio replies
+  - Stateful conversation engine (Gemini, per-lead thread state)
+  - Appointment-intent detector (Gemini structured output)
+  - Dealer web dashboard  [TODO: Next.js assumed]
+  - Banned-word filter on every draft before queueing
+
+--------------------------------------------------------------------------------
+
+4. FILE STRUCTURE
+================================================================================
+
+[TODO: repo not yet scaffolded]
+
+Proposed monorepo layout:
+
+OpenRex/
+├── README.md
+├── package.json                    # workspace root
+├── extension/                      # Chrome Manifest V3 "campaign mode"
+│   ├── src/
+│   │   ├── background/
+│   │   ├── content/
+│   │   │   └── adapters/           # per-CRM scraping adapters
+│   │   └── shared/
+│   └── manifest.json
+├── dashboard/                      # Next.js on Vercel
+│   ├── app/
+│   ├── components/
+│   └── lib/
+├── backend/                        # Supabase edge functions + workers
+│   ├── supabase/
+│   │   ├── functions/
+│   │   │   ├── ingest-customers/   # receive scraped rows
+│   │   │   ├── draft-generator/    # Gemini draft SMS per customer
+│   │   │   ├── twilio-send/        # scheduler + send worker
+│   │   │   ├── twilio-webhook/     # inbound reply handler
+│   │   │   ├── conversation-agent/ # Gemini back-and-forth
+│   │   │   └── appointment-alert/  # owner SMS dispatcher
+│   │   └── migrations/
+│   └── workers/                    # [TODO: scheduler runtime]
+├── shared/                         # prompts, schemas, types
+│   ├── prompts/                    # Rex persona + draft + convo prompts
+│   ├── schema/                     # DB types
+│   └── banned-words.ts             # compliance filter list
+└── docs/
+    ├── OPEN_REX_HANDOVER.txt       # action-oriented onboarding
+    └── OPEN_REX_MASTER_CONTEXT.txt # this file
+
+--------------------------------------------------------------------------------
+
+5. FEATURE STATUS
+================================================================================
+
+Everything below is in "planned." Nothing is built.
+
+Planned:
+  - Chrome extension campaign mode with CRM scraper
+  - Supabase schema for dealerships, customers, messages, conversations,
+    appointments, send_schedule, compliance_events
+  - Gemini draft generator with personalization + banned-word filter
+  - Twilio 10DLC A2P onboarding flow per dealership
+  - Twilio send worker + scheduler with daily cap and quiet-hour windows
+  - Twilio inbound webhook + Gemini conversation agent
+  - Appointment-intent detector with structured time extraction
+  - Owner-alert SMS dispatcher
+  - Dealer web dashboard for draft review, conversation view, compliance
+
+--------------------------------------------------------------------------------
+
+6. DATABASE SCHEMA (PROPOSED)
+================================================================================
+
+All tables [TODO: finalize]. All RLS-scoped to dealership_id.
+
+- dealerships
+    id, name, timezone, twilio_brand_sid, twilio_campaign_sid,
+    twilio_phone_number, daily_send_cap (100-200), quiet_hours_start,
+    quiet_hours_end, onboarding_status, stripe_customer_id
+
+- dealership_users
+    dealership_id, user_id, role (owner | manager), alert_phone
+
+- customers
+    dealership_id, name, phone, email, vehicle_make, vehicle_model,
+    vehicle_year, last_purchase_at, last_contact_at, consent_given_at,
+    dnc_flag, dedupe_key
+
+- campaigns
+    dealership_id, name, created_by, status (draft | approved | running |
+    complete), approved_at
+
+- messages
+    campaign_id, customer_id, direction (out | in), body, twilio_sid, status,
+    error_code, sent_at, received_at
+
+- conversations
+    customer_id, dealership_id, state (initial_sent | awaiting_reply |
+    in_convo | appointment_set | opted_out | dead), last_message_at
+
+- appointments
+    customer_id, dealership_id, proposed_time, status (pending | confirmed |
+    no_show | rescheduled), detected_from_message_id, owner_alerted_at
+
+- send_schedule
+    dealership_id, scheduled_for, customer_id, campaign_id, status (queued |
+    sent | skipped_quiet_hours | skipped_cap | failed)
+
+- compliance_events
+    phone, event_type (stop | help | consent_given | consent_revoked),
+    occurred_at, source_message_id
+
+--------------------------------------------------------------------------------
+
+7. AI SYSTEM
+================================================================================
+
+Two Gemini flows:
+
+A) Draft generator
+   - Input: customer row + dealership context + current date/time/holiday
+     calendar + Rex persona rules + banned-word list
+   - Output: one SMS body per customer, varied in salutation, phrasing,
+     rhythm; references customer's vehicle by name; one ask max
+   - Post-filter: banned-word check → reject + regenerate if violated
+
+B) Conversation agent
+   - Input: full thread history + customer row + dealership context
+   - Output: structured output with two fields —
+       reply_body: string (next message to send, or null if terminating)
+       intent: enum (continue | appointment_detected | keep_in_mind_ack |
+                    opt_out | escalate_to_human)
+       proposed_time: ISO 8601 or null (only when intent is
+                    appointment_detected)
+   - Stateful: reads and writes conversations.state
+
+Rex persona rules inherited verbatim from Rex Lens
+(RexLens/src/shared/prompts.ts in the PocketRep repo).
+
+Open Rex additions to the persona for SMS voice:
+  - Vary salutations: ha, hey, hiya, morning, howdy
+  - Casual rhythm, occasional lowercase, contractions
+  - Vary sentence structure across messages in same campaign
+  - Timeframe-aware: beginning/mid/end of month, season, holidays
+  - One ask per message max
+  - Never blast-y. Banned phrases enforced pre-send.
+
+--------------------------------------------------------------------------------
+
+8. SMS / COMPLIANCE
+================================================================================
+
+Provider: Twilio. Registration: 10DLC A2P brand + campaign per dealership.
+
+Mandatory controls:
+  - TCPA prior express consent required before any outbound message
+  - Consent timestamp stored per customer, provable per recipient
+  - STOP / UNSUBSCRIBE keyword → instant opt-out, global across dealerships
+    for that phone number, logged to compliance_events
+  - HELP keyword → standard compliance reply
+  - Quiet hours per recipient timezone. Default 8am-9pm local.  [TODO confirm]
+  - Daily send cap: 100-200/day, enforced at scheduler.
+    [TODO: per-number or per-dealership]
+  - Banned-word filter on every draft pre-send
+  - Dealership identified in first message of every thread
+  - Carrier delivery monitoring — flag drops per carrier, rotate phrasing
+
+--------------------------------------------------------------------------------
+
+9. DESIGN SYSTEM / BRAND
+================================================================================
+
+Extension and dashboard inherit Rex Lens's visual language:
+
+Extension panel (reused):
+  Primary Red: #e94560
+  Deep Blue:   #0f3460
+  Gradient:    linear-gradient(135deg, #e94560, #0f3460)
+  Dark BG:     #111827
+  Card BG:     #1e293b
+  Border:      #374151
+  Text:        #e5e7eb (primary) | #9ca3af (muted) | #6b7280 (dim)
+
+Dashboard (new):
+  Inherit brand colors. [TODO: owner/manager dashboard UI kit]
+
+Tone: Confident, direct, no fluff. Same Rex voice as Rex Lens.
+
+--------------------------------------------------------------------------------
+
+10. KNOWN ISSUES / RISKS
+================================================================================
+
+Inherited from Rex Lens:
+  - Supabase anon key hardcoded (expected; RLS enforces security)
+  - CRM UI scraping is fragile to vendor UI changes
+
+Open Rex-specific:
+  - 10DLC brand + campaign approval takes 2-6 weeks per dealership. Onboarding
+    flow must handle pending-approval state without sending.
+  - Gemini drafts occasionally violate banned-word list. Always post-filter
+    before queueing.
+  - Appointment-intent false positives — require structured time extraction,
+    not bare intent classification.
+  - Twilio carrier filtering on high-volume patterns. Rotate phrasing, respect
+    cadence, monitor delivery per carrier.
+  - TCPA liability is real. Consent must be provable per recipient.
+  - CRM scraper breaks when vendor changes DOM. Adapter-per-CRM pattern with
+    a fast fix-forward loop is required.
+
+--------------------------------------------------------------------------------
+
+11. DEPLOYMENT STATUS
+================================================================================
+
+[TODO: not deployed — pre-implementation]
+
+Every deployment target below is TODO:
+  - Supabase project provisioning
+  - Edge function deploys (ingest, draft-generator, send worker, webhook,
+    conversation-agent, appointment-alert)
+  - Twilio account + 10DLC registration pipeline
+  - Vercel dashboard deploy
+  - Chrome Web Store submission for the extension
+  - Stripe product + payment link setup
+
+--------------------------------------------------------------------------------
+
+12. NEXT STEPS (priority order)
+================================================================================
+
+1. Scaffold the new Open Rex repo. Port Rex Lens extension core as the base
+   for campaign-mode scraping.
+2. Build customer-scrape flow for the first target CRM.
+   [TODO: VinSolutions likely, matches PocketRep's launch market]
+3. Supabase schema + consent/DNC plumbing + RLS policies.
+4. Twilio 10DLC registration onboarding + send worker + inbound webhook.
+5. Gemini draft generator — personalization + timeframe/holiday modulation +
+   banned-word guardrails.
+6. Dealer dashboard (Next.js) — draft review, approve/edit, conversation view,
+   compliance controls.
+7. Scheduler with 100-200/day cap + quiet-hour windows per recipient tz.
+8. Conversation loop + appointment-intent detector + owner-alert SMS.
+
+--------------------------------------------------------------------------------
+
+13. OUT OF SCOPE
+================================================================================
+
+- CRM write-back. Locked as "no" — owner enters appointments manually.
+- Non-SMS channels (email, voice calls) at launch.
+- Multi-brand text blasts. Open Rex is 1:1 personalized drip, not broadcast.
+- Rep-facing features. Rex Lens covers the rep. Open Rex is for the owner.
+
+================================================================================
+END OF MASTER CONTEXT
+================================================================================
