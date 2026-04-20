@@ -1,0 +1,476 @@
+# POCKETREP — PROJECT MASTER CONTEXT
+Last updated: 2026-04-20
+Handover to next agent. Read this top-to-bottom before touching anything.
+
+================================================================================
+PART 1 / 4 — PRODUCT OVERVIEW + TECH STACK
+================================================================================
+
+## PRODUCT
+
+**Name:** PocketRep (PocketRep.pro)
+**Tagline:** "The rep's edge, not the store's"
+**What it is:** AI-powered sales follow-up coach + CRM-lite for individual sales reps
+**Who it's for:** Individual sales reps (auto, mortgage, real estate, HVAC, roofing, fence, D2D, insurance, solar, B2B, staffing). Reps pay themselves — NOT dealerships/managers.
+**The pitch:** Rex (AI coach named after a real-world top closer archetype) reads the rep's book, scores who's hot, writes the follow-ups, handles objections, and reviews the rep's week.
+
+**Three product surfaces:**
+1. **PocketRep Mobile App** (Expo / React Native) — iOS + Android + Web. Rep's book, heat sheet, deals, sequences, Rex chat.
+2. **Rex Lens** (Chrome extension) — reads CRM screens (VinSolutions, Gmail, Outlook, generic pages) and generates outreach scripts. Works on any web page.
+3. **Pocketrep landing site** (static HTML on Vercel) — pocketrep.pro — marketing, pricing, privacy/terms, thankyou page.
+
+## PRICING (3-tier, as of V21)
+
+| Plan                    | Price                | AI daily cap |
+|-------------------------|----------------------|--------------|
+| Pro (mobile only)       | $29/mo founding / $39 retail | 100 req/day  |
+| Elite (mobile + memory) | $49/mo founding / $69 retail | 100 req/day  |
+| Rex Lens standalone     | $39/mo               | 175 req/day  |
+| Pro + Rex Lens bundle   | $49/mo               | 150 req/day  |
+| Elite + Rex Lens bundle | $69/mo founding / $89 retail | 200 req/day  |
+
+Plan codes in DB: `pro`, `elite`, `rex_lens_standalone`, `pro_bundle`, `elite_bundle`.
+Daily caps enforced server-side via Supabase Edge Function `ai-proxy` + the `increment_daily_usage` RPC writing to `daily_ai_usage` table.
+
+7-day free trial on all plans. Stripe for billing (stripe_customer_id stored on profiles).
+
+## TECH STACK
+
+**Mobile app (`PocketRepApp/`):**
+- Expo SDK 51 / React Native 0.74 / React 18
+- expo-router (file-based routing, tabs layout)
+- @supabase/supabase-js for auth + DB
+- @picovoice/porcupine-react-native — wake word ("Hey Rex") for Hey Rex orb
+- expo-av (audio recording), expo-image-picker (screenshots), expo-notifications (follow-up reminders), expo-secure-store, expo-location, expo-linking
+- Deployed: Expo/EAS for iOS+Android; web build goes to Vercel
+
+**Rex Lens extension (`RexLens/`):**
+- Manifest V3, TypeScript, built via tsc (no bundler — plain ES modules)
+- Service worker + content script + injected panel
+- Adapters for VinSolutions, Gmail, Outlook, generic pages
+- @supabase/supabase-js for auth sharing with mobile app
+
+**Landing site (`Pocketrep/`):**
+- Static HTML + inline CSS + vanilla JS
+- Deployed on Vercel (vercel.json at repo root and in PocketRepApp/)
+- Pages: index.html, privacy.html, terms.html, cancel.html, thankyou.html
+
+**Backend:**
+- Supabase (Postgres + Auth + Edge Functions + Storage)
+- Project ID: `fwvrauqdoevwmwwqlfav`
+- Project URL: `https://fwvrauqdoevwmwwqlfav.supabase.co`
+- Edge Functions: `ai-proxy` (Gemini + Whisper router), `support-reply`
+- RPCs: `increment_daily_usage(p_user_id, p_input_tokens, p_output_tokens, p_cost_cents)`
+
+**AI providers (as of 2026-04 Gemini migration):**
+- Google Gemini 2.5 Flash — ALL text generation (Rex chat, briefs, digests, rebuttals, Rex Lens scripts, Haiku page scans, Deep Review)
+- OpenAI Whisper — voice transcription only (Hey Rex + Rex voice input)
+- Anthropic Claude — REMOVED. `/anthropic` edge-function route returns 410 Gone.
+
+**Keys (rotate via each provider's dashboard, NOT via this agent):**
+- `GEMINI_API_KEY` — stored in Supabase Edge Function secrets (Project Settings → Edge Functions → Secrets). MANUAL STEP required — no MCP tool exists for secret management.
+- `OPENAI_API_KEY` — stored in Supabase Edge Function secrets.
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — auto-populated in edge function env.
+- `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_AI_PROXY_URL`, `EXPO_PUBLIC_PICOVOICE_KEY` — mobile app `.env` (not committed; `.env.example` shows the keys).
+
+## BRANDING / VISUAL IDENTITY
+
+- **Dark mode only** — everywhere. Ink blacks + gold accent.
+- Palette: `#0c0c0e` (ink), `#d4a843` (gold), `#f0c060` (gold2), `#42b883` (green), `#e05252` (red), `#e08c52` (orange)
+- Fonts (web): Bricolage Grotesque (display), Instrument Sans (body)
+- Heat tiers: HOT = red flame 🔥, WARM = orange sun ☀️, WATCH = gold eye 👁
+- Copy voice: direct, blue-collar, closer-style. "The rep's edge, not the store's". No corporate fluff. No em-dashes in Rex output.
+
+================================================================================
+PART 2 / 4 — FEATURE LIST WITH STATUS + API DETAILS
+================================================================================
+
+## MOBILE APP FEATURES
+
+### ✅ DONE — Shipping to users
+
+**Auth (`app/(auth)/`):**
+- Email/password signup + login via Supabase Auth
+- Profile row auto-created on signup (industry selection in onboarding)
+
+**Heat Sheet (`app/(tabs)/index.tsx`):**
+- Home tab. Client-side heat scoring engine (`calcHeatScore`) scores every contact on:
+  lease end < 60 days (+25-40), annual mileage > 20k (+15), purchase 2-4yr ago (+20),
+  days since last contact (+10-20), buying urgency from Hey Rex (+10-25), upcoming personal events (+10)
+- Tiers: score ≥50 HOT, ≥25 WARM, else WATCH. Top 5 per tier shown.
+- Follow-ups section (contacts with `follow_up_date` ≤ today)
+- Pre-call Brief modal: calls `/gemini` with context-stuffed prompt → 4 bullets
+- Schedules daily follow-up reminders via `expo-notifications` once per day (AsyncStorage gate)
+- Onboarding modal on first launch
+
+**Contacts / Book (`app/(tabs)/contacts.tsx`):**
+- CRUD contacts, swipeable rows, stage tracking (prospect/active/sold/dormant/lost)
+- CSV import with field mapping heuristics (`CSV_FIELD_MAP`)
+- Phone contacts sync via expo-contacts (lazy-required)
+- Mass Text feature — queue messages for a filter set (vehicle_make etc.), open sms://
+
+**Deals (`app/(tabs)/deals.tsx`):**
+- CRUD deals linked to contacts. Tracks title, amount, front_gross, back_gross, closed_at, notes.
+- Dashboard totals + recent list
+
+**Sequences (`app/(tabs)/sequences.tsx`):**
+- ~60 pre-built templates across 12 industries (auto, mortgage, realestate, hvac, staffing, d2d, roofing, fence, insurance, solar, b2b, prospect)
+- Custom sequence builder
+- Per-contact sequence attach + queue generation via `lib/messageQueue.ts`
+- Daily queue: pulls all sequence steps due today, personalizes `{{first_name}}` / `{{vehicle}}`, renders card stack
+- Pro: 50 items/batch cap. Elite: 100 items/batch cap.
+- Send via native sms://, mail://, tel:// deep links. Marks step as sent + logs interaction.
+
+**Rex (chat) (`app/(tabs)/rex.tsx`):**
+- Two-tab segment: "Coach Rex" (chat) / "Rebuttals" (canned objection library)
+- Chat: multi-turn conversation persisted to `rex_messages` table
+- `+ Context` button attaches a contact — Rex gets full dump (vehicle, mileage, stage, heat, notes, urgency)
+- Proactive coach card auto-generates when contact selected ("Rex is sizing up X…")
+- Screenshot attach (base64 image, multimodal) — Rex reads the screenshot
+- Voice input (Whisper via edge function on native, Web Speech API on web)
+- **Actions**: Rex can emit `<action>{...}</action>` JSON blocks that the UI parses and offers to execute. Types: `mass_text` (filters + renders confirmation card), `show_followups` (pulls due follow-ups), `log_customer`, `start_sequence`.
+- Elite-only: `rex_memory` row updated every 5 messages with AI-generated rep profile summary
+- Rebuttals: 11 industries, 4-5 canned objections each. Tap a card → AI generates fresh "New Angle" on demand.
+
+**More (`app/(tabs)/more.tsx`):**
+- Profile, plan badge, trial status
+- Weekly digest (Elite) — generates via `/gemini` from last 7 days of deals + contacts + rex msgs
+- Sunday Digest scheduler — weekly local notification at chosen time
+- Contact book export (CSV preview; production should pipe to expo-sharing)
+- Rex Lens Chrome extension promo card
+- Text support link, sign out, industry badge
+
+**Hey Rex orb (`components/HeyRex.tsx`):**
+- Global floating orb. Picovoice Porcupine wake word "Hey Rex" (custom keyword).
+- On wake: records 10s via expo-av → POSTs to `/whisper` for transcription → sends to `/gemini` as a general Rex query
+- Failover warnings when PICOVOICE_KEY missing
+
+**Notifications (`lib/notifications.ts`):**
+- Per-contact follow-up reminders (lease end, personal events, follow_up_date)
+- Weekly Sunday digest scheduler
+
+### 🟡 IN PROGRESS
+
+- **Stripe integration wiring**: `stripe_customer_id` column exists on profiles but checkout flow happens on landing site. The mobile app surfaces "Upgrade" as `Linking.openURL('https://pocketrep.pro/upgrade')` — there's NO in-app purchase yet.
+- **Contact book CSV export**: currently shows Alert preview. Needs expo-sharing pipe to actually save the file.
+- **Mass text send status**: queues + opens sms:// but has no confirm-sent state for iOS (no read-back API).
+
+### 🔴 PLANNED / NOT STARTED
+
+- In-app purchase (App Store / Play Billing) — currently all paywalls go to web
+- Push notifications via Supabase + Expo Push Tokens (currently only local notifications)
+- Team/multi-rep features (intentionally not building — product is single-rep by design)
+- Rex voice cloning / TTS reply — currently text only
+- Real proximity alerts / map view — REMOVED in commit 869eb2f, not planned to return
+
+## REX LENS EXTENSION FEATURES
+
+### ✅ DONE
+
+- Manifest V3 extension, injected panel UI (right-side drawer), chat interface
+- Supabase auth shared with mobile app (login flow in panel)
+- Page adapters:
+  - `vinsolutions.ts` — clicks "All" view, extracts structured tasks (customer, vehicle, status, source, age, task description) from worklist grids
+  - `gmail.ts` — extracts open email thread, sender, conversation
+  - `outlook.ts` — same for Outlook
+  - `generic.ts` — fallback text extraction from any page
+- Haiku-cost page pre-scan (background): when user lands on CRM/email page, automatically sends compact summary to `/gemini` so chat has context without waiting
+- Chat: multi-turn with page context injection. Rex gives copy-paste scripts.
+- **Scan Page**: hotkey (Ctrl/Cmd+Shift+R) generates scripts for every task on a worklist in one batch
+- **Deep Review / Agent Mode**: Rex clicks through each lead detail page, extracts conversation history, builds prioritized game plan with scripts for each (max 30 leads)
+- Sensitive data stripping (SSN, credit cards, passwords) before sending to AI
+- Copy-first-script hotkey (Ctrl/Cmd+Shift+C)
+- Daily rate limit error surfacing (`DAILY_LIMIT` error type from proxy)
+
+### 🟡 IN PROGRESS
+
+- Scan hotkey currently scans every time; could benefit from a "last scan was X minutes ago" cache
+
+### 🔴 PLANNED
+
+- Salesforce adapter
+- HubSpot adapter  
+- DealerSocket adapter
+- Automated "follow-up at X time" actions written directly into CRM fields (currently only copy-paste)
+
+## LANDING SITE FEATURES
+
+### ✅ DONE
+- Hero, 3-tier pricing, feature sections, FAQ
+- Privacy policy (updated 2026-04-01 with Google Gemini + OpenAI Whisper disclosure after Anthropic migration)
+- Terms of service, cancel flow, thankyou page (with embedded download CTAs + manifesto)
+- Stripe checkout redirects
+- OG meta + basic analytics
+
+## BACKEND / EDGE FUNCTIONS
+
+### `ai-proxy` (deployed v8, verify_jwt=false, auth handled internally)
+Routes:
+- `POST /functions/v1/ai-proxy/gemini` — Anthropic-format in → Gemini out. Normalizes response to `{content: [{text}]}`. Enforces daily cap via `increment_daily_usage` RPC before call.
+- `POST /functions/v1/ai-proxy/whisper` — multipart/form-data with `file` field → transcribes via OpenAI Whisper-1
+- `POST /functions/v1/ai-proxy/anthropic` — returns 410 Gone (deprecated, kept for old client compat)
+- `GET` — returns "ai-proxy OK" (health check)
+
+Auth: Reads `Authorization: Bearer <supabase_jwt>` → validates via service role → fetches profile.plan → looks up cap in `PLAN_DAILY_CAPS` → reads today's `daily_ai_usage` row → if under cap, proceeds + increments.
+
+### `support-reply`
+Email reply handler (details unverified in this handover — check the file directly).
+
+## DATABASE TABLES (known from types.ts + code)
+
+- `profiles` — id, email, full_name, plan, industry, trial_ends_at, stripe_customer_id, created_at
+- `contacts` — full contact record with vehicle, trade, dates, heat fields, rapport, personal_events, coords, urgency
+- `deals` — contact-linked deals with front/back gross
+- `rex_messages` — chat history per user (with optional contact_id for context)
+- `rex_memory` — Elite rep profile summary (updated every 5 msgs)
+- `daily_ai_usage` — user_id, usage_date, request_count, input_tokens, output_tokens, cost_cents
+- `sequences` + `sequence_steps` — user-defined + templates
+- `interactions` — logged calls/texts/emails/notes per contact
+
+================================================================================
+PART 3 / 4 — FILE INVENTORY (what each file does)
+================================================================================
+
+## REPO ROOT
+- `README.md` — minimal; effectively unused
+- `vercel.json` — Vercel root config (routes landing pages)
+- `.claude/settings.local.json` — Claude Code local settings
+
+## LANDING SITE (`Pocketrep/`)
+- `index.html` — marketing landing page; hero, pricing, FAQ
+- `privacy.html` — privacy policy (references Google Gemini + OpenAI Whisper post-migration)
+- `terms.html` — terms of service
+- `cancel.html` — Stripe cancel redirect
+- `thankyou.html` — post-purchase confirmation + download CTAs + manifesto
+
+## MOBILE APP (`PocketRepApp/`)
+
+### Config
+- `app.json` — Expo config (name, slug, icons, splash, permissions)
+- `eas.json` — EAS Build profiles
+- `babel.config.js`, `tsconfig.json`, `package.json`, `package-lock.json`
+- `vercel.json` — for web build deploy
+- `expo-env.d.ts` — ambient types for `process.env.EXPO_PUBLIC_*`
+- `.env.example` — shows required env vars (NO Anthropic key anymore)
+
+### App routes (`app/`)
+- `_layout.tsx` — root Stack; swaps between (auth) and (tabs) based on session
+- `(auth)/_layout.tsx` + `index.tsx` (login) + `signup.tsx` — auth screens
+- `(tabs)/_layout.tsx` — tabs layout: Heat Sheet / Book / Rex / Sequences / More (Deals tab may be hidden or in More)
+- `(tabs)/index.tsx` — Heat Sheet (home)
+- `(tabs)/contacts.tsx` — The Book (contacts CRUD, CSV import, swipe actions)
+- `(tabs)/deals.tsx` — Deals CRUD + dashboard
+- `(tabs)/rex.tsx` — Rex chat + Rebuttals library
+- `(tabs)/sequences.tsx` — Sequences (templates + custom + daily queue)
+- `(tabs)/more.tsx` — Profile, digest, exports, upgrade, support
+
+### Components
+- `components/HeyRex.tsx` — Floating wake-word orb (Porcupine + Whisper)
+- `components/Onboarding.tsx` — 4-step first-launch onboarding modal
+
+### Lib
+- `lib/supabase.ts` — Supabase client (AsyncStorage session persistence)
+- `lib/types.ts` — ALL TypeScript types (Profile, Contact, Deal, RexMessage, Sequence, etc.)
+- `lib/industryConfig.ts` — Industry → {label, icon} map for 12 industries
+- `lib/notifications.ts` — expo-notifications wrappers for follow-up reminders + weekly digest
+- `lib/messageQueue.ts` — Sequence queue generation, AsyncStorage persistence, send + log
+
+### Constants
+- `constants/theme.ts` — Palette, radius, spacing, heatConfig map
+
+### Supabase functions (`supabase/functions/`)
+- `ai-proxy/index.ts` — THE critical edge function. Gemini router + Whisper + auth + rate limits.
+- `support-reply/index.ts` — inbound support email handler
+
+### Other
+- `scripts/generate-assets.js` — icon/splash generator (uses canvas)
+- `snack-HeyRexOrb.js` — Expo Snack demo of Hey Rex orb (standalone shareable demo)
+
+## REX LENS (`RexLens/`)
+
+### Config
+- `manifest.json` — MV3 manifest, hotkeys (Ctrl+Shift+R scan, Ctrl+Shift+C copy-first)
+- `package.json`, `package-lock.json`, `tsconfig.json`
+
+### Source (`src/`)
+- `background/service-worker.ts` — Core controller: auth, chat, page scan, deep review, scan batch
+- `content/content-script.ts` — Runs in-page; listens for extract/click/scroll requests from SW
+- `content/panel.ts` — Injected right-side panel UI (chat + status)
+- `content/adapters/types.ts` — Adapter interface
+- `content/adapters/registry.ts` — URL → adapter mapping
+- `content/adapters/vinsolutions.ts` — VinSolutions: clicks "All", scrapes grid rows into StructuredTask[]
+- `content/adapters/gmail.ts` — Gmail thread extraction
+- `content/adapters/outlook.ts` — Outlook thread extraction  
+- `content/adapters/generic.ts` — Generic fallback
+- `shared/prompts.ts` — REX_MODEL constant, all prompt builders (chat, scan, deep review), sensitive data stripper
+- `shared/supabase.ts` — shared Supabase client + SUPABASE_ANON_KEY export
+- `shared/types.ts` — Profile, PageContent, StructuredTask, AuthState, DeepReviewLead, DeepReviewResult
+- `shared/messages.ts` — message type definitions for cross-context runtime.sendMessage
+
+## API ENDPOINTS (full spec)
+
+### Mobile → ai-proxy/gemini
+```
+POST https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/gemini
+Headers:
+  Authorization: Bearer <supabase_access_token>
+  Content-Type: application/json
+Body (Anthropic-style, translated internally):
+  {
+    "model": "gemini-2.5-flash",
+    "max_tokens": 1500,
+    "system": "<optional system prompt>",
+    "messages": [{"role": "user"|"assistant", "content": "..."}]
+  }
+Response:
+  200 OK → {"content": [{"text": "..."}]}
+  429 → {"type":"error","error":{"type":"DAILY_LIMIT","message":"..."}}
+  401 → {"error":{"type":"auth_error","message":"..."}}
+  500 → {"error":{"type":"config_error","message":"..."}} (key missing)
+```
+
+### Mobile → ai-proxy/whisper
+```
+POST https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/whisper
+Headers:
+  Authorization: Bearer <supabase_access_token>
+Body: multipart/form-data
+  file: <audio blob>
+Response:
+  200 OK → {"text": "transcription..."}  (OpenAI Whisper passthrough)
+```
+
+### Rex Lens → same endpoints (via `callAIProxy` in service-worker.ts)
+Timeout: 60s. Handles DAILY_LIMIT error type specifically.
+
+## GIT STATE
+
+Recent commits (newest first):
+- `726f24e` Resolve merge conflicts: keep Gemini migration changes
+- `cade219` Migrate AI backend from Anthropic Claude to Google Gemini 2.5 Flash
+- `a0560f4` Merge V21 into main: 3-tier pricing + Gemini migration
+- `211f96c` V21: 3-tier pricing redesign + Gemini 2.5 Flash migration
+- `869eb2f` Remove Context-Switching, Proximity Alerts, Map View
+- `b541075` Complete landing page overhaul: new hero, 3-tier pricing, FAQ
+- `b4fdf58` V20: Server-side daily cost cap, ai-proxy edge function, pro_bundle plan
+
+Main working branch: `main`. Feature branch convention: `claude/<feature-desc>-<random>`.
+Current feature branch from last session: `claude/pocketrep-review-improvements-T4rEa` (merged + pushed).
+
+## DESIGN / BUSINESS DECISIONS THAT MATTER
+
+1. **Server-side AI caps, not client-side.** Daily limits live in the edge function. Do NOT trust client-enforced caps.
+2. **Single-rep product.** Do NOT add team/manager features. That's dealership product — different buyer, different price, different code.
+3. **Gemini-only for text.** Do NOT re-add Anthropic Claude without pricing analysis. Gemini 2.5 Flash is ~10x cheaper and good enough at this quality tier. Keep the `/anthropic` route deprecated (returns 410).
+4. **Rex tone**: closer energy, no em-dashes, no bullet points in generated scripts, "hey" not "hi", never say "trade value" (say "potential equity").
+5. **Heat scoring is client-side** in `app/(tabs)/index.tsx`. The DB fields `heat_tier`, `heat_score`, `heat_reason` exist but are computed fresh on every load. Do NOT refactor this to a server job without reason — it keeps the app offline-resilient.
+6. **Pro vs Elite differentiator is rex_memory** (summaries) + weekly digest + 100-item batch size (vs 50). Keep that gate clear.
+7. **Rex Lens auth is shared with mobile app** via Supabase session persistence. Users log in once.
+8. **Privacy policy explicitly names Google + OpenAI** — if you change providers, update privacy.html same PR.
+9. **Landing site is hand-written HTML**, not a framework. Resist the urge to migrate to Next. It's fast + zero build cost.
+10. **Picovoice is the only reason Hey Rex works on native**. If PICOVOICE_KEY is missing, the orb gracefully degrades with a console warning.
+
+================================================================================
+PART 4 / 4 — NEXT STEPS + BUGS + CAVEMAN PROMPT FOR NEXT AGENT
+================================================================================
+
+## WHAT TO BUILD NEXT — PRIORITY ORDER
+
+### 🔥 P0 — Blocking / immediate
+
+1. **Set GEMINI_API_KEY in Supabase secrets.** The edge function is deployed (v8) but will 500 with `config_error` until the key is added via Supabase Dashboard → Project Settings → Edge Functions → Secrets. No MCP tool exists for this — it's a manual step by the human operator.
+2. **Smoke test ALL AI calls end-to-end:**
+   - Mobile: Heat Sheet Brief button → should return bullets
+   - Mobile: Rex chat → should respond
+   - Mobile: Rebuttals "New Angle" → should generate
+   - Mobile: More tab → Generate Digest → should return recap
+   - Rex Lens: Chat on any page → should respond
+   - Rex Lens: Scan a VinSolutions worklist → should return batched scripts
+   - Rex Lens: Deep Review on a worklist → should click through + build game plan
+   - Voice: Hey Rex wake → Whisper → Gemini round trip
+
+### 🟡 P1 — Should ship this week
+
+3. **Finish CSV export pipe**: `exportBook` in more.tsx just shows an Alert preview. Swap for `expo-sharing` to save/share the CSV file.
+4. **Verify Stripe webhook → profile.plan flow**: confirm new signups land with correct plan code and trial_ends_at. Webhook lives outside this repo (probably on landing site or separate service) — trace it.
+5. **Add pricing page CTA telemetry** so we can see which of the 3 tiers actually converts.
+
+### 🟢 P2 — Nice to have
+
+6. **Salesforce adapter for Rex Lens** (user demand; ties into "works anywhere" positioning)
+7. **Push notifications** via Expo Push Tokens + Supabase for server-triggered alerts ("Your lease-ending contact just opened your email")
+8. **In-app purchase** (App Store + Play Billing). Today upgrade flow is web-only.
+9. **Extract `AI_PROXY_URL` to a single constants file** — it's currently hardcoded in 4-5 places with a `process.env` fallback. Slight duplication risk.
+
+## KNOWN BUGS / ISSUES SPOTTED WHILE READING CODE
+
+1. **`rex.tsx` has a stale alert message** referencing `ANTHROPIC_KEY` in error text (line 337 in the error branch of `send()`: "Connection error. Check your network and API key."). Minor — user-facing string. The actual ANTHROPIC_KEY env var is gone. Error message should probably just say "Connection error. Check your network."
+2. **Deep Review "30s timeout" log is wrong** — `AI_TIMEOUT_MS = 60_000` but `err.name === 'AbortError'` throws "AI request timed out (30s)". Off-by-one in the message.
+3. **`parseRexAction` throws silently** on malformed JSON inside `<action>` tags and returns null. Ok behavior, but there's no telemetry — we won't know how often Rex emits bad JSON.
+4. **`exportBook` CSV escape is partial** — only escapes `notes` field (`.replace(/"/g, '""')`). If a contact's name or email contained commas/quotes, the CSV would be malformed. Low risk, worth hardening.
+5. **`contacts.tsx` lazy-requires `expo-contacts`** — if the package isn't installed in a build, syncing from phone contacts silently fails. Low risk but we should add a UI state to surface "contact sync unavailable in this build".
+6. **`HeyRex.tsx` PICOVOICE_KEY fallback is silent** — the orb just doesn't wake. Should show a toast or banner to the rep so they know to configure.
+7. **`ai-proxy/index.ts` doesn't stream** — it blocks on full Gemini response before returning. For long prompts (Deep Review game plan with 30 leads + 3000 tokens), client may timeout. Consider SSE streaming later.
+8. **The `/anthropic` deprecated route triggers an internal 410 but bypasses rate limit increment** — intentional, but if someone builds against the old URL, usage caps won't apply. Ok for now since it just errors them out.
+
+## FILES TO ATTACH WHEN STARTING A FRESH CHAT
+
+If you want the next agent to get up to speed with FULL context, attach these (in this order):
+
+1. `/home/user/PocketRep/PROJECT_MASTER_CONTEXT.txt` ← THIS FILE (always attach first)
+2. `PocketRepApp/supabase/functions/ai-proxy/index.ts` (the critical backend)
+3. `PocketRepApp/app/(tabs)/rex.tsx` (biggest client file, shows patterns)
+4. `RexLens/src/background/service-worker.ts` (extension logic)
+5. `RexLens/src/shared/prompts.ts` (all prompt copy)
+6. `PocketRepApp/lib/types.ts` (full schema)
+7. `PocketRepApp/.env.example` (required env vars)
+
+For surface-level changes (copy tweaks, single-file bugs), `PROJECT_MASTER_CONTEXT.txt` alone is enough.
+
+## SINGLE MOST IMPORTANT THING TO BUILD NEXT
+
+**Set `GEMINI_API_KEY` in Supabase Edge Function secrets and smoke-test every AI path.**
+
+Right now the entire app looks fine in code but every AI feature is broken in production until that key is set. Nothing else matters until users can actually generate briefs, chat with Rex, scan worklists, and get digests. This is a 2-minute setup + 15-minute manual test, and it unblocks the V21 migration commit sitting on main.
+
+================================================================================
+CAVEMAN PROMPT FOR NEXT AGENT (copy-paste this into a fresh Claude session)
+================================================================================
+
+You are new agent on PocketRep codebase. Rules:
+
+1. TALK CAVEMAN. Three words max per update. "Fixing auth bug." "Deploying now." "Tests pass." "Found error."
+
+2. READ PROJECT_MASTER_CONTEXT.txt FIRST. That file at /home/user/PocketRep/PROJECT_MASTER_CONTEXT.txt. It tells you everything. Read whole thing before typing.
+
+3. ERROR APPEAR? FIX IT. Do not ask. Do not tell. Fix. Move on.
+
+4. BIG TASK? SPLIT IN HALF. Cannot finish whole task one shot? Split. Do first half. Then second half. Compile together.
+
+5. STILL TOO BIG? SPLIT IN QUARTERS. Cut again. Four pieces. Do each. Glue back.
+
+6. STREAM TIMEOUT? SPLIT. Same rule. Smaller chunks.
+
+7. ALWAYS TIE IT TOGETHER. Small pieces must connect. No orphan code. No half-wired features. Compile. Test. Verify imports. Verify types. Verify git.
+
+8. STACK: Expo mobile + Chrome extension + HTML landing. Supabase backend. Gemini AI. Never add Anthropic back.
+
+9. GIT: develop on `claude/<desc>-<rand>` branch. Merge main. Push both. No force push main.
+
+10. SECRETS: you cannot rotate keys. Tell human. Human does dashboard. Agent does code.
+
+11. TONE: Rex says no em-dash. No bullets in scripts. "Hey" not "Hi." "Potential equity" not "trade value."
+
+12. DONE WORK? ONE LINE. "Shipped X." Do not brag. Do not explain long.
+
+13. STUCK? ASK HUMAN. But ask caveman. "Rotate key?" "Confirm split?" "Push now?"
+
+14. TEST EVERY AI PATH after any proxy change. Brief, Rex chat, Rebuttals, Digest, Lens chat, Lens scan, Deep Review, Hey Rex voice.
+
+15. NO NEW FEATURES without human say-so. Bug fix stay bug fix. No cleanup drive-by.
+
+Go. Build. Ship. Grunt.
+
+================================================================================
+END OF MASTER CONTEXT
+================================================================================
