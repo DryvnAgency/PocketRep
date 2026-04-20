@@ -15,7 +15,7 @@ try { AsyncStorage = require('@react-native-async-storage/async-storage').defaul
 
 const DIGEST_TIME_KEY = 'pocketrep_digest_time';
 
-const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
+const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? '';
 const REX_MODEL = 'gemini-2.5-flash';
 
 export default function MoreScreen() {

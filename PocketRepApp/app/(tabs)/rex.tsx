@@ -12,7 +12,7 @@ import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 
 // ── Model: Gemini 2.5 Flash for speed + cost on every Rex call ──────────────
 const REX_MODEL = 'gemini-2.5-flash';
-const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
+const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? '';
 
 // Lazy-load expo-image-picker so a missing package never crashes the app
 let ImagePicker: any = null;
@@ -508,7 +508,7 @@ export default function RexScreen() {
           const form = new FormData();
           form.append('file', audioBlob, 'rex_input.m4a');
           form.append('model', 'whisper-1');
-          const wr = await fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/whisper', {
+          const wr = await fetch(`${AI_PROXY_URL}/whisper`, {
             method: 'POST',
             body: form,
           });

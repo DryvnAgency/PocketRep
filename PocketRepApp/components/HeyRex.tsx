@@ -25,8 +25,9 @@ import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 //   → Add @picovoice/porcupine-react-native + custom "Hey Rex" keyword
 //   → picovoice.ai/console — free tier, runs fully on-device, no battery drain
 
-// API keys are now server-side only — calls go through the Supabase Edge Function proxy
-const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
+// API keys are server-side only — calls go through the Supabase Edge Function proxy.
+// Set EXPO_PUBLIC_AI_PROXY_URL in .env. Expo bakes it into the bundle at build time.
+const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? '';
 const REX_MODEL = 'gemini-2.5-flash';
 
 // ── Wake word (Porcupine) ─────────────────────────────────────────────────────

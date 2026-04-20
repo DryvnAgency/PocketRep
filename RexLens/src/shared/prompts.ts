@@ -2,7 +2,9 @@ import type { PageContent, StructuredTask } from './types';
 
 export const REX_MODEL = 'gemini-2.5-flash';
 export const HAIKU_MODEL = 'gemini-2.5-flash';
-export const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/gemini';
+// Derived from SUPABASE_URL env var at build time (see esbuild.config.mjs
+// `define` + .env). Rotate by updating .env and rebuilding — never hardcode.
+export const AI_PROXY_URL = `${process.env.SUPABASE_URL || ''}/functions/v1/ai-proxy/gemini`;
 
 /** Format structured tasks as a compact numbered list for prompts */
 function formatStructuredTasks(page: PageContent): string {

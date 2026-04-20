@@ -185,6 +185,9 @@ function HeyRexOrb({ user, activeTab }) {
     }
     setStageSync('processing');
 
+    // Expo Snack demo — hardcoded public Supabase Edge Function URL. Not a
+    // credential. Expo Snack has no env var mechanism; update this literal
+    // if the backing Supabase project is migrated.
     const AI_PROXY = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 
     try {

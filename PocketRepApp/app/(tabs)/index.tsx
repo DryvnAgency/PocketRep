@@ -13,7 +13,7 @@ import { requestNotificationPermission, scheduleContactReminders } from '@/lib/n
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
 
-const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
+const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? '';
 const NOTIF_CHECK_KEY = 'pocketrep_notif_check_v1';
 
 // ── Heat score engine (runs client-side, no server needed) ──────────────────
