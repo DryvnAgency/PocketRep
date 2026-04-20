@@ -27,24 +27,17 @@ async function scrapeTab(): Promise<{ customers: ScrapedCustomer[]; platform: Sc
   const platform = CRM_PATTERNS.find((p) => hostname.includes(p)) as ScrapePayload['platform'] | undefined;
   if (!platform) throw new UnsupportedHostError(hostname);
 
-  // Inject the content script on demand. Handles the two failure modes
-  // of the manifest-declared injection:
-  //   1) tab was loaded before the extension was installed/reloaded
-  //   2) user clicks the icon on a tab that was never matched at load time
-  // executeScript is idempotent from the user's view — double injection
-  // is guarded by window.__openRexLoaded inside the content script.
+  // Ensure content script is injected (handles tabs open before extension install)
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       files: ['dist/content-script.js'],
     });
   } catch (_) {
-    // Swallow: the script may already be present, or host_permissions
-    // may not cover this tab. sendMessage will surface the real error.
+    // Already injected — ignore "cannot inject" errors
   }
 
-  // Small delay so the freshly-injected listener is registered before
-  // sendMessage. 100 ms is enough in practice; keeps things snappy.
+  // Small delay to let the newly-injected script register its listener
   await new Promise((r) => setTimeout(r, 100));
 
   const response = await chrome.tabs.sendMessage(tab.id, { type: 'open-rex:scrape' });
