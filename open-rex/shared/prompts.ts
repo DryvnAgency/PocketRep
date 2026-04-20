@@ -1,4 +1,4 @@
-import type { Conversation } from './types';
+import type { Conversation, OutreachAngle, ScrapedCustomer } from './types';
 
 export const OPEN_REX_MODEL = 'gemini-2.5-flash';
 
@@ -49,6 +49,37 @@ Watch for signals that the customer wants to come in: "when can I come by", "wha
 
 When you detect an appointment signal, your reply should: confirm enthusiasm briefly, propose 2 specific time windows (tomorrow morning, tomorrow afternoon, or similar), and flag this conversation for the dealer rep to take over. Do not try to book the appointment yourself in the SMS — the rep closes the loop.`;
 
+// Six canonical opening angles. Round-robin across a batch so each SMS
+// in a mass outreach reads differently from the rest — same voice,
+// different phrasing, avoids carrier spam filtering.
+export const OUTREACH_ANGLES: Record<OutreachAngle, string> = {
+  check_in:
+    'ANGLE: plain check-in. Ask how the vehicle is treating them. Warm, no edge, no reason given beyond genuine curiosity.',
+  mileage_prompt:
+    'ANGLE: time gap. Acknowledge it has been a while since you last connected. Ask if the vehicle is still running strong. Do not calculate exact months unless the data gives it.',
+  service_frame:
+    'ANGLE: service touchpoint. Frame the check-in around the upcoming season or a natural service checkpoint (winter tires, summer road trips, oil interval). Soft, not pushy.',
+  lease_aware:
+    'ANGLE: lease-aware. Only use IF the profile context includes lease/end-date/months-remaining info. Ask what is on their mind as the lease end gets closer. Never guess at lease status.',
+  time_lapse:
+    'ANGLE: years since purchase. If purchase date is available, reference how long they have had the vehicle naturally ("almost 3 years with the Tacoma now"). If not available, skip this angle.',
+  neighbor_check:
+    'ANGLE: peer reference. "Been catching up with a few folks from around then" tone. Makes the outreach feel like a batch of personal check-ins rather than a single cold ping.',
+};
+
+const MASS_OUTREACH_FRAME = `MASS OUTREACH — ONE BESPOKE SMS:
+
+You are writing ONE of many outreach SMS in a batch. The rep runs these through a dashboard and each customer needs to receive a message that reads uniquely — same Rex voice, different phrasing and approach from the others in the batch.
+
+Each call you receive will specify ONE angle (see ANGLE line below). Honor that angle. Do not blend angles. Do not use stock openers — vary sentence structure per customer. Use every concrete detail the user prompt gives you (notes, trade-in, purchased vehicle, last contact, history), and thread ONE specific detail into the SMS if it feels natural. If nothing specific is usable, still deliver a Rex-voice check-in.
+
+Structure remains:
+1. "Hey <FirstName>," opener
+2. Content shaped by the ANGLE
+3. One direct question about them, not about a sale
+
+Never invent facts. If a field says "unknown", do not reference it.`;
+
 export function buildFirstOutreachPrompt(customer: {
   firstName: string;
   vehicle: string | null;
@@ -69,6 +100,58 @@ export function buildFirstOutreachPrompt(customer: {
 Customer: ${customer.firstName}
 Vehicle: ${customer.vehicle || 'unknown'}
 Last contacted: ${customer.lastContactedAt || 'unknown (long time)'}
+
+Return only the SMS body. No preamble, no labels, no markdown.`;
+
+  return { system, user };
+}
+
+export function buildMassOutreachPrompt(
+  customer: Pick<
+    ScrapedCustomer,
+    | 'firstName'
+    | 'vehicle'
+    | 'lastContactedAt'
+    | 'notes'
+    | 'interactionHistory'
+    | 'tradeInVehicle'
+    | 'purchasedVehicle'
+    | 'purchaseDate'
+    | 'lastContactDate'
+    | 'status'
+    | 'source'
+  >,
+  angle: OutreachAngle,
+): { system: string; user: string } {
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const angleDirective = OUTREACH_ANGLES[angle];
+  const system = `${CORE_VOICE_RULES}\n\n${MASS_OUTREACH_FRAME}\n\n${angleDirective}\n\nToday is ${dateStr}.`;
+
+  const field = (v: string | null | undefined) => (v && v.trim() ? v.trim() : 'unknown');
+
+  const user = `Write ONE outreach SMS for this customer.
+
+Customer first name: ${customer.firstName || 'unknown'}
+Primary vehicle: ${field(customer.vehicle)}
+Purchased vehicle: ${field(customer.purchasedVehicle)}
+Purchase date: ${field(customer.purchaseDate)}
+Trade-in vehicle (if any): ${field(customer.tradeInVehicle)}
+Last contact date: ${field(customer.lastContactDate ?? customer.lastContactedAt)}
+Lead status: ${field(customer.status)}
+Lead source: ${field(customer.source)}
+
+Rep notes on file:
+${field(customer.notes)}
+
+Recent interaction history (newest first):
+${field(customer.interactionHistory)}
 
 Return only the SMS body. No preamble, no labels, no markdown.`;
 
@@ -198,4 +281,16 @@ export function stripAppointmentSignal(body: string): { body: string; isAppointm
     body: body.replace(/APPOINTMENT_SIGNAL\s*$/i, '').trim(),
     isAppointment,
   };
+}
+
+/** First 6 words of a string, lowercased — used for in-batch duplicate detection. */
+export function openerFingerprint(body: string): string {
+  return body
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(' ');
 }

@@ -75,3 +75,13 @@ alter table appointment_signals enable row level security;
 
 -- Service role bypasses RLS. Dashboard auth uses DASHBOARD_AUTH_SECRET bearer
 -- today; swap to Supabase Auth + proper policies post-MVP.
+
+-- ─── Migration: rich profile fields + draft angle (run once on existing DB) ───
+alter table customers add column if not exists notes text;
+alter table customers add column if not exists interaction_history text;
+alter table customers add column if not exists trade_in_vehicle text;
+alter table customers add column if not exists purchased_vehicle text;
+alter table customers add column if not exists purchase_date text;
+alter table customers add column if not exists last_contact_date text;
+
+alter table drafts add column if not exists angle text;

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { generateFirstOutreachDraft } from '@/lib/draft-generator';
+import { generateMassOutreachDrafts } from '@/lib/draft-generator';
 import { requireBearer } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
@@ -17,14 +17,13 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'customerIds required' }, { status: 400 });
   }
 
-  const results = await Promise.allSettled(
-    payload.customerIds.map((id) => generateFirstOutreachDraft(id))
-  );
-
-  const generated = results.filter((r) => r.status === 'fulfilled').length;
-  const failed = results
-    .map((r, i) => (r.status === 'rejected' ? { id: payload.customerIds[i], reason: String((r as PromiseRejectedResult).reason) } : null))
-    .filter(Boolean);
-
-  return Response.json({ ok: true, generated, failed });
+  try {
+    const { generated, failed } = await generateMassOutreachDrafts(payload.customerIds);
+    return Response.json({ ok: true, generated, failed });
+  } catch (e) {
+    return Response.json(
+      { error: e instanceof Error ? e.message : 'generation failed' },
+      { status: 500 },
+    );
+  }
 }

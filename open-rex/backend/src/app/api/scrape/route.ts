@@ -32,15 +32,24 @@ export async function POST(req: NextRequest) {
     status: c.status,
     source: c.source,
     raw_context: c.rawContext,
+    notes: c.notes ?? null,
+    interaction_history: c.interactionHistory ?? null,
+    trade_in_vehicle: c.tradeInVehicle ?? null,
+    purchased_vehicle: c.purchasedVehicle ?? null,
+    purchase_date: c.purchaseDate ?? null,
+    last_contact_date: c.lastContactDate ?? null,
     scraped_at: payload.scrapedAt,
   }));
 
-  const { error, count } = await supabase
+  const { data, error } = await supabase
     .from('customers')
-    .upsert(rows, { onConflict: 'dealer_id,external_id', count: 'exact' });
+    .upsert(rows, { onConflict: 'dealer_id,external_id' })
+    .select('id');
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
-  return Response.json({ ok: true, upserted: count ?? rows.length });
+
+  const customerIds = (data ?? []).map((r: { id: string }) => r.id);
+  return Response.json({ ok: true, upserted: customerIds.length, customerIds });
 }

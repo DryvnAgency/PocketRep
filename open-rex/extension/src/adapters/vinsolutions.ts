@@ -46,7 +46,74 @@ function normalizePhone(raw: string): string | null {
   return null;
 }
 
-function extractContactFromHtml(html: string): { phone: string | null; email: string | null } {
+// Profile-page extractor. VinSolutions markup varies by tenant — these
+// are broad heuristics. Expect to tune label regexes the first time a
+// real profile comes back empty in a few spots.
+interface RichProfile {
+  phone: string | null;
+  email: string | null;
+  notes: string | null;
+  interactionHistory: string | null;
+  tradeInVehicle: string | null;
+  purchasedVehicle: string | null;
+  purchaseDate: string | null;
+  lastContactDate: string | null;
+}
+
+function sectionAfterHeading(doc: Document, labelRegex: RegExp, maxChars = 2000): string | null {
+  const headings = Array.from(doc.querySelectorAll('h1, h2, h3, h4, h5, h6, legend, label, th, strong'));
+  for (const h of headings) {
+    const text = (h.textContent ?? '').trim();
+    if (labelRegex.test(text)) {
+      const sibling = h.nextElementSibling ?? h.parentElement?.nextElementSibling;
+      if (sibling) {
+        const body = (sibling.textContent ?? '').replace(/\s+/g, ' ').trim();
+        if (body) return body.slice(0, maxChars);
+      }
+    }
+  }
+  return null;
+}
+
+function valueForLabel(doc: Document, labelRegex: RegExp): string | null {
+  // VinSolutions often renders label/value as <td>Label</td><td>Value</td>
+  // or <dt>Label</dt><dd>Value</dd>. Try both.
+  const cells = Array.from(doc.querySelectorAll('td, dt, th'));
+  for (const cell of cells) {
+    const text = (cell.textContent ?? '').trim();
+    if (labelRegex.test(text)) {
+      const next = cell.nextElementSibling;
+      if (next) {
+        const value = (next.textContent ?? '').replace(/\s+/g, ' ').trim();
+        if (value && !labelRegex.test(value)) return value.slice(0, 240);
+      }
+    }
+  }
+  return null;
+}
+
+function extractActivityHistory(doc: Document): string | null {
+  // Look for a table with headers that look like an activity log
+  const tables = Array.from(doc.querySelectorAll('table'));
+  for (const table of tables) {
+    const headerText = (table.querySelector('thead, tr')?.textContent ?? '').toLowerCase();
+    if (/date|type|activity|action|result/.test(headerText)) {
+      const rows = Array.from(table.querySelectorAll('tbody tr, tr'));
+      const lines: string[] = [];
+      rows.forEach((r, i) => {
+        if (i === 0) return; // header
+        const cells = Array.from(r.querySelectorAll('td')).map((td) =>
+          (td.textContent ?? '').replace(/\s+/g, ' ').trim(),
+        );
+        if (cells.some(Boolean)) lines.push(cells.filter(Boolean).slice(0, 4).join(' | '));
+      });
+      if (lines.length > 0) return lines.slice(0, 10).join('\n');
+    }
+  }
+  return null;
+}
+
+function extractProfileFromHtml(html: string): RichProfile {
   const doc = new DOMParser().parseFromString(html, 'text/html');
 
   const mailto = doc.querySelector('a[href^="mailto:"]') as HTMLAnchorElement | null;
@@ -60,7 +127,6 @@ function extractContactFromHtml(html: string): { phone: string | null; email: st
   const tel = doc.querySelector('a[href^="tel:"]') as HTMLAnchorElement | null;
   if (tel) phone = normalizePhone(tel.href.replace(/^tel:/i, ''));
   if (!phone) {
-    // Prefer phone next to labels like "Cell" or "Mobile" before falling back
     const labeled = html.match(/(?:cell|mobile|phone)[^0-9]{0,20}(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i);
     if (labeled) phone = normalizePhone(labeled[1]);
   }
@@ -69,17 +135,36 @@ function extractContactFromHtml(html: string): { phone: string | null; email: st
     phone = m ? normalizePhone(m[0]) : null;
   }
 
-  return { phone, email };
+  return {
+    phone,
+    email,
+    notes: sectionAfterHeading(doc, /notes|comments|description/i, 2000),
+    interactionHistory: extractActivityHistory(doc),
+    tradeInVehicle: valueForLabel(doc, /^(trade|trade[- ]?in|current vehicle)\b/i),
+    purchasedVehicle: valueForLabel(doc, /^(purchased|sold vehicle|primary vehicle)\b/i),
+    purchaseDate: valueForLabel(doc, /^(purchase date|sold date|delivered)\b/i),
+    lastContactDate: valueForLabel(doc, /^(last contact|last touched|last activity)\b/i),
+  };
 }
 
-async function fetchDetail(link: HTMLAnchorElement): Promise<{ phone: string | null; email: string | null }> {
+async function fetchDetail(link: HTMLAnchorElement): Promise<RichProfile> {
+  const empty: RichProfile = {
+    phone: null,
+    email: null,
+    notes: null,
+    interactionHistory: null,
+    tradeInVehicle: null,
+    purchasedVehicle: null,
+    purchaseDate: null,
+    lastContactDate: null,
+  };
   try {
     const res = await fetch(link.href, { credentials: 'include' });
-    if (!res.ok) return { phone: null, email: null };
+    if (!res.ok) return empty;
     const html = await res.text();
-    return extractContactFromHtml(html);
+    return extractProfileFromHtml(html);
   } catch {
-    return { phone: null, email: null };
+    return empty;
   }
 }
 
@@ -171,6 +256,12 @@ function scrapeGrid(leftDoc: Document, gridId: string, section: string): RawScra
         status: status || null,
         source: source || null,
         rawContext,
+        notes: null,
+        interactionHistory: null,
+        tradeInVehicle: null,
+        purchasedVehicle: null,
+        purchaseDate: null,
+        lastContactDate: null,
       },
       link: nameLink,
     });
@@ -210,7 +301,17 @@ export async function extract(): Promise<ScrapedCustomer[]> {
 
   return batchWithLimit(deduped, DETAIL_FETCH_CONCURRENCY, async ({ customer, link }) => {
     if (!link) return customer;
-    const { phone, email } = await fetchDetail(link);
-    return { ...customer, phone, email };
+    const profile = await fetchDetail(link);
+    return {
+      ...customer,
+      phone: profile.phone,
+      email: profile.email,
+      notes: profile.notes,
+      interactionHistory: profile.interactionHistory,
+      tradeInVehicle: profile.tradeInVehicle,
+      purchasedVehicle: profile.purchasedVehicle,
+      purchaseDate: profile.purchaseDate,
+      lastContactDate: profile.lastContactDate,
+    };
   });
 }

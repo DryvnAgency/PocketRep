@@ -45,7 +45,10 @@ async function scrapeTab(): Promise<{ customers: ScrapedCustomer[]; platform: Sc
   return { customers: response.customers as ScrapedCustomer[], platform };
 }
 
-async function postToBackend(customers: ScrapedCustomer[], platform: ScrapePayload['platform']) {
+async function uploadScrape(
+  customers: ScrapedCustomer[],
+  platform: ScrapePayload['platform'],
+): Promise<{ customerIds: string[] }> {
   const { backendUrl, dealerId, authSecret } = await getConfig();
   const payload: ScrapePayload = {
     dealerId,
@@ -61,8 +64,24 @@ async function postToBackend(customers: ScrapedCustomer[], platform: ScrapePaylo
     },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(`backend responded ${res.status}`);
-  return res.json();
+  if (!res.ok) throw new Error(`scrape responded ${res.status}`);
+  const json = (await res.json()) as { customerIds?: string[] };
+  return { customerIds: json.customerIds ?? [] };
+}
+
+async function generateDrafts(customerIds: string[]): Promise<{ generated: number }> {
+  const { backendUrl, authSecret } = await getConfig();
+  const res = await fetch(`${backendUrl}/api/drafts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${authSecret}`,
+    },
+    body: JSON.stringify({ customerIds }),
+  });
+  if (!res.ok) throw new Error(`drafts responded ${res.status}`);
+  const json = (await res.json()) as { generated?: number };
+  return { generated: json.generated ?? 0 };
 }
 
 async function runScrapeFlow() {
@@ -73,12 +92,14 @@ async function runScrapeFlow() {
       await chrome.action.setBadgeText({ text: '0' });
       return;
     }
-    const result = await postToBackend(customers, platform);
+    const { customerIds } = await uploadScrape(customers, platform);
+    // Chain: bespoke, angle-rotated drafts are queued immediately after upload.
+    const { generated } = await generateDrafts(customerIds);
     await chrome.action.setBadgeBackgroundColor({ color: '#7a4dff' });
-    await chrome.action.setBadgeText({ text: String(customers.length) });
-    console.log('[open-rex] uploaded', result);
+    await chrome.action.setBadgeText({ text: `${generated}d` });
+    console.log('[open-rex] scrape + drafts complete', { scraped: customers.length, generated });
   } catch (err) {
-    console.error('[open-rex] scrape flow failed', err);
+    console.error('[open-rex] flow failed', err);
     if (err instanceof UnsupportedHostError) {
       await chrome.action.setBadgeBackgroundColor({ color: '#5e6472' });
       await chrome.action.setBadgeText({ text: 'N/A' });
