@@ -1,11 +1,19 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// These match the PocketRep mobile app's Supabase project.
-// In production, inject via build-time env vars.
-const SUPABASE_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0';
+// Values are injected at build time via esbuild's `define` (reads from
+// process.env at build time — see esbuild.config.mjs). They never live in
+// source. Rotating the anon key means updating the env and rebuilding,
+// not editing this file.
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 
-// Chrome extension storage adapter for Supabase auth persistence
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error(
+    '[rex-lens] SUPABASE_URL or SUPABASE_ANON_KEY missing at build time. ' +
+    'Set them in RexLens/.env before running `npm run build`.'
+  );
+}
+
 const chromeStorage = {
   getItem: async (key: string): Promise<string | null> => {
     const result = await chrome.storage.local.get(key);

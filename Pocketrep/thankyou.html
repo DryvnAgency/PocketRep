@@ -666,9 +666,9 @@ document.getElementById('acct-form').addEventListener('submit',function(e){
     var btn=document.querySelector('#acct-form button[type="submit"]');
     if(btn){btn.disabled=true;btn.textContent='Creating account...';}
     var supaEmail=document.getElementById('acct-email-val').textContent.trim();
-    fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/auth/v1/signup',{
+    fetch('__SUPABASE_URL__/auth/v1/signup',{
       method:'POST',
-      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0'},
+      headers:{'Content-Type':'application/json','apikey':'__SUPABASE_ANON_KEY__','Authorization':'Bearer __SUPABASE_ANON_KEY__'},
       body:JSON.stringify({email:supaEmail,password:pw,data:{username:user,plan:new URLSearchParams(location.search).get('plan')||'pro'}})
     }).then(function(r){return r.json();}).then(function(d){
       if(d.error){
@@ -680,9 +680,9 @@ document.getElementById('acct-form').addEventListener('submit',function(e){
                     var userId=d.user&&d.user.id;
                     var planVal=new URLSearchParams(location.search).get('plan')||'pro';
                     if(userId){
-                                    fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/rest/v1/users',{
+                                    fetch('__SUPABASE_URL__/rest/v1/users',{
                                                       method:'POST',
-                                                      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Prefer':'return=minimal'},
+                                                      headers:{'Content-Type':'application/json','apikey':'__SUPABASE_ANON_KEY__','Authorization':'Bearer __SUPABASE_ANON_KEY__','Prefer':'return=minimal'},
                                                       body:JSON.stringify({id:userId,username:user.toLowerCase(),email:supaEmail,plan:planVal})
                                     });
                     }

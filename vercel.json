@@ -1,5 +1,6 @@
 {
-  "outputDirectory": "Pocketrep",
+  "buildCommand": "node scripts/build-pocketrep.mjs",
+  "outputDirectory": "dist",
   "rewrites": [
     { "source": "/thank-you", "destination": "/thankyou.html" },
     { "source": "/privacy", "destination": "/privacy.html" },
