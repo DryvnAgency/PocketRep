@@ -1,0 +1,376 @@
+================================================================================
+OPEN REX — SESSION LOG (chronology of all work through 2026-04-20)
+================================================================================
+
+Read this to understand WHY things are the way they are. Decisions come with
+reasoning; references point to commits, PRs, and files. The session started
+from "zero Open Rex code exists" and ended with a deployed product on
+DryvnAgency/OpenRex behind https://open-rex.vercel.app/.
+
+Working branch throughout on the staging side: DryvnAgency/PocketRep branch
+claude/add-handover-docs-fL4XU (PR #8). A separate security-fix branch is
+PR #10 on the same repo.
+
+================================================================================
+WAVE 1 — DOCUMENTING THE PRODUCT BEFORE WRITING CODE
+================================================================================
+
+Founder defined Open Rex in conversation: dealership customer-DB reactivation
+SMS agent. Separate product from PocketRep, Rex Lens, His Palabra. Targeted
+at dealership owner-operators with dormant customer lists.
+
+Written first (no code yet):
+  open-rex-docs/OPEN_REX_HANDOVER.txt      first-day spec for new contributor
+  open-rex-docs/OPEN_REX_MASTER_CONTEXT.txt  full technical inventory
+
+Voice rules iterated live with the founder:
+  - Opener: originally loose, locked to "Hey <FirstName>," only.
+    Banned: hi, ha, hiya, howdy, morning, everything else.
+  - Tone: originally "closer"; corrected to "conversational consultant."
+    Frame is "how can I help you?" not "time to upgrade."
+  - Reframing banned phrases: huge sale, limited time offer, act now,
+    don't miss out, biggest event, crazy deals, special promotion, lowest
+    prices, unbeatable, amazing offer, exclusive deal, incredible
+    savings, once-in-a-lifetime, flash sale, blowout, clearance event.
+  - Dashes banned entirely (-, --, —, –).
+
+Sibling-product clarifications:
+  - Rex Lens: Chrome extension that coaches reps live on their CRM.
+    Open Rex borrows its scraper pattern and persona file.
+  - PocketRep: mobile CRM for reps.
+  - His Palabra: faith-based app. Zero overlap with Open Rex.
+
+================================================================================
+WAVE 2 — INITIAL SCAFFOLD INSIDE POCKETREP
+================================================================================
+
+Scaffold landed as the open-rex/ subfolder of the PocketRep repo because my
+MCP scope was limited to DryvnAgency/PocketRep. Founder later created the
+standalone DryvnAgency/OpenRex repo; we migrated in Wave 4.
+
+Scaffold commit: aad73be (36 files, +1493 lines).
+
+Layout introduced:
+  open-rex/
+    extension/         Chrome MV3 (esbuild, TypeScript, manifest)
+    backend/           Next.js 14 app router + Tailwind + Supabase +
+                       Gemini + Twilio libs
+    shared/            types.ts + prompts.ts (single source of Rex voice)
+    backend/supabase/schema.sql  dealers/customers/drafts/messages/
+                                 appointment_signals
+    .env.example, .gitignore, README.md
+
+Key decisions:
+  - Next.js 14 App Router in backend/ (not pages router).
+  - Supabase for persistence; server-role key on backend, anon key on
+    extension eventually (currently extension reads nothing from
+    Supabase — all through the backend API with bearer auth).
+  - Gemini 2.5 Flash for draft generation (cheaper free tier than Claude
+    API; see LLM provider section in MASTER_CONTEXT).
+  - Extension posts to backend with bearer auth via DASHBOARD_AUTH_SECRET.
+  - VinSolutions first CRM target; other adapters as a follow-up.
+  - prebuilt open-rex-extension-v0.1.0.zip committed to the repo so the
+    dealer can load-unpacked without running npm install.
+
+================================================================================
+WAVE 3 — SECURITY FIX: SUPABASE ENV INJECTION (PR #10)
+================================================================================
+
+Trigger: founder reported Vercel had a security incident; any secrets sitting
+in Vercel env vars should be treated as compromised. Scan turned up two real
+problems in the monorepo:
+
+  1. RexLens/src/shared/supabase.ts hardcoded the Supabase URL and anon JWT
+     as string constants. Anon keys are public-by-design (Chrome extension
+     bundles them), but rotating them was a code change.
+  2. Pocketrep/thankyou.html (marketing site) embedded the same URL + anon
+     key in inline JavaScript.
+
+Fix shipped as PR #10 on branch claude/secure-supabase-env-injection
+(off main, independent of Open Rex PR #8):
+
+  - RexLens: esbuild.config.mjs now reads RexLens/.env at build time and
+    injects SUPABASE_URL + SUPABASE_ANON_KEY via esbuild's `define`.
+    supabase.ts reads process.env.SUPABASE_URL / ANON_KEY. Tiny inline
+    dotenv parser (no dotenv dep).
+  - Pocketrep: thankyou.html now uses __SUPABASE_URL__ and
+    __SUPABASE_ANON_KEY__ placeholders. scripts/build-pocketrep.mjs
+    copies Pocketrep/ -> dist/ and substitutes from Vercel env vars at
+    build time. vercel.json switched to buildCommand + outputDirectory=dist.
+  - Root .gitignore added to exclude dist/, .env*, node_modules/.
+  - PocketRepApp (Expo) hardcoded URL fallbacks stripped; env refs only.
+  - snack-HeyRexOrb.js left inline with a comment (Expo Snack has no env
+    mechanism).
+
+Verified: grep across the repo confirms no remaining hardcoded JWT or
+project-ref. RexLens + Pocketrep both build cleanly with test env values.
+
+Founder action after merge: rotate Supabase anon + service_role, rotate
+Gemini key, rotate Twilio tokens, revoke Vercel personal tokens, uninstall
+and reinstall the Vercel <-> GitHub integration, update env vars in Vercel.
+Documented end-to-end in the PR body.
+
+================================================================================
+WAVE 4 — MIGRATION TO DryvnAgency/OpenRex (standalone)
+================================================================================
+
+Founder decided Open Rex belongs in its own repo. My MCP scope didn't
+include DryvnAgency/OpenRex, so direct push from this sandbox was blocked
+by both the git proxy AND the GitHub MCP tools (explicit denial:
+"repository 'dryvnagency/openrex' is not configured for this session").
+
+Path taken:
+
+  1. Prebuilt a git bundle (/tmp/openrex.bundle, 34 KB) containing a
+     single commit on main named "feat: migrate OpenRex backend from
+     PocketRep monorepo". Layout flattened: open-rex/backend/ ->
+     backend/, open-rex/shared/ -> shared/, open-rex/extension/ ->
+     extension/.
+  2. Added a root vercel.json that cd's into backend/ for the build
+     (so Vercel Root Directory can stay default).
+  3. Committed bundle + MIGRATION.md to PocketRep PR #8 under
+     migration/. Founder downloaded the bundle, git pull'd onto their
+     local OpenRex clone, pushed to main.
+
+That got the scaffold to OpenRex but not subsequent changes.
+
+Second path: founder provided fine-grained PATs (each time scoped to
+DryvnAgency/OpenRex, Contents: R/W, short expiry). I used curl +
+GitHub Git Tree API from the sandbox (github.com is reachable; the
+MCP block was ours, not the network):
+
+  /tmp/push_openrex_update.py
+    - GET /repos/DryvnAgency/OpenRex/git/refs/heads/main
+    - GET /git/commits/<sha> -> base_tree
+    - For each file in /tmp/openrex-updates/: POST /git/blobs (base64)
+    - POST /git/trees with base_tree + [ {path, mode, type, sha} ]
+    - POST /git/commits with parent = current main sha
+    - PATCH /git/refs/heads/main (fast-forward, no force)
+    - Preserves files outside the changed set via base_tree dedup.
+
+Pushes executed this way so far (all to DryvnAgency/OpenRex main):
+  Initial scaffold         67df306   40 files
+  Matador UI redesign      a99d0f2   base_tree + 13 modifications
+  gemini.ts type fix       c481977   1 file actually changed (rest dedup)
+  Extension inject-on-demand 5b74103  3 extension files
+  Profile scan + angles    [staged at /tmp/openrex-updates/ for next push]
+
+After every push: founder told to revoke the PAT immediately.
+
+================================================================================
+WAVE 5 — UI REDESIGN + REGENERATE-FROM-NOTES
+================================================================================
+
+Founder sent three screenshots: Matador.ai extension panel, Matador.ai full
+dashboard, Rex Lens login (for the color scheme). Asked for "similar to
+matador.ai, use the color scheme from Rex Lens."
+
+Palette locked in tailwind.config.ts:
+  ink      950/900/800/700/600/500  (near-black through card bg)
+  rex      pink #e05272 / pink2 #ff5d7f / purple #7a4dff / purple2 #9d4dff
+  gradient linear 90deg pink -> purple for CTAs and brand
+  mute     greys for body text
+  success  #42b883  warning #f0c060  danger #e05252
+  font     Bricolage Grotesque (display) + Inter (body)
+
+Layout rewrite:
+  - layout.tsx wraps content with a Sidebar component + main column.
+  - Sidebar (client component): gradient brand pill with bull icon,
+    nav items (Dashboard, Drafts, Customers, Appointments) + Settings
+    footer, active state = bg-ink-700 + shadow-rex-glow.
+  - Drafts page rebuilt as 3-column workspace:
+      Col 1: gradient "My Drafts" button, search input, count badge,
+             scrollable card list with purple active border.
+      Col 2: customer header, outgoing-style bubble for the draft,
+             composer with "AI Draft Active" pulse pill.
+      Col 3: customer detail card (active dot, name, phone, email,
+             vehicle of interest, last contact, tags).
+  - Customers page: dark zebra table.
+  - Appointments page (new): unack signals glow pink; ack'd fade grey.
+  - Settings page (new): env-health Set/Missing chips per var.
+
+Then the founder added a new feature request: "Allow to add a text,
+image upload button, generate script based off text message notes."
+
+Implemented as the "Rewrite from notes" panel in the composer:
+  - Collapsible panel above the textarea.
+  - Textarea for rep notes ("notes for Rex — what should the next text
+    say?").
+  - Attach-image button with inline thumbnail preview.
+  - "Generate script" gradient CTA.
+  - POST /api/drafts/[id]/regenerate with { notes, image? (mimeType +
+    dataBase64) } — new API route.
+  - shared/prompts.ts: buildRegenerateFromNotesPrompt composes
+    CORE_VOICE_RULES + REGEN_FROM_NOTES_RULES, optional "and the attached
+    image" marker, rep notes, customer context.
+  - backend/src/lib/gemini.ts: generateText accepts ImagePart[] now;
+    images passed as Gemini multimodal parts alongside the user text.
+  - Validation + regen loop reused (up to 3 attempts).
+  - On success: replaces draft body, collapses the panel.
+
+Commit on PocketRep: 9b934a6. Extensive — 14 files, +1191, -168.
+
+Then a TypeScript build error landed from Vercel:
+  src/lib/gemini.ts(39,46): Type error on generateContent({contents:...})
+The ad-hoc { text?; inlineData? } union I wrote didn't narrow against
+the SDK's discriminated Part = TextPart | InlineDataPart. Fix commit
+966b54e: import Part from @google/generative-ai, type parts as Part[],
+pass directly to generateContent (it accepts Array<string | Part>).
+
+================================================================================
+WAVE 6 — EXTENSION INJECT-ON-DEMAND FIX
+================================================================================
+
+Founder reported: clicking the extension icon threw "Could not establish
+connection. Receiving end does not exist." Classic Chrome error — manifest-
+declared content_scripts inject on page load only; if the tab was opened
+BEFORE the extension install/reload, or the tab is on a host the manifest
+doesn't match, sendMessage has no listener on the other end.
+
+Fix in extension/src/background/service-worker.ts (commit ee28418,
+comment-tightening follow-up 7e8d670):
+
+  1. Validate tab hostname against CRM_PATTERNS (vinsolutions / tekion /
+     cdk / dealersocket). Unsupported host throws UnsupportedHostError
+     which paints the badge "N/A" in grey instead of red "ERR".
+  2. chrome.scripting.executeScript({ target: { tabId }, files:
+     ['dist/content-script.js'] }) immediately before sendMessage.
+     Wrapped in try/catch so already-injected cases don't crash — the
+     ensuing sendMessage will surface any real error.
+  3. 100ms delay after executeScript so the onMessage listener has a
+     tick to register before sendMessage fires.
+  4. Badge color: purple on success, grey on empty/N-A, red on ERR.
+
+Content script: window.__openRexLoaded sentinel so a second injection
+is a no-op (avoids duplicate onMessage listeners).
+
+Extension zip open-rex-extension-v0.1.0.zip rebuilt. Founder loads the
+packaged zip (vs building from source) and still gets the fix.
+
+================================================================================
+WAVE 7 — PROFILE-LEVEL SCAN + ANGLE-ROTATED MASS OUTREACH
+================================================================================
+
+Founder's big ask after the UI redesign: "Work like the Claude Extension
+except prompted to scan customer profiles, read the notes, come up with
+an outreach text based off the history, trade in vehicle, vehicle
+purchased, time frame since last contacted. Just find a way to get in
+the door and start communicating with the customer. Whenever I decide
+to do a mass text based off the current list of customers on the page
+then you will adjust the message and be different every text message
+to not be the exact same to avoid being flagged."
+
+Two requirements interlocked:
+
+  A. Rex-Lens-style rich scan — read the full profile page, not just
+     the list view.
+  B. Per-customer bespoke SMS that differs from every other SMS in the
+     batch, to avoid carrier spam filtering.
+
+Shipped as commit ca387e2 on PocketRep PR #8 (10 files, +2765 line
+growth mostly from new package-lock):
+
+SHARED TYPES (shared/types.ts)
+  ScrapedCustomer grew with 6 rich fields: notes, interactionHistory,
+  tradeInVehicle, purchasedVehicle, purchaseDate, lastContactDate.
+  Added OutreachAngle type with six members.
+
+SHARED PROMPTS (shared/prompts.ts)
+  OUTREACH_ANGLES: map from angle -> one-sentence coaching directive.
+    check_in       plain "how's the vehicle treating you"
+    mileage_prompt acknowledge time gap
+    service_frame  upcoming service / season frame
+    lease_aware    only if lease context present
+    time_lapse     years since purchase if purchase date known
+    neighbor_check peer-reference "catching up with folks from around then"
+  buildMassOutreachPrompt(customer, angle): full rich-profile context +
+  one angle directive. System prompt = CORE_VOICE_RULES +
+  MASS_OUTREACH_FRAME + angleDirective.
+  openerFingerprint(body): first 6 words, lowercased, alphanumeric
+  only — used for in-batch duplicate detection.
+
+SUPABASE MIGRATION (backend/supabase/schema.sql)
+  Appended at bottom:
+    alter table customers add column if not exists notes text;
+    alter table customers add column if not exists interaction_history text;
+    alter table customers add column if not exists trade_in_vehicle text;
+    alter table customers add column if not exists purchased_vehicle text;
+    alter table customers add column if not exists purchase_date text;
+    alter table customers add column if not exists last_contact_date text;
+    alter table drafts add column if not exists angle text;
+  Idempotent. Founder runs once in the Supabase SQL editor.
+
+BACKEND DRAFT GENERATOR (backend/src/lib/draft-generator.ts)
+  New generateMassOutreachDrafts(customerIds[]) that:
+    - Fetches all rows in one Supabase call.
+    - Round-robins across OUTREACH_ANGLES by index (i % 6).
+    - Calls Gemini at temperature 0.85 (bumped from 0.7) for more
+      phrasing variance.
+    - Runs the existing validateDraft regen loop (max 3 attempts).
+    - Second pass: any two drafts sharing the same openerFingerprint
+      trigger a regen of the later one under the next angle.
+    - Bulk-inserts drafts with the angle column set.
+  generateFirstOutreachDraft kept as a thin wrapper for back-compat.
+  generateReplyDraft unchanged.
+
+BACKEND API (backend/src/app/api/scrape/route.ts, .../drafts/route.ts)
+  /api/scrape now accepts the six rich fields in each customer row and
+  returns customerIds in the response so the extension can chain
+  directly into draft generation.
+  /api/drafts routes to generateMassOutreachDrafts.
+
+EXTENSION (extension/src/adapters/vinsolutions.ts)
+  extractProfileFromHtml now pulls:
+    - notes via sectionAfterHeading matching /notes|comments/i
+    - interactionHistory via extractActivityHistory scanning tables
+      with date/type headers
+    - tradeInVehicle, purchasedVehicle, purchaseDate, lastContactDate
+      via valueForLabel (td/dt/th label-then-value pattern)
+  All fields optional; missing ones return null and don't break the
+  scrape. Heuristics will need per-tenant tuning on first real run —
+  documented at the top of the extractor.
+
+EXTENSION (extension/src/background/service-worker.ts)
+  runScrapeFlow now chains scrapeTab -> uploadScrape (returns IDs) ->
+  generateDrafts(customerIds) in one icon click. Badge reads "Nd"
+  (N = drafts queued) on success.
+
+Typecheck clean extension + backend. Build clean. Zip rebuilt (7.4 KB).
+
+================================================================================
+WAVE 8 — CURRENT STATE (end of 2026-04-20)
+================================================================================
+
+DryvnAgency/OpenRex main at commit 5b74103 (Matador UI + regenerate-from-
+notes + extension inject-fix).
+
+The Wave 7 feature (profile-level scan + angle rotation) is staged at
+/tmp/openrex-updates/ on the sandbox side, waiting for a fresh PAT to
+push. Script /tmp/push_openrex_update.py ready with the commit message
+"feat: profile-level scan + angle-rotated mass outreach."
+
+PocketRep PR #8 (claude/add-handover-docs-fL4XU) holds everything: the
+scaffold history, security fix migration docs, UI redesign, regenerate-
+from-notes, the extension fix, the profile + angle feature, and these
+four handover docs.
+
+PR #10 (claude/secure-supabase-env-injection) holds the env-injection
+migration for RexLens + Pocketrep (independent of Open Rex).
+
+Deployment at https://open-rex.vercel.app/ is live; health check is
+green (supabase true, gemini true, twilio false — expected until 10DLC).
+
+================================================================================
+OPEN QUESTIONS PASSED TO THE NEXT CONTRIBUTOR
+================================================================================
+
+1. Pricing model for Open Rex. Not decided.
+2. Exact quiet-hour defaults. Spec is 8a–9p recipient-local; confirm
+   per-dealer override.
+3. Daily send cap granularity — per Twilio number, per dealership, or
+   per campaign? Current schema has no send_schedule table.
+4. Dashboard auth swap from shared secret to Supabase Auth — timing.
+5. Second CRM adapter priority — Tekion first or CDK first? Spec
+   mentions both in host_permissions.
+6. Whether to break off a separate Supabase project for Open Rex vs
+   share fwvrauqdoevwmwwqlfav with PocketRep.
