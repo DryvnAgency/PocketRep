@@ -13,42 +13,21 @@ import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 
 // ── Hey Rex — Voice Intake Engine ────────────────────────────────────────────
 // Workflow:
-//   1. Rep taps the gold mic orb (or long-presses for hands-free)
+//   1. Rep taps the gold mic orb
 //   2. Talks after a meeting: "Marcus Webb, interested in F-150 XLT, not the
 //      Raptor — too expensive. Busy this week. Send pricing Friday. Call Monday."
 //   3. Whisper transcribes the audio
 //   4. Rex (Haiku) parses it into: contact match, notes, follow-up date, game plan
 //   5. Notes + follow-up saved to the matching contact in their book
 //   6. Rex returns a deal game plan on how to move it forward
-//
-// True hands-free wake word ("Hey Rex" with no tap):
-//   → Add @picovoice/porcupine-react-native + custom "Hey Rex" keyword
-//   → picovoice.ai/console — free tier, runs fully on-device, no battery drain
 
 // API keys are now server-side only — calls go through the Supabase Edge Function proxy
 const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 const REX_MODEL = 'claude-haiku-4-5-20251001';
 
-// ── Wake word (Porcupine) ─────────────────────────────────────────────────────
-// Get a free Access Key at picovoice.ai/console → add to .env as EXPO_PUBLIC_PICOVOICE_KEY
-//
-// PLACEHOLDER: currently uses built-in "Porcupine" wake word for testing.
-// To activate the real "Hey Rex" trigger:
-//   1. Go to picovoice.ai/console → Wake Word → Create "Hey Rex"
-//   2. Download .ppn files for iOS (arm64) and Android (arm64-v8a + armeabi-v7a)
-//   3. Drop them in assets/keywords/  (e.g. hey-rex_ios.ppn, hey-rex_android.ppn)
-//   4. Change HEYREX_KEYWORD_PATH to: Platform.OS === 'ios'
-//        ? require('../assets/keywords/hey-rex_ios.ppn')
-//        : require('../assets/keywords/hey-rex_android.ppn')
-//   5. Swap fromBuiltInKeywords → fromKeywordPaths in initWakeWord() below
-const PICOVOICE_KEY = process.env.EXPO_PUBLIC_PICOVOICE_KEY ?? '';
-
-// Lazy-load so a missing package never crashes the app
-let PorcupineManager: any = null;
-let BuiltInKeyword: any = null;
-try {
-  ({ PorcupineManager, BuiltInKeyword } = require('@picovoice/porcupine-react-native'));
-} catch {}
+// Reserved slot for a future wake-word / voice provider. When wired in, this
+// is the only env var a new integration should need.
+// const VOICE_PROVIDER_KEY = process.env.EXPO_PUBLIC_VOICE_PROVIDER_KEY ?? '';
 
 type Stage = 'idle' | 'listening' | 'processing' | 'done';
 
@@ -100,9 +79,6 @@ export default function HeyRex() {
     onPanResponderMove: Animated.event([null, { dx: orbPos.x, dy: orbPos.y }], { useNativeDriver: false }),
     onPanResponderRelease: () => { orbPos.flattenOffset(); },
   })).current;
-  const wakeManagerRef = useRef<any>(null);
-  const startListeningRef = useRef<() => void>(() => {});
-  const [wakeReady, setWakeReady] = useState(false);
   const router = useRouter();
   const segments = useSegments();
   // Hide the orb when already on the Rex tab
@@ -116,49 +92,6 @@ export default function HeyRex() {
       });
     });
   }, []);
-
-  // Keep startListeningRef current so the wake word callback never has a stale closure
-  useEffect(() => { startListeningRef.current = startListening; });
-
-  // Init Porcupine wake word on mount (native only)
-  useEffect(() => {
-    if (isWeb || !PICOVOICE_KEY || !PorcupineManager) return;
-
-    async function initWakeWord() {
-      try {
-        const mgr = await PorcupineManager.fromBuiltInKeywords(
-          PICOVOICE_KEY,
-          [BuiltInKeyword.PORCUPINE], // ← swap to fromKeywordPaths() once hey-rex.ppn is ready
-          (_index: number) => {
-            // Wake word detected — hand off to startListening
-            wakeManagerRef.current?.stop().catch(() => {});
-            setWakeReady(false);
-            startListeningRef.current();
-          },
-          (err: Error) => console.warn('Rex wake word error:', err),
-        );
-        await mgr.start();
-        wakeManagerRef.current = mgr;
-        setWakeReady(true);
-      } catch (e) {
-        console.warn('Wake word init failed (check EXPO_PUBLIC_PICOVOICE_KEY):', e);
-      }
-    }
-    initWakeWord();
-
-    return () => {
-      wakeManagerRef.current?.delete();
-      wakeManagerRef.current = null;
-    };
-  }, []);
-
-  // Restart wake word whenever recording session ends and HeyRex goes back to idle
-  useEffect(() => {
-    if (stage !== 'idle' || isWeb || !wakeManagerRef.current) return;
-    wakeManagerRef.current.start()
-      .then(() => setWakeReady(true))
-      .catch(() => {});
-  }, [stage]);
 
   useEffect(() => {
     if (stage === 'listening') {
@@ -207,12 +140,6 @@ export default function HeyRex() {
     }
 
     try {
-      // Release mic from Porcupine before expo-av takes it
-      if (wakeManagerRef.current) {
-        try { await wakeManagerRef.current.stop(); } catch {}
-        setWakeReady(false);
-      }
-
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
         Alert.alert('Mic needed', 'Allow microphone access to use Hey Rex.');
@@ -645,7 +572,7 @@ Return format (JSON array):
             <Text style={s.orbIcon}>{orbIcon}</Text>
           </TouchableOpacity>
           {stage === 'idle' && (
-            <Text style={s.orbLabel}>{wakeReady ? '👂 Listening…' : 'Hey Rex'}</Text>
+            <Text style={s.orbLabel}>Hey Rex</Text>
           )}
         </Animated.View>
       ) : (

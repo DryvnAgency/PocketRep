@@ -100,7 +100,7 @@ async function callAIProxy(body: Record<string, unknown>): Promise<string> {
     });
   } catch (err: any) {
     clearTimeout(timer);
-    if (err.name === 'AbortError') throw new Error('AI request timed out (30s). Try again.');
+    if (err.name === 'AbortError') throw new Error('AI request timed out (60s). Try again.');
     throw err;
   }
   clearTimeout(timer);

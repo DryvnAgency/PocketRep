@@ -6,13 +6,13 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { callAnthropicProxy } from '@/lib/aiProxy';
 import { colors, radius, spacing } from '@/constants/theme';
 import type { Contact, RexMessage, RexMemory, Profile } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 
 // ── Model: Haiku for speed + cost on every Rex call ──────────────────────────
 const REX_MODEL = 'claude-haiku-4-5-20251001';
-const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
 
 // Lazy-load expo-image-picker so a missing package never crashes the app
 let ImagePicker: any = null;
@@ -225,10 +225,6 @@ export default function RexScreen() {
   async function send() {
     const text = input.trim();
     if ((!text && !pendingImage) || loading) return;
-    if (!ANTHROPIC_KEY) {
-      alert('Add your ANTHROPIC_KEY to .env to activate Rex.');
-      return;
-    }
 
     const imageToSend = pendingImage;
     setInput('');
@@ -263,10 +259,11 @@ export default function RexScreen() {
     });
 
     // Build history for context (last 10 messages)
-    const history = [...messages.slice(-10), userMsg].map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const history: Array<{ role: 'user' | 'assistant'; content: unknown }> =
+      [...messages.slice(-10), userMsg].map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
 
     // Build the final user message content — multimodal if image attached
     const lastUserContent: any = imageToSend
@@ -276,30 +273,20 @@ export default function RexScreen() {
         ]
       : text;
 
-    const apiMessages = [
+    const apiMessages: Array<{ role: 'user' | 'assistant'; content: unknown }> = [
       ...history.slice(0, -1), // all but the last (user) message
       { role: 'user', content: lastUserContent },
     ];
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: REX_MODEL,
-          max_tokens: 600,
-          system: REX_SYSTEM(profile?.full_name ?? '', memory?.summary ?? '', activeContact, profile?.industry ?? 'auto'),
-          messages: apiMessages,
-        }),
+      const json = await callAnthropicProxy({
+        model: REX_MODEL,
+        max_tokens: 600,
+        system: REX_SYSTEM(profile?.full_name ?? '', memory?.summary ?? '', activeContact, profile?.industry ?? 'auto'),
+        messages: apiMessages,
       });
 
-      const json = await res.json();
-      const rawReply = json.content?.[0]?.text ?? 'Rex hit an error. Check your API key.';
+      const rawReply = json?.content?.[0]?.text ?? 'Rex hit an error. Please try again.';
 
       // Detect action intent from Rex reply
       const action = parseRexAction(rawReply);
@@ -335,7 +322,7 @@ export default function RexScreen() {
         user_id: user.id,
         contact_id: null,
         role: 'assistant' as const,
-        content: 'Connection error. Check your network and API key.',
+        content: 'Connection error. Check your network and try again.',
         created_at: new Date().toISOString(),
       }]);
     }
@@ -346,42 +333,35 @@ export default function RexScreen() {
 
   // Summarise conversation into Rex memory (Elite)
   async function buildMemory(userId: string, count: number) {
-    if (!ANTHROPIC_KEY) return;
     const { data: allMsgs } = await supabase.from('rex_messages').select('role,content').eq('user_id', userId).order('created_at').limit(30);
     if (!allMsgs) return;
 
     const transcript = allMsgs.map(m => `${m.role === 'user' ? 'Rep' : 'Rex'}: ${m.content}`).join('\n');
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({
-        model: REX_MODEL,
-        max_tokens: 300,
-        messages: [{
-          role: 'user',
-          content: `Summarise key facts about this sales rep from their conversation with Rex. Focus on their style, common customers, recurring challenges. Be concise.\n\n${transcript}`,
-        }],
-      }),
+    const json = await callAnthropicProxy({
+      model: REX_MODEL,
+      max_tokens: 300,
+      messages: [{
+        role: 'user',
+        content: `Summarise key facts about this sales rep from their conversation with Rex. Focus on their style, common customers, recurring challenges. Be concise.\n\n${transcript}`,
+      }],
     });
-    const json = await res.json();
+    if (!json) return;
     const summary = json.content?.[0]?.text ?? '';
     await supabase.from('rex_memory').upsert({ user_id: userId, summary, message_count: count });
   }
 
   // Fetch proactive coach card when a contact is selected
   async function fetchProactiveCoach(contact: Contact) {
-    if (!ANTHROPIC_KEY) return;
     setProactiveCoach(null);
     try {
       const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ');
       const prompt = `In 2 sentences max, give the rep their immediate game plan for ${contact.first_name} ${contact.last_name}. Vehicle: ${vehicle || 'unknown'}. Lease end: ${contact.lease_end_date ?? 'unknown'}. Notes: ${contact.notes ?? 'none'}. Be direct — what to do next and the one thing to lead with.`;
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({ model: REX_MODEL, max_tokens: 150, messages: [{ role: 'user', content: prompt }] }),
+      const rj = await callAnthropicProxy({
+        model: REX_MODEL,
+        max_tokens: 150,
+        messages: [{ role: 'user', content: prompt }],
       });
-      const rj = await res.json();
-      setProactiveCoach(rj.content?.[0]?.text ?? '');
+      setProactiveCoach(rj?.content?.[0]?.text ?? '');
     } catch {
       setProactiveCoach(''); // clear loading state on error
     }
@@ -532,24 +512,17 @@ export default function RexScreen() {
   }
 
   async function fetchAiRebuttal(key: string, objection: string, fallback: string, newAngle = false) {
-    if (!ANTHROPIC_KEY) { setAiRebuttals(prev => ({ ...prev, [key]: fallback })); return; }
     setAiLoading(key);
     try {
       const prompt = newAngle
         ? `Give me a DIFFERENT fresh angle for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences.\n\nObjection: "${objection}"`
         : `Give me a sharp, specific rebuttal for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences.\n\nObjection: "${objection}"`;
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({ model: REX_MODEL, max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
+      const json = await callAnthropicProxy({
+        model: REX_MODEL,
+        max_tokens: 200,
+        messages: [{ role: 'user', content: prompt }],
       });
-      const json = await res.json();
-      const text = json.content?.[0]?.text ?? fallback;
+      const text = json?.content?.[0]?.text ?? fallback;
       setAiRebuttals(prev => ({ ...prev, [key]: text }));
     } catch {
       setAiRebuttals(prev => ({ ...prev, [key]: fallback }));

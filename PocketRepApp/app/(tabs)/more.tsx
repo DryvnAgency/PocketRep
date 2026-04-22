@@ -10,12 +10,13 @@ import type { Profile } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import { scheduleWeeklyDigest, cancelWeeklyDigest } from '@/lib/notifications';
 
+import { callAnthropicProxy } from '@/lib/aiProxy';
+
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
 
 const DIGEST_TIME_KEY = 'pocketrep_digest_time';
 
-const ANTHROPIC_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
 const REX_MODEL = 'claude-haiku-4-5-20251001';
 
 export default function MoreScreen() {
@@ -94,12 +95,16 @@ export default function MoreScreen() {
       return;
     }
 
+    const csvCell = (v: unknown) => {
+      const s = v == null ? '' : String(v);
+      return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
     const csv = [
       'First,Last,Phone,Email,Year,Make,Model,Mileage,Last Contact,Notes',
       ...contacts.map(c =>
         [c.first_name, c.last_name, c.phone, c.email, c.vehicle_year, c.vehicle_make,
-          c.vehicle_model, c.mileage, c.last_contact_date, `"${(c.notes ?? '').replace(/"/g, '""')}"`
-        ].join(',')
+          c.vehicle_model, c.mileage, c.last_contact_date, c.notes,
+        ].map(csvCell).join(',')
       ),
     ].join('\n');
 
@@ -109,10 +114,6 @@ export default function MoreScreen() {
   }
 
   async function buildDigest() {
-    if (!ANTHROPIC_KEY) {
-      Alert.alert('Anthropic key needed', 'Add ANTHROPIC_KEY to .env for the weekly digest.');
-      return;
-    }
     setDigestLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setDigestLoading(false); return; }
@@ -130,25 +131,20 @@ export default function MoreScreen() {
     const newContacts = contacts?.length ?? 0;
     const rexConvos = Math.round((msgs?.length ?? 0) / 2);
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: REX_MODEL,
-        max_tokens: 350,
-        messages: [{
-          role: 'user',
-          content:
-            `Write a short weekly digest for a sales rep. Be motivating, direct, data-first. No fluff.\n\n` +
-            `Deals logged: ${totalDeals} | Front gross: $${totalFront} | Back gross: $${totalBack}\n` +
-            `New contacts added: ${newContacts} | Rex conversations: ${rexConvos}\n` +
-            `Rep name: ${profile?.full_name ?? 'Rep'}\n\n` +
-            `Format: 3 bullet points covering week highlights + one sharp coaching line at the end.`,
-        }],
-      }),
+    const json = await callAnthropicProxy({
+      model: REX_MODEL,
+      max_tokens: 350,
+      messages: [{
+        role: 'user',
+        content:
+          `Write a short weekly digest for a sales rep. Be motivating, direct, data-first. No fluff.\n\n` +
+          `Deals logged: ${totalDeals} | Front gross: $${totalFront} | Back gross: $${totalBack}\n` +
+          `New contacts added: ${newContacts} | Rex conversations: ${rexConvos}\n` +
+          `Rep name: ${profile?.full_name ?? 'Rep'}\n\n` +
+          `Format: 3 bullet points covering week highlights + one sharp coaching line at the end.`,
+      }],
     });
-    const json = await res.json();
-    setDigest(json.content?.[0]?.text ?? 'Could not generate digest.');
+    setDigest(json?.content?.[0]?.text ?? 'Could not generate digest.');
     setDigestLoading(false);
   }
 
