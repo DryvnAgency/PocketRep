@@ -1,0 +1,281 @@
+================================================================================
+OPEN REX — ONE-WEEK SPRINT TO FIRST DEALERSHIP PILOT
+Compressed plan. Replaces the prior 3-week roadmap.
+================================================================================
+
+## GOAL
+
+Ship a sellable pilot in five business days. First paid dealership on
+Monday of the following week. Email-only outreach for week one; SMS
+rolls in as 10DLC clears.
+
+--------------------------------------------------------------------------------
+
+## TWO STRATEGIES
+
+1. Parallelize external clocks with internal build. 10DLC and Chrome Web
+   Store reviews take 1-2 weeks no matter what. Submit Day 1. Build while
+   they cook.
+
+2. Build against placeholder keys. Every integration we do not yet have
+   a real key for gets scaffolded against a named placeholder env var.
+   When the operator pastes the real key into Vercel or Supabase env, the
+   feature lights up automatically — no code change, no redeploy beyond
+   the env update.
+
+--------------------------------------------------------------------------------
+
+## KEY-SCAFFOLD STRATEGY
+
+All integrations read from process.env. Every unset-key code path must
+fail visibly but gracefully — never crash the server, never swallow.
+
+Placeholder env vars — ship in .env.example and paste into Vercel +
+Supabase secrets:
+
+  STRIPE_SECRET_KEY=sk_PLACEHOLDER_PASTE_REAL_KEY
+  STRIPE_WEBHOOK_SECRET=whsec_PLACEHOLDER_PASTE_REAL_KEY
+  STRIPE_PRICE_REX_LENS=price_PLACEHOLDER
+  STRIPE_PRICE_PRO=price_PLACEHOLDER
+  STRIPE_PRICE_ELITE=price_PLACEHOLDER
+
+  RESEND_API_KEY=re_PLACEHOLDER_PASTE_REAL_KEY
+  RESEND_FROM_EMAIL=hello@open-rex.com
+
+  TWILIO_ACCOUNT_SID=AC_PLACEHOLDER_PASTE_REAL_SID
+  TWILIO_AUTH_TOKEN=PLACEHOLDER_PASTE_REAL_TOKEN
+  TWILIO_MESSAGING_SERVICE_SID=MG_PLACEHOLDER_PASTE_REAL_SID
+
+  # Already have real values for:
+  GEMINI_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE
+
+Central helper — apps/web/lib/env.ts and supabase/functions/_shared/env.ts:
+
+  const isPlaceholder = (v) => !v || v.includes("PLACEHOLDER");
+
+  export const live = {
+    stripe:        !isPlaceholder(process.env.STRIPE_SECRET_KEY),
+    stripeWebhook: !isPlaceholder(process.env.STRIPE_WEBHOOK_SECRET),
+    resend:        !isPlaceholder(process.env.RESEND_API_KEY),
+    twilio:        !isPlaceholder(process.env.TWILIO_AUTH_TOKEN),
+  };
+
+Fallback behavior per integration:
+
+  Stripe checkout   — button renders "Billing coming soon — email us to
+                      pilot" until live.stripe === true.
+  Stripe webhook    — /api/stripe/webhook returns 503
+                      {error: "stripe_not_configured"} until
+                      live.stripeWebhook === true.
+  Resend send       — scheduler writes to outreach_drafts with
+                      status='sent_mock' and logs body to email_log.
+                      Dashboard shows "simulated send" badge. Flips to
+                      real sends the moment the key lands.
+  Twilio SMS        — hard-gated. 503 {error: 'sms_pending_carrier_approval'}
+                      until 10DLC + key both present. (Same gate the
+                      master context already specifies.)
+
+Net effect for operator: paste Stripe key → checkout button lights up.
+Paste Resend key → next scheduler tick switches from sent_mock to real.
+Zero code change. No swap script needed — Vercel and Supabase env UIs
+are the source of truth.
+
+Optional: scripts/sync-env.sh pushes a local .env.production into Vercel
+and Supabase via their CLIs for operators who prefer a single source.
+
+--------------------------------------------------------------------------------
+
+## FIVE-DAY SEQUENCE
+
+DAY 1 (MON) — start external clocks, scaffold env layer
+
+  Operator:
+    [ ] Submit 10DLC brand + campaign in Twilio console
+    [ ] Submit Chrome Web Store listing (screenshots, description,
+        privacy URL, support email)
+    [ ] Draft privacy policy + ToS (Termly / Iubenda templates OK)
+    [ ] Draft Data Processing Addendum from Supabase + Vercel standard
+        DPAs
+    [ ] Draft 1-page pilot MSA (scope, fees, data portability,
+        termination, 24h parser-fix SLA)
+
+  Engineering:
+    [ ] apps/web/lib/env.ts — live-integration helper
+    [ ] supabase/functions/_shared/env.ts — same helper, Deno flavor
+    [ ] .env.example — all placeholders committed
+    [ ] Gate Stripe checkout buttons on live.stripe
+    [ ] Add email_log table to schema for mock-send visibility
+
+DAY 2 (TUE) — auth swap, billing webhook, scheduler skeleton
+
+  [ ] Swap dashboard auth: custom cookie → @supabase/ssr helpers.
+      Keep existing profiles table. Auto-create row on first sign-in
+      (trigger already present in current schema).
+  [ ] supabase/functions/stripe-webhook/ — handle
+      customer.subscription.updated, customer.subscription.deleted,
+      invoice.payment_failed. Early-return 503 if !live.stripeWebhook.
+  [ ] supabase/functions/scheduler/ — pulls approved outreach_drafts
+      where send_at <= now(). If live.resend, send via Resend; else
+      mark sent_mock and write to email_log. Invoked by Vercel Cron
+      every 5 min.
+
+DAY 3 (WED) — UX + compliance surface
+
+  [ ] Mass-approve UI on /review: checkbox per row, select-all per
+      contact, bulk approve mutation. (P1 item from HANDOVER.)
+  [ ] contacts.consent_status enum (unknown | granted | revoked).
+      Outreach UI blocks SMS channel unless granted. Email uses a
+      softer threshold — unsubscribe footer plus 'revoked' gate.
+  [ ] Quiet hours: profiles.timezone, profiles.quiet_hours_start,
+      profiles.quiet_hours_end. Default 21:00-08:00 rep local time.
+      Scheduler skips SMS outside window; email still sends.
+  [ ] supabase/functions/twilio-webhook/ — STOP/HELP/START wire-up.
+      Parse inbound, write to sms_inbound table, flip consent_status
+      on STOP. Behind live.twilio gate.
+
+DAY 4 (THU) — onboarding wizard + parser resilience
+
+  [ ] apps/web/app/onboarding/page.tsx — four steps:
+        1. Sign in
+        2. Install extension (Web Store link or sideload instructions)
+        3. Open VinSolutions and run first scan — page waits for
+           first successful parser_events row, then advances
+        4. Review your heat sheet → routes to dashboard
+  [ ] Parser resilience: selector-version tagging on every adapter
+      call. Write misses to parser_events (already in schema).
+      Dashboard "parser health" widget — per-rep selector hit rate,
+      "we could not read X leads on your last scan" notice.
+  [ ] Expand /api/health per-tenant: last scan timestamp, parser hit
+      rate, scheduler last run, count of drafts awaiting send.
+
+DAY 5 (FRI) — content + dry-run
+
+  [ ] Record 5-minute demo loom:
+        install → scan → AI drafts → approve → scheduler sends →
+        reply comes in
+  [ ] 1-page rep onboarding PDF
+  [ ] 1-page pilot offer for the GM (pricing, scope, SLA, term)
+  [ ] Internal dry-run: pretend you're a rep. Sign up, connect, scan,
+      approve, watch email go out. Real if Resend key landed, else
+      mock. Write down every friction point — fix the top three.
+  [ ] If 10DLC landed this week: paste Twilio keys into Supabase
+      secrets. Otherwise ship email-only and add SMS week two.
+
+WEEKEND — buffer
+  [ ] Fix dry-run bugs
+  [ ] If Resend key arrives, paste into Vercel env. Scheduler picks it
+      up on next 5-min tick. No deploy needed.
+
+NEXT MON — sell
+  [ ] First dealership conversation. Demo the loom. Offer:
+        - 14-30 day pilot
+        - Email-only to start; SMS added as 10DLC clears
+        - 1-3 reps
+        - Founding rate locked (Stripe Payment Links already exist)
+        - Book-portable — export endpoint already enforced by RLS
+        - Named support channel
+        - 24h parser-fix SLA
+
+--------------------------------------------------------------------------------
+
+## WHAT SHIPS VS WHAT WAITS
+
+Ships this week (gated or unguarded):
+
+  - Supabase Auth on dashboard
+  - Mass-approve + consent + quiet hours in UI
+  - Scheduler (mock or real depending on Resend key)
+  - Stripe webhook handler (live when key lands)
+  - STOP/HELP/START stub (live when 10DLC + Twilio keys land)
+  - Onboarding wizard
+  - Parser health surfacing
+  - Legal docs
+  - Demo + onboarding content
+
+Held for v2:
+
+  - Tekion / DealerSocket / Salesforce / HubSpot adapters
+  - Admin panel for dealership GM
+  - App Store / Play Store submission
+  - Analytics dashboard beyond /api/health
+  - Contact import / export UI (handle manually in pilot)
+
+--------------------------------------------------------------------------------
+
+## CRITICAL FILES
+
+New or modified in this sprint:
+
+  apps/web/
+    lib/env.ts                          (NEW)
+    lib/supabase/server.ts              (switch to @supabase/ssr)
+    lib/supabase/middleware.ts          (NEW — Supabase Auth SSR)
+    app/onboarding/page.tsx             (NEW)
+    app/review/page.tsx                 (add mass-approve)
+    app/api/stripe/webhook/route.ts     (NEW — alt: edge function)
+    components/PlanCheckoutButton.tsx   (gate on live.stripe)
+
+  supabase/functions/
+    _shared/env.ts                      (NEW)
+    scheduler/index.ts                  (NEW)
+    stripe-webhook/index.ts             (NEW — alt if not Next route)
+    twilio-webhook/index.ts             (STOP/HELP/START wire-up)
+    twilio-send/index.ts                (consent + quiet-hours check)
+
+  supabase/migrations/<ts>_week_sprint.sql
+    - email_log table
+    - sms_inbound table
+    - contacts.consent_status enum
+    - profiles.timezone, profiles.quiet_hours_start/end
+    - parser selector_version column
+
+  apps/extension/
+    packages/adapters/vinsolutions/     (selector fallback + version tag)
+
+  .env.example                          (placeholder keys)
+  vercel.json                           (cron config for scheduler)
+
+--------------------------------------------------------------------------------
+
+## RISKS + MITIGATIONS
+
+  10DLC does not clear in week one — email-only pilot is still
+    sellable. SMS added in week two. Twilio path stays gated, no ship
+    risk.
+
+  Chrome Web Store rejects — sideload via developer mode for pilot
+    reps. Resubmit with fixes. Onboarding wizard shows both paths.
+
+  Parser breaks on real tenant — Day 4 parser-health widget makes this
+    visible. 24h fix SLA baked into MSA. Selector-version tag on every
+    hit means regressions are localized quickly.
+
+  Stripe webhook signature mismatch when key lands — test the webhook
+    on Day 2 against Stripe CLI using TEST-mode keys (separate from
+    placeholder). Proves handler works before live key ever arrives.
+
+  Single-engineer capacity — five tracks in five days is tight.
+    Priority order if something slips: Supabase Auth → scheduler →
+    onboarding wizard are must-haves. Mass-approve and parser health
+    can slide to Day 6/7.
+
+--------------------------------------------------------------------------------
+
+## DONE-DEFINITION
+
+The sprint is done when:
+
+  [ ] All placeholder env vars documented; paste-to-activate verified
+      for at least one integration (Resend or Stripe test key)
+  [ ] New user can sign up → onboarding → install extension → run a
+      scan → see drafts → approve → drafts queued for send
+  [ ] Scheduler runs end-to-end (mock-send OK)
+  [ ] /api/health returns per-tenant parser + scheduler + draft stats
+  [ ] 10DLC + Chrome Web Store submitted (external clocks ticking)
+  [ ] Privacy policy, ToS, DPA, MSA drafts exist
+  [ ] Demo loom recorded
+  [ ] Dry-run completed; top three friction points fixed
+
+================================================================================
+END — ONE_WEEK_SPRINT_PLAN.txt
+================================================================================
