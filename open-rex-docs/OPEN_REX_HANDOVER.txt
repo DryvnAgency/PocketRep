@@ -1,0 +1,139 @@
+================================================================================
+OPEN REX — FIRST-DAY HANDOVER
+Target audience: human engineer taking over cold.
+Read top to bottom. You can ship with just this file.
+================================================================================
+
+## WHAT YOU'RE INHERITING
+
+OpenRex is the unified evolution of PocketRep + Rex Lens. Canonical repo:
+
+  github.com/DryvnAgency/OpenRex     (main @ 5b74103)
+
+Live at https://open-rex.vercel.app/ — health check is green on Supabase +
+Gemini. Twilio SMS sends are gated until 10DLC A2P brand + campaign are
+approved.
+
+The PocketRep repo (this one) is the staging ground for commits that get
+pushed to OpenRex. PR #8 is the in-flight bundle. PR #10 is a separate
+security fix for Supabase env injection.
+
+--------------------------------------------------------------------------------
+
+## DAY-ONE CHECKLIST
+
+1. Clone
+   git clone git@github.com:DryvnAgency/OpenRex.git
+   cd OpenRex
+
+2. Env
+   cp .env.example .env.local
+   Fill: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE,
+         GEMINI_API_KEY, TWILIO_* (messaging service SID + auth), APP_URL.
+
+3. Schema
+   Open Supabase SQL editor. Paste the idempotent migration block from
+   OPEN_REX_MASTER_CONTEXT.txt section 4. Run once. Safe to re-run.
+
+4. Run
+   pnpm install
+   pnpm dev                        # Next.js dashboard on :3000
+   cd extension && pnpm build      # Rex Lens extension → dist/
+   Load unpacked dist/ in chrome://extensions (developer mode).
+
+5. Smoke test
+   a. Open dashboard → sign in → should hit /health and return ok.
+   b. Load extension on a VinSolutions worklist → "Scan My Page" → should
+      return scripts for every visible task in <30s.
+   c. "Deep Scan" one lead → should click through, parse profile, return
+      game plan with 6-angle outreach choices.
+   d. Mass outreach (SMS disabled until 10DLC) — email path should queue
+      drafts to the review inbox.
+
+--------------------------------------------------------------------------------
+
+## CURRENT STATUS
+
+SHIPPED (live on main, deployed to open-rex.vercel.app):
+  - Dashboard w/ Matador UI redesign
+  - Extension: scan, deep-scan, profile-level scan, 6-angle mass outreach
+  - Regenerate-from-notes flow (rewrites scripts from rep's updated notes)
+  - Extension inject-fix (Shadow DOM panel re-injects on SPA route change)
+  - AI proxy edge function (Gemini 2.5 Flash, daily cost cap)
+  - Supabase schema w/ rich-profile columns (run migration if not applied)
+  - Health check endpoint
+
+GATED (code ready, blocked on external approval):
+  - Twilio SMS sends — 10DLC A2P brand + campaign application in progress
+  - Chrome Web Store listing — submitted, pending review
+
+STAGED (commits exist on PocketRep side, not yet pushed to OpenRex):
+  - Profile-level scan + 6-angle mass outreach (PocketRep commit ca387e2)
+  - This handover package (PocketRep commit to-be-pushed on PR #8)
+  Both sit in /tmp/openrex-updates/ waiting on a fresh PAT; push with
+  /tmp/push_openrex_update.py (base_tree handles both commits in one push).
+
+NOT BUILT:
+  - Scheduler (Vercel Cron or Supabase pg_cron for drip sequences)
+  - Mass-approve button on outreach review queue
+  - Quiet hours enforcement
+  - STOP / HELP / START auto-handler for SMS
+  - Dashboard auth swap (currently session-cookie, move to Supabase Auth)
+  - Second CRM adapter (Tekion) — marketing already promises it
+  - Analytics + admin panel
+  - App Store / Play Store submission (eas.json has placeholder creds)
+
+--------------------------------------------------------------------------------
+
+## PRIORITIZED TODOS
+
+P0 — unblock ship:
+  [ ] 10DLC A2P brand + campaign approval (Twilio console)
+  [ ] VinSolutions parser tuning on first real tenant
+      Parser is heuristic selectors; fields WILL come back empty on a
+      dealership that uses a non-standard template. Log which selectors
+      missed and add fallbacks.
+  [ ] Push staged commits to OpenRex main (waiting on PAT)
+
+P1 — within two weeks of ship:
+  [ ] Scheduler: Vercel Cron or Supabase pg_cron running sequence steps
+  [ ] Mass-approve button on outreach review queue
+  [ ] Quiet hours (no SMS 9pm–8am rep local time)
+  [ ] STOP / HELP / START webhook handler
+  [ ] Dashboard auth → Supabase Auth (drop custom session cookie)
+  [ ] Second CRM adapter: Tekion
+
+P2 — post-launch:
+  [ ] Analytics dashboard
+  [ ] Admin panel for support
+  [ ] DealerSocket, Salesforce, HubSpot adapters
+  [ ] Contact import / export
+  [ ] Stripe webhooks for cancel / upgrade / downgrade
+
+--------------------------------------------------------------------------------
+
+## KNOWN RISKS
+
+  - PAT rotation: the PAT used to push commits lives only in the operator's
+    hand. Revoke after each push. Never commit it.
+  - Profile parser heuristics: selectors break when VinSolutions ships UI
+    changes. Add selector-version logging so drift is visible.
+  - 10DLC gate: until approved, any code path that calls Twilio SMS should
+    fail closed with a clear "pending carrier approval" message, not a
+    silent swallow.
+  - Rex voice prompt is locked. Do not edit. See NEXT_AGENT_PROMPT.txt.
+  - Gemini cost cap is server-side. Don't trust client-side checks.
+
+--------------------------------------------------------------------------------
+
+## WHERE THINGS LIVE
+
+  OpenRex repo layout          → OPEN_REX_MASTER_CONTEXT.txt §3
+  Schema + migration SQL       → OPEN_REX_MASTER_CONTEXT.txt §4
+  AI prompt flows              → OPEN_REX_MASTER_CONTEXT.txt §5
+  What shipped when, and why   → SESSION_LOG.txt
+  How the next Claude operates → NEXT_AGENT_PROMPT.txt
+
+================================================================================
+END — OPEN_REX_HANDOVER.txt
+================================================================================

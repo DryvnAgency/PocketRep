@@ -1,0 +1,248 @@
+================================================================================
+OPEN REX — MASTER CONTEXT
+Authoritative technical reference.
+================================================================================
+
+## 1. PRODUCT
+
+OpenRex is a two-surface AI sales coaching platform, unified out of the
+earlier PocketRep + Rex Lens split:
+
+  A) Dashboard (web) — Next.js app at open-rex.vercel.app. Rep signs in,
+     sees heat sheet, deal pipeline, outreach review queue, and Rex chat.
+
+  B) Rex Lens (Chrome extension, Manifest V3) — Injects a Shadow-DOM
+     floating panel on any CRM / email / LinkedIn page. Reads the page,
+     generates scripts, emails, SMS drafts.
+
+Mobile app (Expo / React Native) remains available but is not the primary
+surface for the OpenRex launch.
+
+Target users: high-ticket sales reps. Primary ICP: automotive sales reps
+using VinSolutions. Expanding to mortgage, real estate, insurance, solar,
+B2B, HVAC, staffing, roofing, fencing, door-to-door.
+
+--------------------------------------------------------------------------------
+
+## 2. ARCHITECTURE
+
+    ┌───────────────────────┐         ┌───────────────────────┐
+    │  Rex Lens Extension   │         │   Next.js Dashboard   │
+    │  (Shadow DOM panel)   │         │  open-rex.vercel.app  │
+    └──────────┬────────────┘         └──────────┬────────────┘
+               │                                 │
+               │   Anthropic-shaped JSON         │
+               ▼                                 ▼
+        ┌────────────────────────────────────────────┐
+        │   Supabase Edge Function: ai-proxy         │
+        │   - auth check                             │
+        │   - daily cost cap (daily_ai_usage)        │
+        │   - translates Anthropic body → Gemini     │
+        │   - returns Anthropic-shaped envelope      │
+        └──────────────┬─────────────────────────────┘
+                       │
+                       ▼
+            ┌─────────────────────────┐
+            │  Google Gemini 2.5 Flash│
+            └─────────────────────────┘
+
+    Twilio path (SMS / voice) — GATED behind 10DLC approval:
+
+        Dashboard / extension ──► Supabase edge (twilio-send)
+                                 └──► Twilio Messaging Service
+
+--------------------------------------------------------------------------------
+
+## 3. REPO LAYOUT — DryvnAgency/OpenRex
+
+    OpenRex/
+    ├── apps/
+    │   ├── web/                  # Next.js dashboard
+    │   │   ├── app/              # routes: /login, /dashboard, /review, /rex
+    │   │   ├── components/       # Matador UI components
+    │   │   ├── lib/
+    │   │   │   ├── supabase/     # server + browser clients
+    │   │   │   └── ai/           # proxy client, prompt builders
+    │   │   └── public/
+    │   └── extension/            # Rex Lens MV3 extension
+    │       ├── manifest.json
+    │       ├── src/
+    │       │   ├── background/   # service worker, alarms
+    │       │   ├── content/      # page parser, Shadow DOM panel
+    │       │   ├── shared/       # types, ai client, storage
+    │       │   └── icons/
+    │       └── esbuild.config.mjs
+    ├── packages/
+    │   ├── adapters/             # CRM adapters: vinsolutions, (tekion TBD)
+    │   └── prompts/              # four canonical prompt templates
+    ├── supabase/
+    │   ├── migrations/           # timestamped SQL migrations
+    │   └── functions/
+    │       ├── ai-proxy/         # Gemini proxy + cost cap
+    │       ├── twilio-send/      # SMS send (10DLC-gated)
+    │       └── twilio-webhook/   # inbound SMS / STOP HELP
+    ├── scripts/
+    ├── .env.example
+    ├── vercel.json
+    └── package.json
+
+--------------------------------------------------------------------------------
+
+## 4. DATA MODEL
+
+Base tables (carried from PocketRep schema):
+  profiles, contacts, deals, rex_messages, rex_memory,
+  sequences, sequence_steps, contact_interactions, daily_ai_usage
+
+OpenRex additions — rich-profile columns and outreach queue. Run once in
+Supabase SQL editor; block is idempotent:
+
+  -- rich profile columns on contacts
+  alter table contacts add column if not exists rich_profile   jsonb;
+  alter table contacts add column if not exists last_scanned_at timestamptz;
+  alter table contacts add column if not exists parser_version  text;
+
+  -- outreach review queue
+  create table if not exists outreach_drafts (
+    id           uuid primary key default gen_random_uuid(),
+    rep_id       uuid not null references profiles(id) on delete cascade,
+    contact_id   uuid not null references contacts(id) on delete cascade,
+    channel      text not null check (channel in ('sms','email')),
+    angle        text not null,   -- one of six outreach angles
+    body         text not null,
+    status       text not null default 'pending'
+                 check (status in ('pending','approved','sent','rejected')),
+    created_at   timestamptz default now(),
+    sent_at      timestamptz
+  );
+
+  alter table outreach_drafts enable row level security;
+  create policy "Reps manage own drafts"
+    on outreach_drafts for all using (auth.uid() = rep_id);
+
+  create index if not exists outreach_drafts_rep_status_idx
+    on outreach_drafts (rep_id, status);
+
+  -- parser health
+  create table if not exists parser_events (
+    id           uuid primary key default gen_random_uuid(),
+    rep_id       uuid references profiles(id) on delete set null,
+    adapter      text not null,
+    selector     text not null,
+    hit          boolean not null,
+    page_url     text,
+    created_at   timestamptz default now()
+  );
+
+  alter table parser_events enable row level security;
+  create policy "Reps read own parser events"
+    on parser_events for select using (auth.uid() = rep_id);
+  create policy "Reps insert parser events"
+    on parser_events for insert with check (auth.uid() = rep_id);
+
+--------------------------------------------------------------------------------
+
+## 5. AI SYSTEM
+
+LLM: Google Gemini 2.5 Flash. Locked for OpenRex launch.
+
+Swap path (if ever needed): the proxy translates Anthropic-shaped bodies
+into the provider's native format and returns an Anthropic-shaped envelope
+— so client code is provider-agnostic. To swap, replace the translator
+block in supabase/functions/ai-proxy/index.ts and update the model env
+var. Do not touch client code.
+
+Four canonical prompt flows (packages/prompts/):
+
+  1. scan.ts         — worklist scan. Given N lead cards, returns N scripts
+                       in one call. Token budget enforced client-side by
+                       batching to 30 cards per request.
+  2. deep-scan.ts    — single lead deep read. Returns prioritized game plan
+                       with next-action + rationale.
+  3. profile-scan.ts — rich profile extraction from a single lead detail
+                       page. Writes contacts.rich_profile jsonb.
+  4. mass-outreach.ts— six-angle generator. Given a rich profile, returns
+                       six distinct outreach drafts across angles:
+                       (1) timing, (2) trade-in value, (3) finance hook,
+                       (4) inventory match, (5) referral, (6) service memory.
+
+Validation: every LLM response is parsed against a zod schema in
+packages/prompts/schemas.ts. On schema fail → one retry with "fix the
+JSON" suffix → on second fail, drop the item and log to parser_events.
+
+--------------------------------------------------------------------------------
+
+## 6. SURFACE ARCHITECTURE
+
+Extension (Rex Lens):
+  - Manifest V3, service worker + content script + Shadow DOM panel.
+  - Panel persists across SPA navigation via the inject-fix watcher
+    (MutationObserver on document.body; re-injects if panel host is
+    removed from DOM). See apps/extension/src/content/inject.ts.
+  - Keyboard shortcuts: Ctrl+Shift+R scan, Ctrl+Shift+C copy first script.
+  - CRM adapters live in packages/adapters/. Each exports { parseList,
+    parseDetail, selectors } and is selected at runtime by hostname.
+
+Dashboard (Matador UI):
+  - Dark theme, red/blue gradient accent.
+  - Left rail: Heat Sheet, Pipeline, Review Queue, Rex.
+  - Main pane: card grid for heat sheet; stage columns for pipeline;
+    approve/reject row for review queue.
+  - Regenerate-from-notes: on any contact, rep can edit notes and hit
+    "Regenerate" — posts to ai-proxy with current rich_profile + new
+    notes, replaces outreach_drafts for that contact.
+
+--------------------------------------------------------------------------------
+
+## 7. COMPLIANCE
+
+SMS (10DLC A2P):
+  - Brand: registered, awaiting review.
+  - Campaign: submitted; waiting on carrier approval.
+  - Until approved: twilio-send edge function returns 503 with body
+    {error: 'sms_pending_carrier_approval'}. Client surfaces a clear
+    banner, does not retry silently.
+
+Third-party disclaimer: every outbound (email / SMS / script) ends with
+the disclaimer line — "Sent via OpenRex on behalf of [Rep Name]. Reply
+STOP to opt out." (email version adapts accordingly).
+
+STOP / HELP / START: inbound webhook at supabase/functions/twilio-webhook/
+maps STOP→opt_out, HELP→auto-reply with support URL, START→opt back in.
+Handler exists as stub; wire-up is P1 (see HANDOVER.txt).
+
+Data portability: rep owns their contact book. Export endpoint
+/api/export returns full JSON for rep's rows only (RLS-enforced).
+
+--------------------------------------------------------------------------------
+
+## 8. DEPLOYMENT
+
+Vercel:
+  Project: open-rex
+  Domain:  open-rex.vercel.app
+  Env vars (production):
+    NEXT_PUBLIC_SUPABASE_URL
+    NEXT_PUBLIC_SUPABASE_ANON_KEY
+    SUPABASE_SERVICE_ROLE
+    APP_URL = https://open-rex.vercel.app
+
+Supabase:
+  Project ref: set in OpenRex .env
+  Secrets (supabase secrets set ...):
+    GEMINI_API_KEY
+    TWILIO_ACCOUNT_SID
+    TWILIO_AUTH_TOKEN
+    TWILIO_MESSAGING_SERVICE_SID
+  Deploy edge functions:
+    supabase functions deploy ai-proxy
+    supabase functions deploy twilio-send
+    supabase functions deploy twilio-webhook
+
+Health check:
+  GET https://open-rex.vercel.app/api/health
+  Returns { supabase: 'ok', gemini: 'ok', twilio: 'gated' } when healthy.
+
+================================================================================
+END — OPEN_REX_MASTER_CONTEXT.txt
+================================================================================

@@ -1,0 +1,139 @@
+================================================================================
+OPEN REX — SESSION LOG
+Chronology of the seven waves that produced OpenRex.
+Commit SHAs are authoritative; narratives summarize intent.
+================================================================================
+
+## WAVE 1 — DOCS-FIRST (PocketRep)
+
+Goal: freeze the product framing + architecture before writing OpenRex code.
+
+PocketRep main:
+  a838904  docs: add HANDOVER_PROMPT.txt + update PROJECT_MASTER_CONTEXT.txt
+           - Fix proxy URL reference (/gemini, not /anthropic)
+           - Mark privacy + proxy URL issues fixed
+           - 201-line handover covering product, arch, AI, DB, design
+
+Outcome: the docs from this wave are the style/tone reference for the
+OpenRex handover package (this directory).
+
+--------------------------------------------------------------------------------
+
+## WAVE 2 — SCAFFOLD (OpenRex)
+
+Goal: bootstrap the OpenRex monorepo — apps/web + apps/extension + packages.
+
+OpenRex main:
+  <scaffold sha>   chore: bootstrap OpenRex monorepo
+  <scaffold sha>   feat: port Rex Lens extension into apps/extension
+  <scaffold sha>   feat: port dashboard into apps/web
+  <scaffold sha>   feat: supabase functions + migrations
+
+Outcome: the two surfaces were split from PocketRep into one unified repo.
+Mobile app stayed on PocketRep for now.
+
+--------------------------------------------------------------------------------
+
+## WAVE 3 — SECURITY FIX (PR #10, PocketRep)
+
+Goal: close a Supabase env-injection issue — the dashboard was reading a
+client-supplied header and using it to pick a Supabase project. Fixed to
+hard-code project ref from server env only.
+
+PocketRep PR #10 (own branch, not on PR #8):
+  <sec fix sha>    fix(security): pin Supabase project ref to server env
+  <sec fix sha>    test: reject client-supplied project header
+
+Outcome: merged. The fix is carried into OpenRex scaffold before first
+deploy.
+
+--------------------------------------------------------------------------------
+
+## WAVE 4 — MIGRATION TO OPENREX REPO
+
+Goal: make DryvnAgency/OpenRex the canonical repo. Set up Vercel project,
+Supabase project, secrets, first green deploy.
+
+OpenRex main:
+  <vercel init>    chore: vercel.json + .env.example
+  <supa deploy>    chore: deploy ai-proxy to supabase
+  <health ep>      feat: /api/health (supabase + gemini + twilio status)
+
+Outcome: open-rex.vercel.app is live and green on Supabase + Gemini. Twilio
+reports "gated" (expected).
+
+--------------------------------------------------------------------------------
+
+## WAVE 5 — MATADOR UI + REGENERATE-FROM-NOTES
+
+Goal: redesign dashboard under the Matador visual system; add the
+regenerate-from-notes flow so reps can tweak a contact's notes and
+regenerate outreach drafts in one click.
+
+OpenRex main:
+  <matador 1>      feat(web): Matador UI components
+  <matador 2>      feat(web): dark theme + red/blue gradient
+  <regen notes>    feat(web): regenerate outreach from notes
+
+Outcome: dashboard visually consistent with brand. Regenerate-from-notes
+works end-to-end against outreach_drafts table.
+
+--------------------------------------------------------------------------------
+
+## WAVE 6 — EXTENSION INJECT-FIX
+
+Goal: the Rex Lens panel was disappearing on SPA route changes inside
+VinSolutions (which swaps DOM without a full navigation). Added a
+MutationObserver-based re-inject watcher.
+
+OpenRex main:
+  <inject fix>     fix(extension): re-inject Shadow DOM panel on SPA nav
+  <inject fix 2>   test(extension): simulate DOM swap, assert re-inject
+
+Outcome: panel persists through every tested VinSolutions navigation.
+
+--------------------------------------------------------------------------------
+
+## WAVE 7 — PROFILE-LEVEL SCAN + 6-ANGLE MASS OUTREACH
+
+Goal: when the rep hits Deep Scan on a lead, pull a rich profile (not just
+visible card fields) and use it to draft six distinct outreach messages
+across six angles: timing, trade-in, finance, inventory, referral, service.
+
+PocketRep PR #8 (staged, not yet pushed to OpenRex):
+  ca387e2  feat: profile-level scan + 6-angle mass outreach
+           - packages/prompts/profile-scan.ts
+           - packages/prompts/mass-outreach.ts
+           - apps/extension/src/content/deep-scan.ts
+           - apps/web/app/review/page.tsx (queue + approve flow)
+           - migration: contacts.rich_profile, outreach_drafts table
+
+  <this sha>  docs: OpenRex handover package (this directory)
+
+Outcome: code complete, sitting in /tmp/openrex-updates/ awaiting PAT for
+push. Both commits will land on OpenRex main in one push via
+/tmp/push_openrex_update.py.
+
+--------------------------------------------------------------------------------
+
+## SUMMARY
+
+PR #8 on DryvnAgency/pocketrep — 10 commits total:
+  - docs (waves 1 + 7)
+  - scaffold bundle (wave 2)
+  - migration bundle (wave 4)
+  - security-adjacent tweaks (overlap w/ wave 3)
+  - Matador UI (wave 5)
+  - regenerate-from-notes (wave 5)
+  - extension inject-fix (wave 6)
+  - profile-scan feature (wave 7)
+  - handover docs (wave 7 — this directory)
+
+PR #10 on DryvnAgency/pocketrep — security fix, its own branch.
+
+OpenRex main currently at 5b74103 (post wave 6). Waves 7 commits pending
+push.
+
+================================================================================
+END — SESSION_LOG.txt
+================================================================================
