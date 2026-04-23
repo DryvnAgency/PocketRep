@@ -8,7 +8,7 @@ declare global {
       readonly EXPO_PUBLIC_SUPABASE_URL: string;
       readonly EXPO_PUBLIC_SUPABASE_ANON_KEY: string;
       readonly EXPO_PUBLIC_AI_PROXY_URL: string;
-      readonly EXPO_PUBLIC_PICOVOICE_KEY: string;
+      readonly EXPO_PUBLIC_VOICE_PROVIDER_KEY: string;
     }
   }
 }
