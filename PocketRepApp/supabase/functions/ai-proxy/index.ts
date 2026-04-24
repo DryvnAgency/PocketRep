@@ -156,26 +156,65 @@ Deno.serve(async (req: Request) => {
 
   const geminiBody = anthropicToGemini(body);
 
-  // ── Call Gemini ───────────────────────────────────────────────────────────
-  let geminiRes: Response;
-  try {
-    geminiRes = await fetch(`${GEMINI_BASE}/${model}:generateContent`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': GEMINI_API_KEY,
-      },
-      body: JSON.stringify(geminiBody),
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return jsonResponse({ error: { type: 'proxy_error', message: `Failed to reach Gemini: ${message}` } }, 502);
+  // ── Call Gemini with retry + fallback on overload ─────────────────────────
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const isOverload = (status: number, errObj: any): boolean => {
+    if (status === 429 || status === 503 || status === 529) return true;
+    const msg = (errObj?.message || errObj?.status || '').toString().toLowerCase();
+    return msg.includes('overload') || msg.includes('high demand') || msg.includes('unavailable') || msg.includes('exhausted') || msg.includes('quota');
+  };
+
+  const modelFallbackChain = [model];
+  if (model === 'gemini-2.5-flash') modelFallbackChain.push('gemini-2.5-flash-lite');
+
+  let geminiRes: Response | null = null;
+  let geminiJson: any = null;
+  let lastError: any = null;
+
+  outer: for (const tryModel of modelFallbackChain) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(`${GEMINI_BASE}/${tryModel}:generateContent`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': GEMINI_API_KEY,
+          },
+          body: JSON.stringify(geminiBody),
+        });
+        const json = await res.json();
+
+        if (res.ok && !json.error) {
+          geminiRes = res;
+          geminiJson = json;
+          break outer;
+        }
+
+        lastError = { status: res.status, error: json.error ?? json };
+
+        if (!isOverload(res.status, json.error)) {
+          // Non-transient error — return immediately
+          return jsonResponse({ error: json.error ?? json }, res.status);
+        }
+
+        // Transient overload — wait and retry (exponential backoff)
+        if (attempt < 2) await sleep(500 * Math.pow(2, attempt));
+      } catch (err: unknown) {
+        lastError = { error: { message: err instanceof Error ? err.message : 'Unknown error' } };
+        if (attempt < 2) await sleep(500 * Math.pow(2, attempt));
+      }
+    }
+    // Exhausted retries on this model — try next fallback
   }
 
-  const geminiJson = await geminiRes.json();
-
-  if (!geminiRes.ok || geminiJson.error) {
-    return jsonResponse({ error: geminiJson.error ?? geminiJson }, geminiRes.status);
+  if (!geminiRes || !geminiJson) {
+    return jsonResponse({
+      error: {
+        type: 'OVERLOADED',
+        message: 'AI is at capacity right now. Try again in 30 seconds.',
+        detail: lastError?.error?.message || 'All retries and fallbacks exhausted',
+      },
+    }, 503);
   }
 
   // ── Extract text + usage ──────────────────────────────────────────────────
