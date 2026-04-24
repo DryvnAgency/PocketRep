@@ -44,6 +44,10 @@ export interface PrepareAdapterMessage {
   type: 'PREPARE_ADAPTER';
 }
 
+export interface ClickServiceTabMessage {
+  type: 'CLICK_SERVICE_TAB';
+}
+
 // ── Side Panel ↔ Service Worker ──────────────────────────────────────────────
 
 export interface ExtractPageContextMessage {
@@ -94,6 +98,10 @@ export interface ScanBatchMessage {
   payload: { tasks: StructuredTask[]; rawText: string };
 }
 
+export interface ScanCustomerMessage {
+  type: 'SCAN_CUSTOMER';
+}
+
 export interface TogglePanelMessage {
   type: 'TOGGLE_PANEL';
 }
@@ -108,6 +116,7 @@ export type ExtensionMessage =
   | WaitAndExtractMessage
   | GoBackMessage
   | PrepareAdapterMessage
+  | ClickServiceTabMessage
   | ExtractPageContextMessage
   | ChatMessage
   | DeepReviewMessage
@@ -118,4 +127,5 @@ export type ExtensionMessage =
   | StatusMessage
   | ScanPageMessage
   | ScanBatchMessage
+  | ScanCustomerMessage
   | TogglePanelMessage;

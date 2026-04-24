@@ -1,4 +1,4 @@
-import type { PageContent, StructuredTask } from './types';
+import type { PageContent, StructuredTask, CustomerDetail } from './types';
 
 export const REX_MODEL = 'gemini-2.5-flash';
 export const HAIKU_MODEL = 'gemini-2.5-flash';
@@ -59,8 +59,9 @@ ${pageBlock}
 
 When you see a CRM page, worklist, or deal screen, parse everything:
 
-* **Vehicle of Interest (VOI)**: The vehicle they WANT to buy. Look for "stock #", "vehicle of interest", "desired vehicle", or the unit in the deal/desking section.
-* **Trade-In**: The vehicle they're BRINGING IN. Look for "trade", "trade-in", "appraisal", "payoff", or their current vehicle info.
+* **Vehicle of Interest (VOI)**: The vehicle they WANT to buy. On a VinConnect detail page this lives under the "Vehicle Info" section, never under "Trade-in Info." Look for "stock #", "vehicle of interest", "desired vehicle", or the unit in the deal/desking section.
+* **Trade-In**: The vehicle they're BRINGING IN. On a VinConnect detail page this lives under "Trade-in Info" only. Look for "trade", "trade-in", "appraisal", "payoff", or their current vehicle info. If the page says "(none entered)" there is no trade.
+* **Source**: Drop the source naturally into outreach so the customer trusts the message. If Source mentions "NissanUSA Payment Estimator", say "I saw you came through the Nissan payment estimator." If Source contains a third-party site name like AutoTrader or Cars.com, mention it. Never paste the raw source string verbatim, work it into a sentence.
 * **Deal Stage**: Fresh up, demo done, numbers presented, objection handling, follow-up, gone cold? Read the task type, status, notes, last activity.
 * **Buying Signals**: Multiple visits, specific model requests, payment questions, lease ending, high mileage on trade.
 * **Blockers**: Credit issues, negative equity, payment too high, spouse approval, competitor shopping.
@@ -104,7 +105,7 @@ NOTIFICATION-ONLY tasks (price changes, prospect viewed email, rep reassignments
 
 FORMATTING:
 
-Present everything numbered in worklist order with the customer name, vehicle, task type, and the script clearly labeled. Never send anything into the page. Just give the rep copy-and-paste scripts.
+Present everything numbered in worklist order with the customer name, vehicle, task type, and the script clearly labeled. Number every task sequentially as 1, 2, 3, 4, and so on. Never restart at 1 for each task. Preserve the exact order the tasks were given to you in the input list, because the rep copies them in that order. Never send anything into the page. Just give the rep copy-and-paste scripts.
 
 When the rep asks general questions or wants to modify a script, respond conversationally while maintaining the same tone — warm, confident, human.`;
 }
@@ -218,13 +219,19 @@ NOTIFICATION ONLY TASKS (price changes, prospect viewed email, rep reassignments
 
 CONTEXT AWARENESS: If a task includes email replies, notes, prior customer responses, or any conversation history in its context, reference it directly in the script. Acknowledge what the customer said, respond to their specific concern or question, and build on the conversation instead of starting cold. A reply task is not a cold outreach. It is a warm follow up that proves you actually read what they said.
 
+SOURCE AWARENESS: Each task includes a Source field (NissanUSA Payment Estimator, AutoTrader, Cars.com, walk-in, phone-up, etc). Drop the source name naturally into the outreach. "I saw you came through the Nissan payment estimator" or "noticed you reached out from AutoTrader" builds instant trust. Do not paste the raw source string verbatim, work it into a real sentence.
+
+VEHICLE OF INTEREST vs TRADE: When a task includes both a vehicle of interest and a trade-in, anchor the script around the vehicle of interest. Mention potential equity in their current vehicle, never trade value. If only a vehicle of interest is listed and no trade, do not invent a trade.
+
 TIME OF MONTH: Today's date will be provided. Use it:
 End of month (25th through 31st): Lean into urgency. Manufacturer incentives are expiring, managers are more flexible on pricing, and inventory is moving. Frame it as "timing is actually perfect right now" without sounding desperate.
 Beginning of month (1st through 7th): Fresh energy. New incentives just dropped, fresh inventory just landed, clean slate. Frame it as a great time to start the conversation.
 Mid month (8th through 24th): Standard approach, no calendar urgency needed.
-Holidays (around Memorial Day, July 4th, Labor Day, Black Friday, Christmas, New Year, Presidents Day): Reference the holiday sale or event naturally. "With the holiday weekend coming up" or "holiday event just kicked off" but never cheesy or forced.
+Holidays (around Memorial Day, July 4th, Labor Day, Black Friday, Christmas, New Year, Presidents Day, Mother's Day, Father's Day): Reference the holiday sale or event naturally when within seven days of the holiday. "With Memorial Day coming up" or "holiday event just kicked off" but never cheesy or forced.
 
-Present everything numbered in worklist order with the customer name, vehicle, task type, and the script clearly labeled.`;
+ANNIVERSARY: If the lead was created roughly 30, 60, 90, 180, or 365 days ago, lead with that. "Hey John, hard to believe it's been a year since you first looked at that Rogue." If service history shows the last RO was six or more months ago, that is a natural reentry point for a service-tied outreach.
+
+Present everything numbered sequentially in worklist order: 1, 2, 3, 4, and so on. Never restart at 1 for every task. Preserve the exact input order so the rep can copy and paste in order. Each task block should label the customer name, vehicle, task type, and the script clearly.`;
 
 export function buildScanBatchPrompt(tasks: StructuredTask[], rawText: string): string {
   if (tasks.length > 0) {
@@ -250,6 +257,149 @@ export function buildScanBatchPrompt(tasks: StructuredTask[], rawText: string): 
 }
 
 export { SCAN_BATCH_SYSTEM };
+
+// ── Customer Detail Prompt (per-lead "Scan Customer") ─────────────────────
+
+const US_HOLIDAYS_2026 = [
+  { name: 'New Year', date: '2026-01-01' },
+  { name: 'Presidents Day', date: '2026-02-16' },
+  { name: 'Memorial Day', date: '2026-05-25' },
+  { name: 'Mothers Day', date: '2026-05-10' },
+  { name: 'Fathers Day', date: '2026-06-21' },
+  { name: 'July 4th', date: '2026-07-04' },
+  { name: 'Labor Day', date: '2026-09-07' },
+  { name: 'Black Friday', date: '2026-11-27' },
+  { name: 'Christmas', date: '2026-12-25' },
+];
+
+function nearbyHoliday(today: Date): string {
+  for (const h of US_HOLIDAYS_2026) {
+    const hd = new Date(h.date + 'T12:00:00');
+    const diffDays = Math.round((hd.getTime() - today.getTime()) / 86400000);
+    if (diffDays >= -2 && diffDays <= 7) {
+      return `${h.name} is ${diffDays === 0 ? 'today' : diffDays > 0 ? `${diffDays} days away` : `${Math.abs(diffDays)} days ago`}.`;
+    }
+  }
+  return '';
+}
+
+function monthBucket(today: Date): string {
+  const day = today.getDate();
+  if (day >= 25) return 'End of month — lean into urgency, incentives expiring, managers more flexible.';
+  if (day <= 7) return 'Beginning of month — fresh incentives, fresh inventory, clean slate.';
+  return 'Mid month — standard approach, no calendar urgency.';
+}
+
+function daysBetween(isoOrLoose: string, today: Date): number | null {
+  if (!isoOrLoose) return null;
+  const cleaned = isoOrLoose.replace(/\([^)]*\)/g, '').trim();
+  // Try MM/DD/YY or MM/DD/YYYY
+  const m = cleaned.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (m) {
+    const yr = parseInt(m[3], 10);
+    const fullYr = yr < 100 ? 2000 + yr : yr;
+    const date = new Date(fullYr, parseInt(m[1], 10) - 1, parseInt(m[2], 10));
+    return Math.round((today.getTime() - date.getTime()) / 86400000);
+  }
+  const date = new Date(cleaned);
+  if (isNaN(date.getTime())) return null;
+  return Math.round((today.getTime() - date.getTime()) / 86400000);
+}
+
+function anniversaryHint(daysAgo: number | null): string {
+  if (daysAgo === null) return '';
+  const tolerance = 5;
+  for (const target of [30, 60, 90, 180, 365]) {
+    if (Math.abs(daysAgo - target) <= tolerance) {
+      return target === 365
+        ? 'It has been roughly a year since this lead was created — lead with the year-mark.'
+        : `It has been roughly ${target} days since this lead was created — natural anniversary touchpoint.`;
+    }
+  }
+  return '';
+}
+
+export function buildCustomerDetailPrompt(
+  detail: CustomerDetail,
+  today: Date,
+  repName: string,
+): string {
+  const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const monthCtx = monthBucket(today);
+  const holidayCtx = nearbyHoliday(today);
+  const daysAgo = daysBetween(detail.created, today);
+  const annivCtx = anniversaryHint(daysAgo);
+
+  const voiBlock = detail.voi
+    ? `${detail.voi.year} ${detail.voi.make} ${detail.voi.model}${detail.voi.trim ? ' ' + detail.voi.trim : ''}${detail.voi.condition ? ' (' + detail.voi.condition + ')' : ''}${detail.voi.stock ? ' Stock #' + detail.voi.stock : ''}`
+    : 'No vehicle of interest listed.';
+
+  const tradeBlock = detail.trade
+    ? `${detail.trade.year} ${detail.trade.make} ${detail.trade.model}${detail.trade.mileage ? ' — ' + detail.trade.mileage + ' miles' : ''}${detail.trade.vin ? ' (VIN ' + detail.trade.vin + ')' : ''}`
+    : 'No trade on file.';
+
+  const emails = detail.contactHistory.filter(c => c.type === 'email');
+  const contactBlock = detail.contactHistory.length === 0
+    ? 'No prior contact history visible.'
+    : detail.contactHistory.slice(0, 15).map((c, i) => {
+        const parts = [`${i + 1}.`, c.type.toUpperCase(), c.date || ''];
+        if (c.subject) parts.push(`Subject: ${c.subject}`);
+        if (c.snippet) parts.push(`Snippet: ${c.snippet.slice(0, 200)}`);
+        if (c.direction) parts.push(`(${c.direction})`);
+        if (c.replied) parts.push('(replied)');
+        return parts.filter(Boolean).join(' | ');
+      }).join('\n');
+
+  const serviceBlock = detail.serviceHistory.length === 0
+    ? 'No service history visible.'
+    : detail.serviceHistory.slice(0, 10).map((s, i) =>
+        `${i + 1}. RO #${s.ro} | ${s.vehicle} | ${s.dateTime}${s.mileage ? ' | ' + s.mileage + ' mi' : ''}${s.advisor ? ' | Advisor: ' + s.advisor : ''}`
+      ).join('\n');
+
+  const lastRO = detail.serviceHistory[0];
+  const lastROAge = lastRO ? daysBetween(lastRO.dateTime, today) : null;
+
+  const emailFollowUpInstr = emails.length === 0
+    ? ''
+    : `\n\nFOLLOW-UP EMAILS: For EACH of the ${emails.length} prior email${emails.length === 1 ? '' : 's'} in the contact history above, write one tailored follow-up email that references the prior thread. Acknowledge what the customer said or what was last sent, respond to their specific concern or question, and build on the conversation instead of starting cold. Number them 1, 2, 3, ... in the same order as the contact history. Each email needs a short subject line and a body under five sentences. Open every email with "hey".`;
+
+  const serviceInstr = detail.serviceHistory.length > 0
+    ? `\n\nSERVICE-TIED OUTREACH: They have service history. Write one phone opener tying their most recent service visit (RO #${lastRO!.ro} on ${lastRO!.dateTime}${lastROAge !== null && lastROAge >= 180 ? `, ${lastROAge} days ago — that is a natural reentry point` : ''}) to a quick conversation about potential equity in their current vehicle. Keep it light and curious, no pressure.`
+    : '';
+
+  return `Today is ${dateStr}. Calendar context: ${monthCtx} ${holidayCtx} ${annivCtx}
+
+You are scanning a single VinConnect customer detail page for ${repName || 'the rep'}. Generate a complete outreach kit for this lead following your rules. Use "hey" not "hi". No dashes anywhere.
+
+CUSTOMER:
+Name: ${detail.buyerName || 'Unknown'}
+Status: ${detail.status || 'unknown'}
+Source: ${detail.source || 'unknown'}
+Engagement: ${detail.engagement || 'not specified'}
+Created: ${detail.created || 'unknown'}${daysAgo !== null ? ` (${daysAgo} days ago)` : ''}
+Contacted: ${detail.contacted ? 'Yes' : 'No'}${detail.lastAttempt ? ` — last attempt ${detail.lastAttempt}` : ''}
+Sales Rep: ${detail.salesRep || 'unassigned'} | BD Agent: ${detail.bdAgent || 'unassigned'} | Manager: ${detail.manager || 'unassigned'}
+
+VEHICLE OF INTEREST (the car they want to buy):
+${voiBlock}
+
+TRADE-IN (the car they currently own):
+${tradeBlock}
+
+CONTACT HISTORY (most recent first):
+${contactBlock}
+
+SERVICE HISTORY:
+${serviceBlock}
+
+GENERATE THIS OUTREACH KIT, in this exact order, numbered sequentially 1, 2, 3, ...:
+
+1. PHONE OPENER — one liner, starts with their first name, anchored on the vehicle of interest, drops the source naturally.
+2. TEXT MESSAGE — two to three sentences, opens with "hey" and their first name.
+3. OUTBOUND EMAIL — short subject line plus body under five sentences, opens with "hey", references the source naturally.${emailFollowUpInstr}${serviceInstr}
+
+Number every block sequentially. Do not restart at 1.`;
+}
 
 export function stripSensitiveData(text: string): string {
   let cleaned = text;

@@ -1,5 +1,5 @@
 import { getSupabase, SUPABASE_ANON_KEY } from '../shared/supabase';
-import { buildPageScanPrompt, buildChatSystemPrompt, buildDeepReviewSummaryPrompt, buildDeepReviewGamePlanPrompt, buildScanBatchPrompt, SCAN_BATCH_SYSTEM, REX_MODEL, HAIKU_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
+import { buildPageScanPrompt, buildChatSystemPrompt, buildDeepReviewSummaryPrompt, buildDeepReviewGamePlanPrompt, buildScanBatchPrompt, buildCustomerDetailPrompt, SCAN_BATCH_SYSTEM, REX_MODEL, HAIKU_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
 import type { Profile, PageContent, AuthState, DeepReviewLead, DeepReviewResult, StructuredTask } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
 
@@ -651,9 +651,70 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       }
     }
 
+    case 'SCAN_CUSTOMER': {
+      if (!authState.hasAccess) return { error: 'Sign in to Rex Lens to use this feature.' };
+      const tabId = sender.tab?.id || (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id;
+      if (!tabId) return { error: 'No active tab found.' };
+      try {
+        return await scanCustomerDetail(tabId);
+      } catch (err: any) {
+        return { error: `Customer scan failed: ${err.message}` };
+      }
+    }
+
     default:
       return {};
   }
+}
+
+async function scanCustomerDetail(tabId: number): Promise<any> {
+  await ensureContentScript(tabId);
+
+  // Initial extract — adapter populates customerDetail when on a detail page
+  let content: PageContent = await chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_PAGE' });
+
+  if (!content?.customerDetail) {
+    return { error: 'This does not look like a customer detail page. Open a lead in VinConnect and try again.' };
+  }
+
+  // If service history is empty, try clicking the Service tab and re-extract
+  if (content.customerDetail.serviceHistory.length === 0) {
+    try {
+      const clickResult = await sendToContentScript(tabId, { type: 'CLICK_SERVICE_TAB' });
+      if (clickResult?.clicked) {
+        await new Promise(r => setTimeout(r, 2000));
+        const reExtract: PageContent = await chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_PAGE' });
+        if (reExtract?.customerDetail) {
+          content = reExtract;
+        }
+      }
+    } catch {
+      // Service tab click is best effort
+    }
+  }
+
+  const detail = content.customerDetail!;
+  const storageData = await chrome.storage.sync.get(['repName', 'dealershipName']);
+  const repName = storageData.repName || authState.profile?.full_name || 'admin';
+  const dealershipName = storageData.dealershipName || 'the dealership';
+
+  const today = new Date();
+  const userPrompt = buildCustomerDetailPrompt(detail, today, repName);
+  const system = SCAN_BATCH_SYSTEM
+    + `\n\nThe rep's name is ${repName} and they work at ${dealershipName}. Use their actual name in scripts instead of placeholders.`;
+
+  const reply = await callAIProxy({
+    model: REX_MODEL,
+    max_tokens: 8000,
+    system,
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+  return {
+    reply,
+    customerName: detail.buyerName,
+    emailFollowUpCount: detail.contactHistory.filter(c => c.type === 'email').length,
+    serviceROCount: detail.serviceHistory.length,
+  };
 }
 
 async function scanPageForTab(tabId: number): Promise<any> {

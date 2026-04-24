@@ -1,5 +1,12 @@
 import type { PlatformAdapter, AdapterHelpers, StructuredTask } from './types';
-import type { ClickableContact } from '../../shared/types';
+import type {
+  ClickableContact,
+  CustomerDetail,
+  VehicleOfInterest,
+  TradeIn,
+  ContactEntry,
+  ServiceRO,
+} from '../../shared/types';
 
 // ── VinSolutions (VinConnect) Adapter ───────────────────────────────────────
 // Deep scraper for VinConnect's RadGrid worklist tables inside nested iframes.
@@ -117,6 +124,304 @@ function scrapeGrid(leftDoc: Document, gridId: string, section: string): Structu
   return tasks;
 }
 
+// ── Customer Detail Page Extraction ───────────────────────────────────────
+// VinConnect customer detail pages render labeled fields like:
+//   Status: Waiting for Prospect Response
+//   Buyer/Co-Buyer: Eduardo Ponce
+//   Created: 4/22/26 11:58p (2d)
+//   Source: NISSANUSA - CONTACT DLR - PAYMENT EST (Internet)
+//   Vehicle Info → 2026 Nissan Rogue Rock Creek AWD (New)
+//   Trade-in Info → (none entered) OR a year/make/model line
+// Plus a tab strip "Sales (3) | Wish List | Service (3) | Value" and a Contact History block.
+
+/** Read text following a label like "Status:" by walking siblings/parent text */
+function readLabeledField(doc: Document, label: string): string {
+  // Find any node whose text starts with the label
+  const walker = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_TEXT);
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const text = (node.textContent || '').trim();
+    if (!text) continue;
+    if (text.toLowerCase() === label.toLowerCase() || text.toLowerCase() === label.toLowerCase() + ':') {
+      // Value is in the next sibling or parent's next text node
+      const parent = node.parentElement;
+      if (!parent) continue;
+      // Try next sibling element
+      let sib = parent.nextElementSibling as HTMLElement | null;
+      if (sib && sib.textContent) {
+        const v = sib.textContent.replace(/\s+/g, ' ').trim();
+        if (v) return v;
+      }
+      // Try parent's next sibling
+      sib = parent.parentElement?.nextElementSibling as HTMLElement | null;
+      if (sib && sib.textContent) {
+        const v = sib.textContent.replace(/\s+/g, ' ').trim();
+        if (v) return v;
+      }
+    }
+    // Inline form: "Label: value"
+    const inline = new RegExp('^' + label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&') + '\\s*:\\s*(.+)$', 'i');
+    const match = text.match(inline);
+    if (match) return match[1].replace(/\s+/g, ' ').trim();
+  }
+  return '';
+}
+
+/** Parse a vehicle line like "2026 Nissan Rogue Rock Creek AWD (New)" or "2018 Nissan Murano" */
+function parseVehicleLine(line: string): { year: string; make: string; model: string; trim?: string; condition?: 'New' | 'Used' | 'CPO' } | null {
+  const cleaned = line.replace(/\s+/g, ' ').trim();
+  const condMatch = cleaned.match(/\((New|Used|CPO|Certified)\)/i);
+  const condition = condMatch
+    ? (condMatch[1].toLowerCase().startsWith('cert') ? 'CPO' : (condMatch[1] as 'New' | 'Used' | 'CPO'))
+    : undefined;
+  const stripped = cleaned.replace(/\((New|Used|CPO|Certified)\)/i, '').trim();
+  const parts = stripped.split(/\s+/);
+  if (parts.length < 3) return null;
+  const year = parts[0];
+  if (!/^\d{4}$/.test(year)) return null;
+  const make = parts[1];
+  const model = parts[2];
+  const trim = parts.slice(3).join(' ') || undefined;
+  return { year, make, model, trim, condition };
+}
+
+function extractCustomerDetail(leftDoc: Document): CustomerDetail | null {
+  const bodyText = (leftDoc.body?.textContent || '').replace(/\s+/g, ' ');
+  // Heuristic: must look like a Lead Info / detail page
+  if (!/Lead\s*Info/i.test(bodyText) && !/Vehicle\s*Info/i.test(bodyText)) return null;
+
+  const status = readLabeledField(leftDoc, 'Status') || '';
+  const created = readLabeledField(leftDoc, 'Created') || '';
+  const sourceRaw = readLabeledField(leftDoc, 'Source') || '';
+  const source = sourceRaw.replace(/\s*\((Internet|Phone|Walk-?in|Showroom)\)\s*$/i, '').trim();
+  const salesRep = readLabeledField(leftDoc, 'Sales Rep') || undefined;
+  const bdAgent = readLabeledField(leftDoc, 'BD Agent') || undefined;
+  const manager = readLabeledField(leftDoc, 'Manager') || undefined;
+  const contactedRaw = readLabeledField(leftDoc, 'Contacted');
+  const contacted = /^yes/i.test(contactedRaw);
+  const lastAttempt = readLabeledField(leftDoc, 'Attempted') || undefined;
+
+  // Engagement Strength: look for "High|Medium|Low" near label text
+  let engagement: CustomerDetail['engagement'] = '';
+  const engRegex = /Engagement\s*Strength\s*[:\s]\s*(High|Medium|Low)/i;
+  const engMatch = bodyText.match(engRegex);
+  if (engMatch) engagement = engMatch[1] as CustomerDetail['engagement'];
+
+  // Buyer name: look for "Buyer/Co-Buyer" header then read the customer name link/text
+  let buyerName = '';
+  const headers = leftDoc.querySelectorAll('h1,h2,h3,h4,h5,th,td,div,span,strong,b');
+  for (const h of headers) {
+    const t = (h.textContent || '').trim();
+    if (/^Buyer\s*\/\s*Co-?Buyer$/i.test(t)) {
+      let sib = h.nextElementSibling as HTMLElement | null;
+      while (sib && !buyerName) {
+        const v = (sib.textContent || '').replace(/\s+/g, ' ').trim();
+        if (v && !/Buyer/i.test(v)) {
+          buyerName = v.split(/\s{2,}|,/)[0].trim();
+          break;
+        }
+        sib = sib.nextElementSibling as HTMLElement | null;
+      }
+      if (buyerName) break;
+    }
+  }
+  // Fallback: page title or first .viewitemlink
+  if (!buyerName) {
+    const link = leftDoc.querySelector('a.viewitemlink, h1, h2');
+    if (link) buyerName = (link.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  // Vehicle of Interest: scope DOM to the "Vehicle Info" header's container
+  let voi: VehicleOfInterest | null = null;
+  let trade: TradeIn | null = null;
+  const allElements = leftDoc.querySelectorAll('*');
+  for (const el of allElements) {
+    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (text === 'Vehicle Info' || text === 'Vehicle Info ') {
+      // Look at next sibling block for the vehicle line
+      let sib = el.parentElement?.nextElementSibling as HTMLElement | null;
+      let attempts = 0;
+      while (sib && attempts < 5 && !voi) {
+        const lines = (sib.textContent || '').split(/\n/).map(l => l.trim()).filter(Boolean);
+        for (const line of lines) {
+          const parsed = parseVehicleLine(line);
+          if (parsed) {
+            const stockMatch = (sib.textContent || '').match(/Stock\s*#?\s*[:\-]?\s*([A-Z0-9-]+)/i);
+            voi = { ...parsed, stock: stockMatch ? stockMatch[1] : undefined };
+            break;
+          }
+        }
+        sib = sib.nextElementSibling as HTMLElement | null;
+        attempts++;
+      }
+    }
+    if (text === 'Trade-in Info' || text === 'Trade In Info' || text === 'Trade-In Info') {
+      let sib = el.parentElement?.nextElementSibling as HTMLElement | null;
+      let attempts = 0;
+      while (sib && attempts < 5 && !trade) {
+        const blob = (sib.textContent || '').replace(/\s+/g, ' ').trim();
+        if (/none entered/i.test(blob)) break;
+        const lines = blob.split(/\s{2,}|,/).map(l => l.trim()).filter(Boolean);
+        for (const line of lines) {
+          const parsed = parseVehicleLine(line);
+          if (parsed) {
+            const vinMatch = blob.match(/\bVIN\s*[:\-]?\s*([A-HJ-NPR-Z0-9]{17})/i);
+            const milesMatch = blob.match(/(\d{1,3}(?:,\d{3})+|\d{4,6})\s*(?:mi|miles)\b/i);
+            trade = {
+              year: parsed.year,
+              make: parsed.make,
+              model: parsed.model,
+              vin: vinMatch ? vinMatch[1] : undefined,
+              mileage: milesMatch ? milesMatch[1] : undefined,
+            };
+            break;
+          }
+        }
+        sib = sib.nextElementSibling as HTMLElement | null;
+        attempts++;
+      }
+    }
+  }
+
+  const contactHistory = extractContactHistory(leftDoc);
+  const serviceHistory = extractServiceHistory(leftDoc);
+
+  return {
+    status,
+    buyerName,
+    created,
+    source,
+    salesRep,
+    bdAgent,
+    manager,
+    contacted,
+    lastAttempt,
+    engagement,
+    voi,
+    trade,
+    contactHistory,
+    serviceHistory,
+  };
+}
+
+function extractContactHistory(leftDoc: Document): ContactEntry[] {
+  const entries: ContactEntry[] = [];
+  // Look for a Contact History header, then walk subsequent rows
+  const headers = leftDoc.querySelectorAll('h1,h2,h3,h4,h5,th,strong,b,div,span');
+  let historyRoot: Element | null = null;
+  for (const h of headers) {
+    if (/^Contact\s*History$/i.test((h.textContent || '').trim())) {
+      historyRoot = h.closest('table') || h.parentElement?.parentElement || h.parentElement;
+      break;
+    }
+  }
+  if (!historyRoot) return entries;
+
+  const rows = historyRoot.querySelectorAll('tr');
+  for (const row of rows) {
+    const cells = row.querySelectorAll('td');
+    if (cells.length < 2) continue;
+    const cellTexts = Array.from(cells).map(c => (c.textContent || '').replace(/\s+/g, ' ').trim());
+    const joined = cellTexts.join(' ');
+    if (!joined || /Contact\s*History/i.test(joined)) continue;
+
+    let type: ContactEntry['type'] = 'other';
+    if (/\bemail\b/i.test(joined)) type = 'email';
+    else if (/\bcall\b|\bphone\b/i.test(joined)) type = 'call';
+    else if (/\btext\b|\bsms\b/i.test(joined)) type = 'text';
+    else if (/\bletter\b/i.test(joined)) type = 'letter';
+    else if (/\bnote\b/i.test(joined)) type = 'note';
+    else if (/\bvisit\b|\bshowroom\b/i.test(joined)) type = 'visit';
+
+    const dateMatch = joined.match(/\b\d{1,2}\/\d{1,2}\/\d{2,4}(\s+\d{1,2}:\d{2}\s*[ap]?m?)?/i);
+    const date = dateMatch ? dateMatch[0] : '';
+    const subject = cellTexts.find(c => c.length > 5 && c.length < 100 && !/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(c));
+    const snippetCell = cellTexts.find(c => c.length > 30);
+    const replied = /\breplied\b|\banswered\b/i.test(joined);
+    const direction: 'in' | 'out' | undefined = /\binbound\b|\bfrom\s+customer\b/i.test(joined)
+      ? 'in'
+      : /\boutbound\b|\bsent\b/i.test(joined)
+        ? 'out'
+        : undefined;
+
+    entries.push({ type, date, subject, snippet: snippetCell, direction, replied });
+  }
+  return entries.slice(0, 30);
+}
+
+function extractServiceHistory(leftDoc: Document): ServiceRO[] {
+  const entries: ServiceRO[] = [];
+  // Find tables that look like the service RO list (RO# | Vehicle | Date/Time)
+  const tables = leftDoc.querySelectorAll('table');
+  for (const table of tables) {
+    const headerRow = table.querySelector('tr');
+    if (!headerRow) continue;
+    const headerText = (headerRow.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!/RO\s*#/i.test(headerText) || !/Date.*Time/i.test(headerText)) continue;
+
+    const rows = table.querySelectorAll('tr');
+    rows.forEach((row, idx) => {
+      if (idx === 0) return; // skip header
+      const cells = row.querySelectorAll('td');
+      if (cells.length < 3) return;
+      const ro = (cells[0].textContent || '').replace(/\s+/g, ' ').trim();
+      if (!/^\d{4,}/.test(ro)) return;
+      const vehicle = (cells[1].textContent || '').replace(/\s+/g, ' ').trim();
+      const dateTime = (cells[2].textContent || '').replace(/\s+/g, ' ').trim();
+      entries.push({ ro, vehicle, dateTime });
+    });
+  }
+
+  // Pull RO detail block (Vin, Mileage, totals, advisor) for the most recent RO
+  if (entries.length > 0) {
+    const bodyText = (leftDoc.body?.textContent || '').replace(/\s+/g, ' ');
+    const vinMatch = bodyText.match(/\bVin\s*[:\-]?\s*([A-HJ-NPR-Z0-9]{17})/i);
+    const milesMatch = bodyText.match(/Mileage\s*[:\-]?\s*([\d,]+)/i);
+    const advisorMatch = bodyText.match(/Advisor\s*[:\-]?\s*([A-Za-z][A-Za-z\s\-\.()]{1,40})/);
+    const totalMatch = bodyText.match(/RO\s*Total\s*[:\-]?\s*\$?([\d,.]+)/i);
+    const last = entries[0];
+    if (vinMatch) last.vin = vinMatch[1];
+    if (milesMatch) last.mileage = milesMatch[1];
+    if (advisorMatch) last.advisor = advisorMatch[1].trim();
+    if (totalMatch) last.total = '$' + totalMatch[1];
+  }
+
+  return entries.slice(0, 20);
+}
+
+/** Click the Service tab in the "Sales | Wish List | Service | Value" tab strip */
+async function clickServiceTab(_helpers: AdapterHelpers): Promise<boolean> {
+  const leftDoc = getLeftPaneDocument();
+  if (!leftDoc) return false;
+
+  // Strategy 1: anchor with text exactly "Service" or "Service (n)"
+  const links = leftDoc.querySelectorAll('a, button, [role="tab"]');
+  for (const link of links) {
+    const t = (link.textContent || '').replace(/\s+/g, ' ').trim();
+    if (/^Service(\s*\(\d+\))?$/i.test(t)) {
+      // Confirm we're in a tab strip context (sibling tabs include Sales/Wish List/Value)
+      const parent = link.parentElement;
+      const siblingText = parent ? (parent.textContent || '') : '';
+      if (/Sales/i.test(siblingText) || /Wish\s*List/i.test(siblingText) || /Value/i.test(siblingText)) {
+        try {
+          (link as HTMLElement).click();
+          await new Promise(r => setTimeout(r, 2000));
+          return true;
+        } catch {
+          return false;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/** Detect whether the current page is a customer detail page (vs worklist) */
+function isCustomerDetailPage(leftDoc: Document): boolean {
+  const text = (leftDoc.body?.textContent || '').replace(/\s+/g, ' ');
+  return /Lead\s*Info/i.test(text) && /Vehicle\s*Info/i.test(text);
+}
+
 export const vinsolutions: PlatformAdapter = {
   id: 'vinsolutions',
   priority: 100,
@@ -146,6 +451,17 @@ export const vinsolutions: PlatformAdapter = {
       return { tasks: [], rawText: helpers.extractText() };
     }
 
+    // Detail page path: extract structured customer data instead of worklist tasks
+    if (isCustomerDetailPage(leftDoc)) {
+      const detail = extractCustomerDetail(leftDoc);
+      const rawText = (leftDoc.body?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 6000);
+      return {
+        tasks: [],
+        rawText,
+        customerDetail: detail || undefined,
+      };
+    }
+
     const tasks: StructuredTask[] = [];
     for (const config of GRID_CONFIGS) {
       tasks.push(...scrapeGrid(leftDoc, config.id, config.section));
@@ -160,6 +476,8 @@ export const vinsolutions: PlatformAdapter = {
 
     return { tasks, rawText };
   },
+
+  clickServiceTab,
 
   findClickables(helpers: AdapterHelpers): ClickableContact[] {
     const leftDoc = getLeftPaneDocument();

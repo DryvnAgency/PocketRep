@@ -1,6 +1,6 @@
-import type { ClickableContact, StructuredTask } from '../../shared/types';
+import type { ClickableContact, StructuredTask, CustomerDetail } from '../../shared/types';
 
-export type { StructuredTask };
+export type { StructuredTask, CustomerDetail };
 
 // ── Adapter Helpers ────────────────────────────────────────────────────────
 // Functions the content script exposes for adapters to use.
@@ -18,7 +18,8 @@ export interface PlatformAdapter {
   id: string;
   priority: number;         // higher = checked first; generic = 0
   matches(hostname: string): boolean;
-  extract(helpers: AdapterHelpers): { tasks: StructuredTask[]; rawText: string };
+  extract(helpers: AdapterHelpers): { tasks: StructuredTask[]; rawText: string; customerDetail?: CustomerDetail };
   findClickables?(helpers: AdapterHelpers): ClickableContact[];
   prepare?(helpers: AdapterHelpers): Promise<void>;
+  clickServiceTab?(helpers: AdapterHelpers): Promise<boolean>;
 }

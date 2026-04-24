@@ -59,6 +59,25 @@ const PANEL_CSS = /* css */ `
 }
 #rex-panel.open { transform: translateX(0); }
 
+/* ── Headlight Loading Bar ───────────────── */
+#rex-panel::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg,
+    transparent 0%, transparent 30%,
+    #e94560 50%, #ff7a8a 55%, #e94560 60%,
+    transparent 70%, transparent 100%);
+  background-size: 220% 100%; pointer-events: none;
+  opacity: 0; transition: opacity 0.2s; z-index: 10;
+}
+#rex-panel.scanning::before {
+  opacity: 1; animation: rex-headlight 1.4s ease-in-out infinite;
+}
+@keyframes rex-headlight {
+  0%   { background-position: 100% 0; }
+  50%  { background-position: 0% 0; }
+  100% { background-position: 100% 0; }
+}
+
 /* ── Resize Handle ────────────────────────── */
 #rex-resize {
   position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
@@ -358,6 +377,7 @@ const PANEL_HTML = /* html */ `
     <div id="rex-limit-banner">Daily limit reached — your scripts reset at midnight. Upgrade your plan for a higher limit!</div>
     <div id="rex-pills">
       <button class="rex-pill rex-pill-primary" data-action="scan">Scan My Page</button>
+      <button class="rex-pill" data-action="scan-customer">Scan Customer</button>
       <button class="rex-pill" data-action="rebuttals">Rebuttals</button>
       <button class="rex-pill" data-action="email">Email Writer</button>
       <button class="rex-pill" data-action="text">Text Writer</button>
@@ -615,6 +635,19 @@ export class RexLensPanel {
 
   private renderMarkdown(text: string): string {
     let html = this.esc(text);
+
+    // Numbering safety net: if the model regressed and emitted "1." for every
+    // top-level item (e.g. all customers numbered 1.), renumber sequentially.
+    const lines = html.split('\n');
+    const numberedLines = lines.filter(l => /^\s*\d+\.\s/.test(l));
+    const onesOnly = lines.filter(l => /^\s*1\.\s/.test(l));
+    if (numberedLines.length >= 3 && onesOnly.length === numberedLines.length) {
+      let n = 0;
+      html = lines
+        .map(l => /^\s*1\.\s/.test(l) ? l.replace(/^(\s*)1\.\s/, (_m, indent) => `${indent}${++n}. `) : l)
+        .join('\n');
+    }
+
     // Headers (must be before bold)
     html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
     html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
@@ -664,6 +697,7 @@ export class RexLensPanel {
     this.isSending = true;
     this.sendBtn.disabled = true;
     const thinkingEl = this.showThinking();
+    this.setScanning(true);
 
     try {
       const result = await this.sendToSW({ type: 'CHAT_MESSAGE', payload: { content: fullText } });
@@ -685,6 +719,7 @@ export class RexLensPanel {
     } finally {
       this.isSending = false;
       this.sendBtn.disabled = this.dailyLimitHit;
+      this.setScanning(false);
     }
   }
 
@@ -694,6 +729,9 @@ export class RexLensPanel {
     switch (action) {
       case 'scan':
         this.scanPage();
+        break;
+      case 'scan-customer':
+        this.scanCustomerDetail();
         break;
       case 'rebuttals':
         this.inputEl.value = 'The customer said: "';
@@ -715,6 +753,44 @@ export class RexLensPanel {
     }
   }
 
+  private setScanning(on: boolean) {
+    if (on) this.panel.classList.add('scanning');
+    else this.panel.classList.remove('scanning');
+  }
+
+  // ── Scan Customer (single customer detail page) ─────────────────────────
+
+  private async scanCustomerDetail() {
+    if (this.isSending || this.dailyLimitHit) return;
+    this.isSending = true;
+    this.sendBtn.disabled = true;
+    this.appendMessage('user', 'Scan Customer');
+    const scanEl = this.showScanning('Reading customer profile...');
+    this.setScanning(true);
+
+    try {
+      const result = await this.sendToSW({ type: 'SCAN_CUSTOMER' });
+      scanEl.remove();
+
+      if (result.error?.includes('DAILY_LIMIT') || result.error === 'DAILY_LIMIT') {
+        this.showDailyLimit();
+      } else if (result.error) {
+        this.appendMessage('system', result.error);
+      } else if (result.reply) {
+        this.appendMessage('assistant', result.reply);
+      }
+    } catch (err: any) {
+      scanEl.remove();
+      if (err.message === 'DAILY_LIMIT') this.showDailyLimit();
+      else this.appendMessage('system', `Customer scan error: ${err.message}`);
+    } finally {
+      this.isSending = false;
+      this.sendBtn.disabled = this.dailyLimitHit;
+      this.setScanning(false);
+      this.saveState();
+    }
+  }
+
   // ── Scan My Page ────────────────────────────────────────────────────────
 
   private async scanPage() {
@@ -724,6 +800,7 @@ export class RexLensPanel {
     this.sendBtn.disabled = true;
     this.appendMessage('user', 'Scan My Page');
     const scanEl = this.showScanning('Scanning worklist...');
+    this.setScanning(true);
 
     try {
       // 1. Tell service worker to prepare adapter + extract page
@@ -787,6 +864,7 @@ export class RexLensPanel {
     } finally {
       this.isSending = false;
       this.sendBtn.disabled = this.dailyLimitHit;
+      this.setScanning(false);
       this.saveState();
     }
   }
@@ -799,6 +877,7 @@ export class RexLensPanel {
     this.isSending = true;
     this.continueBtn.disabled = true;
     const thinkingEl = this.showScanning('Processing next batch...');
+    this.setScanning(true);
 
     try {
       const batch = this.state.taskQueue.slice(0, MAX_TASKS_PER_BATCH);
@@ -835,6 +914,7 @@ export class RexLensPanel {
       this.isSending = false;
       this.continueBtn.disabled = false;
       this.sendBtn.disabled = this.dailyLimitHit;
+      this.setScanning(false);
       this.saveState();
     }
   }

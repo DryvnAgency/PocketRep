@@ -270,6 +270,7 @@ function extractPageContent(): PageContent {
     phones: contactInfo.phones,
     structuredTasks: adapterResult.tasks.length > 0 ? adapterResult.tasks : undefined,
     adapterPlatform: adapter.id,
+    customerDetail: adapterResult.customerDetail,
   };
 }
 
@@ -1020,6 +1021,20 @@ chrome.runtime.onMessage.addListener(
           adapter.prepare(helpers).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: true }));
         } else {
           sendResponse({ ok: true });
+        }
+        break;
+      }
+
+      case 'CLICK_SERVICE_TAB': {
+        const hostname = window.location.hostname.toLowerCase();
+        const adapter = getAdapter(hostname);
+        if (adapter.clickServiceTab) {
+          const helpers = getAdapterHelpers();
+          adapter.clickServiceTab(helpers)
+            .then(clicked => sendResponse({ ok: true, clicked }))
+            .catch(() => sendResponse({ ok: false, clicked: false }));
+        } else {
+          sendResponse({ ok: false, clicked: false });
         }
         break;
       }

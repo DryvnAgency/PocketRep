@@ -46,6 +46,63 @@ export interface PageContent {
   phones: string[];
   structuredTasks?: StructuredTask[];
   adapterPlatform?: string;
+  customerDetail?: CustomerDetail;
+}
+
+// ── Customer Detail (per-lead view) ────────────────────────────────────────
+
+export interface VehicleOfInterest {
+  year: string;
+  make: string;
+  model: string;
+  trim?: string;
+  stock?: string;
+  condition?: 'New' | 'Used' | 'CPO';
+}
+
+export interface TradeIn {
+  year: string;
+  make: string;
+  model: string;
+  vin?: string;
+  mileage?: string;
+}
+
+export interface ContactEntry {
+  type: 'call' | 'email' | 'text' | 'letter' | 'note' | 'visit' | 'other';
+  date: string;
+  subject?: string;
+  snippet?: string;
+  direction?: 'in' | 'out';
+  replied?: boolean;
+}
+
+export interface ServiceRO {
+  ro: string;
+  vehicle: string;
+  dateTime: string;
+  vin?: string;
+  mileage?: string;
+  advisor?: string;
+  total?: string;
+}
+
+export interface CustomerDetail {
+  status: string;
+  buyerName: string;
+  coBuyer?: string;
+  created: string;
+  source: string;
+  salesRep?: string;
+  bdAgent?: string;
+  manager?: string;
+  contacted: boolean;
+  lastAttempt?: string;
+  engagement?: 'High' | 'Medium' | 'Low' | '';
+  voi: VehicleOfInterest | null;
+  trade: TradeIn | null;
+  contactHistory: ContactEntry[];
+  serviceHistory: ServiceRO[];
 }
 
 export interface FormField {
