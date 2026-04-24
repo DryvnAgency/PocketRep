@@ -110,30 +110,33 @@ Deno.serve(async (req: Request) => {
   // ── Plan lookup ───────────────────────────────────────────────────────────
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan')
+    .select('plan, unlimited')
     .eq('id', user.id)
     .single();
 
   const plan = profile?.plan || 'pro';
+  const isUnlimited = profile?.unlimited === true;
   const capCents = DAILY_CAP_CENTS[plan] ?? DEFAULT_CAP_CENTS;
 
-  // ── Daily usage check ─────────────────────────────────────────────────────
+  // ── Daily usage check (skipped for unlimited accounts) ────────────────────
   const today = new Date().toISOString().slice(0, 10);
-  const { data: usage } = await supabase
-    .from('daily_ai_usage')
-    .select('cost_cents')
-    .eq('user_id', user.id)
-    .eq('usage_date', today)
-    .single();
+  if (!isUnlimited) {
+    const { data: usage } = await supabase
+      .from('daily_ai_usage')
+      .select('cost_cents')
+      .eq('user_id', user.id)
+      .eq('usage_date', today)
+      .single();
 
-  const currentCostCents = Number(usage?.cost_cents ?? 0);
-  if (currentCostCents >= capCents) {
-    return jsonResponse({
-      error: {
-        type: 'DAILY_LIMIT',
-        message: `Daily limit reached ($${(capCents / 100).toFixed(2)}/day on your ${plan} plan). Resets at midnight.`,
-      },
-    }, 429);
+    const currentCostCents = Number(usage?.cost_cents ?? 0);
+    if (currentCostCents >= capCents) {
+      return jsonResponse({
+        error: {
+          type: 'DAILY_LIMIT',
+          message: `Daily limit reached ($${(capCents / 100).toFixed(2)}/day on your ${plan} plan). Resets at midnight.`,
+        },
+      }, 429);
+    }
   }
 
   // ── Parse Anthropic-style request ─────────────────────────────────────────

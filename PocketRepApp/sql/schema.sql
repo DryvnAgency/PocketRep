@@ -18,6 +18,7 @@ create table if not exists profiles (
   industry     text not null default 'auto',
   trial_ends_at timestamptz,
   stripe_customer_id text,
+  unlimited    boolean not null default false,
   created_at   timestamptz default now()
 );
 
