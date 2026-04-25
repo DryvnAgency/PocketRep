@@ -6,7 +6,7 @@ import type { StructuredTask } from '../shared/types';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const MAX_TASKS_PER_BATCH = 30;
+const MAX_TASKS_PER_BATCH = 10;
 const PANEL_MIN_WIDTH = 340;
 const PANEL_MAX_WIDTH = 720;
 const PANEL_DEFAULT_WIDTH = 460;
@@ -634,19 +634,27 @@ export class RexLensPanel {
   // ── Markdown Rendering ──────────────────────────────────────────────────
 
   private renderMarkdown(text: string): string {
-    let html = this.esc(text);
-
-    // Numbering safety net: if the model regressed and emitted "1." for every
-    // top-level item (e.g. all customers numbered 1.), renumber sequentially.
-    const lines = html.split('\n');
-    const numberedLines = lines.filter(l => /^\s*\d+\.\s/.test(l));
-    const onesOnly = lines.filter(l => /^\s*1\.\s/.test(l));
-    if (numberedLines.length >= 3 && onesOnly.length === numberedLines.length) {
+    // Numbering safety net: run on RAW text before escaping.
+    // Gemini sometimes numbers every block as "1." (or **1.**). Renumber sequentially.
+    let fixed = text;
+    const numPattern = /^(\s*(?:\*\*)?)\d+\.\s/;
+    const onePattern = /^(\s*(?:\*\*)?)(1)\.\s/;
+    const rawLines = fixed.split('\n');
+    const numberedCount = rawLines.filter(l => numPattern.test(l)).length;
+    const onesCount = rawLines.filter(l => onePattern.test(l)).length;
+    if (numberedCount >= 3 && onesCount === numberedCount) {
       let n = 0;
-      html = lines
-        .map(l => /^\s*1\.\s/.test(l) ? l.replace(/^(\s*)1\.\s/, (_m, indent) => `${indent}${++n}. `) : l)
+      fixed = rawLines
+        .map(l => {
+          if (onePattern.test(l)) {
+            return l.replace(/^(\s*(?:\*\*)?)1\.\s/, (_m, prefix) => `${prefix}${++n}. `);
+          }
+          return l;
+        })
         .join('\n');
     }
+
+    let html = this.esc(fixed);
 
     // Headers (must be before bold)
     html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');

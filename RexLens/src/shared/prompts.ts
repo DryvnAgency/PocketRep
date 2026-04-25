@@ -231,7 +231,9 @@ Holidays (around Memorial Day, July 4th, Labor Day, Black Friday, Christmas, New
 
 ANNIVERSARY: If the lead was created roughly 30, 60, 90, 180, or 365 days ago, lead with that. "Hey John, hard to believe it's been a year since you first looked at that Rogue." If service history shows the last RO was six or more months ago, that is a natural reentry point for a service-tied outreach.
 
-Present everything numbered sequentially in worklist order: 1, 2, 3, 4, and so on. Never restart at 1 for every task. Preserve the exact input order so the rep can copy and paste in order. Each task block should label the customer name, vehicle, task type, and the script clearly.`;
+BREVITY: You must generate a script for EVERY task in the input list. Do not skip any. Phone scripts are one to two sentences. Texts are two to three sentences. Emails are a subject line plus three to five sentences max. Notification tasks are one line ("Dismiss this task."). Never write preambles, summaries, or commentary between scripts. Jump straight from one to the next.
+
+NUMBERING: Number every task sequentially in worklist order: 1, 2, 3, 4, and so on. NEVER restart at 1 for each task. NEVER number every task as 1. The numbers must increment. Preserve the exact input order so the rep can copy and paste in order. Each task block should label the customer name, vehicle, task type, and the script clearly.`;
 
 export function buildScanBatchPrompt(tasks: StructuredTask[], rawText: string): string {
   if (tasks.length > 0) {
