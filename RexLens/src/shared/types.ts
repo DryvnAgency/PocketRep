@@ -99,6 +99,9 @@ export interface CustomerDetail {
   contacted: boolean;
   lastAttempt?: string;
   engagement?: 'High' | 'Medium' | 'Low' | '';
+  process?: string;
+  suggestedAction?: string;
+  notes?: string[];
   voi: VehicleOfInterest | null;
   trade: TradeIn | null;
   contactHistory: ContactEntry[];

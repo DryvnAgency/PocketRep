@@ -286,6 +286,53 @@ function extractCustomerDetail(leftDoc: Document): CustomerDetail | null {
   const contactHistory = extractContactHistory(leftDoc);
   const serviceHistory = extractServiceHistory(leftDoc);
 
+  // Process: "New Internet Sales Lead", "Active Follow Up", etc.
+  const process = readLabeledField(leftDoc, 'Process') || undefined;
+
+  // Suggested action: look at the CRM task row visible on the detail page
+  // VinConnect shows action buttons: Hot, Call, Email, Appt., Note, Lost, Bad, Sold, Visit, Letter, Text
+  // The active/highlighted one or the task description indicates what the CRM wants the rep to do
+  let suggestedAction: string | undefined;
+  // Try reading the task description near the process/status block
+  const taskDesc = readLabeledField(leftDoc, 'Task');
+  if (taskDesc) {
+    suggestedAction = taskDesc;
+  } else {
+    // Infer from status
+    const statusLower = status.toLowerCase();
+    if (/waiting for prospect response/i.test(statusLower) || /reply|respond/i.test(statusLower)) {
+      suggestedAction = 'email follow-up';
+    } else if (/call|phone/i.test(statusLower)) {
+      suggestedAction = 'call';
+    } else if (/text|sms/i.test(statusLower)) {
+      suggestedAction = 'text';
+    } else if (/sold|delivered/i.test(statusLower)) {
+      suggestedAction = 'sold follow-up';
+    } else if (/service/i.test(statusLower)) {
+      suggestedAction = 'service';
+    } else if (/appointment|appt/i.test(statusLower)) {
+      suggestedAction = 'appointment';
+    }
+  }
+  // If the worklist section this lead came from is "Service Tasks", override
+  if (!suggestedAction && serviceHistory.length > 0) {
+    suggestedAction = 'service';
+  }
+
+  // Notes: scrape any visible note entries from the page
+  const notes: string[] = [];
+  const noteElements = leftDoc.querySelectorAll('[class*="note"], [class*="Note"], [id*="note"], [id*="Note"]');
+  for (const el of noteElements) {
+    const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (t.length > 10 && t.length < 2000) notes.push(t);
+  }
+  // Also pull notes from contact history entries of type 'note'
+  for (const entry of contactHistory) {
+    if (entry.type === 'note' && entry.snippet && entry.snippet.length > 10) {
+      notes.push(`[${entry.date || 'no date'}] ${entry.snippet}`);
+    }
+  }
+
   return {
     status,
     buyerName,
@@ -297,6 +344,9 @@ function extractCustomerDetail(leftDoc: Document): CustomerDetail | null {
     contacted,
     lastAttempt,
     engagement,
+    process,
+    suggestedAction,
+    notes: notes.length > 0 ? notes.slice(0, 10) : undefined,
     voi,
     trade,
     contactHistory,

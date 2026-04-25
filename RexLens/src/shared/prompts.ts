@@ -319,6 +319,27 @@ function anniversaryHint(daysAgo: number | null): string {
   return '';
 }
 
+function detectTaskType(detail: CustomerDetail): string {
+  if (detail.suggestedAction) {
+    const a = detail.suggestedAction.toLowerCase();
+    if (/email\s*follow/i.test(a) || /reply|respond/i.test(a)) return 'email-followup';
+    if (/email/i.test(a)) return 'email';
+    if (/text|sms/i.test(a)) return 'text';
+    if (/call|phone/i.test(a)) return 'call';
+    if (/service/i.test(a)) return 'service';
+    if (/sold|deliver/i.test(a)) return 'sold-followup';
+    if (/appointment|appt/i.test(a)) return 'appointment';
+  }
+  // Infer from status
+  const s = detail.status.toLowerCase();
+  if (/waiting for prospect response/i.test(s)) return 'email-followup';
+  if (/sold|delivered/i.test(s)) return 'sold-followup';
+  // Infer from service history
+  if (detail.serviceHistory.length > 0 && detail.contactHistory.length === 0) return 'service';
+  // Default
+  return 'call';
+}
+
 export function buildCustomerDetailPrompt(
   detail: CustomerDetail,
   today: Date,
@@ -329,16 +350,16 @@ export function buildCustomerDetailPrompt(
   const holidayCtx = nearbyHoliday(today);
   const daysAgo = daysBetween(detail.created, today);
   const annivCtx = anniversaryHint(daysAgo);
+  const taskType = detectTaskType(detail);
 
   const voiBlock = detail.voi
     ? `${detail.voi.year} ${detail.voi.make} ${detail.voi.model}${detail.voi.trim ? ' ' + detail.voi.trim : ''}${detail.voi.condition ? ' (' + detail.voi.condition + ')' : ''}${detail.voi.stock ? ' Stock #' + detail.voi.stock : ''}`
     : 'No vehicle of interest listed.';
 
   const tradeBlock = detail.trade
-    ? `${detail.trade.year} ${detail.trade.make} ${detail.trade.model}${detail.trade.mileage ? ' — ' + detail.trade.mileage + ' miles' : ''}${detail.trade.vin ? ' (VIN ' + detail.trade.vin + ')' : ''}`
+    ? `${detail.trade.year} ${detail.trade.make} ${detail.trade.model}${detail.trade.mileage ? ', ' + detail.trade.mileage + ' miles' : ''}${detail.trade.vin ? ' (VIN ' + detail.trade.vin + ')' : ''}`
     : 'No trade on file.';
 
-  const emails = detail.contactHistory.filter(c => c.type === 'email');
   const contactBlock = detail.contactHistory.length === 0
     ? 'No prior contact history visible.'
     : detail.contactHistory.slice(0, 15).map((c, i) => {
@@ -350,6 +371,10 @@ export function buildCustomerDetailPrompt(
         return parts.filter(Boolean).join(' | ');
       }).join('\n');
 
+  const notesBlock = detail.notes && detail.notes.length > 0
+    ? detail.notes.slice(0, 8).map((n, i) => `${i + 1}. ${n.slice(0, 300)}`).join('\n')
+    : 'No notes visible.';
+
   const serviceBlock = detail.serviceHistory.length === 0
     ? 'No service history visible.'
     : detail.serviceHistory.slice(0, 10).map((s, i) =>
@@ -359,25 +384,105 @@ export function buildCustomerDetailPrompt(
   const lastRO = detail.serviceHistory[0];
   const lastROAge = lastRO ? daysBetween(lastRO.dateTime, today) : null;
 
-  const emailFollowUpInstr = emails.length === 0
-    ? ''
-    : `\n\nFOLLOW-UP EMAILS: For EACH of the ${emails.length} prior email${emails.length === 1 ? '' : 's'} in the contact history above, write one tailored follow-up email that references the prior thread. Acknowledge what the customer said or what was last sent, respond to their specific concern or question, and build on the conversation instead of starting cold. Number them 1, 2, 3, ... in the same order as the contact history. Each email needs a short subject line and a body under five sentences. Open every email with "hey".`;
+  // Determine what has been done already and whether the customer responded
+  const lastContact = detail.contactHistory[0];
+  const customerResponded = detail.contactHistory.some(c => c.direction === 'in' || c.replied);
+  const lastOutbound = detail.contactHistory.find(c => c.direction === 'out' || c.type === 'email');
 
-  const serviceInstr = detail.serviceHistory.length > 0
-    ? `\n\nSERVICE-TIED OUTREACH: They have service history. Write one phone opener tying their most recent service visit (RO #${lastRO!.ro} on ${lastRO!.dateTime}${lastROAge !== null && lastROAge >= 180 ? `, ${lastROAge} days ago — that is a natural reentry point` : ''}) to a quick conversation about potential equity in their current vehicle. Keep it light and curious, no pressure.`
-    : '';
+  let responseContext = '';
+  if (customerResponded) {
+    const inbound = detail.contactHistory.find(c => c.direction === 'in');
+    responseContext = inbound
+      ? `The customer HAS responded. Their last message: "${inbound.snippet?.slice(0, 200) || 'content not visible'}". Reference what they said and build on it.`
+      : 'The customer has responded at some point. Acknowledge the prior conversation.';
+  } else if (lastOutbound) {
+    responseContext = `The customer has NOT responded yet. Last outreach was ${lastOutbound.type} on ${lastOutbound.date || 'unknown date'}${lastOutbound.snippet ? ': "' + lastOutbound.snippet.slice(0, 150) + '"' : ''}. Do not repeat the same message. Try a different angle or give them a new reason to engage.`;
+  } else {
+    responseContext = 'No prior outreach visible. This may be a first contact.';
+  }
+
+  // Build the single task instruction based on what the CRM says to do
+  let taskInstruction: string;
+  switch (taskType) {
+    case 'email-followup':
+      taskInstruction = `TASK: EMAIL FOLLOW-UP
+
+The CRM says to follow up by email. Write ONE ready-to-paste follow-up email.
+
+${responseContext}
+
+Read the contact history and notes carefully. If the customer asked a question, answer it. If they raised a concern, address it. If they went silent, try a different angle than whatever was sent last. Reference their vehicle of interest and drop the source naturally.
+
+Provide a short subject line (no marketing copy) and a body under five sentences. Open with "hey". This should feel like a real reply to a real conversation, not a template.`;
+      break;
+    case 'email':
+      taskInstruction = `TASK: OUTBOUND EMAIL
+
+The CRM says to send an email. Write ONE ready-to-paste email.
+
+${responseContext}
+
+Reference the vehicle of interest and drop the source naturally. Use a timely angle based on today's date and calendar context.
+
+Provide a short subject line and a body under five sentences. Open with "hey". Write it like the rep took 30 seconds to type it themselves.`;
+      break;
+    case 'text':
+      taskInstruction = `TASK: TEXT MESSAGE
+
+The CRM says to send a text. Write ONE ready-to-paste text message.
+
+${responseContext}
+
+Two to three sentences max. Open with "hey" and their first name. Mention the vehicle of interest and give one honest reason to act now. If they responded before, reference what they said. If they didn't respond, try a different angle. The kind of text a person actually responds to because it doesn't feel like a blast.`;
+      break;
+    case 'call':
+      taskInstruction = `TASK: PHONE CALL
+
+The CRM says to call this customer. Write ONE phone opener script, two to three sentences the rep can read naturally.
+
+${responseContext}
+
+Start with their first name. Reference their specific vehicle of interest. Drop the source naturally. Give a real reason why right now matters (based on the calendar context, their engagement level, and how long ago they were created). Keep it conversational and curious, not scripted-sounding.`;
+      break;
+    case 'service':
+      taskInstruction = `TASK: SERVICE OPPORTUNITY
+
+${detail.serviceHistory.length > 0
+        ? `This customer has service history. Most recent: RO #${lastRO!.ro} on ${lastRO!.dateTime}${lastROAge !== null ? ` (${lastROAge} days ago)` : ''}.`
+        : 'Customer has a service connection.'}
+
+Write ONE phone opener that ties their service visit to a quick conversation about potential equity in their current vehicle while they're already thinking about their car. Keep it light and genuinely curious, no pressure. Two to three sentences max.`;
+      break;
+    case 'sold-followup':
+      taskInstruction = `TASK: SOLD/DELIVERED FOLLOW-UP
+
+This customer already bought. Write ONE phone opener that opens with "hey," thanks them, asks how the vehicle is treating them${daysAgo !== null && daysAgo >= 300 ? ' (it has been almost a year)' : ''}, and naturally moves into asking if anyone they know might be looking. Two to three sentences, warm and genuine.`;
+      break;
+    case 'appointment':
+      taskInstruction = `TASK: SET APPOINTMENT
+
+The CRM says to set an appointment. Write ONE phone opener or text (whichever feels more natural for this customer based on contact history) that gives a specific reason to come in. Reference the vehicle of interest and a timely reason to visit. Keep it to two to three sentences.`;
+      break;
+    default:
+      taskInstruction = `TASK: OUTREACH
+
+Read the CRM status, contact history, and notes, then write ONE script matching the most logical next outreach type (call, text, or email). Base your choice on what has already been done and whether the customer responded.
+
+${responseContext}`;
+  }
 
   return `Today is ${dateStr}. Calendar context: ${monthCtx} ${holidayCtx} ${annivCtx}
 
-You are scanning a single VinConnect customer detail page for ${repName || 'the rep'}. Generate a complete outreach kit for this lead following your rules. Use "hey" not "hi". No dashes anywhere.
+You are scanning a single VinConnect customer detail page for ${repName || 'the rep'}. Read all the data below, then generate exactly ONE script matching the CRM's suggested task. Use "hey" not "hi". No dashes of any kind anywhere in your response. Write in natural paragraph form.
 
 CUSTOMER:
 Name: ${detail.buyerName || 'Unknown'}
 Status: ${detail.status || 'unknown'}
+Process: ${detail.process || 'not specified'}
 Source: ${detail.source || 'unknown'}
 Engagement: ${detail.engagement || 'not specified'}
 Created: ${detail.created || 'unknown'}${daysAgo !== null ? ` (${daysAgo} days ago)` : ''}
-Contacted: ${detail.contacted ? 'Yes' : 'No'}${detail.lastAttempt ? ` — last attempt ${detail.lastAttempt}` : ''}
+Contacted: ${detail.contacted ? 'Yes' : 'No'}${detail.lastAttempt ? ', last attempt ' + detail.lastAttempt : ''}
 Sales Rep: ${detail.salesRep || 'unassigned'} | BD Agent: ${detail.bdAgent || 'unassigned'} | Manager: ${detail.manager || 'unassigned'}
 
 VEHICLE OF INTEREST (the car they want to buy):
@@ -386,19 +491,25 @@ ${voiBlock}
 TRADE-IN (the car they currently own):
 ${tradeBlock}
 
+CRM NOTES:
+${notesBlock}
+
 CONTACT HISTORY (most recent first):
 ${contactBlock}
 
 SERVICE HISTORY:
 ${serviceBlock}
 
-GENERATE THIS OUTREACH KIT, in this exact order, numbered sequentially 1, 2, 3, ...:
+${taskInstruction}
 
-1. PHONE OPENER — one liner, starts with their first name, anchored on the vehicle of interest, drops the source naturally.
-2. TEXT MESSAGE — two to three sentences, opens with "hey" and their first name.
-3. OUTBOUND EMAIL — short subject line plus body under five sentences, opens with "hey", references the source naturally.${emailFollowUpInstr}${serviceInstr}
-
-Number every block sequentially. Do not restart at 1.`;
+RULES:
+1. Base your script entirely on the contact history, notes, and whether the customer has responded or not.
+2. If they responded, reference what they actually said.
+3. If they have not responded, do NOT repeat what was already sent. Try a new angle.
+4. Drop the source naturally ("saw you came through the Nissan estimator" not "Source: NISSANUSA").
+5. Anchor on the vehicle of interest, never the trade. If a trade exists, mention potential equity in their current vehicle.
+6. Use the calendar context (end of month urgency, holiday, anniversary) only if it fits naturally.
+7. Write ONE script only. No kit, no alternatives, no multiple options.`;
 }
 
 export function stripSensitiveData(text: string): string {
