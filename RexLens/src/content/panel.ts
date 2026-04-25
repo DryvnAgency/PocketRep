@@ -6,7 +6,7 @@ import type { StructuredTask } from '../shared/types';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const MAX_TASKS_PER_BATCH = 10;
+const MAX_TASKS_PER_BATCH = 30;
 const PANEL_MIN_WIDTH = 340;
 const PANEL_MAX_WIDTH = 720;
 const PANEL_DEFAULT_WIDTH = 460;

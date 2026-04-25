@@ -83,7 +83,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 // ── AI Calls ─────────────────────────────────────────────────────────────────
 
-const AI_TIMEOUT_MS = 60_000; // 60 second timeout — proxy chain (extension → Supabase Edge → Google Gemini) needs headroom
+const AI_TIMEOUT_MS = 120_000; // 120 second timeout — 30-task batches with 32K output need headroom
 
 async function callAIProxy(body: Record<string, unknown>): Promise<string> {
   const headers = await getAuthHeaders();
@@ -641,7 +641,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
           + `\n\nThe rep's name is ${repName} and they work at ${dealershipName}. Use their actual name in scripts instead of placeholders.`;
         const reply = await callAIProxy({
           model: REX_MODEL,
-          max_tokens: 8000,
+          max_tokens: 32000,
           system,
           messages: [{ role: 'user', content: prompt }],
         });
