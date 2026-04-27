@@ -665,14 +665,6 @@ export class RexLensPanel {
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     // Inline code
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Numbered lists: detect consecutive lines starting with digits
-    html = html.replace(/((?:^|\n)\d+\.\s.+(?:\n(?!\d+\.\s).+)*)+/g, (block) => {
-      const items = block.trim().split(/\n(?=\d+\.\s)/).map(line => {
-        const content = line.replace(/^\d+\.\s/, '').trim();
-        return `<li>${content}</li>`;
-      });
-      return `<ol>${items.join('')}</ol>`;
-    });
     // Paragraphs (double newline)
     html = html.replace(/\n\n/g, '</p><p>');
     html = '<p>' + html + '</p>';
