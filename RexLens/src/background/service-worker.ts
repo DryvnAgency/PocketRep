@@ -85,53 +85,82 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 const AI_TIMEOUT_MS = 120_000; // 120 second timeout — 30-task batches with 32K output need headroom
 
+function isOverloadError(status: number, errMsg: string): boolean {
+  if (status === 429 || status === 503 || status === 529) return true;
+  const lower = errMsg.toLowerCase();
+  return lower.includes('overload') || lower.includes('high demand') || lower.includes('capacity') || lower.includes('unavailable') || lower.includes('exhausted');
+}
+
 async function callAIProxy(body: Record<string, unknown>): Promise<string> {
-  const headers = await getAuthHeaders();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+  const MAX_RETRIES = 3;
+  const RETRY_BASE_MS = 3000;
+  let lastError: Error | null = null;
 
-  let res: Response;
-  try {
-    res = await fetch(AI_PROXY_URL, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch (err: any) {
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const headers = await getAuthHeaders();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+
+    let res: Response;
+    try {
+      res = await fetch(AI_PROXY_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err: any) {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        lastError = new Error('AI request timed out. Try again.');
+        if (attempt < MAX_RETRIES - 1) { await new Promise(r => setTimeout(r, RETRY_BASE_MS * Math.pow(2, attempt))); continue; }
+        throw lastError;
+      }
+      throw err;
+    }
     clearTimeout(timer);
-    if (err.name === 'AbortError') throw new Error('AI request timed out (30s). Try again.');
-    throw err;
-  }
-  clearTimeout(timer);
 
-  let json: any;
-  try {
-    json = await res.json();
-  } catch {
-    throw new Error(`AI proxy returned ${res.status} with non-JSON response`);
+    let json: any;
+    try {
+      json = await res.json();
+    } catch {
+      throw new Error(`AI proxy returned ${res.status} with non-JSON response`);
+    }
+
+    if (json.error?.type === 'DAILY_LIMIT') {
+      throw new Error('DAILY_LIMIT');
+    }
+
+    if (json.type === 'error' || json.error) {
+      const msg = json.error?.message || json.error?.type || JSON.stringify(json.error || json);
+      if (isOverloadError(res.status, msg) && attempt < MAX_RETRIES - 1) {
+        lastError = new Error(`AI proxy error: ${msg}`);
+        await new Promise(r => setTimeout(r, RETRY_BASE_MS * Math.pow(2, attempt)));
+        continue;
+      }
+      throw new Error(`AI proxy error: ${msg}`);
+    }
+
+    if (!res.ok) {
+      const msg = JSON.stringify(json).slice(0, 200);
+      if (isOverloadError(res.status, msg) && attempt < MAX_RETRIES - 1) {
+        lastError = new Error(`AI proxy returned ${res.status}: ${msg}`);
+        await new Promise(r => setTimeout(r, RETRY_BASE_MS * Math.pow(2, attempt)));
+        continue;
+      }
+      throw new Error(`AI proxy returned ${res.status}: ${msg}`);
+    }
+
+    const text = json.content?.[0]?.text;
+    if (text === undefined || text === null) {
+      console.error('[Rex Lens] Unexpected AI proxy response:', JSON.stringify(json).slice(0, 500));
+      throw new Error(`Unexpected AI response format: ${JSON.stringify(json).slice(0, 200)}`);
+    }
+
+    return text;
   }
 
-  if (json.error?.type === 'DAILY_LIMIT') {
-    throw new Error('DAILY_LIMIT');
-  }
-
-  if (json.type === 'error' || json.error) {
-    const msg = json.error?.message || json.error?.type || JSON.stringify(json.error || json);
-    throw new Error(`AI proxy error: ${msg}`);
-  }
-
-  if (!res.ok) {
-    throw new Error(`AI proxy returned ${res.status}: ${JSON.stringify(json).slice(0, 200)}`);
-  }
-
-  const text = json.content?.[0]?.text;
-  if (text === undefined || text === null) {
-    console.error('[Rex Lens] Unexpected AI proxy response:', JSON.stringify(json).slice(0, 500));
-    throw new Error(`Unexpected AI response format: ${JSON.stringify(json).slice(0, 200)}`);
-  }
-
-  return text;
+  throw lastError || new Error('AI request failed after retries');
 }
 
 // ── Silent Page Context Extraction + Haiku Pre-Scan ─────────────────────────

@@ -160,8 +160,10 @@ Deno.serve(async (req: Request) => {
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const isOverload = (status: number, errObj: any): boolean => {
     if (status === 429 || status === 503 || status === 529) return true;
-    const msg = (errObj?.message || errObj?.status || '').toString().toLowerCase();
-    return msg.includes('overload') || msg.includes('high demand') || msg.includes('unavailable') || msg.includes('exhausted') || msg.includes('quota');
+    const msg = typeof errObj === 'string'
+      ? errObj.toLowerCase()
+      : (errObj?.message || errObj?.status || '').toString().toLowerCase();
+    return msg.includes('overload') || msg.includes('high demand') || msg.includes('unavailable') || msg.includes('exhausted') || msg.includes('quota') || msg.includes('resource_exhausted');
   };
 
   const modelFallbackChain = [model];
@@ -198,10 +200,10 @@ Deno.serve(async (req: Request) => {
         }
 
         // Transient overload — wait and retry (exponential backoff)
-        if (attempt < 2) await sleep(500 * Math.pow(2, attempt));
+        if (attempt < 2) await sleep(2000 * Math.pow(2, attempt));
       } catch (err: unknown) {
         lastError = { error: { message: err instanceof Error ? err.message : 'Unknown error' } };
-        if (attempt < 2) await sleep(500 * Math.pow(2, attempt));
+        if (attempt < 2) await sleep(2000 * Math.pow(2, attempt));
       }
     }
     // Exhausted retries on this model — try next fallback
