@@ -40,11 +40,13 @@ apps/web/
 │       ├── lens/page.tsx
 │       ├── coach/page.tsx
 │       ├── audit/page.tsx
-│       └── rep/page.tsx
+│       ├── rep/page.tsx
+│       └── game-plans/new/run.ts        # runGamePlan server action — REAL writes
 ├── components/{StatusPill, Waitlist}.tsx
 ├── lib/
 │   ├── env.ts                           # paste-to-activate gate helper
 │   ├── mock.ts                          # mocked entities, swap to Supabase reads later
+│   ├── anthropic.ts                     # Sonnet wrapper + prompt cache + price-leak guard
 │   └── supabase/{client, server}.ts     # SSR helpers
 ├── middleware.ts                        # session refresh + route guard
 ├── next.config.ts, tsconfig.json, package.json, .env.example
@@ -58,7 +60,8 @@ apps/web/
 | Waitlist API | **Real.** Validates email, inserts via anon key + RLS. |
 | Sign-in (magic link) | **Real.** Supabase email OTP. Requires Site URL + redirect URL configured in Supabase Auth settings (see "Before pushing" below). |
 | Auth-gating on `/dashboard`, `/heat-sheet`, etc. | **Real.** Middleware redirects to `/sign-in` if no session. |
-| Dashboard, Heat Sheet, Game Plan Builder, Lens, Coach, Audit, Rep | **Mock data only.** Pulled from `lib/mock.ts`. Wire each surface to Supabase tables in Phase 1. |
+| **Game Plan Run** (`runGamePlan` server action) | **Real.** First click bootstraps tenant + membership, inserts `game_plans` + `campaign_runs` + `consent_events` + `audit_log` rows, then loops the first 6 customers calling `claude-sonnet-4-6` for unique per-customer outbound and writing real `messages` rows (status `sent_mock`). 6-customer cap is a v0 limit — full 142-pool generation belongs in a Supabase Edge Function or Inngest queue. |
+| Dashboard, Heat Sheet, Lens, Coach, Audit, Rep (read paths) | **Mock data only.** Pulled from `lib/mock.ts`. Each is its own follow-up slice. |
 
 ### Pixel parity
 
@@ -92,13 +95,15 @@ under **Settings → Environment Variables**, add for **Production** and
 NEXT_PUBLIC_SUPABASE_URL              = https://dhtzhftxrszfccpqivga.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY  = sb_publishable_oeWH4BK61fe9uEyB4r7-KA_rDlwS70M
 NEXT_PUBLIC_SITE_URL                  = https://open-rex.vercel.app
-SUPABASE_SERVICE_ROLE                 = (paste from Supabase dashboard → Settings → API → service_role secret)
+SUPABASE_SERVICE_ROLE                 = (Supabase dashboard → Settings → API → service_role secret)
+ANTHROPIC_API_KEY                     = (console.anthropic.com → API keys → starts sk-ant-)
 ```
 
-The `live.supabase` gate in `lib/env.ts` only flips on once both
-`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are
-non-placeholder, so the app boots harmlessly without secrets — the
-waitlist form silently no-ops in that mode.
+The `live.*` gates in `lib/env.ts` short-circuit features whose secrets
+aren't pasted yet:
+- Without `SUPABASE_SERVICE_ROLE` or `ANTHROPIC_API_KEY`, `runGamePlan`
+  refuses to run (returns a friendly error to the builder).
+- Without `NEXT_PUBLIC_SUPABASE_*`, the waitlist form silently no-ops.
 
 ## Two-command push to DryvnAgency/OpenRex
 
@@ -143,31 +148,37 @@ pnpm dev
 Sign-in works locally because `signInWithMagicLink` uses the request's
 `origin` header, so the redirect comes back to localhost.
 
-## What's NOT done (Phase 1 work, multi-week)
+## What's NOT done (Phase 1+ work, multi-week)
 
-The 6 app surfaces all read from `lib/mock.ts`. To take it from "real auth
-+ real waitlist" to "real product":
+Read paths for the 6 inner surfaces still use `lib/mock.ts`. The Game
+Plan **write** path is real (see `lib/anthropic.ts` +
+`app/(app)/game-plans/new/run.ts`). Remaining slices:
 
-1. **Tenancy bootstrap** — when a new user signs in for the first time,
-   create a `tenants` row + `memberships` row, write `tenant_id` into the
-   user's JWT custom claim. RLS policies are already keyed off this claim.
-2. **Heat Sheet** — replace `lib/mock.ts` reads with `supabase.from('conversations')`
-   + `messages` joined query, scoped to `tenant_id`.
-3. **Game Plan run path** — server action that creates `game_plans` +
-   `campaign_runs` + `campaign_contacts` rows, writes attestation to
-   `audit_log` + `consent_events`.
-4. **Rex Lens (Chrome extension)** — separate codebase. Posts scraped
-   rows to `/api/ingest/contacts` (route doesn't exist yet — will need
-   service-role insert).
-5. **Twilio webhook** — `app/api/twilio/inbound/route.ts` that handles
-   STOP/HELP/START + replies. Needs 10DLC + Messaging Service first.
-6. **Gemini message generation** — server worker that reads pending
-   `campaign_contacts`, calls Gemini per row, writes drafts to `messages`
-   with `approval_state = 'queued'`.
-7. **Hybrid autonomy classifier** — small Gemini call on inbound to flag
-   `simple_yesno` / `timing` / `substantive`, gate auto-replies.
-8. **Stripe checkout** — `app/api/stripe/webhook/route.ts` → activates
-   tenant on subscription creation.
+1. **JWT tenant claim** — `runGamePlan` currently uses the service role
+   to bypass RLS. Migrate to Supabase Auth Hook that injects `tenant_id`
+   as a JWT custom claim, so the publishable key honors RLS for normal
+   reads. Bootstrap on first sign-in.
+2. **Heat Sheet read** — replace `lib/mock.ts` reads with a Supabase
+   query against `conversations` + `messages` joined, scoped to
+   `tenant_id`. Subscribe to realtime updates.
+3. **Dashboard read** — replace KPI mocks with `count` aggregates over
+   `messages` and `campaign_runs`.
+4. **Audit Vault read** — already structured; just swap source from
+   `lib/mock.ts` to `audit_log` table.
+5. **Pool generation worker** — lift `runGamePlan`'s per-customer loop
+   into a Supabase Edge Function or Inngest job, drop the 6-customer cap,
+   batch through full 142-customer pools at the carrier TPS limit.
+6. **Rex Lens ingest API** — `app/api/ingest/contacts/route.ts` for the
+   Chrome extension to POST scraped CRM rows. Service-role insert.
+7. **Twilio webhook** — `app/api/twilio/inbound/route.ts` that handles
+   STOP/HELP/START + customer replies, fires hybrid autonomy classifier.
+8. **Hybrid autonomy classifier** — small Sonnet call on inbound to flag
+   `simple_yesno` / `timing` / `substantive`, gate auto-replies vs.
+   manager approval queue per the design's hard rules.
+9. **Real send path** — flip `messages.status` from `sent_mock` to a
+   real Twilio Messaging Service call once 10DLC clears.
+10. **Stripe checkout** — `app/api/stripe/webhook/route.ts` → activates
+    tenant on subscription creation.
 
 This roughly matches Phases 1–3 of `open-rex-docs/GAME_PLAN_SECTIONS.md`.
 

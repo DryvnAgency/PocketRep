@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { lensRows } from "@/lib/mock";
+import { runGamePlan } from "./run";
 
 export default function NewGamePlanPage() {
   const router = useRouter();
@@ -13,6 +14,27 @@ export default function NewGamePlanPage() {
   const [handoff, setHandoff] = useState<"auto_assign" | "queue_to_me">("queue_to_me");
   const [attested, setAttested] = useState(false);
   const [name, setName] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [runError, setRunError] = useState<string | null>(null);
+
+  function onRun() {
+    setRunError(null);
+    startTransition(async () => {
+      const result = await runGamePlan({
+        offer,
+        sendMode,
+        cadence,
+        handoff,
+        attestationName: name,
+        attested,
+      });
+      if (result.ok) {
+        router.push("/heat-sheet");
+      } else {
+        setRunError(result.error);
+      }
+    });
+  }
 
   return (
     <div className="gp">
@@ -111,7 +133,7 @@ export default function NewGamePlanPage() {
       {step === 3 && (
         <div className="gp-card">
           <h3 className="serif">Preview & Attest</h3>
-          <p className="muted">Sonnet generated 142 unique messages. Showing 4.</p>
+          <p className="muted">v0 cap: Sonnet generates 6 messages live on Run. Pool above shows 142 — the rest queue for the Phase 2 batch worker.</p>
           <div className="preview-list">
             {[
               { c: "Carla Mendez", text: `Hey Carla — Eddie at Nissan of Omaha. You're coming up on 33 months in your Murano SL. ${offer} Worth a look?` },
@@ -144,14 +166,30 @@ export default function NewGamePlanPage() {
             <div className="mono attest-meta">Pool hash 7a41f… · timestamp will be locked at run</div>
           </div>
 
+          {runError && (
+            <div
+              className="mono"
+              style={{
+                color: "#8b0000",
+                background: "rgba(139,0,0,0.08)",
+                border: "1px solid rgba(139,0,0,0.3)",
+                padding: "10px 14px",
+                fontSize: 12,
+                marginBottom: 12,
+              }}
+            >
+              {runError}
+            </div>
+          )}
+
           <div className="gp-nav">
-            <button className="btn-ghost" onClick={() => setStep(2)}>← Back</button>
+            <button className="btn-ghost" onClick={() => setStep(2)} disabled={pending}>← Back</button>
             <button
               className="btn-primary"
-              disabled={!attested || !name}
-              onClick={() => router.push("/heat-sheet")}
+              disabled={!attested || !name || pending}
+              onClick={onRun}
             >
-              Run Game Plan → 142 sends
+              {pending ? "Running… generating 6 messages" : "Run Game Plan → 6 sends"}
             </button>
           </div>
         </div>

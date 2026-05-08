@@ -14,6 +14,7 @@ export const env = {
   supabasePublishableKey:
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
   supabaseServiceRole: process.env.SUPABASE_SERVICE_ROLE ?? "",
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
 };
 
@@ -22,4 +23,5 @@ export const live = {
     hasReal(env.supabaseUrl, "https://") &&
     hasReal(env.supabasePublishableKey, "sb_publishable_"),
   supabaseServer: hasReal(env.supabaseServiceRole, ""),
+  anthropic: hasReal(env.anthropicApiKey, "sk-ant-"),
 };
