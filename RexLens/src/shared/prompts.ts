@@ -1,7 +1,7 @@
 import type { PageContent, StructuredTask, CustomerDetail } from './types';
 
-export const REX_MODEL = 'gemini-2.5-flash';
-export const HAIKU_MODEL = 'gemini-2.5-flash';
+export const REX_MODEL = 'claude-haiku-4-5-20251001';
+export const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 export const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/gemini';
 
 /** Format structured tasks as a compact numbered list for prompts */
