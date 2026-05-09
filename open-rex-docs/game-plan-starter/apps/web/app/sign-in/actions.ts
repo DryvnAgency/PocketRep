@@ -32,3 +32,23 @@ export async function signInWithMagicLink(formData: FormData) {
   }
   return { ok: true, email };
 }
+
+export async function signInWithPassword(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
+  if (!email.includes("@")) {
+    return { ok: false, error: "Please enter a valid email." };
+  }
+  if (!password) {
+    return { ok: false, error: "Password is required." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}

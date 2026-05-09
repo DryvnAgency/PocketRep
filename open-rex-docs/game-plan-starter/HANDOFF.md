@@ -58,7 +58,7 @@ apps/web/
 |---|---|
 | Landing page | **Real.** Posts to `/api/waitlist` → `public.waitlist` row. |
 | Waitlist API | **Real.** Validates email, inserts via anon key + RLS. |
-| Sign-in (magic link) | **Real.** Supabase email OTP. Requires Site URL + redirect URL configured in Supabase Auth settings (see "Before pushing" below). |
+| Sign-in (magic link + password) | **Real.** `/sign-in` has two tabs. Magic link uses Supabase email OTP; password uses `signInWithPassword`. Requires Site URL + redirect URL configured in Supabase Auth (see "Before pushing"). One admin account is pre-seeded — see "Admin account" below. |
 | Auth-gating on `/dashboard`, `/heat-sheet`, etc. | **Real.** Middleware redirects to `/sign-in` if no session. |
 | **Game Plan Run** (`runGamePlan` server action) | **Real.** First click bootstraps tenant + membership, inserts `game_plans` + `campaign_runs` + `consent_events` + `audit_log` rows, then loops the first 6 customers calling `claude-sonnet-4-6` for unique per-customer outbound and writing real `messages` rows (status `sent_mock`). 6-customer cap is a v0 limit — full 142-pool generation belongs in a Supabase Edge Function or Inngest queue. |
 | Dashboard, Heat Sheet, Lens, Coach, Audit, Rep (read paths) | **Mock data only.** Pulled from `lib/mock.ts`. Each is its own follow-up slice. |
@@ -69,6 +69,32 @@ apps/web/
 Claude Design bundle: same CSS custom properties (`--orx-*`, `--app-*`),
 same class names, same media queries. Re-using the prototype's class names
 means React JSX matches the prototype's structure with minimal change.
+
+## Admin account (pre-seeded)
+
+A single admin user is already seeded in the live OpenRex Supabase project
+so you can sign in immediately without going through magic-link flow:
+
+- **Email:** `openrexadmin@dryvnagency.com`
+- **Password:** `Dryvnagency2026`
+- **Tenant:** `Dryvn Agency` (created at seed time)
+- **Role:** `owner` (full membership row in `public.memberships`)
+
+How it was seeded (for reference, do not re-run):
+
+- `auth.users` row created via direct insert with `crypt(password, gen_salt('bf'))` (Supabase's bcrypt scheme); `email_confirmed_at = now()` so no verification gate.
+- `auth.identities` row attached with provider `email` and `email_verified: true`.
+- `public.tenants` + `public.memberships` rows inserted, owner role.
+
+Because the membership pre-exists, the first `runGamePlan` click for this
+account skips the auto-bootstrap branch and writes straight into the
+seeded tenant.
+
+**Rotate this password after first sign-in.** It was chosen for handoff
+convenience and lives in chat history / commit messages — change it from
+the Supabase dashboard (Authentication → Users → ⋯ → Send password
+recovery, or set a new password via service role) before sharing the
+project broadly.
 
 ## Before pushing — three Supabase Auth settings
 

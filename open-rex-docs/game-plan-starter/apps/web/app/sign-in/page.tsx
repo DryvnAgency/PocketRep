@@ -2,20 +2,32 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { useSearchParams } from "next/navigation";
-import { signInWithMagicLink } from "./actions";
+import { useRouter, useSearchParams } from "next/navigation";
+import { signInWithMagicLink, signInWithPassword } from "./actions";
+
+type Mode = "magic" | "password";
 
 export default function SignInPage() {
+  const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") ?? "/dashboard";
   const errorParam = params.get("error");
 
+  const [mode, setMode] = useState<Mode>("magic");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(
     errorParam === "auth_callback_failed" ? "That sign-in link expired. Try again." : null,
   );
   const [pending, startTransition] = useTransition();
+
+  function switchMode(nextMode: Mode) {
+    if (nextMode === mode) return;
+    setMode(nextMode);
+    setError(null);
+    setSentTo(null);
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,10 +35,25 @@ export default function SignInPage() {
     const fd = new FormData();
     fd.set("email", email);
     fd.set("next", next);
+
+    if (mode === "magic") {
+      startTransition(async () => {
+        const result = await signInWithMagicLink(fd);
+        if (result.ok) {
+          setSentTo(result.email ?? email);
+        } else {
+          setError(result.error ?? "Sign in failed.");
+        }
+      });
+      return;
+    }
+
+    fd.set("password", password);
     startTransition(async () => {
-      const result = await signInWithMagicLink(fd);
+      const result = await signInWithPassword(fd);
       if (result.ok) {
-        setSentTo(result.email ?? email);
+        router.push(next);
+        router.refresh();
       } else {
         setError(result.error ?? "Sign in failed.");
       }
@@ -46,8 +73,32 @@ export default function SignInPage() {
           </div>
         ) : (
           <>
+            <div className="signin-tabs" role="tablist" aria-label="Sign-in method">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "magic"}
+                className={`signin-tab${mode === "magic" ? " is-active" : ""}`}
+                onClick={() => switchMode("magic")}
+                disabled={pending}
+              >
+                Magic link
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "password"}
+                className={`signin-tab${mode === "password" ? " is-active" : ""}`}
+                onClick={() => switchMode("password")}
+                disabled={pending}
+              >
+                Password
+              </button>
+            </div>
             <div className="signin-hint">
-              We&apos;ll email you a one-time link. No password to remember.
+              {mode === "magic"
+                ? "We'll email you a one-time link. No password to remember."
+                : "Use your admin email and password."}
             </div>
             <label htmlFor="email">Work email</label>
             <input
@@ -58,10 +109,39 @@ export default function SignInPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@yourdealership.com"
               disabled={pending}
+              autoComplete={mode === "password" ? "username" : "email"}
             />
+            {mode === "password" && (
+              <>
+                <label htmlFor="password">Password</label>
+                <input
+                  id="password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={pending}
+                  autoComplete="current-password"
+                />
+              </>
+            )}
             {error && <div className="signin-error">{error}</div>}
-            <button className="go" type="submit" disabled={pending || !email.includes("@")}>
-              {pending ? "Sending…" : "Email me a sign-in link →"}
+            <button
+              className="go"
+              type="submit"
+              disabled={
+                pending ||
+                !email.includes("@") ||
+                (mode === "password" && !password)
+              }
+            >
+              {pending
+                ? mode === "magic"
+                  ? "Sending…"
+                  : "Signing in…"
+                : mode === "magic"
+                  ? "Email me a sign-in link →"
+                  : "Sign in →"}
             </button>
           </>
         )}

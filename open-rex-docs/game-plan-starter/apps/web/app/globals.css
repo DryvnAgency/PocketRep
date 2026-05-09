@@ -224,6 +224,11 @@ section.lp.bone p.lead { color: rgba(11,12,15,0.72); }
 .signin-hint { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.06em; color: var(--orx-gold); background: rgba(229,181,72,0.1); border: 1px solid rgba(229,181,72,0.3); padding: 10px 14px; margin-bottom: 22px; }
 .signin-success { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.06em; color: var(--orx-bone); background: rgba(45,82,52,0.18); border: 1px solid var(--orx-green); padding: 14px; margin-bottom: 18px; line-height: 1.5; }
 .signin-error { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--orx-rust); margin-top: -6px; margin-bottom: 16px; }
+.signin-tabs { display: flex; gap: 0; margin-bottom: 22px; border-bottom: 1px solid rgba(242,238,229,0.2); }
+.signin-card .signin-tab { background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; margin: 0 8px -1px 0; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(242,238,229,0.5); cursor: pointer; }
+.signin-card .signin-tab:hover { color: var(--orx-bone); }
+.signin-card .signin-tab.is-active { color: var(--orx-bone); border-bottom-color: var(--orx-rust); }
+.signin-card .signin-tab:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* APP SHELL */
 .app-shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; background: var(--app-paper); color: var(--app-ink); }
