@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 
 function usernameToEmail(username: string) {
-  return `${username.trim().toLowerCase()}@pocketrep.app`;
+  return `${username.trim().toLowerCase()}@pocketrep.pro`;
 }
 
 export default function LoginScreen() {

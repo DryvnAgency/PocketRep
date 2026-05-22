@@ -168,7 +168,7 @@ Deno.serve(async (req: Request) => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${POCKETREP_API_KEY}`,
-          'HTTP-Referer': 'https://pocketrep.app',
+          'HTTP-Referer': 'https://pocketrep.pro',
           'X-Title': 'PocketRep',
         },
         body: JSON.stringify(orBody),
