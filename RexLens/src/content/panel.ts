@@ -635,7 +635,7 @@ export class RexLensPanel {
 
   private renderMarkdown(text: string): string {
     // Numbering safety net: run on RAW text before escaping.
-    // Gemini sometimes numbers every block as "1." (or **1.**). Renumber sequentially.
+    // Some models number every block as "1." (or **1.**). Renumber sequentially.
     let fixed = text;
     const numPattern = /^(\s*(?:\*\*)?)\d+\.\s/;
     const onePattern = /^(\s*(?:\*\*)?)(1)\.\s/;

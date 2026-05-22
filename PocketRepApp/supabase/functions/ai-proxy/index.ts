@@ -1,35 +1,31 @@
 /**
- * Rex Lens AI Proxy — Supabase Edge Function (Gemini 2.5 Flash)
+ * PocketRep AI Proxy — Supabase Edge Function
  *
- * Sits between the Chrome extension and Google's Gemini API.
- * - Verifies JWT auth
- * - Enforces per-plan daily cost caps
- * - Translates Anthropic-style bodies → Gemini format (extension stays unchanged)
- * - Logs usage to daily_ai_usage table
+ * Brain: OpenRouter (Grok 4.3 primary → Gemini 3 Flash fallback via models[])
+ * STT/TTS: stubbed (501) — Deepgram + OpenAI lands in follow-up PR
+ *
+ * Routes (POST):
+ *   /functions/v1/ai-proxy        → brain (back-compat root)
+ *   /functions/v1/ai-proxy/brain  → brain
+ *   /functions/v1/ai-proxy/stt    → 501 stub
+ *   /functions/v1/ai-proxy/tts    → 501 stub
  *
  * Deploy:
- *   supabase secrets set GEMINI_API_KEY=...
+ *   supabase secrets set POCKETREP_API_KEY=sk-or-v1-...   # OpenRouter
  *   supabase functions deploy ai-proxy
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const BRAIN_MODELS = ['x-ai/grok-4.3', 'google/gemini-3-flash'];
 
-// Gemini pricing per 1M tokens (USD)
-const PRICING: Record<string, { input: number; output: number }> = {
-  'gemini-2.5-flash':      { input: 0.30, output: 2.50 },
-  'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
-};
-const DEFAULT_PRICING = { input: 0.30, output: 2.50 };
-
-// Daily cost cap per plan (in cents)
 const DAILY_CAP_CENTS: Record<string, number> = {
-  rex_lens: 100,
-  pro: 100,
-  elite: 200,
+  rex_lens: 75,
+  pro: 75,
+  elite: 125,
 };
-const DEFAULT_CAP_CENTS = 100;
+const DEFAULT_CAP_CENTS = 75;
 
 function corsHeaders() {
   return {
@@ -46,49 +42,44 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-interface AnthropicMessage {
-  role: 'user' | 'assistant';
-  content: string | Array<{ type: string; text?: string }>;
-}
-
-function extractText(content: AnthropicMessage['content']): string {
-  if (typeof content === 'string') return content;
-  return content
-    .filter((p) => p.type === 'text' && p.text)
-    .map((p) => p.text!)
-    .join('\n');
-}
-
-function anthropicToGemini(body: Record<string, unknown>) {
-  const system = typeof body.system === 'string' ? body.system : '';
-  const messages = (body.messages as AnthropicMessage[]) || [];
-  const maxTokens = typeof body.max_tokens === 'number' ? body.max_tokens : 2048;
-
-  const contents = messages.map((m) => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: extractText(m.content) }],
-  }));
-
-  const geminiBody: Record<string, unknown> = {
-    contents,
-    generationConfig: { maxOutputTokens: maxTokens },
-  };
-  if (system) {
-    geminiBody.system_instruction = { parts: [{ text: system }] };
-  }
-  return geminiBody;
+function routeOf(req: Request): 'brain' | 'stt' | 'tts' | 'root' {
+  const path = new URL(req.url).pathname.replace(/\/+$/, '');
+  if (path.endsWith('/brain')) return 'brain';
+  if (path.endsWith('/stt')) return 'stt';
+  if (path.endsWith('/tts')) return 'tts';
+  return 'root';
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() });
-  if (req.method === 'GET') return jsonResponse({ status: 'ok', service: 'ai-proxy', model: 'gemini-2.5-flash' });
+  if (req.method === 'GET') {
+    return jsonResponse({ status: 'ok', service: 'ai-proxy', brain: BRAIN_MODELS });
+  }
   if (req.method !== 'POST') {
     return jsonResponse({ error: { type: 'invalid_request', message: 'POST required' } }, 405);
   }
 
-  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-  if (!GEMINI_API_KEY) {
-    return jsonResponse({ error: { type: 'server_error', message: 'GEMINI_API_KEY not configured' } }, 500);
+  const route = routeOf(req);
+
+  if (route === 'stt') {
+    return jsonResponse(
+      { error: 'not_implemented', message: 'Deepgram Nova-3 STT lands in next PR' },
+      501,
+    );
+  }
+  if (route === 'tts') {
+    return jsonResponse(
+      { error: 'not_implemented', message: 'OpenAI gpt-4o-mini-tts lands in next PR' },
+      501,
+    );
+  }
+
+  const POCKETREP_API_KEY = Deno.env.get('POCKETREP_API_KEY');
+  if (!POCKETREP_API_KEY) {
+    return jsonResponse(
+      { error: { type: 'server_error', message: 'POCKETREP_API_KEY not configured' } },
+      500,
+    );
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -107,7 +98,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: { type: 'auth_error', message: 'Invalid or expired token' } }, 401);
   }
 
-  // ── Plan lookup ───────────────────────────────────────────────────────────
+  // ── Plan + daily cap ──────────────────────────────────────────────────────
   const { data: profile } = await supabase
     .from('profiles')
     .select('plan, unlimited')
@@ -118,7 +109,6 @@ Deno.serve(async (req: Request) => {
   const isUnlimited = profile?.unlimited === true;
   const capCents = DAILY_CAP_CENTS[plan] ?? DEFAULT_CAP_CENTS;
 
-  // ── Daily usage check (skipped for unlimited accounts) ────────────────────
   const today = new Date().toISOString().slice(0, 10);
   if (!isUnlimited) {
     const { data: usage } = await supabase
@@ -139,7 +129,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // ── Parse Anthropic-style request ─────────────────────────────────────────
+  // ── Parse request ─────────────────────────────────────────────────────────
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -147,112 +137,95 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: { type: 'invalid_request', message: 'Invalid JSON body' } }, 400);
   }
 
-  const rawModel = (body.model as string) || 'gemini-2.5-flash';
-  // Accept legacy Anthropic model names — map to Gemini
-  const model =
-    rawModel.startsWith('claude-') || rawModel.startsWith('gemini-')
-      ? (rawModel.startsWith('claude-') ? 'gemini-2.5-flash' : rawModel)
-      : rawModel;
+  const maxTokens = typeof body.max_tokens === 'number' ? body.max_tokens : 2048;
+  const incomingMessages = (body.messages as Array<{ role: string; content: unknown }>) || [];
+  const systemText = typeof body.system === 'string' ? body.system : '';
 
-  const geminiBody = anthropicToGemini(body);
+  // OpenAI/OpenRouter shape: system goes inline as the first message
+  const messages = systemText
+    ? [{ role: 'system', content: systemText }, ...incomingMessages]
+    : incomingMessages;
 
-  // ── Call Gemini with retry + fallback on overload ─────────────────────────
-  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-  const isOverload = (status: number, errObj: any): boolean => {
-    if (status === 429 || status === 503 || status === 529) return true;
-    const msg = typeof errObj === 'string'
-      ? errObj.toLowerCase()
-      : (errObj?.message || errObj?.status || '').toString().toLowerCase();
-    return msg.includes('overload') || msg.includes('high demand') || msg.includes('unavailable') || msg.includes('exhausted') || msg.includes('quota') || msg.includes('resource_exhausted');
+  const orBody: Record<string, unknown> = {
+    models: BRAIN_MODELS,
+    messages,
+    max_tokens: maxTokens,
+    usage: { include: true }, // OpenRouter returns usage.cost in USD
   };
 
-  const modelFallbackChain = [model];
-  if (model === 'gemini-2.5-flash') modelFallbackChain.push('gemini-2.5-flash-lite');
-
-  let geminiRes: Response | null = null;
-  let geminiJson: any = null;
+  // ── Call OpenRouter ───────────────────────────────────────────────────────
+  // OpenRouter handles primary→fallback inside the models[] array. Our retry
+  // loop only re-tries on transient network/5xx after that — most failures are
+  // already covered by OpenRouter's own routing.
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  let apiJson: any = null;
   let lastError: any = null;
 
-  outer: for (const tryModel of modelFallbackChain) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const res = await fetch(`${GEMINI_BASE}/${tryModel}:generateContent`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': GEMINI_API_KEY,
-          },
-          body: JSON.stringify(geminiBody),
-        });
-        const json = await res.json();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(OPENROUTER_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${POCKETREP_API_KEY}`,
+          'HTTP-Referer': 'https://pocketrep.app',
+          'X-Title': 'PocketRep',
+        },
+        body: JSON.stringify(orBody),
+      });
+      const json = await res.json();
 
-        if (res.ok && !json.error) {
-          geminiRes = res;
-          geminiJson = json;
-          break outer;
-        }
-
-        lastError = { status: res.status, error: json.error ?? json };
-
-        if (!isOverload(res.status, json.error)) {
-          // Non-transient error — return immediately
-          return jsonResponse({ error: json.error ?? json }, res.status);
-        }
-
-        // Transient overload — wait and retry (exponential backoff)
-        if (attempt < 2) await sleep(2000 * Math.pow(2, attempt));
-      } catch (err: unknown) {
-        lastError = { error: { message: err instanceof Error ? err.message : 'Unknown error' } };
-        if (attempt < 2) await sleep(2000 * Math.pow(2, attempt));
+      if (res.ok && !json.error && json.choices?.length) {
+        apiJson = json;
+        break;
       }
+
+      lastError = { status: res.status, error: json.error ?? json };
+      const retryable = res.status === 429 || res.status === 503 || (res.status >= 500 && res.status < 600);
+      if (!retryable) {
+        return jsonResponse({ error: json.error ?? json }, res.status);
+      }
+      if (attempt < 2) await sleep(2000 * Math.pow(2, attempt));
+    } catch (err: unknown) {
+      lastError = { error: { message: err instanceof Error ? err.message : 'Unknown error' } };
+      if (attempt < 2) await sleep(2000 * Math.pow(2, attempt));
     }
-    // Exhausted retries on this model — try next fallback
   }
 
-  if (!geminiRes || !geminiJson) {
+  if (!apiJson) {
     return jsonResponse({
       error: {
         type: 'OVERLOADED',
         message: 'AI is at capacity right now. Try again in 30 seconds.',
-        detail: lastError?.error?.message || 'All retries and fallbacks exhausted',
+        detail: lastError?.error?.message || 'All retries exhausted',
       },
     }, 503);
   }
 
-  // ── Extract text + usage ──────────────────────────────────────────────────
-  const candidate = geminiJson.candidates?.[0];
-  const parts = candidate?.content?.parts ?? [];
-  const text = parts.map((p: { text?: string }) => p.text ?? '').join('');
-
-  if (!text) {
-    return jsonResponse({ error: { type: 'empty_response', message: 'Gemini returned no text', raw: geminiJson } }, 502);
-  }
-
-  const promptTokens = geminiJson.usageMetadata?.promptTokenCount ?? 0;
-  const outputTokens = geminiJson.usageMetadata?.candidatesTokenCount ?? 0;
-
-  // ── Log usage ─────────────────────────────────────────────────────────────
-  const pricing = PRICING[model] ?? DEFAULT_PRICING;
-  const costUsd = (promptTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
+  // ── Extract usage + cost ──────────────────────────────────────────────────
+  const usage = apiJson.usage ?? {};
+  const inputTokens = Number(usage.prompt_tokens ?? 0);
+  const outputTokens = Number(usage.completion_tokens ?? 0);
+  // OpenRouter returns cost in USD (e.g. 0.000123) when usage.include is true.
+  const costUsd = Number(usage.cost ?? 0);
   const costCents = costUsd * 100;
 
   try {
     await supabase.rpc('increment_daily_usage', {
       p_user_id: user.id,
       p_date: today,
-      p_input_tokens: promptTokens,
+      p_input_tokens: inputTokens,
       p_output_tokens: outputTokens,
       p_cost_cents: costCents,
     });
   } catch {
-    // Fallback: direct upsert
     await supabase
       .from('daily_ai_usage')
       .upsert(
         {
           user_id: user.id,
           usage_date: today,
-          input_tokens: promptTokens,
+          input_tokens: inputTokens,
           output_tokens: outputTokens,
           cost_cents: costCents,
           request_count: 1,
@@ -262,10 +235,8 @@ Deno.serve(async (req: Request) => {
       );
   }
 
-  // ── Return in Anthropic-compatible envelope ───────────────────────────────
-  return jsonResponse({
-    content: [{ type: 'text', text }],
-    usage: { input_tokens: promptTokens, output_tokens: outputTokens },
-    model,
-  });
+  // ── Return OpenRouter response as-is (OpenAI-shaped) ──────────────────────
+  // Includes `model` (the slug that actually served, e.g. x-ai/grok-4.3 or
+  // google/gemini-3-flash if Grok failed), `choices`, and `usage` with cost.
+  return jsonResponse(apiJson);
 });
