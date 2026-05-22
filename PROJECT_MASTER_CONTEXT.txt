@@ -212,12 +212,12 @@ DONE (shipped and working in code):
   [x] SEO (sitemap, robots.txt)
 
 NEEDS DEPLOYMENT (code done, infrastructure pending):
-  [ ] Set GEMINI_API_KEY secret in Supabase
+  [ ] Set POCKETREP_API_KEY secret in Supabase (OpenRouter key)
   [ ] Deploy ai-proxy edge function
   [ ] Run plan migration SQL (5 plans → 3)
   [ ] Run daily_ai_usage + increment_daily_usage SQL
   [ ] Update Stripe Payment Link prices
-  [ ] Remove old ANTHROPIC_API_KEY secret
+  [ ] Remove old ANTHROPIC_API_KEY and GEMINI_API_KEY secrets (replaced by POCKETREP_API_KEY)
 
 NOT YET STARTED / PLANNED:
   [ ] Chrome Web Store listing and submission
@@ -349,7 +349,7 @@ Landing page (Vercel):     ✅ Deployed, auto-deploys on push to main
 Chrome extension:          ⚠️  V21 zip ready, not yet on Chrome Web Store
 Mobile app (iOS):          ⚠️  Code ready, eas.json needs credentials
 Mobile app (Android):      ⚠️  Code ready, needs Google service account
-AI Proxy edge function:    ⚠️  Code ready, needs GEMINI_API_KEY secret + deploy
+AI Proxy edge function:    ⚠️  Code ready, needs POCKETREP_API_KEY secret + deploy
 Database migration:        ⚠️  SQL ready, needs to run in Supabase SQL Editor
 Stripe:                    ⚠️  Links exist, prices need updating to match new tiers
 
@@ -359,7 +359,7 @@ Stripe:                    ⚠️  Links exist, prices need updating to match ne
 ================================================================================
 
 1. DEPLOY AI PROXY + DB MIGRATION (blocks Rex Lens functionality)
-   - supabase secrets set GEMINI_API_KEY=...
+   - supabase secrets set POCKETREP_API_KEY=sk-or-v1-...    # OpenRouter
    - Run migration SQL + daily_ai_usage table SQL
    - supabase functions deploy ai-proxy
    - Test scan + chat from extension

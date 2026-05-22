@@ -12,7 +12,7 @@ import { INDUSTRY_CONFIG, INDUSTRY_KEYS } from '@/lib/industryConfig';
 
 // Supabase requires email — derived from username, never shown to user
 function usernameToEmail(username: string) {
-  return `${username.trim().toLowerCase()}@pocketrep.app`;
+  return `${username.trim().toLowerCase()}@pocketrep.pro`;
 }
 
 const PLANS: { id: Plan; name: string; price: string; after: string; features: string[] }[] = [

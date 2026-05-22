@@ -1087,7 +1087,7 @@ export class RexLensPanel {
 
   private usernameToEmail(input: string): string {
     const trimmed = input.trim().toLowerCase();
-    return trimmed.includes('@') ? trimmed : `${trimmed}@pocketrep.app`;
+    return trimmed.includes('@') ? trimmed : `${trimmed}@pocketrep.pro`;
   }
 
   private async login() {

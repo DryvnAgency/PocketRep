@@ -35,7 +35,7 @@ PocketRep gives them a portable CRM they own. Rex Lens gives them instant script
 - Database schema — 9 tables with RLS, atomic usage tracking
 
 **What needs deployment (code done, infrastructure pending):**
-- Set GEMINI_API_KEY secret in Supabase
+- Set POCKETREP_API_KEY secret in Supabase (OpenRouter key)
 - Deploy ai-proxy edge function: `supabase functions deploy ai-proxy`
 - Run plan migration SQL (converts old 5-plan users to 3-plan structure)
 - Run daily_ai_usage table creation SQL
