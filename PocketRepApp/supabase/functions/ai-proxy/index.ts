@@ -1,7 +1,7 @@
 /**
  * PocketRep AI Proxy — Supabase Edge Function
  *
- * Brain: OpenRouter (Grok 4.3 primary → Gemini 3 Flash fallback via models[])
+ * Brain: OpenRouter (Grok 4.3 primary → Kimi K2.6 fallback via models[])
  * STT/TTS: stubbed (501) — Deepgram + OpenAI lands in follow-up PR
  *
  * Routes (POST):
@@ -18,7 +18,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const BRAIN_MODELS = ['x-ai/grok-4.3', 'google/gemini-3-flash'];
+const BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6'];
 
 const DAILY_CAP_CENTS: Record<string, number> = {
   rex_lens: 75,
@@ -237,6 +237,6 @@ Deno.serve(async (req: Request) => {
 
   // ── Return OpenRouter response as-is (OpenAI-shaped) ──────────────────────
   // Includes `model` (the slug that actually served, e.g. x-ai/grok-4.3 or
-  // google/gemini-3-flash if Grok failed), `choices`, and `usage` with cost.
+  // moonshotai/kimi-k2.6 if Grok failed), `choices`, and `usage` with cost.
   return jsonResponse(apiJson);
 });
