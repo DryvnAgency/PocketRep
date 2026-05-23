@@ -1,22 +1,28 @@
 {
   "manifest_version": 3,
-  "name": "Rex Lens — AI Sales Coach",
-  "version": "1.24.0",
+  "name": "Rex Lens \u2014 AI Sales Coach",
+  "version": "1.25.0",
   "description": "AI-powered sales coach that reads your screen. Scans any CRM, email, or web page and coaches you with objection handling, draft responses, and next steps. Works across any industry.",
   "permissions": [
     "activeTab",
     "storage",
     "scripting"
   ],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "dist/service-worker.js",
     "type": "module"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["dist/content-script.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "dist/content-script.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }
@@ -31,11 +37,17 @@
   },
   "commands": {
     "scan-page": {
-      "suggested_key": { "default": "Ctrl+Shift+R", "mac": "Command+Shift+R" },
+      "suggested_key": {
+        "default": "Ctrl+Shift+R",
+        "mac": "Command+Shift+R"
+      },
       "description": "Scan the current page with Rex Lens"
     },
     "copy-first-script": {
-      "suggested_key": { "default": "Ctrl+Shift+C", "mac": "Command+Shift+C" },
+      "suggested_key": {
+        "default": "Ctrl+Shift+C",
+        "mac": "Command+Shift+C"
+      },
       "description": "Copy the first scan script to clipboard"
     }
   },
