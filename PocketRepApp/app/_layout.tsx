@@ -1,9 +1,7 @@
-import { useEffect, useState, Component } from 'react';
-import { Platform, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useEffect, Component } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Session } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
 import { colors, spacing, radius } from '@/constants/theme';
 import { setupNotificationHandler } from '@/lib/notifications';
 import { shouldUseNewUi } from '@/lib/featureFlags';
@@ -58,44 +56,28 @@ export default function RootLayout() {
 }
 
 function V1RootLayout() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [ready, setReady] = useState(false);
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    // Set up push notification display handler (must run before any scheduling)
     setupNotificationHandler();
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setReady(true);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
   }, []);
 
+  // Auth gate intentionally REMOVED for the v2 port phase (PR #26 scope
+  // addition). SignIn / SignUp files still exist under app/(auth)/ but the
+  // router never sends users there. If someone lands at /(auth) via a stale
+  // bookmark or direct URL, bounce them into the tabs. Re-mount the auth
+  // gate in a dedicated PR before shipping to real users.
   useEffect(() => {
-    if (!ready) return;
-
-    const inAuth = segments[0] === '(auth)';
-
-    if (!session && !inAuth) {
-      router.replace('/(auth)');
-    } else if (session && inAuth) {
+    if (segments[0] === '(auth)') {
       router.replace('/(tabs)');
     }
-  }, [session, ready, segments]);
+  }, [segments, router]);
 
   return (
     <ErrorBoundary>
       <StatusBar style="light" backgroundColor={colors.ink} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.ink } }}>
-        <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
       </Stack>
     </ErrorBoundary>

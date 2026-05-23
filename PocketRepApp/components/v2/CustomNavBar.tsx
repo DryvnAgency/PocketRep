@@ -36,6 +36,8 @@ export default function CustomNavBar({
           </LinearGradient>
         </Pressable>
 
+        <Text style={styles.wordmark}>POCKETREP</Text>
+
         <View style={{ flex: 1 }} />
 
         <Pressable onPress={onSearch} style={styles.iconBtn}>
@@ -89,6 +91,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontSize: 13,
     letterSpacing: -0.5,
+  },
+  wordmark: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    color: colors.gold,
+    textTransform: 'uppercase',
+    marginLeft: -2,
   },
   iconBtn: {
     width: 36,
