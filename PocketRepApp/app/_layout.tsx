@@ -6,6 +6,8 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { colors, spacing, radius } from '@/constants/theme';
 import { setupNotificationHandler } from '@/lib/notifications';
+import { shouldUseNewUi } from '@/lib/featureFlags';
+import NewUiShell from '@/components/NewUiShell';
 
 // ── Error Boundary ─────────────────────────────────────────────────────────────
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -41,6 +43,21 @@ const eb = StyleSheet.create({
 });
 
 export default function RootLayout() {
+  // v2 UI port — gated by EXPO_PUBLIC_NEW_UI=1 (build-time) or ?v=2 (web).
+  // While true, bypass the v1 auth/routing entirely. Production native users
+  // see no change until cutover.
+  if (shouldUseNewUi()) {
+    return (
+      <ErrorBoundary>
+        <StatusBar style="light" backgroundColor={colors.ink} />
+        <NewUiShell />
+      </ErrorBoundary>
+    );
+  }
+  return <V1RootLayout />;
+}
+
+function V1RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const segments = useSegments();

@@ -7,6 +7,7 @@ export const colors = {
   gold2: '#f0c060',
   goldBg: 'rgba(212,168,67,0.10)',
   goldBorder: 'rgba(212,168,67,0.22)',
+  goldBorderStrong: 'rgba(212,168,67,0.45)',
   white: '#ffffff',
   grey: '#5a6070',
   grey2: '#8a90a0',
