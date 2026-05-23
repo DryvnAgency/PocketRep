@@ -37,13 +37,15 @@ const PANEL_CSS = /* css */ `
   width: 54px; height: 54px; border-radius: 50%;
   background: linear-gradient(135deg, #e94560, #0f3460);
   color: #fff; border: none; font-size: 22px;
-  cursor: pointer; z-index: 2147483647;
+  cursor: grab; z-index: 2147483647;
   box-shadow: 0 4px 18px rgba(233,69,96,0.45);
   display: flex; align-items: center; justify-content: center;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: box-shadow 0.2s;
   font-weight: 700; letter-spacing: -0.5px;
+  touch-action: none; user-select: none;
 }
-#rex-toggle:hover { transform: scale(1.08); box-shadow: 0 6px 24px rgba(233,69,96,0.6); }
+#rex-toggle:active { cursor: grabbing; }
+#rex-toggle:hover { box-shadow: 0 6px 24px rgba(233,69,96,0.6); }
 
 /* ── Panel Shell ──────────────────────────── */
 #rex-panel {
@@ -467,8 +469,8 @@ export class RexLensPanel {
   // ── Events ──────────────────────────────────────────────────────────────
 
   private bindEvents() {
-    // Toggle
-    this.toggle.addEventListener('click', () => this.togglePanel());
+    // Toggle (with vertical drag support)
+    this.initToggleDrag();
     this.$('rex-minimize-btn').addEventListener('click', () => this.closePanel());
     this.$('rex-close-btn').addEventListener('click', () => this.closePanel());
 
@@ -531,6 +533,65 @@ export class RexLensPanel {
     this.isOpen = false;
     this.panel.classList.remove('open');
     this.toggle.style.display = 'flex';
+  }
+
+  // ── Toggle Drag (vertical slide) ────────────────────────────────────────
+
+  private initToggleDrag() {
+    let startY = 0;
+    let startBottom = 20;
+    let dragged = false;
+    const DRAG_THRESHOLD = 5;
+
+    const onMove = (e: MouseEvent) => {
+      const deltaY = startY - e.clientY;
+      if (!dragged && Math.abs(deltaY) < DRAG_THRESHOLD) return;
+      dragged = true;
+      const vh = window.innerHeight;
+      const newBottom = Math.min(vh - 60, Math.max(4, startBottom + deltaY));
+      this.toggle.style.bottom = newBottom + 'px';
+    };
+
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (!dragged) this.togglePanel();
+    };
+
+    this.toggle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      dragged = false;
+      startY = e.clientY;
+      startBottom = parseInt(this.toggle.style.bottom || '20', 10);
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    this.toggle.addEventListener('touchstart', (e) => {
+      dragged = false;
+      const touch = (e as TouchEvent).touches[0];
+      startY = touch.clientY;
+      startBottom = parseInt(this.toggle.style.bottom || '20', 10);
+
+      const onTouchMove = (ev: Event) => {
+        const t = (ev as TouchEvent).touches[0];
+        const deltaY = startY - t.clientY;
+        if (!dragged && Math.abs(deltaY) < DRAG_THRESHOLD) return;
+        dragged = true;
+        const vh = window.innerHeight;
+        const newBottom = Math.min(vh - 60, Math.max(4, startBottom + deltaY));
+        this.toggle.style.bottom = newBottom + 'px';
+      };
+
+      const onTouchEnd = () => {
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+        if (!dragged) this.togglePanel();
+      };
+
+      document.addEventListener('touchmove', onTouchMove, { passive: true });
+      document.addEventListener('touchend', onTouchEnd);
+    }, { passive: true });
   }
 
   // ── Resize ──────────────────────────────────────────────────────────────
