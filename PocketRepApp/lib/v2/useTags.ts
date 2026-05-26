@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 
 export type V2Tag = { id: string; name: string; color: string };
 
-export function useTags() {
+export function useTags(refetchKey: number = 0): V2Tag[] {
   const [tags, setTags] = useState<V2Tag[]>([]);
 
   useEffect(() => {
@@ -17,7 +17,7 @@ export function useTags() {
         setTags((data ?? []) as V2Tag[]);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [refetchKey]);
 
   return tags;
 }

@@ -10,8 +10,10 @@ import ContactDetail from './ContactDetail';
 import ProfileTab from './ProfileTab';
 import MetricsTab from './MetricsTab';
 import DealLogger, { type DealLoggerPrefill } from './DealLogger';
+import BulkTagFlow from './BulkTagFlow';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
+import { useTags } from '@/lib/v2/useTags';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
@@ -21,8 +23,11 @@ export default function AppShell() {
   const [dealLoggerOpen, setDealLoggerOpen] = useState(false);
   const [dealLoggerPrefill, setDealLoggerPrefill] = useState<DealLoggerPrefill | undefined>();
   const [dealsRefetchKey, setDealsRefetchKey] = useState(0);
+  const [bulkTagOpen, setBulkTagOpen] = useState(false);
+  const [tagsRefetchKey, setTagsRefetchKey] = useState(0);
 
-  const { contacts, error, patchLocal } = useContacts();
+  const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
+  const tags = useTags(tagsRefetchKey);
 
   useEffect(() => {
     ensureDemoSession().finally(() => setAuthReady(true));
@@ -60,7 +65,13 @@ export default function AppShell() {
         ) : active === 'heat' ? (
           <HeatSheetTab contacts={contacts} error={error} onSelect={c => setSelectedId(c.id)} />
         ) : active === 'contacts' ? (
-          <ContactsTab contacts={contacts} error={error} onSelect={c => setSelectedId(c.id)} />
+          <ContactsTab
+            contacts={contacts}
+            error={error}
+            tags={tags}
+            onSelect={c => setSelectedId(c.id)}
+            onBulkTag={() => setBulkTagOpen(true)}
+          />
         ) : active === 'profile' ? (
           <ProfileTab />
         ) : (
@@ -89,6 +100,17 @@ export default function AppShell() {
         prefill={dealLoggerPrefill}
         onClose={() => setDealLoggerOpen(false)}
         onSaved={() => setDealsRefetchKey(k => k + 1)}
+      />
+
+      <BulkTagFlow
+        open={bulkTagOpen}
+        contacts={contacts ?? []}
+        allTags={tags}
+        onClose={() => setBulkTagOpen(false)}
+        onApplied={() => {
+          setTagsRefetchKey(k => k + 1);
+          reloadContacts();
+        }}
       />
     </View>
   );

@@ -6,7 +6,7 @@ import { colors, radius, spacing } from '@/constants/theme';
 import { Avatar, rgbaTint } from './atoms';
 import { TIERS, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
-import { useTags, type V2Tag } from '@/lib/v2/useTags';
+import type { V2Tag } from '@/lib/v2/useTags';
 
 type FilterTag =
   | null
@@ -97,13 +97,16 @@ function Chip({
 export default function ContactsTab({
   contacts,
   error,
+  tags,
   onSelect,
+  onBulkTag,
 }: {
   contacts: V2Contact[] | null;
   error: string | null;
+  tags: V2Tag[];
   onSelect: (c: V2Contact) => void;
+  onBulkTag?: () => void;
 }) {
-  const tags = useTags();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterTag>(null);
 
@@ -202,7 +205,13 @@ export default function ContactsTab({
             onPress={() => setFilter({ kind: 'custom', name: t.name, color: t.color })}
           />
         ))}
-        <Chip label="＋ Tag" color={colors.gold} active={false} onPress={() => { /* bulk-tag in follow-up */ }} dashed />
+        <Chip
+          label="＋ Tag"
+          color={colors.gold}
+          active={false}
+          onPress={() => onBulkTag?.()}
+          dashed
+        />
       </ScrollView>
 
       {filter ? (
