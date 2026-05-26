@@ -9,6 +9,7 @@ import type { V2Contact } from '@/lib/v2/useContacts';
 import { useDeals, type V2Deal } from '@/lib/v2/useDeals';
 import { useTags } from '@/lib/v2/useTags';
 import { updateContactNotes, updateContactTags } from '@/lib/v2/updateContact';
+import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 
 const MILESTONE_ICONS: Record<string, { icon: string; color: string }> = {
   'visit':       { icon: '👋', color: colors.gold },
@@ -42,9 +43,20 @@ export default function ContactDetail({
   const [stepView, setStepView] = useState<'latest' | 'next'>('latest');
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
 
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiChannel, setAiChannel] = useState<GamePlanChannel>('text');
+  const [aiWhy, setAiWhy] = useState('');
+  const [aiScript, setAiScript] = useState('');
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     setNotes(contact.notes ?? '');
     setEditingNotes(false);
+    setAiOpen(false);
+    setAiScript('');
+    setAiError(null);
   }, [contact.id]);
 
   const totalCommission = useMemo(
@@ -86,9 +98,52 @@ export default function ContactDetail({
   };
 
   const openCall = () => contact.phone && Linking.openURL(`tel:${digitsOnly(contact.phone)}`);
-  const openText = () => contact.phone && Linking.openURL(`sms:${digitsOnly(contact.phone)}`);
-  const openEmail = () =>
-    Linking.openURL(`mailto:?subject=${encodeURIComponent(`Following up on the ${contact.vehicle ?? ''}`)}`);
+  const openText = (body?: string) => {
+    if (!contact.phone) return;
+    const url = body
+      ? `sms:${digitsOnly(contact.phone)}?&body=${encodeURIComponent(body)}`
+      : `sms:${digitsOnly(contact.phone)}`;
+    Linking.openURL(url);
+  };
+  const openEmail = (body?: string) => {
+    const subject = encodeURIComponent(`Following up on the ${contact.vehicle ?? ''}`);
+    const url = body
+      ? `mailto:?subject=${subject}&body=${encodeURIComponent(body)}`
+      : `mailto:?subject=${subject}`;
+    Linking.openURL(url);
+  };
+
+  const runGamePlan = async () => {
+    setAiOpen(true);
+    setAiLoading(true);
+    setAiError(null);
+    setAiScript('');
+    setAiWhy('');
+    setCopied(false);
+    try {
+      const result = await generateGamePlan(contact, notes);
+      setAiChannel(result.channel);
+      setAiWhy(result.why);
+      setAiScript(result.script);
+    } catch (e: any) {
+      setAiError(e?.message ?? 'Rex is unreachable');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const copyScript = async () => {
+    if (!aiScript) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(aiScript);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+      }
+    } catch {
+      // fall through silently
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -117,8 +172,8 @@ export default function ContactDetail({
         <View style={styles.quickRow}>
           {[
             { label: 'Call',  icon: '📞', onPress: openCall },
-            { label: 'Text',  icon: '💬', onPress: openText },
-            { label: 'Email', icon: '✉️', onPress: openEmail },
+            { label: 'Text',  icon: '💬', onPress: () => openText() },
+            { label: 'Email', icon: '✉️', onPress: () => openEmail() },
             { label: 'Note',  icon: '📝', onPress: () => setEditingNotes(true) },
           ].map(a => (
             <Pressable key={a.label} onPress={a.onPress} style={styles.quickBtn}>
@@ -286,11 +341,80 @@ export default function ContactDetail({
         </Pressable>
 
         <View style={{ paddingHorizontal: 14, paddingTop: 12 }}>
-          <Pressable style={styles.gamePlan}>
+          <Pressable
+            onPress={runGamePlan}
+            disabled={aiLoading}
+            style={[styles.gamePlan, aiLoading && { opacity: 0.6 }]}
+          >
             <Text style={styles.gamePlanText}>GAME PLAN</Text>
-            <Text style={styles.gamePlanHint}>· AI wiring lands next</Text>
+            <Text style={styles.gamePlanHint}>
+              {aiLoading ? '· thinking…' : '· Rex picks the move'}
+            </Text>
           </Pressable>
         </View>
+
+        {aiOpen ? (
+          <View style={styles.aiBox}>
+            <View style={styles.aiHead}>
+              <View style={styles.rexOrb} />
+              <Text style={styles.aiHeadLabel}>
+                REX SAYS · {aiLoading ? 'THINKING' : aiChannel.toUpperCase()}
+              </Text>
+              <View style={{ flex: 1 }} />
+              {!aiLoading ? (
+                <Pressable onPress={runGamePlan} hitSlop={6}>
+                  <Text style={styles.linkPrimary}>↻ REGENERATE</Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            {aiError ? (
+              <View style={styles.aiBody}>
+                <Text style={styles.aiError}>Couldn't reach Rex: {aiError}</Text>
+              </View>
+            ) : aiLoading ? (
+              <View style={[styles.aiBody, { paddingVertical: 24 }]}>
+                <Text style={styles.aiLoadingText}>Reading your notes…</Text>
+              </View>
+            ) : (
+              <>
+                {aiWhy ? (
+                  <View style={styles.aiWhy}>
+                    <Text style={styles.aiWhyText}>“{aiWhy}”</Text>
+                  </View>
+                ) : null}
+                <View style={styles.aiBody}>
+                  <TextInput
+                    value={aiScript}
+                    onChangeText={setAiScript}
+                    multiline
+                    style={styles.aiScript}
+                  />
+                </View>
+                <View style={styles.aiActions}>
+                  <Pressable onPress={copyScript} style={[styles.aiAction, copied && styles.aiActionDone]}>
+                    <Text style={[styles.aiActionText, copied && { color: colors.white }]}>
+                      {copied ? '✓ COPIED' : '⧉ COPY'}
+                    </Text>
+                  </Pressable>
+                  {aiChannel === 'call' ? (
+                    <Pressable onPress={openCall} style={[styles.aiAction, styles.aiActionPrimary]}>
+                      <Text style={styles.aiActionPrimaryText}>📞 CALL</Text>
+                    </Pressable>
+                  ) : aiChannel === 'text' ? (
+                    <Pressable onPress={() => openText(aiScript)} style={[styles.aiAction, styles.aiActionPrimary]}>
+                      <Text style={styles.aiActionPrimaryText}>💬 TEXT</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable onPress={() => openEmail(aiScript)} style={[styles.aiAction, styles.aiActionPrimary]}>
+                      <Text style={styles.aiActionPrimaryText}>✉ EMAIL</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </>
+            )}
+          </View>
+        ) : null}
 
         <View style={styles.sectionHead}>
           <Text style={styles.sectionLabel}>DEAL LOG</Text>
@@ -612,6 +736,70 @@ const styles = StyleSheet.create({
   },
   gamePlanText: { fontSize: 14, fontWeight: '800', color: colors.ink, letterSpacing: 0.2 },
   gamePlanHint: { fontSize: 10, fontWeight: '700', color: colors.ink, opacity: 0.6, letterSpacing: 0.3 },
+
+  aiBox: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  aiHead: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: colors.goldBg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rexOrb: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.gold },
+  aiHeadLabel: { fontSize: 10, fontWeight: '700', color: colors.gold, letterSpacing: 1.2 },
+
+  aiWhy: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink4,
+  },
+  aiWhyText: { fontSize: 12, color: colors.gold, fontStyle: 'italic', lineHeight: 17 },
+
+  aiBody: { paddingHorizontal: 14, paddingVertical: 12 },
+  aiScript: {
+    minHeight: 110,
+    color: colors.white,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlignVertical: 'top',
+  } as any,
+  aiError: { color: colors.red, fontSize: 13 },
+  aiLoadingText: { color: colors.gold, fontSize: 12, letterSpacing: 0.3 },
+
+  aiActions: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.ink4,
+    backgroundColor: colors.ink2,
+  },
+  aiAction: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+  },
+  aiActionText: { fontSize: 12, fontWeight: '700', color: colors.gold, letterSpacing: 0.3 },
+  aiActionDone: { backgroundColor: colors.green, borderColor: colors.green },
+  aiActionPrimary: { backgroundColor: colors.gold, borderColor: colors.gold },
+  aiActionPrimaryText: { fontSize: 12, fontWeight: '700', color: colors.ink, letterSpacing: 0.3 },
 
   dealCount: {
     paddingHorizontal: 6,
