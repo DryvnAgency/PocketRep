@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { colors } from '@/constants/theme';
 import CustomNavBar, { TabId } from './CustomNavBar';
 import TabBar from './TabBar';
 import { OrbState } from './HeyRexOrb';
 import { SectionHead } from './atoms';
+import HeatSheetTab from './HeatSheetTab';
+import { ensureDemoSession } from '@/lib/v2/demoAuth';
+import type { V2Contact } from '@/lib/v2/useContacts';
 
-const PLACEHOLDER: Record<TabId, { sectionLabel: string; sectionIcon?: string; body: string }> = {
-  heat: { sectionLabel: 'HOT', sectionIcon: '🔥', body: 'Heat Sheet content lands in PR #29.' },
-  contacts: { sectionLabel: 'YOUR BOOK', body: 'Contacts list lands in PR #30.' },
+const PLACEHOLDER: Record<Exclude<TabId, 'heat'>, { sectionLabel: string; body: string }> = {
+  contacts: { sectionLabel: 'YOUR BOOK', body: 'Contacts list lands in PR #31.' },
   metrics: { sectionLabel: 'COMMISSION MTD', body: 'Metrics tab lands in PR #34.' },
   profile: { sectionLabel: 'YOUR PAY PLAN', body: 'Profile / Pay Plan lands in PR #35.' },
 };
@@ -16,9 +18,12 @@ const PLACEHOLDER: Record<TabId, { sectionLabel: string; sectionIcon?: string; b
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
   const [orbState, setOrbState] = useState<OrbState>('idle');
+  const [authReady, setAuthReady] = useState(false);
 
-  // PR #26: orb tap cycles all four states so QA can see every animation
-  // without needing real STT. PR #31 replaces this with real Hey Rex flow.
+  useEffect(() => {
+    ensureDemoSession().finally(() => setAuthReady(true));
+  }, []);
+
   const cycleOrb = () => {
     const order: OrbState[] = ['idle', 'listening', 'processing', 'saved'];
     const next = order[(order.indexOf(orbState) + 1) % order.length];
@@ -28,7 +33,10 @@ export default function AppShell() {
     }
   };
 
-  const p = PLACEHOLDER[active];
+  const onSelectContact = (_c: V2Contact) => {
+    // Contact detail lands in PR #32 — for now this is a no-op so the row
+    // press still feels responsive but doesn't navigate to a stub.
+  };
 
   return (
     <View style={styles.root}>
@@ -39,8 +47,18 @@ export default function AppShell() {
         contentContainerStyle={styles.contentInner}
         showsVerticalScrollIndicator={false}
       >
-        <SectionHead label={p.sectionLabel} icon={p.sectionIcon} />
-        <Text style={styles.placeholder}>{p.body}</Text>
+        {active === 'heat' ? (
+          authReady ? (
+            <HeatSheetTab onSelect={onSelectContact} />
+          ) : (
+            <Text style={styles.placeholder}>Signing in…</Text>
+          )
+        ) : (
+          <>
+            <SectionHead label={PLACEHOLDER[active].sectionLabel} />
+            <Text style={styles.placeholder}>{PLACEHOLDER[active].body}</Text>
+          </>
+        )}
       </ScrollView>
 
       <TabBar active={active} onChange={setActive} orbState={orbState} onOrbPress={cycleOrb} />
@@ -65,5 +83,6 @@ const styles = StyleSheet.create({
     color: colors.grey2,
     marginHorizontal: 16,
     lineHeight: 19,
+    marginTop: 18,
   },
 });
