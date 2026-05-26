@@ -18,6 +18,17 @@ export type V2Contact = {
   notes: string | null;
   nextStep: string | null;
   milestones: Array<{ kind: string; t: string; d: string }>;
+
+  // Rex intelligence fields (PR #36+)
+  preferredLanguage: 'en' | 'es';
+  repDecision: string | null;
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  vehicleYear: number | null;
+  leaseEndDate: string | null;
+  currentMileage: number | null;
+  isPastCustomer: boolean;
+  doNotContact: boolean;
 };
 
 export function tierFromScore(score: number): TierKey {
@@ -51,6 +62,15 @@ function rowToContact(r: any): V2Contact {
     notes: r.notes,
     nextStep: r.next_step,
     milestones: Array.isArray(r.milestones) ? r.milestones : [],
+    preferredLanguage: (r.preferred_language ?? 'en') as 'en' | 'es',
+    repDecision: r.rep_decision ?? null,
+    vehicleMake: r.vehicle_make ?? null,
+    vehicleModel: r.vehicle_model ?? null,
+    vehicleYear: r.vehicle_year ?? null,
+    leaseEndDate: r.lease_end_date ?? null,
+    currentMileage: r.current_mileage ?? null,
+    isPastCustomer: !!r.is_past_customer,
+    doNotContact: !!r.do_not_contact,
   };
 }
 
@@ -62,7 +82,7 @@ export function useContacts() {
     const { data, error } = await supabase
       .from('contacts')
       .select(
-        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,budget,trade_in,tags,notes,next_step,milestones'
+        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,budget,trade_in,tags,notes,next_step,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact'
       )
       .eq('is_deleted', false);
 

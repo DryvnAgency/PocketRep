@@ -94,6 +94,34 @@ Once the domain points at `project-t90u1`, `shouldUseNewUi()` returns true autom
 
 ---
 
+## 5b. Rex Intelligence build (PRs #36-#39)
+
+The spec is in chat history (the "Rex Intelligence Build Spec" the user dropped 2026-05-26). This section tracks what's shipped vs pending against that spec.
+
+**Foundation migrations applied to `fwvrauqdoevwmwwqlfav`:**
+- `20260527_v2_rex_intelligence_schema.sql` — contacts adds (last_contact_method, last_contact_summary, rep_decision, do_not_contact, preferred_language, lease_end_date, current_mileage, vehicle_year/make/model, is_past_customer) + new tables (contact_milestones, nurture_messages, holiday_calendar, rex_action_log, user_push_tokens) + sequences/sequence_steps extensions + 2026 US holiday seed
+- `20260527_v2_rex_intelligence_seed.sql` — backfill rep_decision = 'active', demo lease_end milestones, Sofia → preferred_language = 'es'
+
+**Copy rules** — `REX_COPY_RULES` exported from `lib/v2/rexActions.ts`. Appended to every brain prompt that produces user-facing copy. Bake into any new brain prompt — never re-derive.
+
+### PR #36 — Cross-Deal Memory · **shipped**
+- `lib/v2/bookContext.ts` — `loadBookContext()` builds the full-book payload (hot/warm/watch/cold/dead, past customers, stalled list, by-make/model counts). `bookContextForPrompt()` compacts it to text for the brain (capped at 30 per tier).
+- `rexInterpret()` now loads book context + Rex memory in parallel and threads BOOK STATE into the prompt with hard guidance ("never invent ids — they must appear in BOOK STATE").
+- New actions: `filter_contacts`, `book_summary`, `call_next` (locally re-derived for copy safety), `batch_action`.
+- `lib/v2/batchActions.ts` — bulk tag / mark_dead / mark_active / archive.
+- `lib/v2/callNext.ts` — deterministic pick + opener templates (already obey copy rules so the brain can't drift on closers).
+- `components/v2/BookSummaryCard.tsx` — renders book_summary payload.
+- `components/v2/ContactListPreview.tsx` — renders filter_contacts payload with tap-to-open.
+- `components/v2/LanguageToggle.tsx` — EN/ES switch wired into ContactDetail hero. Persists to `contacts.preferred_language` via `updateContactPreferredLanguage`.
+- `useContacts` widened to surface `preferredLanguage`, `repDecision`, vehicle make/model/year, `leaseEndDate`, `currentMileage`, `isPastCustomer`, `doNotContact`.
+- `useHeyRex` now exposes `filteredIds`/`dismissFiltered` and threads `contacts` into `executeAction`; logs every action to `rex_action_log` (success / cancelled / failed).
+
+### PR #37 — Smart Blast Sequences · **pending**
+### PR #38 — Stalled Lead Intelligence · **pending**
+### PR #39 — Nurture Engine + Expo Push · **pending**
+
+---
+
 ## 6. Roadmap items locked in (PR #35)
 
 The four items the user called out as not-yet-architected:

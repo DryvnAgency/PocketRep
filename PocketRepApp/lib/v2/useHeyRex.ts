@@ -11,6 +11,7 @@ import {
 import {
   rexInterpret,
   executeAction,
+  logRexAction,
   type RexAction,
 } from './rexActions';
 import { recordRexTurn } from './rexMemory';
@@ -29,8 +30,10 @@ export type UseHeyRexOutput = {
   action: RexAction | null;
   executing: boolean;
   error: string | null;
-  confirm: () => Promise<{ openContactId?: string } | null>;
+  filteredIds: string[] | null;
+  confirm: () => Promise<{ openContactId?: string; filteredIds?: string[] } | null>;
   cancel: () => void;
+  dismissFiltered: () => void;
 };
 
 export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
@@ -40,6 +43,7 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
   const [action, setAction] = useState<RexAction | null>(null);
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filteredIds, setFilteredIds] = useState<string[] | null>(null);
   const listenerRef = useRef<ReturnType<typeof createHeyRexListener> | null>(null);
   const lastUtteranceRef = useRef<string>('');
 
@@ -101,39 +105,46 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
   }, [input.enabled]);
 
   const cancel = useCallback(() => {
+    if (action) logRexAction(action, 'cancelled').catch(() => undefined);
     setAction(null);
     setThinking(false);
     setExecuting(false);
     setError(null);
     setPartial('');
     listenerRef.current?.resume();
+  }, [action]);
+
+  const dismissFiltered = useCallback(() => {
+    setFilteredIds(null);
   }, []);
 
-  const confirm = useCallback(async (): Promise<{ openContactId?: string } | null> => {
+  const confirm = useCallback(async (): Promise<{ openContactId?: string; filteredIds?: string[] } | null> => {
     if (!action) return null;
     setExecuting(true);
     setError(null);
     try {
-      const result = await executeAction(action);
+      const result = await executeAction(action, contactsRef.current);
       const opened = result.openContactId;
-      // Persist this turn for cross-deal memory. Fire-and-forget — failure
-      // shouldn't block the user from acting on the result.
+      const filtered = result.filteredIds;
       recordRexTurn(
         lastUtteranceRef.current,
         action.say || '(no spoken reply)',
         opened,
       ).catch(() => undefined);
+      logRexAction(action, 'success').catch(() => undefined);
       setAction(null);
       setExecuting(false);
       setPartial('');
+      if (filtered && filtered.length > 0) setFilteredIds(filtered);
       listenerRef.current?.resume();
-      return opened ? { openContactId: opened } : null;
+      return (opened || filtered) ? { openContactId: opened, filteredIds: filtered } : null;
     } catch (e: any) {
       setError(e?.message ?? 'Save failed');
       setExecuting(false);
+      logRexAction(action, 'failed').catch(() => undefined);
       return null;
     }
   }, [action]);
 
-  return { state, partial, thinking, action, executing, error, confirm, cancel };
+  return { state, partial, thinking, action, executing, error, filteredIds, confirm, cancel, dismissFiltered };
 }

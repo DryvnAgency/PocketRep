@@ -112,6 +112,7 @@ export default function AppShell() {
       || rex.action?.type === 'update_notes'
       || rex.action?.type === 'delete_contact'
       || rex.action?.type === 'schedule_followup'
+      || rex.action?.type === 'batch_action'
     ) {
       reloadContacts();
     }
@@ -231,8 +232,10 @@ export default function AppShell() {
         action={rex.action}
         executing={rex.executing}
         error={rex.error}
+        contacts={contacts ?? []}
         onConfirm={handleRexConfirm}
         onCancel={rex.cancel}
+        onOpenContact={(id) => setSelectedId(id)}
       />
     </View>
   );

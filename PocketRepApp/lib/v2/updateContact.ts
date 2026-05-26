@@ -67,3 +67,14 @@ export async function deleteContact(id: string): Promise<void> {
     .eq('id', id);
   if (error) throw error;
 }
+
+export async function updateContactPreferredLanguage(
+  id: string,
+  language: 'en' | 'es',
+): Promise<void> {
+  const { error } = await supabase
+    .from('contacts')
+    .update({ preferred_language: language, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
