@@ -254,7 +254,7 @@ Outstanding (next PR if needed):
 
 - All v2 work lives on branch `claude/exciting-goodall-or4T2`.
 - After each squash-merge, the branch is force-pushed (`--force-with-lease`) to match `main` so the next PR starts cleanly.
-- `pocket-rep` and `project-t90u1` CI must both go green to merge; `his-palabra` is permanent noise — ignore.
+- `pocket-rep` and `project-t90u1` CI must both go green to merge. (The orphaned `his-palabra` Vercel project was deleted from the dashboard 2026-05-26 — if you see it on a PR, the deletion hasn't propagated yet.)
 
 ---
 
