@@ -8,7 +8,7 @@ import { TIERS } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import { useDeals, type V2Deal } from '@/lib/v2/useDeals';
 import { useTags } from '@/lib/v2/useTags';
-import { updateContactNotes, updateContactTags } from '@/lib/v2/updateContact';
+import { updateContactNotes, updateContactTags, deleteContact } from '@/lib/v2/updateContact';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 
 const MILESTONE_ICONS: Record<string, { icon: string; color: string }> = {
@@ -28,12 +28,14 @@ export default function ContactDetail({
   contact,
   onClose,
   onLocalUpdate,
+  onDeleted,
   dealsRefetchKey = 0,
   onLogDeal,
 }: {
   contact: V2Contact;
   onClose: () => void;
   onLocalUpdate: (next: V2Contact) => void;
+  onDeleted?: (id: string) => void;
   dealsRefetchKey?: number;
   onLogDeal?: () => void;
 }) {
@@ -54,6 +56,10 @@ export default function ContactDetail({
   const [aiScript, setAiScript] = useState('');
   const [aiError, setAiError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setNotes(contact.notes ?? '');
@@ -136,6 +142,20 @@ export default function ContactDetail({
     }
   };
 
+  const handleDelete = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await deleteContact(contact.id);
+      onDeleted?.(contact.id);
+      onClose();
+    } catch (e) {
+      console.warn('deleteContact failed', e);
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
   const copyScript = async () => {
     if (!aiScript) return;
     try {
@@ -156,10 +176,60 @@ export default function ContactDetail({
           <Text style={styles.iconBtnText}>‹</Text>
         </Pressable>
         <View style={{ flex: 1 }} />
-        <View style={[styles.iconBtn, { borderColor: colors.ink4 }]}>
+        <Pressable onPress={() => setMenuOpen(true)} style={[styles.iconBtn, { borderColor: colors.ink4 }]}>
           <Text style={[styles.iconBtnText, { color: colors.grey2, fontSize: 14 }]}>⋯</Text>
-        </View>
+        </Pressable>
       </View>
+
+      {menuOpen ? (
+        <View style={StyleSheet.absoluteFillObject as any}>
+          <Pressable
+            style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(5,5,8,0.6)' }]}
+            onPress={() => setMenuOpen(false)}
+          />
+          <View style={styles.menuCard}>
+            <Pressable
+              onPress={() => { setMenuOpen(false); setConfirmDelete(true); }}
+              style={styles.menuRow}
+            >
+              <Text style={[styles.menuRowText, { color: colors.red }]}>Delete contact</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      {confirmDelete ? (
+        <View style={StyleSheet.absoluteFillObject as any}>
+          <Pressable
+            style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(5,5,8,0.75)' }]}
+            onPress={() => !deleting && setConfirmDelete(false)}
+          />
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Delete {contact.name}?</Text>
+            <Text style={styles.confirmBody}>
+              You can undo this from your audit log within 30 days.
+            </Text>
+            <View style={styles.confirmActions}>
+              <Pressable
+                onPress={() => setConfirmDelete(false)}
+                disabled={deleting}
+                style={styles.confirmCancel}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleDelete}
+                disabled={deleting}
+                style={styles.confirmDelete}
+              >
+                <Text style={styles.confirmDeleteText}>
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}>
         <View style={styles.hero}>
@@ -577,6 +647,50 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconBtnText: { color: colors.gold, fontSize: 18, fontWeight: '700' },
+
+  menuCard: {
+    position: 'absolute',
+    top: 60,
+    right: 14,
+    backgroundColor: colors.ink2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.md,
+    minWidth: 180,
+    overflow: 'hidden',
+  } as any,
+  menuRow: { paddingHorizontal: 14, paddingVertical: 12 },
+  menuRowText: { fontSize: 14, fontWeight: '600' },
+
+  confirmCard: {
+    position: 'absolute',
+    left: 24, right: 24, top: '30%',
+    backgroundColor: colors.ink2,
+    borderWidth: 1,
+    borderColor: colors.redBorder,
+    borderRadius: radius.lg,
+    padding: 20,
+  } as any,
+  confirmTitle: { fontSize: 16, fontWeight: '700', color: colors.white, letterSpacing: -0.2 },
+  confirmBody: { fontSize: 13, color: colors.grey2, marginTop: 8, lineHeight: 18 },
+  confirmActions: { flexDirection: 'row', gap: 8, marginTop: 16 },
+  confirmCancel: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    borderWidth: 1, borderColor: colors.ink4,
+    alignItems: 'center',
+  },
+  confirmCancelText: { fontSize: 13, fontWeight: '700', color: colors.grey2 },
+  confirmDelete: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: radius.md,
+    backgroundColor: colors.red,
+    alignItems: 'center',
+  },
+  confirmDeleteText: { fontSize: 13, fontWeight: '700', color: colors.white },
 
   hero: {
     paddingHorizontal: 16,

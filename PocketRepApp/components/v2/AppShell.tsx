@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { colors } from '@/constants/theme';
 import CustomNavBar, { TabId } from './CustomNavBar';
@@ -11,9 +11,20 @@ import ProfileTab from './ProfileTab';
 import MetricsTab from './MetricsTab';
 import DealLogger, { type DealLoggerPrefill } from './DealLogger';
 import BulkTagFlow from './BulkTagFlow';
+import AddContactModal from './AddContactModal';
+import RexDisclosure from './RexDisclosure';
+import HeyRexSheet from './HeyRexSheet';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
+import {
+  getAlwaysListenEnabled,
+  hasSeenDisclosure,
+  markDisclosureSeen,
+  setAlwaysListenEnabled,
+  subscribeAlwaysListen,
+} from '@/lib/v2/rexSettings';
+import { useHeyRex } from '@/lib/v2/useHeyRex';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
@@ -25,15 +36,45 @@ export default function AppShell() {
   const [dealsRefetchKey, setDealsRefetchKey] = useState(0);
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [tagsRefetchKey, setTagsRefetchKey] = useState(0);
+  const [addContactOpen, setAddContactOpen] = useState(false);
+  const [disclosureOpen, setDisclosureOpen] = useState(false);
+  const [alwaysListen, setAlwaysListen] = useState(false);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
   const tags = useTags(tagsRefetchKey);
+  const tagNames = useMemo(() => tags.map(t => t.name), [tags]);
+
+  const rex = useHeyRex({
+    enabled: authReady && alwaysListen,
+    contacts: contacts ?? [],
+    tagNames,
+  });
 
   useEffect(() => {
-    ensureDemoSession().finally(() => setAuthReady(true));
+    ensureDemoSession().finally(() => {
+      setAuthReady(true);
+      setAlwaysListen(getAlwaysListenEnabled());
+      if (!hasSeenDisclosure()) setDisclosureOpen(true);
+    });
+    return subscribeAlwaysListen(setAlwaysListen);
   }, []);
 
+  // Map listener state to the orb visual
+  useEffect(() => {
+    if (!alwaysListen) { setOrbState('idle'); return; }
+    if (rex.state === 'awake') setOrbState('listening');
+    else if (rex.thinking || rex.state === 'processing') setOrbState('processing');
+    else if (rex.executing) setOrbState('saved');
+    else setOrbState('idle');
+  }, [rex.state, rex.thinking, rex.executing, alwaysListen]);
+
   const cycleOrb = () => {
+    // With always-listen on, the orb is driven by the listener — tap to cancel
+    // a pending action. With it off, fall back to the demo cycle.
+    if (alwaysListen) {
+      if (rex.action || rex.state !== 'idle') rex.cancel();
+      return;
+    }
     const order: OrbState[] = ['idle', 'listening', 'processing', 'saved'];
     const next = order[(order.indexOf(orbState) + 1) % order.length];
     setOrbState(next);
@@ -49,6 +90,24 @@ export default function AppShell() {
   const openDealLogger = (prefill?: DealLoggerPrefill) => {
     setDealLoggerPrefill(prefill);
     setDealLoggerOpen(true);
+  };
+
+  const handleRexConfirm = async () => {
+    const result = await rex.confirm();
+    // Refresh writers' downstream state
+    if (rex.action?.type === 'log_deal') {
+      setDealsRefetchKey(k => k + 1);
+    }
+    if (rex.action?.type === 'add_contact'
+      || rex.action?.type === 'update_notes'
+      || rex.action?.type === 'delete_contact'
+      || rex.action?.type === 'schedule_followup'
+    ) {
+      reloadContacts();
+    }
+    if (result?.openContactId) {
+      setSelectedId(result.openContactId);
+    }
   };
 
   return (
@@ -71,6 +130,7 @@ export default function AppShell() {
             tags={tags}
             onSelect={c => setSelectedId(c.id)}
             onBulkTag={() => setBulkTagOpen(true)}
+            onAddContact={() => setAddContactOpen(true)}
           />
         ) : active === 'profile' ? (
           <ProfileTab />
@@ -86,6 +146,7 @@ export default function AppShell() {
           contact={selected}
           onClose={() => setSelectedId(null)}
           onLocalUpdate={(next: V2Contact) => patchLocal(next.id, next)}
+          onDeleted={() => { reloadContacts(); setSelectedId(null); }}
           dealsRefetchKey={dealsRefetchKey}
           onLogDeal={() => openDealLogger({
             name: selected.name,
@@ -111,6 +172,39 @@ export default function AppShell() {
           setTagsRefetchKey(k => k + 1);
           reloadContacts();
         }}
+      />
+
+      <AddContactModal
+        open={addContactOpen}
+        onClose={() => setAddContactOpen(false)}
+        onCreated={() => { reloadContacts(); setActive('contacts'); }}
+      />
+
+      <RexDisclosure
+        open={disclosureOpen}
+        onEnable={() => {
+          setAlwaysListenEnabled(true);
+          setAlwaysListen(true);
+          markDisclosureSeen();
+          setDisclosureOpen(false);
+        }}
+        onDecline={() => {
+          setAlwaysListenEnabled(false);
+          setAlwaysListen(false);
+          markDisclosureSeen();
+          setDisclosureOpen(false);
+        }}
+      />
+
+      <HeyRexSheet
+        state={rex.state}
+        partial={rex.partial}
+        thinking={rex.thinking}
+        action={rex.action}
+        executing={rex.executing}
+        error={rex.error}
+        onConfirm={handleRexConfirm}
+        onCancel={rex.cancel}
       />
     </View>
   );

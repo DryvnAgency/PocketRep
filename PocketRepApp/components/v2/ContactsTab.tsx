@@ -100,12 +100,14 @@ export default function ContactsTab({
   tags,
   onSelect,
   onBulkTag,
+  onAddContact,
 }: {
   contacts: V2Contact[] | null;
   error: string | null;
   tags: V2Tag[];
   onSelect: (c: V2Contact) => void;
   onBulkTag?: () => void;
+  onAddContact?: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterTag>(null);
@@ -173,6 +175,9 @@ export default function ContactsTab({
             </Pressable>
           ) : null}
         </View>
+        <Pressable onPress={onAddContact} style={styles.addBtn} hitSlop={6}>
+          <Text style={styles.addBtnText}>＋</Text>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -257,8 +262,16 @@ const styles = StyleSheet.create({
   center: { padding: spacing.xl, alignItems: 'center' },
   error: { color: colors.red, fontSize: 13 },
 
-  searchWrap: { paddingTop: 12, paddingHorizontal: 14, paddingBottom: 8 },
+  searchWrap: {
+    paddingTop: 12,
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   searchBox: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -268,6 +281,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: 12,
   },
+  addBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.md,
+    backgroundColor: colors.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBtnText: { fontSize: 22, fontWeight: '800', color: colors.ink, lineHeight: 24 },
   searchIcon: { color: colors.grey, fontSize: 14 },
   searchInput: {
     flex: 1,
