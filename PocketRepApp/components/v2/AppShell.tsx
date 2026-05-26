@@ -8,12 +8,12 @@ import { SectionHead } from './atoms';
 import HeatSheetTab from './HeatSheetTab';
 import ContactsTab from './ContactsTab';
 import ContactDetail from './ContactDetail';
+import ProfileTab from './ProfileTab';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 
-const PLACEHOLDER: Record<Exclude<TabId, 'heat' | 'contacts'>, { sectionLabel: string; body: string }> = {
+const PLACEHOLDER: Record<Exclude<TabId, 'heat' | 'contacts' | 'profile'>, { sectionLabel: string; body: string }> = {
   metrics: { sectionLabel: 'COMMISSION MTD', body: 'Metrics tab lands next.' },
-  profile: { sectionLabel: 'YOUR PAY PLAN', body: 'Profile / Pay Plan lands next.' },
 };
 
 export default function AppShell() {
@@ -56,6 +56,8 @@ export default function AppShell() {
           <HeatSheetTab contacts={contacts} error={error} onSelect={c => setSelectedId(c.id)} />
         ) : active === 'contacts' ? (
           <ContactsTab contacts={contacts} error={error} onSelect={c => setSelectedId(c.id)} />
+        ) : active === 'profile' ? (
+          <ProfileTab />
         ) : (
           <>
             <SectionHead label={PLACEHOLDER[active].sectionLabel} />
