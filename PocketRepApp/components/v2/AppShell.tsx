@@ -27,6 +27,7 @@ import {
 } from '@/lib/v2/stalledLeads';
 import { scheduleNurtureBlast } from '@/lib/v2/nurtureEngine';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
+import { registerForPush } from '@/lib/v2/pushNotifications';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
 import {
@@ -83,6 +84,8 @@ export default function AppShell() {
       } else if (!hasCompletedOnboarding()) {
         setOnboardingOpen(true);
       }
+      // Fire-and-forget — push registration is silent on web/unsupported devices.
+      registerForPush().catch(() => undefined);
     });
     return subscribeAlwaysListen(setAlwaysListen);
   }, []);

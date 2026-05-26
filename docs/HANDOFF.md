@@ -148,9 +148,14 @@ The spec is in chat history (the "Rex Intelligence Build Spec" the user dropped 
 - New action `schedule_nurture_blast` (`rexActions.ts`) — voice "send a holiday blast to my past customers" / "queue a quarterly check-in for dead leads". AppShell catches it, runs `scheduleNurtureBlast`, bumps the banner refetch key, opens the reviewer.
 
 **Out of V1 scope** (post-PR follow-ups):
-- Supabase Edge Function for the daily holiday cron (`nurture-scheduler`). The client-side `scheduleNurtureBlast` is the exact same logic the cron will call; lifting it to Deno is a copy-paste plus `pg_cron` config.
-- Expo Push registration + `send-push` edge function. `user_push_tokens` table is in place from Migration A; the registration flow needs `expo-notifications` install + permission UX.
-- Twilio webhook reply auto-classification.
+- Twilio webhook reply auto-classification — still deferred (needs Twilio account / phone / webhook host setup).
+
+**Shipped as PR #40 add-ons (this branch):**
+- `send-push` edge function (`verify_jwt=true`) — auth'd POST that resolves the caller's `auth.uid()`, reads their `user_push_tokens`, and fans out to Expo's `/api/v2/push/send`. Refuses to push to other users.
+- `nurture-scheduler` edge function (`verify_jwt=false`, guarded by `X-Cron-Secret` env header) — daily call. Looks up `holiday_calendar` for today; if it's a holiday, queues holiday nurtures for each rep. Mondays additionally queue a quarterly check-in batch (max 10/rep). Mirrors the client's cadence + variety rules exactly (re-uses the same brain prompt). Fires a push notification when a rep's queue grows.
+  - **Schedule via `pg_cron`**: `SELECT cron.schedule('nurture-scheduler', '0 14 * * *', $$SELECT net.http_post(url:='https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/nurture-scheduler', headers:='{"X-Cron-Secret":"<set CRON_SECRET via supabase secrets>"}'::jsonb)$$);` (14:00 UTC = ~9 AM ET).
+  - **Required secret**: `supabase secrets set CRON_SECRET=<random-32-char-string>` so unsanctioned callers can't trigger drafts.
+- `lib/v2/pushNotifications.ts` — Expo token registration on app boot (no-op on web / unsupported devices). `sendTestPush()` calls `send-push` for the QA row in Profile → REX → "Send a test push".
 
 ---
 

@@ -7,6 +7,7 @@ import {
   getAlwaysListenEnabled,
   setAlwaysListenEnabled,
 } from '@/lib/v2/rexSettings';
+import { sendTestPush } from '@/lib/v2/pushNotifications';
 
 type ProfileRow = { email: string; full_name: string | null; plan: string };
 
@@ -136,6 +137,14 @@ export default function ProfileTab({
         <Row icon="🤖" label="Voice & tone" detail="Direct" />
         <Row icon="🔐" label="Data sources" detail="3 connected" />
         <Row icon="📝" label="Custom prompts" detail="7 saved" />
+        <Pressable
+          onPress={async () => {
+            const result = await sendTestPush();
+            console.log('[push] test result', result);
+          }}
+        >
+          <Row icon="🔔" label="Send a test push" detail="ping →" />
+        </Pressable>
       </View>
 
       <SectionHead label="LEARN" color={colors.gold} />
