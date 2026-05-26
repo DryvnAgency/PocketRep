@@ -4,17 +4,14 @@ import { colors } from '@/constants/theme';
 import CustomNavBar, { TabId } from './CustomNavBar';
 import TabBar from './TabBar';
 import { OrbState } from './HeyRexOrb';
-import { SectionHead } from './atoms';
 import HeatSheetTab from './HeatSheetTab';
 import ContactsTab from './ContactsTab';
 import ContactDetail from './ContactDetail';
 import ProfileTab from './ProfileTab';
+import MetricsTab from './MetricsTab';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 
-const PLACEHOLDER: Record<Exclude<TabId, 'heat' | 'contacts' | 'profile'>, { sectionLabel: string; body: string }> = {
-  metrics: { sectionLabel: 'COMMISSION MTD', body: 'Metrics tab lands next.' },
-};
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
@@ -59,10 +56,7 @@ export default function AppShell() {
         ) : active === 'profile' ? (
           <ProfileTab />
         ) : (
-          <>
-            <SectionHead label={PLACEHOLDER[active].sectionLabel} />
-            <Text style={styles.placeholder}>{PLACEHOLDER[active].body}</Text>
-          </>
+          <MetricsTab />
         )}
       </ScrollView>
 
