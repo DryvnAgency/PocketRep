@@ -28,7 +28,7 @@ function rowToDeal(r: any): V2DealRich {
   };
 }
 
-export function useUserDeals() {
+export function useUserDeals(refetchKey: number = 0): V2DealRich[] | null {
   const [deals, setDeals] = useState<V2DealRich[] | null>(null);
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export function useUserDeals() {
         setDeals((data ?? []).map(rowToDeal));
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [refetchKey]);
 
   return deals;
 }

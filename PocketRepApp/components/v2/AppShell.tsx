@@ -9,15 +9,18 @@ import ContactsTab from './ContactsTab';
 import ContactDetail from './ContactDetail';
 import ProfileTab from './ProfileTab';
 import MetricsTab from './MetricsTab';
+import DealLogger, { type DealLoggerPrefill } from './DealLogger';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
-
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
   const [orbState, setOrbState] = useState<OrbState>('idle');
   const [authReady, setAuthReady] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [dealLoggerOpen, setDealLoggerOpen] = useState(false);
+  const [dealLoggerPrefill, setDealLoggerPrefill] = useState<DealLoggerPrefill | undefined>();
+  const [dealsRefetchKey, setDealsRefetchKey] = useState(0);
 
   const { contacts, error, patchLocal } = useContacts();
 
@@ -38,6 +41,11 @@ export default function AppShell() {
     ? contacts?.find(c => c.id === selectedId) ?? null
     : null;
 
+  const openDealLogger = (prefill?: DealLoggerPrefill) => {
+    setDealLoggerPrefill(prefill);
+    setDealLoggerOpen(true);
+  };
+
   return (
     <View style={styles.root}>
       <CustomNavBar active={active} />
@@ -56,7 +64,7 @@ export default function AppShell() {
         ) : active === 'profile' ? (
           <ProfileTab />
         ) : (
-          <MetricsTab />
+          <MetricsTab refetchKey={dealsRefetchKey} onLogDeal={() => openDealLogger()} />
         )}
       </ScrollView>
 
@@ -67,8 +75,21 @@ export default function AppShell() {
           contact={selected}
           onClose={() => setSelectedId(null)}
           onLocalUpdate={(next: V2Contact) => patchLocal(next.id, next)}
+          dealsRefetchKey={dealsRefetchKey}
+          onLogDeal={() => openDealLogger({
+            name: selected.name,
+            vehicle: selected.vehicle,
+            contactId: selected.id,
+          })}
         />
       ) : null}
+
+      <DealLogger
+        open={dealLoggerOpen}
+        prefill={dealLoggerPrefill}
+        onClose={() => setDealLoggerOpen(false)}
+        onSaved={() => setDealsRefetchKey(k => k + 1)}
+      />
     </View>
   );
 }
