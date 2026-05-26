@@ -6,11 +6,11 @@ import TabBar from './TabBar';
 import { OrbState } from './HeyRexOrb';
 import { SectionHead } from './atoms';
 import HeatSheetTab from './HeatSheetTab';
+import ContactsTab from './ContactsTab';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import type { V2Contact } from '@/lib/v2/useContacts';
 
-const PLACEHOLDER: Record<Exclude<TabId, 'heat'>, { sectionLabel: string; body: string }> = {
-  contacts: { sectionLabel: 'YOUR BOOK', body: 'Contacts list lands in PR #31.' },
+const PLACEHOLDER: Record<Exclude<TabId, 'heat' | 'contacts'>, { sectionLabel: string; body: string }> = {
   metrics: { sectionLabel: 'COMMISSION MTD', body: 'Metrics tab lands in PR #34.' },
   profile: { sectionLabel: 'YOUR PAY PLAN', body: 'Profile / Pay Plan lands in PR #35.' },
 };
@@ -47,12 +47,12 @@ export default function AppShell() {
         contentContainerStyle={styles.contentInner}
         showsVerticalScrollIndicator={false}
       >
-        {active === 'heat' ? (
-          authReady ? (
-            <HeatSheetTab onSelect={onSelectContact} />
-          ) : (
-            <Text style={styles.placeholder}>Signing in…</Text>
-          )
+        {!authReady ? (
+          <Text style={styles.placeholder}>Signing in…</Text>
+        ) : active === 'heat' ? (
+          <HeatSheetTab onSelect={onSelectContact} />
+        ) : active === 'contacts' ? (
+          <ContactsTab onSelect={onSelectContact} />
         ) : (
           <>
             <SectionHead label={PLACEHOLDER[active].sectionLabel} />
