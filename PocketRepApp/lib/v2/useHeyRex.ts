@@ -13,6 +13,7 @@ import {
   executeAction,
   type RexAction,
 } from './rexActions';
+import { recordRexTurn } from './rexMemory';
 import type { V2Contact } from './useContacts';
 
 export type UseHeyRexInput = {
@@ -40,6 +41,7 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listenerRef = useRef<ReturnType<typeof createHeyRexListener> | null>(null);
+  const lastUtteranceRef = useRef<string>('');
 
   // Keep the latest data in refs so the listener callback (created once) can
   // always see fresh values without needing to be torn down on every render.
@@ -72,6 +74,7 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
         case 'utterance': {
           setThinking(true);
           setError(null);
+          lastUtteranceRef.current = e.text;
           rexInterpret(e.text, contactsRef.current, tagsRef.current)
             .then((act) => {
               setAction(act);
@@ -113,6 +116,13 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
     try {
       const result = await executeAction(action);
       const opened = result.openContactId;
+      // Persist this turn for cross-deal memory. Fire-and-forget — failure
+      // shouldn't block the user from acting on the result.
+      recordRexTurn(
+        lastUtteranceRef.current,
+        action.say || '(no spoken reply)',
+        opened,
+      ).catch(() => undefined);
       setAction(null);
       setExecuting(false);
       setPartial('');
