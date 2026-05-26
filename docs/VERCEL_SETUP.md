@@ -10,9 +10,8 @@ No new Vercel project is needed.
 
 | Project | Source | Domain | Build |
 |---|---|---|---|
-| `pocket-rep` | `Pocketrep/` (root) | `pocketrep.pro`, `app.pocketrep.pro` | Static (marketing site + static design mock at `/app`) |
-| `project-t90u1` | `PocketRepApp/` | auto-generated `*.vercel.app` preview | `npm run build:web` → `dist/` (Expo Web SPA) |
-| `his-palabra` | (unrelated project in the monorepo) | n/a | Unrelated; pre-existing failure ignored |
+| `pocket-rep` | `Pocketrep/` (root) | `pocketrep.pro` (and historically `app.pocketrep.pro`, now transferred) | Static (marketing site + static design mock at `/app`) |
+| `project-t90u1` | `PocketRepApp/` | `app.pocketrep.pro` + auto-generated `*.vercel.app` preview | `npm run build:web` → `dist/` (Expo Web SPA) |
 
 ## Enable the v2 UI on `project-t90u1`
 
