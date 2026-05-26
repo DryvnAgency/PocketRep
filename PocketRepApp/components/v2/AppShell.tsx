@@ -18,12 +18,14 @@ import Onboarding from './Onboarding';
 import GamePlanSheet from './GamePlanSheet';
 import BlastSequenceDrafter from './BlastSequenceDrafter';
 import StalledLeadsAnalysis from './StalledLeadsAnalysis';
+import NurtureReviewer from './NurtureReviewer';
 import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
 import {
   analyzeStalledLeads,
   type StalledReport,
   type StalledRecommendation,
 } from '@/lib/v2/stalledLeads';
+import { scheduleNurtureBlast } from '@/lib/v2/nurtureEngine';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
@@ -58,6 +60,9 @@ export default function AppShell() {
   const [stalledOpen, setStalledOpen] = useState(false);
   const [stalledReport, setStalledReport] = useState<StalledReport | null>(null);
   const [stalledLoading, setStalledLoading] = useState(false);
+  const [nurtureReviewerOpen, setNurtureReviewerOpen] = useState(false);
+  const [nurtureRefetchKey, setNurtureRefetchKey] = useState(0);
+  const [schedulingNurture, setSchedulingNurture] = useState(false);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
   const tags = useTags(tagsRefetchKey);
@@ -119,6 +124,7 @@ export default function AppShell() {
     const actionType = rex.action?.type;
     const blastPayload = rex.action?.type === 'create_blast_sequence' ? rex.action.payload : null;
     const stalledPayload = rex.action?.type === 'analyze_stalled_leads' ? rex.action.payload : null;
+    const nurturePayload = rex.action?.type === 'schedule_nurture_blast' ? rex.action.payload : null;
     const result = await rex.confirm();
     // Refresh writers' downstream state
     if (actionType === 'log_deal') {
@@ -134,6 +140,23 @@ export default function AppShell() {
     }
     if (result?.openContactId) {
       setSelectedId(result.openContactId);
+    }
+    // Nurture blast: write pending drafts then open the reviewer.
+    if (nurturePayload) {
+      setSchedulingNurture(true);
+      try {
+        await scheduleNurtureBlast({
+          trigger: nurturePayload.trigger,
+          audience: nurturePayload.audience,
+          customIntent: nurturePayload.custom_intent,
+        });
+        setNurtureRefetchKey(k => k + 1);
+        setNurtureReviewerOpen(true);
+      } catch (e) {
+        console.warn('nurture blast failed', e);
+      } finally {
+        setSchedulingNurture(false);
+      }
     }
     // Stalled lead analysis: open the overlay, run the analyzer in parallel.
     if (stalledPayload) {
@@ -187,7 +210,13 @@ export default function AppShell() {
         {!authReady ? (
           <Text style={styles.placeholder}>Signing in…</Text>
         ) : active === 'heat' ? (
-          <HeatSheetTab contacts={contacts} error={error} onSelect={c => setSelectedId(c.id)} />
+          <HeatSheetTab
+            contacts={contacts}
+            error={error}
+            onSelect={c => setSelectedId(c.id)}
+            nurtureRefetchKey={nurtureRefetchKey}
+            onOpenNurture={() => setNurtureReviewerOpen(true)}
+          />
         ) : active === 'contacts' ? (
           <ContactsTab
             contacts={contacts}
@@ -282,7 +311,7 @@ export default function AppShell() {
       <HeyRexSheet
         state={rex.state}
         partial={rex.partial}
-        thinking={rex.thinking || blastDrafting}
+        thinking={rex.thinking || blastDrafting || schedulingNurture}
         action={rex.action}
         executing={rex.executing}
         error={rex.error}
@@ -301,6 +330,12 @@ export default function AppShell() {
           setBlastDraft(null);
           reloadContacts();
         }}
+      />
+
+      <NurtureReviewer
+        open={nurtureReviewerOpen}
+        onClose={() => setNurtureReviewerOpen(false)}
+        onChanged={() => setNurtureRefetchKey(k => k + 1)}
       />
 
       <StalledLeadsAnalysis

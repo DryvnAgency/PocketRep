@@ -4,6 +4,7 @@ import { HeatStripe, SectionHead, StatNumber } from './atoms';
 import { TIERS, stalenessColor, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import WeeklyDigestCard from './WeeklyDigestCard';
+import NurtureBanner from './NurtureBanner';
 
 const TODAY_LABEL = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
 
@@ -38,10 +39,14 @@ export default function HeatSheetTab({
   contacts,
   error,
   onSelect,
+  nurtureRefetchKey = 0,
+  onOpenNurture,
 }: {
   contacts: V2Contact[] | null;
   error: string | null;
   onSelect: (c: V2Contact) => void;
+  nurtureRefetchKey?: number;
+  onOpenNurture?: () => void;
 }) {
   if (error) {
     return (
@@ -78,6 +83,10 @@ export default function HeatSheetTab({
       </View>
 
       <WeeklyDigestCard />
+
+      {onOpenNurture ? (
+        <NurtureBanner refetchKey={nurtureRefetchKey} onOpenReviewer={onOpenNurture} />
+      ) : null}
 
       <SectionHead label="HOT" count={groups.hot.length} color={colors.red} icon="🔥" />
       {groups.hot.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}

@@ -29,12 +29,19 @@ export type RexAction =
   | { type: 'batch_action'; payload: BatchActionPayload; say: string }
   | { type: 'create_blast_sequence'; payload: CreateBlastSequencePayload; say: string }
   | { type: 'analyze_stalled_leads'; payload: AnalyzeStalledLeadsPayload; say: string }
+  | { type: 'schedule_nurture_blast'; payload: ScheduleNurtureBlastPayload; say: string }
   | { type: 'clarify'; payload: ClarifyPayload; say: string }
   | { type: 'say'; payload: Record<string, never>; say: string };
 
 export type AnalyzeStalledLeadsPayload = {
   days_silent_threshold?: number;
   include_dead?: boolean;
+};
+
+export type ScheduleNurtureBlastPayload = {
+  trigger: 'holiday' | 'quarterly_check_in' | 'custom';
+  audience: 'dead' | 'dormant' | 'past_customers' | 'all_inactive';
+  custom_intent?: string;
 };
 
 export type CreateBlastSequencePayload = {
@@ -246,10 +253,14 @@ Actions you can take, with required + optional payload fields:
     payload: { days_silent_threshold?: number, include_dead?: boolean }
     Default threshold is 14 days. The "say" line MUST be a short ack ("analyzing stalled leads now…") — DO NOT enumerate names; the analyzer will.
 
-13. clarify — the rep's request is ambiguous; ask back
+13. schedule_nurture_blast — generate nurture drafts for dead / dormant / past customers / all inactive. Variety + cadence enforced server-side (no contact gets > 1 nurture/30d, skip 60d after a reply, skip do_not_contact, 6mo pause after negative).
+    payload: { trigger: "holiday" | "quarterly_check_in" | "custom", audience: "dead" | "dormant" | "past_customers" | "all_inactive", custom_intent?: string }
+    Use ONLY when the rep is asking for a batch nurture (not an individual message). "say" confirms the audience ("queueing nurtures for past customers, review momentarily").
+
+14. clarify — the rep's request is ambiguous; ask back
     payload: { question, candidates?: [{id, label}] }
 
-14. say — informational reply, no write
+15. say — informational reply, no write
     payload: {}
 
 EXISTING TAGS the rep uses: ${tagList}
@@ -442,6 +453,11 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
       // StalledLeadsAnalysis. No DB write here.
       return { ok: true };
     }
+    case 'schedule_nurture_blast': {
+      // AppShell catches the type, runs scheduleNurtureBlast (which writes
+      // pending nurture_messages rows), and opens NurtureReviewer.
+      return { ok: true };
+    }
     case 'clarify':
     case 'say':
     default:
@@ -478,6 +494,8 @@ export function summarizeAction(action: RexAction): string {
       return `Blast ${p.contact_ids?.length ?? 0} contacts · ${p.filter_summary ?? p.filter_criteria ?? ''}`;
     case 'analyze_stalled_leads':
       return `Analyze stalled leads (≥${p.days_silent_threshold ?? 14}d silent)`;
+    case 'schedule_nurture_blast':
+      return `Nurture blast · ${p.trigger?.replace('_', ' ')} · ${p.audience?.replace('_', ' ')}`;
     case 'clarify':
       return p.question ?? 'Need clarification';
     case 'say':
@@ -509,7 +527,8 @@ export function actionWritesData(t: RexAction['type']): boolean {
     t === 'schedule_followup' ||
     t === 'batch_action' ||
     t === 'create_blast_sequence' ||
-    t === 'analyze_stalled_leads'
+    t === 'analyze_stalled_leads' ||
+    t === 'schedule_nurture_blast'
   );
 }
 

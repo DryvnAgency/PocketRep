@@ -20,6 +20,7 @@ export type BookContact = {
   preferred_language: 'en' | 'es';
   rep_decision: string | null;
   is_past_customer: boolean;
+  do_not_contact: boolean;
   tags: string[];
   days_silent: number;
 };
@@ -58,6 +59,7 @@ function rowToBook(r: any): BookContact {
     preferred_language: (r.preferred_language ?? 'en') as 'en' | 'es',
     rep_decision: r.rep_decision,
     is_past_customer: !!r.is_past_customer,
+    do_not_contact: !!r.do_not_contact,
     tags: Array.isArray(r.tags) ? r.tags : [],
     days_silent: daysSince(r.last_contact_date),
   };
@@ -67,7 +69,7 @@ export async function loadBookContext(): Promise<BookContext> {
   const { data, error } = await supabase
     .from('contacts')
     .select(
-      'id,first_name,last_name,heat_score,vehicle,vehicle_make,vehicle_model,last_contact_date,last_contact_summary,lease_end_date,current_mileage,preferred_language,rep_decision,is_past_customer,tags'
+      'id,first_name,last_name,heat_score,vehicle,vehicle_make,vehicle_model,last_contact_date,last_contact_summary,lease_end_date,current_mileage,preferred_language,rep_decision,is_past_customer,do_not_contact,tags'
     )
     .eq('is_deleted', false);
 

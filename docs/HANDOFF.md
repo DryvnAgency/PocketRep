@@ -131,7 +131,26 @@ The spec is in chat history (the "Rex Intelligence Build Spec" the user dropped 
   - `batchKill(ids)` — flips `rep_decision='dead'` (KILL means "stop selling, start nurturing" per spec — not delete).
 - New action `analyze_stalled_leads` (`rexActions.ts`) — voice "who haven't I contacted in two weeks" / "show me stalled leads" lands here. AppShell catches the type, opens the overlay, and runs the analyzer.
 - `components/v2/StalledLeadsAnalysis.tsx` — overlay sorted by recommendation priority (PUSH > FENCE > KILL > WATCH). Each card: avatar, heat + days-silent, reason, PUSH/FENCE rows show the suggested opener in EN or ES. Multi-select check pattern; footer shows "Kill N" + "Push N" buttons that fan out to `batchKill` or to `BlastSequenceDrafter` pre-loaded with the openers.
-### PR #39 — Nurture Engine + Expo Push · **pending**
+### PR #39 — Nurture Engine + manual reply tracker · **shipped (V1)**
+- `lib/v2/nurtureEngine.ts`
+  - `scheduleNurtureBlast({trigger, audience, customIntent?})` — loads BookContext, filters by audience (`dead` / `dormant` / `past_customers` / `all_inactive`), runs cadence checks (skip `do_not_contact`, skip if last nurture <30d, skip 60d after a reply, 6-month pause after a `negative` reply), fetches `last_3_hooks_used` per contact, then makes one batched brain call with `REX_COPY_RULES` plus a VARIETY RULE that forbids any hook in each contact's `hooks_to_avoid`. Inserts pending rows into `public.nurture_messages` (sent_at=null, scheduled_for=now).
+  - `loadPendingNurtures()` — joins nurture_messages → contacts for the reviewer UI.
+  - `markNurtureSent()` / `dismissNurture()` — manual send/skip from the reviewer.
+  - `countNurtureBanners()` — Heat Sheet banner counts (pending drafts + sent-but-unmarked-reply in last 7 days).
+- `lib/v2/manualReplyTracker.ts` — `markNurtureReply({nurtureMessageId, contactId, kind, replyText?, followUpInDays?})`. V1 manual classification per the spec's reply routing:
+  - `positive` → bump heat +20, set `rep_decision='active'`, update `last_contact_date`
+  - `negative` → set `do_not_contact=true`, `rep_decision='do_not_nurture'`
+  - `neutral` → flag the row, no contact mutation
+  - `later` → bump heat +10, set `next_followup_date` N days out
+- `components/v2/NurtureReviewer.tsx` — bulk review bottom sheet. Each row: avatar, name, trigger/hook/language pills, message (tap Edit to inline-edit before send), copy-rule violation warning, Skip / Send (`launchSms` fires `sms:` URL; marks the row sent on success).
+- `components/v2/MarkReplyButton.tsx` — opens an inline panel on a sent nurture: Positive / Neutral / Negative / Follow-up-later N days, plus a paste-the-reply text area for memory. Triggers `markNurtureReply`.
+- `components/v2/NurtureBanner.tsx` — Heat Sheet banner showing pending draft count (or "N sent · mark replies" when drafts are empty). Taps open the `NurtureReviewer`.
+- New action `schedule_nurture_blast` (`rexActions.ts`) — voice "send a holiday blast to my past customers" / "queue a quarterly check-in for dead leads". AppShell catches it, runs `scheduleNurtureBlast`, bumps the banner refetch key, opens the reviewer.
+
+**Out of V1 scope** (post-PR follow-ups):
+- Supabase Edge Function for the daily holiday cron (`nurture-scheduler`). The client-side `scheduleNurtureBlast` is the exact same logic the cron will call; lifting it to Deno is a copy-paste plus `pg_cron` config.
+- Expo Push registration + `send-push` edge function. `user_push_tokens` table is in place from Migration A; the registration flow needs `expo-notifications` install + permission UX.
+- Twilio webhook reply auto-classification.
 
 ---
 
