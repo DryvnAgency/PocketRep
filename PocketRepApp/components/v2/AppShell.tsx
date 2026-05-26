@@ -17,7 +17,13 @@ import HeyRexSheet from './HeyRexSheet';
 import Onboarding from './Onboarding';
 import GamePlanSheet from './GamePlanSheet';
 import BlastSequenceDrafter from './BlastSequenceDrafter';
+import StalledLeadsAnalysis from './StalledLeadsAnalysis';
 import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
+import {
+  analyzeStalledLeads,
+  type StalledReport,
+  type StalledRecommendation,
+} from '@/lib/v2/stalledLeads';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
@@ -49,6 +55,9 @@ export default function AppShell() {
   const [gamePlanOpen, setGamePlanOpen] = useState(false);
   const [blastDraft, setBlastDraft] = useState<BlastDraft | null>(null);
   const [blastDrafting, setBlastDrafting] = useState(false);
+  const [stalledOpen, setStalledOpen] = useState(false);
+  const [stalledReport, setStalledReport] = useState<StalledReport | null>(null);
+  const [stalledLoading, setStalledLoading] = useState(false);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
   const tags = useTags(tagsRefetchKey);
@@ -109,6 +118,7 @@ export default function AppShell() {
   const handleRexConfirm = async () => {
     const actionType = rex.action?.type;
     const blastPayload = rex.action?.type === 'create_blast_sequence' ? rex.action.payload : null;
+    const stalledPayload = rex.action?.type === 'analyze_stalled_leads' ? rex.action.payload : null;
     const result = await rex.confirm();
     // Refresh writers' downstream state
     if (actionType === 'log_deal') {
@@ -124,6 +134,23 @@ export default function AppShell() {
     }
     if (result?.openContactId) {
       setSelectedId(result.openContactId);
+    }
+    // Stalled lead analysis: open the overlay, run the analyzer in parallel.
+    if (stalledPayload) {
+      setStalledOpen(true);
+      setStalledReport(null);
+      setStalledLoading(true);
+      try {
+        const report = await analyzeStalledLeads({
+          daysSilentThreshold: stalledPayload.days_silent_threshold ?? 14,
+          includeDead: stalledPayload.include_dead ?? false,
+        });
+        setStalledReport(report);
+      } catch (e) {
+        console.warn('stalled analysis failed', e);
+      } finally {
+        setStalledLoading(false);
+      }
     }
     // Blast sequence: confirm just opens the drafter. The drafter handles its
     // own send-loop and DB writes; we kick off the per-contact brain call now.
@@ -273,6 +300,35 @@ export default function AppShell() {
         onSent={() => {
           setBlastDraft(null);
           reloadContacts();
+        }}
+      />
+
+      <StalledLeadsAnalysis
+        open={stalledOpen}
+        report={stalledReport}
+        loading={stalledLoading}
+        onClose={() => { setStalledOpen(false); setStalledReport(null); }}
+        onKilled={() => { reloadContacts(); }}
+        onDispatchBlast={(rows: StalledRecommendation[]) => {
+          // Use the stalled openers as the starting blast — synthesize a
+          // BlastDraft directly (no second brain call) so the rep can review
+          // + edit + send in the same flow.
+          const draft: BlastDraft = {
+            sequence_id: '',
+            intent: 'Re-engage stalled leads',
+            filter_summary: `${rows.length} re-engagement${rows.length === 1 ? '' : 's'}`,
+            promotion: {},
+            drafted_steps: rows.map(r => ({
+              contact_id: r.contact_id,
+              contact_name: r.contact_name,
+              language: r.suggested_language,
+              message: r.suggested_opener,
+              game_plan: r.reason,
+              hook_used: r.recommendation === 'PUSH' ? 'calendar_event' : 'rapport',
+              char_count: r.suggested_opener.length,
+            })),
+          };
+          setBlastDraft(draft);
         }}
       />
     </View>

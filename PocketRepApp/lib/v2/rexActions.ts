@@ -28,8 +28,14 @@ export type RexAction =
   | { type: 'call_next'; payload: CallNextPayload; say: string }
   | { type: 'batch_action'; payload: BatchActionPayload; say: string }
   | { type: 'create_blast_sequence'; payload: CreateBlastSequencePayload; say: string }
+  | { type: 'analyze_stalled_leads'; payload: AnalyzeStalledLeadsPayload; say: string }
   | { type: 'clarify'; payload: ClarifyPayload; say: string }
   | { type: 'say'; payload: Record<string, never>; say: string };
+
+export type AnalyzeStalledLeadsPayload = {
+  days_silent_threshold?: number;
+  include_dead?: boolean;
+};
 
 export type CreateBlastSequencePayload = {
   intent: string;
@@ -236,10 +242,14 @@ Actions you can take, with required + optional payload fields:
     }
     Use ONLY when the rep clearly wants to message a group. The "say" line MUST confirm the count ("found N <segment>, drafting now").
 
-12. clarify — the rep's request is ambiguous; ask back
+12. analyze_stalled_leads — the rep is asking "who haven't I contacted in X days/weeks" or wants a stalled review. The client takes over and runs the KILL/PUSH/FENCE analyzer.
+    payload: { days_silent_threshold?: number, include_dead?: boolean }
+    Default threshold is 14 days. The "say" line MUST be a short ack ("analyzing stalled leads now…") — DO NOT enumerate names; the analyzer will.
+
+13. clarify — the rep's request is ambiguous; ask back
     payload: { question, candidates?: [{id, label}] }
 
-13. say — informational reply, no write
+14. say — informational reply, no write
     payload: {}
 
 EXISTING TAGS the rep uses: ${tagList}
@@ -427,6 +437,11 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
       // type and mounts BlastSequenceDrafter.
       return { ok: true };
     }
+    case 'analyze_stalled_leads': {
+      // Pure analysis pivot — AppShell catches the type and opens
+      // StalledLeadsAnalysis. No DB write here.
+      return { ok: true };
+    }
     case 'clarify':
     case 'say':
     default:
@@ -461,6 +476,8 @@ export function summarizeAction(action: RexAction): string {
       return `${labelFor(p.action)} ${p.count ?? p.contact_ids?.length ?? 0} contacts`;
     case 'create_blast_sequence':
       return `Blast ${p.contact_ids?.length ?? 0} contacts · ${p.filter_summary ?? p.filter_criteria ?? ''}`;
+    case 'analyze_stalled_leads':
+      return `Analyze stalled leads (≥${p.days_silent_threshold ?? 14}d silent)`;
     case 'clarify':
       return p.question ?? 'Need clarification';
     case 'say':
@@ -491,7 +508,8 @@ export function actionWritesData(t: RexAction['type']): boolean {
     t === 'log_deal' ||
     t === 'schedule_followup' ||
     t === 'batch_action' ||
-    t === 'create_blast_sequence'
+    t === 'create_blast_sequence' ||
+    t === 'analyze_stalled_leads'
   );
 }
 

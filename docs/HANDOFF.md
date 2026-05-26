@@ -125,7 +125,12 @@ The spec is in chat history (the "Rex Intelligence Build Spec" the user dropped 
 - `lib/v2/smsLauncher.ts` — `launchSms(draft)` fires `sms:` URLs through `Linking.openURL` (iOS uses `&body=`, Android `?body=`). One user gesture per message — the drafter drives the loop.
 - New action `create_blast_sequence` (`rexActions.ts`) — Rex parses the rep's voice intent ("text all my Murano lease customers about 499 SL promo"), returns matched `contact_ids` from BOOK STATE + parsed `promotion`. AppShell catches the confirmation, calls `createBlastDraft`, then opens the drafter sheet.
 - `components/v2/BlastSequenceDrafter.tsx` — bottom-sheet review UI. Per-contact card with: avatar, name, hook label, char count, language toggle, message (tap Edit to inline-edit), Rex's "game plan" line, copy-rule violation warning if any, and Skip / Send actions. Header shows the count, Cancel marks the sequence `cancelled`, "Send N" fires SMS one-by-one + marks the sequence `sent`.
-### PR #38 — Stalled Lead Intelligence · **pending**
+### PR #38 — Stalled Lead Intelligence · **shipped**
+- `lib/v2/stalledLeads.ts`
+  - `analyzeStalledLeads({daysSilentThreshold=14, includeDead=false})` — loads BookContext, runs the spec's decision tree (KILL / PUSH / FENCE / WATCH), and for any PUSH/FENCE asks the brain (one batched call) for a re-engagement opener per contact under `REX_COPY_RULES`. Falls back to a templated opener if the brain is unreachable.
+  - `batchKill(ids)` — flips `rep_decision='dead'` (KILL means "stop selling, start nurturing" per spec — not delete).
+- New action `analyze_stalled_leads` (`rexActions.ts`) — voice "who haven't I contacted in two weeks" / "show me stalled leads" lands here. AppShell catches the type, opens the overlay, and runs the analyzer.
+- `components/v2/StalledLeadsAnalysis.tsx` — overlay sorted by recommendation priority (PUSH > FENCE > KILL > WATCH). Each card: avatar, heat + days-silent, reason, PUSH/FENCE rows show the suggested opener in EN or ES. Multi-select check pattern; footer shows "Kill N" + "Push N" buttons that fan out to `batchKill` or to `BlastSequenceDrafter` pre-loaded with the openers.
 ### PR #39 — Nurture Engine + Expo Push · **pending**
 
 ---
