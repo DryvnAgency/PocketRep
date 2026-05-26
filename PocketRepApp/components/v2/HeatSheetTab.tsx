@@ -3,6 +3,7 @@ import { colors, radius, spacing } from '@/constants/theme';
 import { HeatStripe, SectionHead, StatNumber } from './atoms';
 import { TIERS, stalenessColor, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
+import WeeklyDigestCard from './WeeklyDigestCard';
 
 const TODAY_LABEL = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
 
@@ -75,6 +76,8 @@ export default function HeatSheetTab({
         </View>
         <StatNumber value={String(overdueCount)} size={32} color={colors.gold2} />
       </View>
+
+      <WeeklyDigestCard />
 
       <SectionHead label="HOT" count={groups.hot.length} color={colors.red} icon="🔥" />
       {groups.hot.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}

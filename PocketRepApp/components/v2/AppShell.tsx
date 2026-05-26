@@ -14,6 +14,8 @@ import BulkTagFlow from './BulkTagFlow';
 import AddContactModal from './AddContactModal';
 import RexDisclosure from './RexDisclosure';
 import HeyRexSheet from './HeyRexSheet';
+import Onboarding from './Onboarding';
+import GamePlanSheet from './GamePlanSheet';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
@@ -23,6 +25,8 @@ import {
   markDisclosureSeen,
   setAlwaysListenEnabled,
   subscribeAlwaysListen,
+  hasCompletedOnboarding,
+  markOnboardingComplete,
 } from '@/lib/v2/rexSettings';
 import { useHeyRex } from '@/lib/v2/useHeyRex';
 
@@ -39,6 +43,8 @@ export default function AppShell() {
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
   const [alwaysListen, setAlwaysListen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [gamePlanOpen, setGamePlanOpen] = useState(false);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
   const tags = useTags(tagsRefetchKey);
@@ -54,7 +60,11 @@ export default function AppShell() {
     ensureDemoSession().finally(() => {
       setAuthReady(true);
       setAlwaysListen(getAlwaysListenEnabled());
-      if (!hasSeenDisclosure()) setDisclosureOpen(true);
+      if (!hasSeenDisclosure()) {
+        setDisclosureOpen(true);
+      } else if (!hasCompletedOnboarding()) {
+        setOnboardingOpen(true);
+      }
     });
     return subscribeAlwaysListen(setAlwaysListen);
   }, []);
@@ -133,7 +143,10 @@ export default function AppShell() {
             onAddContact={() => setAddContactOpen(true)}
           />
         ) : active === 'profile' ? (
-          <ProfileTab />
+          <ProfileTab
+            onOpenGamePlan={() => setGamePlanOpen(true)}
+            onReplayOnboarding={() => setOnboardingOpen(true)}
+          />
         ) : (
           <MetricsTab refetchKey={dealsRefetchKey} onLogDeal={() => openDealLogger()} />
         )}
@@ -187,13 +200,28 @@ export default function AppShell() {
           setAlwaysListen(true);
           markDisclosureSeen();
           setDisclosureOpen(false);
+          if (!hasCompletedOnboarding()) setOnboardingOpen(true);
         }}
         onDecline={() => {
           setAlwaysListenEnabled(false);
           setAlwaysListen(false);
           markDisclosureSeen();
           setDisclosureOpen(false);
+          if (!hasCompletedOnboarding()) setOnboardingOpen(true);
         }}
+      />
+
+      <Onboarding
+        open={onboardingOpen}
+        onClose={() => {
+          markOnboardingComplete();
+          setOnboardingOpen(false);
+        }}
+      />
+
+      <GamePlanSheet
+        open={gamePlanOpen}
+        onClose={() => setGamePlanOpen(false)}
       />
 
       <HeyRexSheet

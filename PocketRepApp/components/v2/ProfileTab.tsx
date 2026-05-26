@@ -41,7 +41,13 @@ function Row({
   );
 }
 
-export default function ProfileTab() {
+export default function ProfileTab({
+  onOpenGamePlan,
+  onReplayOnboarding,
+}: {
+  onOpenGamePlan?: () => void;
+  onReplayOnboarding?: () => void;
+} = {}) {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [alwaysListen, setAlwaysListen] = useState<boolean>(false);
 
@@ -97,6 +103,9 @@ export default function ProfileTab() {
       <View style={styles.group}>
         <Row icon="💵" label="Pay plan" detail="Edit" />
         <Row icon="📈" label="Commission MTD" detail="$4,280" />
+        <Pressable onPress={onOpenGamePlan}>
+          <Row icon="◐" label="Game Plan" detail="Sequences & templates" />
+        </Pressable>
       </View>
 
       <SectionHead label="WORKSPACE" color={colors.grey2} />
@@ -130,7 +139,7 @@ export default function ProfileTab() {
       </View>
 
       <SectionHead label="LEARN" color={colors.gold} />
-      <Pressable style={styles.learnCard}>
+      <Pressable onPress={onReplayOnboarding} style={styles.learnCard}>
         <View style={styles.learnPlay}>
           <Text style={styles.learnPlayIcon}>▶</Text>
         </View>

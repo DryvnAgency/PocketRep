@@ -94,7 +94,59 @@ Once the domain points at `project-t90u1`, `shouldUseNewUi()` returns true autom
 
 ---
 
-## 6. Hey Rex always-listening + tool-use (PR #35, this branch)
+## 6. Roadmap items locked in (PR #35)
+
+The four items the user called out as not-yet-architected:
+
+### Cross-Deal Memory — **shipped**
+- `lib/v2/rexMemory.ts` — `getRexMemory()` reads `public.rex_memory.summary`,
+  `recordRexTurn()` appends each utterance + Rex's reply to `public.rex_messages`,
+  bumps the per-user message counter, and every 8 turns asks the brain to
+  regenerate the summary (4-6 short bullets covering recurring patterns,
+  open follow-ups, customer preferences).
+- `lib/v2/rexActions.ts` threads `memory.summary` into the brain prompt
+  ("WHAT YOU REMEMBER ABOUT THIS REP"), so Rex can disambiguate names and
+  reference past context.
+- `lib/v2/useHeyRex.ts` calls `recordRexTurn()` after every successful
+  `executeAction()` (fire-and-forget — UX continues if the memory write
+  fails).
+
+### Custom Onboarding — **shipped**
+- `components/v2/Onboarding.tsx` ports `design/extracted/onboarding.jsx`:
+  8-step playbook with per-step kicker, title, body, optional bullets +
+  tip + RN-native illustration. Progress bar at top, skip button, back/next
+  CTAs at the bottom.
+- Shows automatically on first launch (after the Hey Rex disclosure);
+  `markOnboardingComplete()` in `lib/v2/rexSettings.ts` persists the
+  "seen" flag in localStorage.
+- Replay: Profile → LEARN → "Sales rep playbook" reopens the flow.
+
+### Sequences UI — **shipped (read-only)**
+- `lib/v2/useSequences.ts` joins `public.sequences` with
+  `public.sequence_steps` and counts active enrollments via
+  `public.contact_sequences`.
+- `components/v2/GamePlanSheet.tsx` is a full-screen overlay accessed
+  from Profile → COMPENSATION → "Game Plan". Lists each sequence as a
+  card with channel pipeline (text/call/email dots), enrollment count,
+  live/draft pill. Editor + enrollment flows are the next follow-up.
+
+### Weekly Digest — **shipped (manual generate)**
+- Migration `20260526_v2_weekly_digests.sql` adds `public.weekly_digests`
+  with one row per rep × ISO-week (units / commission / gross / new
+  contacts / contacts touched / summary / highlights). RLS-scoped to
+  `auth.uid()`.
+- `lib/v2/weeklyDigest.ts` — `getLatestDigest()` + `generateDigestForCurrentWeek()`.
+  The generator rolls up the deals/contacts in the current week and
+  asks the brain for a 2-4-bullet "what went well / what to chase /
+  one suggestion" narrative.
+- `components/v2/WeeklyDigestCard.tsx` mounts at the top of the Heat
+  Sheet with the latest stored digest + a Generate/Regen button.
+  Cron-based auto-generation is still pending; the Edge Function lives
+  in the next PR.
+
+---
+
+## 7. Hey Rex always-listening + tool-use (PR #34, merged)
 
 Web-only for the first pass. Native iOS/Android falls through to push-to-talk.
 

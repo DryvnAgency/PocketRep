@@ -45,3 +45,18 @@ export function markDisclosureSeen(): void {
     localStorage.setItem(DISCLOSURE_KEY, '1');
   }
 }
+
+const ONBOARDING_KEY = 'pocketrep:v2:onboarding-complete';
+let memOnboarding = false;
+
+export function hasCompletedOnboarding(): boolean {
+  if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return memOnboarding;
+  return localStorage.getItem(ONBOARDING_KEY) === '1';
+}
+
+export function markOnboardingComplete(): void {
+  memOnboarding = true;
+  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+    localStorage.setItem(ONBOARDING_KEY, '1');
+  }
+}

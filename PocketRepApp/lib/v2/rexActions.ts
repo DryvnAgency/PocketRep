@@ -8,6 +8,7 @@
 import { supabase } from '@/lib/supabase';
 import { createContact, updateContactNotes, deleteContact } from './updateContact';
 import { insertDeal, type DealDraft } from './dealLogger';
+import { getRexMemory, recordRexTurn } from './rexMemory';
 import type { V2Contact } from './useContacts';
 
 const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
@@ -74,12 +75,15 @@ export type ClarifyPayload = {
   candidates?: Array<{ id: string; label: string }>;
 };
 
-function buildPrompt(transcript: string, contacts: V2Contact[], tags: string[]): string {
+function buildPrompt(transcript: string, contacts: V2Contact[], tags: string[], memory: string): string {
   const contactList = contacts.slice(0, 80).map(c =>
     `- ${c.name} (id: ${c.id})${c.vehicle ? ` · ${c.vehicle}` : ''}`
   ).join('\n');
   const tagList = tags.join(', ') || '(none)';
-  return `You are Rex, the voice assistant inside PocketRep — a sales rep CRM. The rep just said something to you. Pick the single best action.
+  const memorySection = memory.trim()
+    ? `\nWHAT YOU REMEMBER ABOUT THIS REP (use to disambiguate / recall context — never quote it back verbatim):\n${memory.trim()}\n`
+    : '';
+  return `You are Rex, the voice assistant inside PocketRep — a sales rep CRM. The rep just said something to you. Pick the single best action.${memorySection}
 
 Actions you can take, with required + optional payload fields:
 
@@ -151,12 +155,13 @@ export async function rexInterpret(
   contacts: V2Contact[],
   tagNames: string[],
 ): Promise<RexAction> {
+  const memory = await getRexMemory();
   const res = await fetch(`${AI_PROXY_URL}/brain`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       max_tokens: 600,
-      messages: [{ role: 'user', content: buildPrompt(transcript, contacts, tagNames) }],
+      messages: [{ role: 'user', content: buildPrompt(transcript, contacts, tagNames, memory?.summary ?? '') }],
     }),
   });
   if (!res.ok) throw new Error(`ai-proxy ${res.status}`);
