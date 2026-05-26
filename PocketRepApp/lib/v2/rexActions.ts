@@ -27,8 +27,23 @@ export type RexAction =
   | { type: 'book_summary'; payload: BookSummaryPayload; say: string }
   | { type: 'call_next'; payload: CallNextPayload; say: string }
   | { type: 'batch_action'; payload: BatchActionPayload; say: string }
+  | { type: 'create_blast_sequence'; payload: CreateBlastSequencePayload; say: string }
   | { type: 'clarify'; payload: ClarifyPayload; say: string }
   | { type: 'say'; payload: Record<string, never>; say: string };
+
+export type CreateBlastSequencePayload = {
+  intent: string;
+  filter_criteria: string;
+  filter_summary: string;
+  contact_ids: string[];
+  promotion: {
+    vehicle?: string;
+    payment?: string;
+    down?: string;
+    term?: string;
+    details?: string;
+  };
+};
 
 export type AddContactPayload = {
   first_name: string;
@@ -205,10 +220,26 @@ Actions you can take, with required + optional payload fields:
 10. batch_action — apply add_tag / mark_dead / mark_active / archive to multiple contacts.
     payload: { contact_ids: uuid[], action: "add_tag"|"mark_dead"|"mark_active"|"archive", payload?: {tag?: string}, count: number }
 
-11. clarify — the rep's request is ambiguous; ask back
+11. create_blast_sequence — rep wants to text/email a group with a specific promotion. Filter the book, parse the promo, return ids + parsed details. The client takes it from there (drafts per-contact + review UI).
+    payload: {
+      intent: string,              // full rep utterance
+      filter_criteria: string,     // parsed filter
+      filter_summary: string,      // "3 Murano lease customers"
+      contact_ids: uuid[],         // matched ids from BOOK STATE
+      promotion: {                 // parsed from the rep's words
+        vehicle?: string,
+        payment?: string,
+        down?: string,
+        term?: string,
+        details?: string
+      }
+    }
+    Use ONLY when the rep clearly wants to message a group. The "say" line MUST confirm the count ("found N <segment>, drafting now").
+
+12. clarify — the rep's request is ambiguous; ask back
     payload: { question, candidates?: [{id, label}] }
 
-12. say — informational reply, no write
+13. say — informational reply, no write
     payload: {}
 
 EXISTING TAGS the rep uses: ${tagList}
@@ -390,6 +421,12 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
       await executeBatchAction(p.action, p.contact_ids, p.payload ?? {}, contacts);
       return { ok: true };
     }
+    case 'create_blast_sequence': {
+      // No DB write here — the UI takes over and runs the drafter / SMS flow.
+      // Returning ok=true marks the action as accepted; AppShell catches the
+      // type and mounts BlastSequenceDrafter.
+      return { ok: true };
+    }
     case 'clarify':
     case 'say':
     default:
@@ -422,6 +459,8 @@ export function summarizeAction(action: RexAction): string {
       return `Call ${p.contact_name} — ${p.reason ?? ''}`;
     case 'batch_action':
       return `${labelFor(p.action)} ${p.count ?? p.contact_ids?.length ?? 0} contacts`;
+    case 'create_blast_sequence':
+      return `Blast ${p.contact_ids?.length ?? 0} contacts · ${p.filter_summary ?? p.filter_criteria ?? ''}`;
     case 'clarify':
       return p.question ?? 'Need clarification';
     case 'say':
@@ -451,7 +490,8 @@ export function actionWritesData(t: RexAction['type']): boolean {
     t === 'delete_contact' ||
     t === 'log_deal' ||
     t === 'schedule_followup' ||
-    t === 'batch_action'
+    t === 'batch_action' ||
+    t === 'create_blast_sequence'
   );
 }
 

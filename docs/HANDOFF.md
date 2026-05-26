@@ -116,7 +116,15 @@ The spec is in chat history (the "Rex Intelligence Build Spec" the user dropped 
 - `useContacts` widened to surface `preferredLanguage`, `repDecision`, vehicle make/model/year, `leaseEndDate`, `currentMileage`, `isPastCustomer`, `doNotContact`.
 - `useHeyRex` now exposes `filteredIds`/`dismissFiltered` and threads `contacts` into `executeAction`; logs every action to `rex_action_log` (success / cancelled / failed).
 
-### PR #37 — Smart Blast Sequences · **pending**
+### PR #37 — Smart Blast Sequences · **shipped**
+- `lib/v2/blastSequences.ts`
+  - `createBlastDraft({intent, filterSummary, promotion, contacts})` — one brain call that drafts a personalized message per contact in the batch. Uses `REX_COPY_RULES` plus a "VARIETY RULE" that forbids repeating hooks or openers within the batch. Persists into `sequences` (with `is_ai_drafted=true`, `draft_status='pending_review'`) + `sequence_steps` so the rep can come back to a pending review later.
+  - `copyRuleViolations(message)` — local regex sanity check that flags any draft slipping forbidden tokens past the brain (em-dash, en-dash, "no pressure", "just checking in", etc.). Surfaced as a per-draft warning in the UI.
+  - `recordSentBlast` writes each sent draft to `nurture_messages` for variety tracking by future PR #39 nurture flows.
+  - `markBlastApproved` / `markBlastCancelled` flip `sequences.draft_status`.
+- `lib/v2/smsLauncher.ts` — `launchSms(draft)` fires `sms:` URLs through `Linking.openURL` (iOS uses `&body=`, Android `?body=`). One user gesture per message — the drafter drives the loop.
+- New action `create_blast_sequence` (`rexActions.ts`) — Rex parses the rep's voice intent ("text all my Murano lease customers about 499 SL promo"), returns matched `contact_ids` from BOOK STATE + parsed `promotion`. AppShell catches the confirmation, calls `createBlastDraft`, then opens the drafter sheet.
+- `components/v2/BlastSequenceDrafter.tsx` — bottom-sheet review UI. Per-contact card with: avatar, name, hook label, char count, language toggle, message (tap Edit to inline-edit), Rex's "game plan" line, copy-rule violation warning if any, and Skip / Send actions. Header shows the count, Cancel marks the sequence `cancelled`, "Send N" fires SMS one-by-one + marks the sequence `sent`.
 ### PR #38 — Stalled Lead Intelligence · **pending**
 ### PR #39 — Nurture Engine + Expo Push · **pending**
 

@@ -16,6 +16,8 @@ import RexDisclosure from './RexDisclosure';
 import HeyRexSheet from './HeyRexSheet';
 import Onboarding from './Onboarding';
 import GamePlanSheet from './GamePlanSheet';
+import BlastSequenceDrafter from './BlastSequenceDrafter';
+import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
@@ -45,6 +47,8 @@ export default function AppShell() {
   const [alwaysListen, setAlwaysListen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [gamePlanOpen, setGamePlanOpen] = useState(false);
+  const [blastDraft, setBlastDraft] = useState<BlastDraft | null>(null);
+  const [blastDrafting, setBlastDrafting] = useState(false);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
   const tags = useTags(tagsRefetchKey);
@@ -103,21 +107,44 @@ export default function AppShell() {
   };
 
   const handleRexConfirm = async () => {
+    const actionType = rex.action?.type;
+    const blastPayload = rex.action?.type === 'create_blast_sequence' ? rex.action.payload : null;
     const result = await rex.confirm();
     // Refresh writers' downstream state
-    if (rex.action?.type === 'log_deal') {
+    if (actionType === 'log_deal') {
       setDealsRefetchKey(k => k + 1);
     }
-    if (rex.action?.type === 'add_contact'
-      || rex.action?.type === 'update_notes'
-      || rex.action?.type === 'delete_contact'
-      || rex.action?.type === 'schedule_followup'
-      || rex.action?.type === 'batch_action'
+    if (actionType === 'add_contact'
+      || actionType === 'update_notes'
+      || actionType === 'delete_contact'
+      || actionType === 'schedule_followup'
+      || actionType === 'batch_action'
     ) {
       reloadContacts();
     }
     if (result?.openContactId) {
       setSelectedId(result.openContactId);
+    }
+    // Blast sequence: confirm just opens the drafter. The drafter handles its
+    // own send-loop and DB writes; we kick off the per-contact brain call now.
+    if (blastPayload && (contacts?.length ?? 0) > 0) {
+      const selected = (contacts ?? []).filter(c => blastPayload.contact_ids.includes(c.id));
+      if (selected.length > 0) {
+        setBlastDrafting(true);
+        try {
+          const draft = await createBlastDraft({
+            intent: blastPayload.intent,
+            filterSummary: blastPayload.filter_summary,
+            promotion: blastPayload.promotion ?? {},
+            contacts: selected,
+          });
+          setBlastDraft(draft);
+        } catch (e) {
+          console.warn('blast draft failed', e);
+        } finally {
+          setBlastDrafting(false);
+        }
+      }
     }
   };
 
@@ -228,7 +255,7 @@ export default function AppShell() {
       <HeyRexSheet
         state={rex.state}
         partial={rex.partial}
-        thinking={rex.thinking}
+        thinking={rex.thinking || blastDrafting}
         action={rex.action}
         executing={rex.executing}
         error={rex.error}
@@ -236,6 +263,17 @@ export default function AppShell() {
         onConfirm={handleRexConfirm}
         onCancel={rex.cancel}
         onOpenContact={(id) => setSelectedId(id)}
+      />
+
+      <BlastSequenceDrafter
+        open={!!blastDraft}
+        draft={blastDraft}
+        contacts={contacts ?? []}
+        onClose={() => setBlastDraft(null)}
+        onSent={() => {
+          setBlastDraft(null);
+          reloadContacts();
+        }}
       />
     </View>
   );
