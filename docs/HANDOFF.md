@@ -94,31 +94,47 @@ Once the domain points at `project-t90u1`, `shouldUseNewUi()` returns true autom
 
 ---
 
-## 6. Hey Rex roadmap (next PR — not in this branch yet)
+## 6. Hey Rex always-listening + tool-use (PR #35, this branch)
 
-The user asked for these in the closing turn of the v2 cutover session:
+Web-only for the first pass. Native iOS/Android falls through to push-to-talk.
 
-- **Wake word**: continuous listen for "Hey Rex" using Web Speech API (`SpeechRecognition` with `continuous=true, interimResults=true`). When the phrase is detected, start an "active session" — keep listening until 4 seconds of silence, then process.
-- **Universal app access**: Rex tool-use mode against `ai-proxy/brain` with a system prompt enumerating actions:
-  - `add_contact { name, phone?, vehicle?, ... }`
-  - `update_contact_notes { name, notes }`
-  - `delete_contact { name }`
-  - `log_deal { name, phone?, stock, frontGross, backGross, ... }`
-  - `schedule_followup { name, days_from_now, note }`
-  - `show_contact { name }`
-- **Output contract**: Rex returns `ACTION: <name>` / `PAYLOAD: {json}` / `SAY: <one-liner>` so the client can render a confirmation card before writing.
-- **Privacy**: first-run modal already lands in this PR (`RexDisclosure.tsx`). Always-listen toggle lives in the You tab via `rexSettings.ts`.
-- **Native fallback**: web-only for the first pass — Web Speech API. iOS Safari has known limitations; we'll push-to-talk there until a wake-word model is in place.
+- `lib/v2/heyRexListener.ts` — wake-word state machine over the Web Speech API.
+  States: `idle` (continuous listen, scan for "hey rex"/"hi rex"/"ok rex") →
+  `awake` (accumulate transcript, each new chunk resets a 4s silence timer) →
+  `processing` (emit utterance, pause until caller `.resume()`s). Auto-restarts
+  on Chrome's silent `onend` while still in the active states. Returns
+  `'unsupported'` / `'denied'` when the API is missing or permission is denied.
 
-State already wired in this PR:
-- `lib/v2/rexSettings.ts` (localStorage flags)
-- `components/v2/RexDisclosure.tsx` (first-run modal)
-- `ProfileTab.tsx` → "Always listen for Hey Rex" Switch
+- `lib/v2/rexActions.ts` — tool schema + brain call + executor.
+  Actions: `add_contact`, `update_notes`, `delete_contact`, `log_deal`,
+  `schedule_followup`, `show_contact`, `clarify`, `say`. Brain prompt
+  includes the user's current contact list (name + id) so Rex can pick
+  the right id. Output is a single JSON object in a fenced block; parser
+  is loose so prose responses fall back to `say`.
 
-Open architectural calls for the Rex PR:
-- Confirm-before-write vs auto-write (current plan: confirm)
-- Where to mount the confirmation card (inside the Hey Rex orb sheet vs a global toast)
-- How to disambiguate contact references when the rep says a first name that matches multiple contacts ("Did you mean Sarah Chen or Sarah Park?")
+- `lib/v2/useHeyRex.ts` — owns the listener lifecycle, runs `rexInterpret`
+  on every captured utterance, exposes `{ state, partial, thinking, action,
+  executing, error, confirm, cancel }`.
+
+- `components/v2/HeyRexSheet.tsx` — confirmation card that mounts above the
+  tab bar whenever the listener is past idle or an action is pending.
+  Shows interim transcript, Rex's "say" line, a proposed-action summary,
+  and Cancel / Confirm buttons (write actions always confirm).
+
+- `components/v2/AppShell.tsx` — wires the controller, maps listener state
+  → orb visual, refetches contacts/deals after writes, opens contact
+  details after `show_contact` / `add_contact`. Listens for the always-on
+  toggle via `subscribeAlwaysListen` so flipping the Profile switch
+  starts/stops the listener live.
+
+Outstanding (next PR if needed):
+- Native (iOS/Android) wake-word — would need a small model (Picovoice
+  was removed in `remove-picovoice` branch). Push-to-talk via the orb
+  still works there.
+- Voice replay of Rex's "say" line via Web Speech `speechSynthesis`
+  (text-only today).
+- Audit log of Rex-initiated writes — currently no breadcrumb beyond
+  `contacts.updated_at`.
 
 ---
 
