@@ -15,7 +15,7 @@ export type V2Deal = {
   splitWith: string | null;
 };
 
-export function useDeals(contactId: string | null) {
+export function useDeals(contactId: string | null, refetchKey: number = 0) {
   const [deals, setDeals] = useState<V2Deal[]>([]);
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function useDeals(contactId: string | null) {
         })));
       });
     return () => { cancelled = true; };
-  }, [contactId]);
+  }, [contactId, refetchKey]);
 
   return deals;
 }

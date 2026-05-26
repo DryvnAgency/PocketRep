@@ -112,8 +112,14 @@ function MonthAccordion({
   );
 }
 
-export default function MetricsTab() {
-  const deals = useUserDeals();
+export default function MetricsTab({
+  refetchKey = 0,
+  onLogDeal,
+}: {
+  refetchKey?: number;
+  onLogDeal?: () => void;
+} = {}) {
+  const deals = useUserDeals(refetchKey);
   const now = new Date();
   const curMo = now.getMonth();
   const curYr = now.getFullYear();
@@ -246,7 +252,7 @@ export default function MetricsTab() {
       </View>
 
       <View style={{ paddingHorizontal: 14, paddingTop: 12 }}>
-        <Pressable style={styles.logDeal}>
+        <Pressable onPress={onLogDeal} style={styles.logDeal}>
           <Text style={styles.logDealText}>＋ LOG A DEAL</Text>
         </Pressable>
       </View>

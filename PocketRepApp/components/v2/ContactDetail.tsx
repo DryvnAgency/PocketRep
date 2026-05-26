@@ -28,14 +28,18 @@ export default function ContactDetail({
   contact,
   onClose,
   onLocalUpdate,
+  dealsRefetchKey = 0,
+  onLogDeal,
 }: {
   contact: V2Contact;
   onClose: () => void;
   onLocalUpdate: (next: V2Contact) => void;
+  dealsRefetchKey?: number;
+  onLogDeal?: () => void;
 }) {
   const tier = TIERS[contact.tier];
   const allTags = useTags();
-  const deals = useDeals(contact.id);
+  const deals = useDeals(contact.id, dealsRefetchKey);
 
   const [notes, setNotes] = useState(contact.notes ?? '');
   const [editingNotes, setEditingNotes] = useState(false);
@@ -424,14 +428,16 @@ export default function ContactDetail({
             </View>
           ) : null}
           <View style={{ flex: 1 }} />
-          <Text style={styles.linkPrimary}>＋ LOG DEAL</Text>
+          <Pressable onPress={onLogDeal} hitSlop={6}>
+            <Text style={styles.linkPrimary}>＋ LOG DEAL</Text>
+          </Pressable>
         </View>
 
         {deals.length === 0 ? (
-          <View style={styles.dealEmpty}>
+          <Pressable onPress={onLogDeal} style={styles.dealEmpty}>
             <Text style={styles.dealEmptyTitle}>No deals yet — close them and log it here</Text>
             <Text style={styles.dealEmptyHint}>Flows straight into your Metrics</Text>
-          </View>
+          </Pressable>
         ) : (
           <>
             <View style={[styles.card, styles.lifetimeCard]}>

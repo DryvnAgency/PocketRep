@@ -9,17 +9,25 @@ import ContactsTab from './ContactsTab';
 import ContactDetail from './ContactDetail';
 import ProfileTab from './ProfileTab';
 import MetricsTab from './MetricsTab';
+import DealLogger, { type DealLoggerPrefill } from './DealLogger';
+import BulkTagFlow from './BulkTagFlow';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
-
+import { useTags } from '@/lib/v2/useTags';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
   const [orbState, setOrbState] = useState<OrbState>('idle');
   const [authReady, setAuthReady] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [dealLoggerOpen, setDealLoggerOpen] = useState(false);
+  const [dealLoggerPrefill, setDealLoggerPrefill] = useState<DealLoggerPrefill | undefined>();
+  const [dealsRefetchKey, setDealsRefetchKey] = useState(0);
+  const [bulkTagOpen, setBulkTagOpen] = useState(false);
+  const [tagsRefetchKey, setTagsRefetchKey] = useState(0);
 
-  const { contacts, error, patchLocal } = useContacts();
+  const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
+  const tags = useTags(tagsRefetchKey);
 
   useEffect(() => {
     ensureDemoSession().finally(() => setAuthReady(true));
@@ -38,6 +46,11 @@ export default function AppShell() {
     ? contacts?.find(c => c.id === selectedId) ?? null
     : null;
 
+  const openDealLogger = (prefill?: DealLoggerPrefill) => {
+    setDealLoggerPrefill(prefill);
+    setDealLoggerOpen(true);
+  };
+
   return (
     <View style={styles.root}>
       <CustomNavBar active={active} />
@@ -52,11 +65,17 @@ export default function AppShell() {
         ) : active === 'heat' ? (
           <HeatSheetTab contacts={contacts} error={error} onSelect={c => setSelectedId(c.id)} />
         ) : active === 'contacts' ? (
-          <ContactsTab contacts={contacts} error={error} onSelect={c => setSelectedId(c.id)} />
+          <ContactsTab
+            contacts={contacts}
+            error={error}
+            tags={tags}
+            onSelect={c => setSelectedId(c.id)}
+            onBulkTag={() => setBulkTagOpen(true)}
+          />
         ) : active === 'profile' ? (
           <ProfileTab />
         ) : (
-          <MetricsTab />
+          <MetricsTab refetchKey={dealsRefetchKey} onLogDeal={() => openDealLogger()} />
         )}
       </ScrollView>
 
@@ -67,8 +86,32 @@ export default function AppShell() {
           contact={selected}
           onClose={() => setSelectedId(null)}
           onLocalUpdate={(next: V2Contact) => patchLocal(next.id, next)}
+          dealsRefetchKey={dealsRefetchKey}
+          onLogDeal={() => openDealLogger({
+            name: selected.name,
+            vehicle: selected.vehicle,
+            contactId: selected.id,
+          })}
         />
       ) : null}
+
+      <DealLogger
+        open={dealLoggerOpen}
+        prefill={dealLoggerPrefill}
+        onClose={() => setDealLoggerOpen(false)}
+        onSaved={() => setDealsRefetchKey(k => k + 1)}
+      />
+
+      <BulkTagFlow
+        open={bulkTagOpen}
+        contacts={contacts ?? []}
+        allTags={tags}
+        onClose={() => setBulkTagOpen(false)}
+        onApplied={() => {
+          setTagsRefetchKey(k => k + 1);
+          reloadContacts();
+        }}
+      />
     </View>
   );
 }
