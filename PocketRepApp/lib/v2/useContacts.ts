@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { TierKey } from '@/components/v2/tokens';
 
@@ -33,56 +33,57 @@ function daysSince(date: string | null): number {
   return Math.max(0, Math.floor((now - d) / 86_400_000));
 }
 
+function rowToContact(r: any): V2Contact {
+  const score = Number(r.heat_score ?? 0);
+  return {
+    id: r.id,
+    name: [r.first_name, r.last_name].filter(Boolean).join(' '),
+    vehicle: r.vehicle,
+    trim: r.trim,
+    tier: tierFromScore(score),
+    days: daysSince(r.last_contact_date),
+    heatScore: score,
+    planLabel: r.plan_label,
+    phone: r.phone,
+    budget: r.budget,
+    tradeIn: r.trade_in,
+    tags: Array.isArray(r.tags) ? r.tags : [],
+    notes: r.notes,
+    nextStep: r.next_step,
+    milestones: Array.isArray(r.milestones) ? r.milestones : [],
+  };
+}
+
 export function useContacts() {
   const [contacts, setContacts] = useState<V2Contact[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('contacts')
+      .select(
+        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,budget,trade_in,tags,notes,next_step,milestones'
+      )
+      .eq('is_deleted', false);
 
-    async function load() {
-      const { data, error } = await supabase
-        .from('contacts')
-        .select(
-          'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,budget,trade_in,tags,notes,next_step,milestones'
-        )
-        .eq('is_deleted', false);
-
-      if (cancelled) return;
-      if (error) {
-        setError(error.message);
-        setContacts([]);
-        return;
-      }
-
-      const rows: V2Contact[] = (data ?? []).map((r: any) => {
-        const score = Number(r.heat_score ?? 0);
-        return {
-          id: r.id,
-          name: [r.first_name, r.last_name].filter(Boolean).join(' '),
-          vehicle: r.vehicle,
-          trim: r.trim,
-          tier: tierFromScore(score),
-          days: daysSince(r.last_contact_date),
-          heatScore: score,
-          planLabel: r.plan_label,
-          phone: r.phone,
-          budget: r.budget,
-          tradeIn: r.trade_in,
-          tags: Array.isArray(r.tags) ? r.tags : [],
-          notes: r.notes,
-          nextStep: r.next_step,
-          milestones: Array.isArray(r.milestones) ? r.milestones : [],
-        };
-      });
-
-      rows.sort((a, b) => b.heatScore - a.heatScore || a.days - b.days);
-      setContacts(rows);
+    if (error) {
+      setError(error.message);
+      setContacts([]);
+      return;
     }
 
-    load();
-    return () => { cancelled = true; };
+    const rows = (data ?? []).map(rowToContact);
+    rows.sort((a, b) => b.heatScore - a.heatScore || a.days - b.days);
+    setContacts(rows);
   }, []);
 
-  return { contacts, error };
+  useEffect(() => { load(); }, [load]);
+
+  const patchLocal = useCallback((id: string, patch: Partial<V2Contact>) => {
+    setContacts(prev =>
+      prev ? prev.map(c => (c.id === id ? { ...c, ...patch } : c)) : prev
+    );
+  }, []);
+
+  return { contacts, error, reload: load, patchLocal };
 }

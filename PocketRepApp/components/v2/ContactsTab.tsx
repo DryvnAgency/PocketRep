@@ -5,7 +5,7 @@ import {
 import { colors, radius, spacing } from '@/constants/theme';
 import { Avatar, rgbaTint } from './atoms';
 import { TIERS, type TierKey } from './tokens';
-import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
+import type { V2Contact } from '@/lib/v2/useContacts';
 import { useTags, type V2Tag } from '@/lib/v2/useTags';
 
 type FilterTag =
@@ -94,8 +94,15 @@ function Chip({
   );
 }
 
-export default function ContactsTab({ onSelect }: { onSelect: (c: V2Contact) => void }) {
-  const { contacts, error } = useContacts();
+export default function ContactsTab({
+  contacts,
+  error,
+  onSelect,
+}: {
+  contacts: V2Contact[] | null;
+  error: string | null;
+  onSelect: (c: V2Contact) => void;
+}) {
   const tags = useTags();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterTag>(null);
