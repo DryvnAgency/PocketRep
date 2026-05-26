@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Switch } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, Pill, SectionHead } from './atoms';
 import { supabase } from '@/lib/supabase';
+import {
+  getAlwaysListenEnabled,
+  setAlwaysListenEnabled,
+} from '@/lib/v2/rexSettings';
 
 type ProfileRow = { email: string; full_name: string | null; plan: string };
 
@@ -39,9 +43,11 @@ function Row({
 
 export default function ProfileTab() {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [alwaysListen, setAlwaysListen] = useState<boolean>(false);
 
   useEffect(() => {
     let cancelled = false;
+    setAlwaysListen(getAlwaysListenEnabled());
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || cancelled) return;
@@ -54,6 +60,11 @@ export default function ProfileTab() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  const toggleListen = (next: boolean) => {
+    setAlwaysListen(next);
+    setAlwaysListenEnabled(next);
+  };
 
   const displayName = profile?.full_name?.trim() || 'Jake Morales';
   const planLabel = (profile?.plan ?? 'pro').toUpperCase();
@@ -98,6 +109,21 @@ export default function ProfileTab() {
 
       <SectionHead label="REX" color={colors.gold} />
       <View style={styles.group}>
+        <View style={styles.row}>
+          <View style={[styles.rowIcon, { backgroundColor: colors.goldBg, borderColor: colors.goldBorder }]}>
+            <Text style={{ color: colors.gold, fontSize: 14 }}>🎙</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.rowLabel}>Always listen for “Hey Rex”</Text>
+            <Text style={styles.rowSub}>Wake word + 4s silence trigger</Text>
+          </View>
+          <Switch
+            value={alwaysListen}
+            onValueChange={toggleListen}
+            trackColor={{ false: colors.ink4, true: colors.gold }}
+            thumbColor={alwaysListen ? colors.ink : colors.grey2}
+          />
+        </View>
         <Row icon="🤖" label="Voice & tone" detail="Direct" />
         <Row icon="🔐" label="Data sources" detail="3 connected" />
         <Row icon="📝" label="Custom prompts" detail="7 saved" />
@@ -205,6 +231,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rowLabel: { fontSize: 14, fontWeight: '500', color: colors.white, letterSpacing: -0.1 },
+  rowSub: { fontSize: 11, color: colors.grey2, marginTop: 2 },
   rowDetail: { fontSize: 13, color: colors.grey2 },
   chevron: { color: colors.grey, fontSize: 14 },
 

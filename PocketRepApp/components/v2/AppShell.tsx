@@ -11,9 +11,16 @@ import ProfileTab from './ProfileTab';
 import MetricsTab from './MetricsTab';
 import DealLogger, { type DealLoggerPrefill } from './DealLogger';
 import BulkTagFlow from './BulkTagFlow';
+import AddContactModal from './AddContactModal';
+import RexDisclosure from './RexDisclosure';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
+import {
+  hasSeenDisclosure,
+  markDisclosureSeen,
+  setAlwaysListenEnabled,
+} from '@/lib/v2/rexSettings';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
@@ -25,12 +32,17 @@ export default function AppShell() {
   const [dealsRefetchKey, setDealsRefetchKey] = useState(0);
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [tagsRefetchKey, setTagsRefetchKey] = useState(0);
+  const [addContactOpen, setAddContactOpen] = useState(false);
+  const [disclosureOpen, setDisclosureOpen] = useState(false);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
   const tags = useTags(tagsRefetchKey);
 
   useEffect(() => {
-    ensureDemoSession().finally(() => setAuthReady(true));
+    ensureDemoSession().finally(() => {
+      setAuthReady(true);
+      if (!hasSeenDisclosure()) setDisclosureOpen(true);
+    });
   }, []);
 
   const cycleOrb = () => {
@@ -71,6 +83,7 @@ export default function AppShell() {
             tags={tags}
             onSelect={c => setSelectedId(c.id)}
             onBulkTag={() => setBulkTagOpen(true)}
+            onAddContact={() => setAddContactOpen(true)}
           />
         ) : active === 'profile' ? (
           <ProfileTab />
@@ -86,6 +99,7 @@ export default function AppShell() {
           contact={selected}
           onClose={() => setSelectedId(null)}
           onLocalUpdate={(next: V2Contact) => patchLocal(next.id, next)}
+          onDeleted={() => { reloadContacts(); setSelectedId(null); }}
           dealsRefetchKey={dealsRefetchKey}
           onLogDeal={() => openDealLogger({
             name: selected.name,
@@ -110,6 +124,26 @@ export default function AppShell() {
         onApplied={() => {
           setTagsRefetchKey(k => k + 1);
           reloadContacts();
+        }}
+      />
+
+      <AddContactModal
+        open={addContactOpen}
+        onClose={() => setAddContactOpen(false)}
+        onCreated={() => { reloadContacts(); setActive('contacts'); }}
+      />
+
+      <RexDisclosure
+        open={disclosureOpen}
+        onEnable={() => {
+          setAlwaysListenEnabled(true);
+          markDisclosureSeen();
+          setDisclosureOpen(false);
+        }}
+        onDecline={() => {
+          setAlwaysListenEnabled(false);
+          markDisclosureSeen();
+          setDisclosureOpen(false);
         }}
       />
     </View>
