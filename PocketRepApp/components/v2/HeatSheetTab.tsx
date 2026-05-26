@@ -2,7 +2,7 @@ import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-nati
 import { colors, radius, spacing } from '@/constants/theme';
 import { HeatStripe, SectionHead, StatNumber } from './atoms';
 import { TIERS, stalenessColor, type TierKey } from './tokens';
-import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
+import type { V2Contact } from '@/lib/v2/useContacts';
 
 const TODAY_LABEL = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
 
@@ -12,10 +12,7 @@ function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
   return (
     <Pressable
       onPress={onTap}
-      style={({ pressed }) => [
-        styles.row,
-        pressed && styles.rowPressed,
-      ]}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
       <HeatStripe color={tier.color} style={styles.stripe} />
       <View style={styles.rowText}>
@@ -36,9 +33,15 @@ function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
   );
 }
 
-export default function HeatSheetTab({ onSelect }: { onSelect: (c: V2Contact) => void }) {
-  const { contacts, error } = useContacts();
-
+export default function HeatSheetTab({
+  contacts,
+  error,
+  onSelect,
+}: {
+  contacts: V2Contact[] | null;
+  error: string | null;
+  onSelect: (c: V2Contact) => void;
+}) {
   if (error) {
     return (
       <View style={styles.center}>
@@ -46,7 +49,6 @@ export default function HeatSheetTab({ onSelect }: { onSelect: (c: V2Contact) =>
       </View>
     );
   }
-
   if (!contacts) {
     return (
       <View style={styles.center}>

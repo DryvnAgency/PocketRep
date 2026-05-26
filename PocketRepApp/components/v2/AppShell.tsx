@@ -7,18 +7,22 @@ import { OrbState } from './HeyRexOrb';
 import { SectionHead } from './atoms';
 import HeatSheetTab from './HeatSheetTab';
 import ContactsTab from './ContactsTab';
+import ContactDetail from './ContactDetail';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
-import type { V2Contact } from '@/lib/v2/useContacts';
+import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 
 const PLACEHOLDER: Record<Exclude<TabId, 'heat' | 'contacts'>, { sectionLabel: string; body: string }> = {
-  metrics: { sectionLabel: 'COMMISSION MTD', body: 'Metrics tab lands in PR #34.' },
-  profile: { sectionLabel: 'YOUR PAY PLAN', body: 'Profile / Pay Plan lands in PR #35.' },
+  metrics: { sectionLabel: 'COMMISSION MTD', body: 'Metrics tab lands next.' },
+  profile: { sectionLabel: 'YOUR PAY PLAN', body: 'Profile / Pay Plan lands next.' },
 };
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
   const [orbState, setOrbState] = useState<OrbState>('idle');
   const [authReady, setAuthReady] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const { contacts, error, patchLocal } = useContacts();
 
   useEffect(() => {
     ensureDemoSession().finally(() => setAuthReady(true));
@@ -33,10 +37,9 @@ export default function AppShell() {
     }
   };
 
-  const onSelectContact = (_c: V2Contact) => {
-    // Contact detail lands in PR #32 — for now this is a no-op so the row
-    // press still feels responsive but doesn't navigate to a stub.
-  };
+  const selected = selectedId
+    ? contacts?.find(c => c.id === selectedId) ?? null
+    : null;
 
   return (
     <View style={styles.root}>
@@ -50,9 +53,9 @@ export default function AppShell() {
         {!authReady ? (
           <Text style={styles.placeholder}>Signing in…</Text>
         ) : active === 'heat' ? (
-          <HeatSheetTab onSelect={onSelectContact} />
+          <HeatSheetTab contacts={contacts} error={error} onSelect={c => setSelectedId(c.id)} />
         ) : active === 'contacts' ? (
-          <ContactsTab onSelect={onSelectContact} />
+          <ContactsTab contacts={contacts} error={error} onSelect={c => setSelectedId(c.id)} />
         ) : (
           <>
             <SectionHead label={PLACEHOLDER[active].sectionLabel} />
@@ -62,6 +65,14 @@ export default function AppShell() {
       </ScrollView>
 
       <TabBar active={active} onChange={setActive} orbState={orbState} onOrbPress={cycleOrb} />
+
+      {selected ? (
+        <ContactDetail
+          contact={selected}
+          onClose={() => setSelectedId(null)}
+          onLocalUpdate={(next: V2Contact) => patchLocal(next.id, next)}
+        />
+      ) : null}
     </View>
   );
 }
