@@ -1,304 +1,749 @@
-# PocketRep handoff — v2 cutover edition
+# PocketRep — handoff (A → Z)
 
-**Last updated**: 2026-05-26
-**Repo**: `DryvnAgency/PocketRep`
-**Live web**: `app.pocketrep.pro` (served by Vercel project `project-t90u1` once the domain is moved off `pocket-rep`)
-**Backend**: Supabase project `fwvrauqdoevwmwwqlfav` (`https://fwvrauqdoevwmwwqlfav.supabase.co`)
-**Source of truth for design**: `design/PocketRep-Standalone.html` → extracted to `design/extracted/*.jsx`
-**Open work branch**: `claude/exciting-goodall-or4T2`
+**Last updated**: 2026-05-27
+**Latest commit on `main`**: `f601d51` (PR #37 — Pay plan editor + Sequences editor + photo upload + reply marker + profile onboarding)
+**Live web**: https://app.pocketrep.pro (Vercel project `project-t90u1`, Expo Web)
+**Supabase project**: `fwvrauqdoevwmwwqlfav` — `https://fwvrauqdoevwmwwqlfav.supabase.co`
+**Backend models**: brain via OpenRouter (`x-ai/grok-4.3` primary → `moonshotai/kimi-k2.6` fallback), STT/TTS routes are 501 stubs (see §10).
 
----
-
-## 1. What's shipped
-
-| PR | Title | Sha (squash) |
-|---|---|---|
-| #31 | Heat Sheet + Contacts wired + handle_new_user hotfix | `be0740d` |
-| #32 | Contact detail + Game Plan AI + Profile + Metrics | `5c292e3` |
-| #33 | Log Deal + Bulk-tag flow + cutover-ready feature flag | `26c4576` |
-| _next_ | Add/Delete contact + Hey Rex disclosure + settings toggle (this PR) | — |
-
-Plus three earlier PRs already merged before this session: #25 (Expo Web scaffold), #26 (chrome + nav), #27/#28/#29 (v2 schema + Marcus seed).
+This document is the single source of truth. If anything in the codebase contradicts it, the codebase is right and this doc is stale — fix this doc.
 
 ---
 
-## 2. v2 surface map (all on `?v=2` web)
+## Table of contents
 
-| Tab | Component | Source spec | Notes |
+1. [Repo layout](#1-repo-layout)
+2. [Tech stack & how the app actually runs](#2-tech-stack--how-the-app-actually-runs)
+3. [Branch / commit / merge policy](#3-branch--commit--merge-policy)
+4. [Vercel projects + domains](#4-vercel-projects--domains)
+5. [Feature flag — `shouldUseNewUi()`](#5-feature-flag--shouldusenewui)
+6. [Database schema](#6-database-schema)
+7. [Migrations history](#7-migrations-history)
+8. [Demo account](#8-demo-account)
+9. [Sign-in flow](#9-sign-in-flow)
+10. [Edge functions](#10-edge-functions)
+11. [The cron](#11-the-cron)
+12. [Supabase Storage](#12-supabase-storage)
+13. [Expo Push](#13-expo-push)
+14. [v2 surface map — every tab + every overlay](#14-v2-surface-map--every-tab--every-overlay)
+15. [`lib/v2/` map — every helper](#15-libv2-map--every-helper)
+16. [Hey Rex — listener + tool-use](#16-hey-rex--listener--tool-use)
+17. [`REX_COPY_RULES` — the canonical tone spec](#17-rex_copy_rules--the-canonical-tone-spec)
+18. [Nurture engine](#18-nurture-engine)
+19. [Pay plan + commission math](#19-pay-plan--commission-math)
+20. [Sequences (Game Plan)](#20-sequences-game-plan)
+21. [Cross-deal memory](#21-cross-deal-memory)
+22. [Onboarding](#22-onboarding)
+23. [Anti-patterns & traps](#23-anti-patterns--traps)
+24. [Known gaps / explicitly deferred](#24-known-gaps--explicitly-deferred)
+25. [Where to look next](#25-where-to-look-next)
+
+---
+
+## 1. Repo layout
+
+```
+/                            <repo root>
+├── Pocketrep/               Static marketing site (deployed by `pocket-rep` Vercel project)
+│                            Mostly hand-written HTML, served at pocketrep.pro
+├── PocketRepApp/            Expo (React Native + Web) app — the actual product
+│   ├── app/                 expo-router screens (v1 surface)
+│   ├── components/
+│   │   └── v2/              ALL the v2 design-port components live here
+│   ├── lib/
+│   │   └── v2/              ALL the v2 hooks/helpers live here
+│   ├── supabase/
+│   │   ├── functions/       Edge function source (Deno) — mirrors live functions
+│   │   └── migrations/      All schema migrations, ordered by date
+│   ├── constants/theme.ts   colors / radius / spacing tokens
+│   ├── package.json
+│   └── tsconfig.json
+├── RexLens/                 Chrome extension that uses the same Supabase backend
+├── design/
+│   ├── PocketRep-Standalone.html   Original static mock
+│   └── extracted/           17 .jsx modules pulled out of the mock — design source of truth
+├── docs/
+│   ├── HANDOFF.md           THIS FILE
+│   ├── PORT_PLAN.md         Original "mock → live" plan (historical)
+│   └── VERCEL_SETUP.md      Vercel project conventions
+└── HANDOVER_PROMPT.txt      Older handover (superseded by this doc)
+```
+
+---
+
+## 2. Tech stack & how the app actually runs
+
+- **Mobile target**: Expo SDK 51 → React Native 0.74.5 (iOS + Android via EAS, web via Expo Web)
+- **Web target**: `expo export --platform web` → `dist/` deployed by Vercel project `project-t90u1`
+- **State**: no Redux / Zustand / Jotai. Everything is plain React hooks + a handful of custom hooks in `lib/v2/`. State is co-located with `AppShell.tsx`; child screens take props.
+- **Routing**: `expo-router` for the v1 surface. The v2 surface lives behind `shouldUseNewUi()` and is rendered as a single `<AppShell>` mounted from `app/(tabs)/index.tsx` (or equivalent entry); navigation inside v2 is local state — no router.
+- **Auth + DB**: Supabase JS client (`@supabase/supabase-js@2`)
+- **AI**: brain via `ai-proxy` edge function → OpenRouter → Grok 4.3 → Kimi K2.6 fallback. STT/TTS are stubbed.
+- **Voice**: Web Speech API (`SpeechRecognition`) — web-only first pass; native wake-word deferred.
+- **Push**: Expo Push (iOS/Android only; web silent)
+
+`EXPO_PUBLIC_*` env vars get baked into the JS bundle. Anything sensitive (service role key, OpenRouter key) must live in **Supabase secrets** (see §10) and never in client code.
+
+---
+
+## 3. Branch / commit / merge policy
+
+- **Work branch**: `claude/exciting-goodall-or4T2` (the session's prescribed branch). Don't push to `main` directly.
+- **PR flow**: open as draft → CI checks `pocket-rep` and `project-t90u1` go green → flip to ready → squash merge.
+- **After squash merge**: `git fetch origin main && git reset --hard origin/main && git push --force-with-lease origin claude/exciting-goodall-or4T2`. This re-aligns the branch with main so the next PR opens cleanly.
+- **Commit messages**: short title (`feat(web-v2): …` / `fix(web-v2): …` / `db(v2): …` / `docs: …`) + a body that says what changed + why (not just what).
+- **`his-palabra`** check is gone — the orphan Vercel project was deleted. If you ever see it again, that means someone re-created the project; you can ignore it as before until it's deleted.
+
+---
+
+## 4. Vercel projects + domains
+
+| Project | Source dir | Domain | Build |
 |---|---|---|---|
-| Heat Sheet | `components/v2/HeatSheetTab.tsx` | `tab-heat.jsx` | Today banner, HOT/WARM/WATCH sections, days-since counter |
-| Contacts | `components/v2/ContactsTab.tsx` | `tab-contacts.jsx` | Search + tier/tag filter carousel + alphabetical sections, + Tag opens BulkTagFlow, + button opens AddContactModal |
-| Metrics | `components/v2/MetricsTab.tsx` | `tab-metrics.jsx` | YTD hero, 12-mo bar chart, MTD/projected cards, monthly accordion, + LOG A DEAL → DealLogger |
-| You | `components/v2/ProfileTab.tsx` | `tab-profile.jsx` | Hero + plan callout + groups + "Always listen for Hey Rex" toggle + sign out |
-| (overlay) | `components/v2/ContactDetail.tsx` | `contact-detail.jsx` | Hero, milestones, notes editor, Game Plan AI, deal log, ⋯ menu → delete contact |
-| (overlay) | `components/v2/DealLogger.tsx` | `deal-logger.jsx` | Bottom-sheet form + live commission preview |
-| (overlay) | `components/v2/BulkTagFlow.tsx` | `tab-contacts.jsx` (BulkTagFlow) | 2-step create/pick → multi-select → apply |
-| (overlay) | `components/v2/AddContactModal.tsx` | (designed inline) | First name + phone min; vehicle/budget/tier/timeline optional |
-| (overlay) | `components/v2/RexDisclosure.tsx` | (designed inline) | First-run mic disclosure; opt-in/out toggle for always-listening |
+| `pocket-rep` | `Pocketrep/` (root) | `pocketrep.pro` | static (marketing site + the old static mock at `/app`) |
+| `project-t90u1` | `PocketRepApp/` | `app.pocketrep.pro` + branch alias `project-t90u1-git-*.vercel.app` | `npm run build:web` → `dist/` (Expo Web SPA) |
 
-### Shared atoms / hooks
+**Team**: `dryvnagency-1422s-projects`
 
-`components/v2/atoms.tsx` — `Label`, `Pill`, `Avatar`, `StatNumber`, `SectionHead`, `HeatStripe`, `rgbaTint`
-`components/v2/tokens.ts` — `TIERS`, `stalenessColor`
-`components/v2/CustomNavBar.tsx` · `TabBar.tsx` · `HeyRexOrb.tsx` — chrome
-`lib/v2/useContacts.ts` — fetches + sorts contacts (hoisted in `AppShell`, shared with all surfaces; supports optimistic `patchLocal` and `reload`)
-`lib/v2/useTags.ts` — fetches tags (`refetchKey` arg)
-`lib/v2/useDeals.ts` — per-contact deals (`contactId` + `refetchKey`)
-`lib/v2/useUserDeals.ts` — all deals for current user (`refetchKey`)
-`lib/v2/demoAuth.ts` — auto-signs into `demo@pocketrep.pro` on web boot if no session
-`lib/v2/updateContact.ts` — notes / tags / **createContact** / **deleteContact** (soft via `is_deleted=true`)
-`lib/v2/gamePlan.ts` — POSTs to `ai-proxy/brain` with the CHANNEL/WHY/SCRIPT prompt
-`lib/v2/dealLogger.ts` — `calcCommission` + `insertDeal`
-`lib/v2/tagMutations.ts` — `createTag` + `applyTagToContacts`
-`lib/v2/rexSettings.ts` — `getAlwaysListenEnabled` / `setAlwaysListenEnabled` / `hasSeenDisclosure` / `markDisclosureSeen` (localStorage-backed on web)
+Both projects auto-deploy on every push to any branch (preview); the `main` branch additionally deploys to `production`. `app.pocketrep.pro` is wired to `project-t90u1`'s production deployment — moving it from `pocket-rep` to `project-t90u1` was the v2 cutover, completed 2026-05-26.
+
+**Vercel env vars** (set in the dashboard, not in the repo):
+- `EXPO_PUBLIC_SUPABASE_URL` — `https://fwvrauqdoevwmwwqlfav.supabase.co`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY` — the legacy anon JWT (public)
+- `EXPO_PUBLIC_NEW_UI` — optional, set to `1` if you want v2 on every preview URL (current default is to rely on hostname auto-detect; see §5)
+- `EXPO_PUBLIC_EXPO_PROJECT_ID` — optional, only needed if Expo Push doesn't auto-detect from EAS config
 
 ---
 
-## 3. Database state (Supabase `fwvrauqdoevwmwwqlfav`)
+## 5. Feature flag — `shouldUseNewUi()`
 
-Migrations in `PocketRepApp/supabase/migrations/`:
+`PocketRepApp/lib/featureFlags.ts`. Returns `true` when **any** of:
 
-- `20260523_v2_schema_extensions.sql` — adds `vehicle/trim/budget/trade_in/milestones/next_step/plan_label` to `contacts`, plus `tags` + `pay_plans` tables (PR #27)
-- `20260523_v2_marcus_seed.sql` — `seed_marcus_for_user` + trigger to call it on signup (PR #29)
-- `20260526_v2_handle_new_user_fix.sql` — adds `ON CONFLICT (id) DO NOTHING` to the trigger (was rolling back signups with pre-existing profile rows; surfaced as the Rex Lens V25 "Database error querying schema") and revokes anon `EXECUTE` on the two SECURITY DEFINER functions
-- `20260526_v2_demo_user_and_backfill.sql` — backfills profile+Marcus for users the broken trigger skipped; creates `demo@pocketrep.pro` (password `PocketRepDemo2026!`)
-- `20260526_v2_demo_full_seed.sql` — 9 additional mock contacts (Priya/Derek/Sofia/etc.) for the demo account
-- `20260526_v2_demo_deals_seed.sql` — 25 Jan–Apr 2026 mock deals
-- `20260526_v2_demo_may_deals.sql` — 5 May 2026 deals (so MTD ≠ 0)
+1. `process.env.EXPO_PUBLIC_NEW_UI === '1'` (set at build time)
+2. The web hostname is in `V2_HOSTNAMES = { 'app.pocketrep.pro' }`
+3. The URL has `?v=2`
 
-Demo account state: 10 contacts (4 hot / 3 warm / 3 watch) + 30 deals + 12 starter tags. RLS-scoped to `auth.uid()` like every other user.
+Native EAS builds leave the env var unset → production iOS / Android users keep seeing v1 until that's also flipped.
+
+To force v2 on a Vercel preview without an env var: append `?v=2`.
 
 ---
 
-## 4. Feature flag — `lib/featureFlags.ts`
+## 6. Database schema
 
-`shouldUseNewUi()` is true when **any** of:
-1. `process.env.EXPO_PUBLIC_NEW_UI === '1'` (native EAS or Vercel build-time)
-2. Web hostname is in `V2_HOSTNAMES = { 'app.pocketrep.pro' }` — **dormant until the domain flips**
-3. URL has `?v=2`
+All tables live in `public`. Every user-data table has RLS enabled and is scoped by `auth.uid()`.
 
-Native EAS builds leave the env var unset, so production iOS/Android users still see v1 until cutover.
+### Auth-adjacent tables
 
----
+- **`auth.users`** — Supabase-managed; we don't touch directly except in the demo-user creation migration.
+- **`public.profiles`** — canonical "current user" row. FK to `auth.users.id`.
+  Columns: `id, email, full_name, plan, trial_ends_at, stripe_customer_id, created_at, username, industry, unlimited, onboarding_complete`
+- **`public.users`** — legacy parallel users table (older code paths). Both tables track the same set of accounts; `profiles` is the canonical one for v2.
 
-## 5. The cutover (the one remaining manual step)
+### Contacts + interaction history
 
-The feature flag is in place. The actual move is two clicks in the Vercel dashboard:
+- **`public.contacts`** — the heart of the rep's book
+  Core: `id, user_id (→ users.id), first_name, last_name, phone, email`
+  Vehicle: `vehicle, trim, vehicle_make, vehicle_model, vehicle_year, lease_end_date, current_mileage`
+  Heat / status: `heat_score (0-100), last_contact_date (date), last_contact_method, last_contact_summary, rep_decision (active|kill|push|fence|watch|dead|do_not_nurture), do_not_contact (bool), preferred_language (en|es), is_past_customer`
+  v1 leftovers (don't read in v2): `heat_tier (red|orange|blue)` — legacy CHECK constraint, derive tier from `heat_score` client-side instead
+  Detail: `notes, next_step, milestones (jsonb), plan_label, photo_url, photo_urls (legacy), tags (text[]), budget, trade_in, purchase_date, follow_up_date, next_followup_date, stage`
+  Lifecycle: `is_deleted (bool), created_at, updated_at`
 
-1. `pocket-rep` project → Settings → Domains → Remove `app.pocketrep.pro`
-2. `project-t90u1` project → Settings → Domains → Add `app.pocketrep.pro`
+- **`public.interactions`** — call/text/email touch log (older; not heavily used in v2)
+- **`public.deals`** — closed sales
+  `id, user_id (→ profiles.id), contact_id, title, vehicle, stock, amount, front_gross, back_gross, deal_type (NEW|CPO|USED), funding (finance|lease|cash), split (bool), split_with, closed_at (date), notes, created_at`
+- **`public.tags`** — user-scoped tag library
+  `id, user_id (→ profiles.id), name, color, created_at`
+- **`public.contact_milestones`** — date-bound urgency tags (lease_end, mileage_threshold, purchase_anniversary, budget_ready, birthday, custom)
+  `id, contact_id, user_id, milestone_type, milestone_date, urgency_score (0-100), notes, is_active`
 
-Once the domain points at `project-t90u1`, `shouldUseNewUi()` returns true automatically — no code change or rebuild needed.
+### Sequences (Game Plan)
 
-**Rollback**: reverse the two steps. Both projects share the same Supabase backend, so no data loss either way.
+- **`public.sequences`** — multi-step outreach cadences
+  `id, user_id, name, description, sequence_type (prospect|sold|custom), is_template, is_custom, is_archived, source_intent, is_ai_drafted, draft_status (pending_review|approved|sending|sent|cancelled), language (en|es|mixed), notes_hash, created_at`
+- **`public.sequence_steps`** — per-step config
+  `id, sequence_id, step_number, delay_days, channel (text|call|email), message_template, ai_personalize, contact_id (for blast sequences), personalization (jsonb), game_plan, language, hook_used, rep_edited, created_at`
+- **`public.contact_sequences`** — active enrollments
+  `id, user_id, contact_id, sequence_id, current_step, status (active|paused|completed|cancelled), started_at, next_step_at, completed_at`
 
----
+### Rex / AI
 
-## 5b. Rex Intelligence build (PRs #36-#39)
+- **`public.rex_messages`** — raw conversation log per rep, used by cross-deal memory
+  `id, user_id (→ profiles.id), contact_id, role (user|assistant), content, created_at`
+- **`public.rex_memory`** — rolling summary per rep (4-6 bullets)
+  `id, user_id (unique), summary, message_count, updated_at`
+- **`public.rex_action_log`** — audit trail of confirmed/cancelled/executed Rex actions
+  `id, user_id, action_type, action_payload (jsonb), contact_ids (uuid[]), confirmed_at, executed_at, result (success|cancelled|partial|failed), created_at`
+- **`public.daily_ai_usage`** — `ai-proxy/brain` per-user daily cap accounting
+  `id, user_id, usage_date, input_tokens, output_tokens, cost_cents, request_count, updated_at`
 
-The spec is in chat history (the "Rex Intelligence Build Spec" the user dropped 2026-05-26). This section tracks what's shipped vs pending against that spec.
+### Nurture + holidays
 
-**Foundation migrations applied to `fwvrauqdoevwmwwqlfav`:**
-- `20260527_v2_rex_intelligence_schema.sql` — contacts adds (last_contact_method, last_contact_summary, rep_decision, do_not_contact, preferred_language, lease_end_date, current_mileage, vehicle_year/make/model, is_past_customer) + new tables (contact_milestones, nurture_messages, holiday_calendar, rex_action_log, user_push_tokens) + sequences/sequence_steps extensions + 2026 US holiday seed
-- `20260527_v2_rex_intelligence_seed.sql` — backfill rep_decision = 'active', demo lease_end milestones, Sofia → preferred_language = 'es'
+- **`public.nurture_messages`** — every draft Rex queues (and the rep's manual sent_at + reply marking)
+  `id, contact_id, user_id, message_text, language, hook_used, trigger_type, pitch_intensity, scheduled_for, sent_at, reply_received, reply_text, reply_sentiment, created_at`
+- **`public.holiday_calendar`** — what the cron checks each morning
+  `id, holiday_name, holiday_date, tone_guidance, pitch_intensity, applies_to_dead_leads, applies_to_past_customers, applies_to_active_leads, created_at`
+  Seeded with 9 US 2026 holidays (New Year, Valentine's Day, Memorial Day, July 4, Labor Day, Halloween, Thanksgiving, Black Friday, Christmas).
 
-**Copy rules** — `REX_COPY_RULES` exported from `lib/v2/rexActions.ts`. Appended to every brain prompt that produces user-facing copy. Bake into any new brain prompt — never re-derive.
+### Metrics & analytics
 
-### PR #36 — Cross-Deal Memory · **shipped**
-- `lib/v2/bookContext.ts` — `loadBookContext()` builds the full-book payload (hot/warm/watch/cold/dead, past customers, stalled list, by-make/model counts). `bookContextForPrompt()` compacts it to text for the brain (capped at 30 per tier).
-- `rexInterpret()` now loads book context + Rex memory in parallel and threads BOOK STATE into the prompt with hard guidance ("never invent ids — they must appear in BOOK STATE").
-- New actions: `filter_contacts`, `book_summary`, `call_next` (locally re-derived for copy safety), `batch_action`.
-- `lib/v2/batchActions.ts` — bulk tag / mark_dead / mark_active / archive.
-- `lib/v2/callNext.ts` — deterministic pick + opener templates (already obey copy rules so the brain can't drift on closers).
-- `components/v2/BookSummaryCard.tsx` — renders book_summary payload.
-- `components/v2/ContactListPreview.tsx` — renders filter_contacts payload with tap-to-open.
-- `components/v2/LanguageToggle.tsx` — EN/ES switch wired into ContactDetail hero. Persists to `contacts.preferred_language` via `updateContactPreferredLanguage`.
-- `useContacts` widened to surface `preferredLanguage`, `repDecision`, vehicle make/model/year, `leaseEndDate`, `currentMileage`, `isPastCustomer`, `doNotContact`.
-- `useHeyRex` now exposes `filteredIds`/`dismissFiltered` and threads `contacts` into `executeAction`; logs every action to `rex_action_log` (success / cancelled / failed).
+- **`public.weekly_digests`** — one row per user × ISO week
+  `id, user_id, week_start (date), units, commission, gross, contacts_added, contacts_touched, summary, highlights, generated_at`
+- **`public.heat_sheet_log`** — older daily heat snapshot (not actively used in v2)
+- **`public.rex_usage`** — older usage counter (legacy)
+- **`public.mass_texts`** — older blast log (legacy; superseded by `nurture_messages`)
 
-### PR #37 — Smart Blast Sequences · **shipped**
-- `lib/v2/blastSequences.ts`
-  - `createBlastDraft({intent, filterSummary, promotion, contacts})` — one brain call that drafts a personalized message per contact in the batch. Uses `REX_COPY_RULES` plus a "VARIETY RULE" that forbids repeating hooks or openers within the batch. Persists into `sequences` (with `is_ai_drafted=true`, `draft_status='pending_review'`) + `sequence_steps` so the rep can come back to a pending review later.
-  - `copyRuleViolations(message)` — local regex sanity check that flags any draft slipping forbidden tokens past the brain (em-dash, en-dash, "no pressure", "just checking in", etc.). Surfaced as a per-draft warning in the UI.
-  - `recordSentBlast` writes each sent draft to `nurture_messages` for variety tracking by future PR #39 nurture flows.
-  - `markBlastApproved` / `markBlastCancelled` flip `sequences.draft_status`.
-- `lib/v2/smsLauncher.ts` — `launchSms(draft)` fires `sms:` URLs through `Linking.openURL` (iOS uses `&body=`, Android `?body=`). One user gesture per message — the drafter drives the loop.
-- New action `create_blast_sequence` (`rexActions.ts`) — Rex parses the rep's voice intent ("text all my Murano lease customers about 499 SL promo"), returns matched `contact_ids` from BOOK STATE + parsed `promotion`. AppShell catches the confirmation, calls `createBlastDraft`, then opens the drafter sheet.
-- `components/v2/BlastSequenceDrafter.tsx` — bottom-sheet review UI. Per-contact card with: avatar, name, hook label, char count, language toggle, message (tap Edit to inline-edit), Rex's "game plan" line, copy-rule violation warning if any, and Skip / Send actions. Header shows the count, Cancel marks the sequence `cancelled`, "Send N" fires SMS one-by-one + marks the sequence `sent`.
-### PR #38 — Stalled Lead Intelligence · **shipped**
-- `lib/v2/stalledLeads.ts`
-  - `analyzeStalledLeads({daysSilentThreshold=14, includeDead=false})` — loads BookContext, runs the spec's decision tree (KILL / PUSH / FENCE / WATCH), and for any PUSH/FENCE asks the brain (one batched call) for a re-engagement opener per contact under `REX_COPY_RULES`. Falls back to a templated opener if the brain is unreachable.
-  - `batchKill(ids)` — flips `rep_decision='dead'` (KILL means "stop selling, start nurturing" per spec — not delete).
-- New action `analyze_stalled_leads` (`rexActions.ts`) — voice "who haven't I contacted in two weeks" / "show me stalled leads" lands here. AppShell catches the type, opens the overlay, and runs the analyzer.
-- `components/v2/StalledLeadsAnalysis.tsx` — overlay sorted by recommendation priority (PUSH > FENCE > KILL > WATCH). Each card: avatar, heat + days-silent, reason, PUSH/FENCE rows show the suggested opener in EN or ES. Multi-select check pattern; footer shows "Kill N" + "Push N" buttons that fan out to `batchKill` or to `BlastSequenceDrafter` pre-loaded with the openers.
-### PR #40 — final polish · **shipped**
+### Pay plan + push
 
-- **Pay Plan editor** — `components/v2/PayPlanEditor.tsx` ports `design/extracted/pay-plan.jsx`. Replaces the inert "Pay plan" row in Profile → COMPENSATION with `PayPlanSummary` (front/back/mini stat cards + pills) that opens a full editor. `lib/v2/payPlan.ts` loads from / saves to `public.pay_plans` and exposes `usePayPlan(refetchKey)` + `calcCommissionWithPlan`. DealLogger now reads the rep's real plan for the live payout preview + at insert time, so changing rates immediately affects future deal commission math.
+- **`public.pay_plans`** — rep comp configuration
+  `user_id (pk → profiles.id), front_pct, back_pct, flat_mini, base_salary, spiff_per_unit, unit_bonus, unit_bonus_tiers (jsonb), updated_at`
+- **`public.user_push_tokens`** — Expo Push tokens
+  `id, user_id, expo_token, platform (ios|android|web), device_name, last_used_at, created_at`
 
-- **Sequences editor** — `components/v2/SequenceEditor.tsx`. Tapping any card in `GamePlanSheet` opens a full editor: rename, channel toggle (text/call/email) per step, delay days per step, message template with `{{token}}` highlighting in preview mode, token-chip insert in raw mode, and an Archive sequence link with confirm. `lib/v2/useSequences.ts` exposes `updateSequenceStep` / `renameSequence` / `archiveSequence`.
+### Legacy "other dealership" tables (not v2)
 
-- **Photo upload on Contact card** — `lib/v2/contactPhoto.ts` runs `expo-image-picker` (lazy-loaded), uploads to the new `contact-photos` Supabase Storage bucket (path `<user_id>/<contact_id>-<timestamp>.<ext>`), and stamps `contacts.photo_url`. ContactDetail hero now has a tap-to-upload affordance with a `+` / `↻` badge. `Avatar` atom renders the photo when `photoUrl` is provided, falls back to initials otherwise. RLS keys writes to the rep's own user_id prefix; bucket is publicly readable so `<Image>` works without auth.
-
-- **MarkReplyButton in ContactDetail** — recent sent nurtures that haven't been marked yet appear above the Deal Log as a "NURTURE · AWAITING REPLY" section. The collapsed pill opens the same inline panel from `NurtureReviewer` (Positive / Neutral / Negative / Follow-up later N days + optional reply text capture) and triggers the right side effects via `markNurtureReply` (heat bump, `rep_decision` update, `do_not_contact`, `next_followup_date`).
-
-- **Onboarding persisted to profile** — `profiles.onboarding_complete` column added; `markOnboardingComplete()` writes to Supabase + localStorage cache; `syncOnboardingFromProfile()` hydrates the cache on boot so a fresh browser doesn't replay the playbook for someone who already finished it.
-
-### PR #39 — Nurture Engine + manual reply tracker · **shipped (V1)**
-- `lib/v2/nurtureEngine.ts`
-  - `scheduleNurtureBlast({trigger, audience, customIntent?})` — loads BookContext, filters by audience (`dead` / `dormant` / `past_customers` / `all_inactive`), runs cadence checks (skip `do_not_contact`, skip if last nurture <30d, skip 60d after a reply, 6-month pause after a `negative` reply), fetches `last_3_hooks_used` per contact, then makes one batched brain call with `REX_COPY_RULES` plus a VARIETY RULE that forbids any hook in each contact's `hooks_to_avoid`. Inserts pending rows into `public.nurture_messages` (sent_at=null, scheduled_for=now).
-  - `loadPendingNurtures()` — joins nurture_messages → contacts for the reviewer UI.
-  - `markNurtureSent()` / `dismissNurture()` — manual send/skip from the reviewer.
-  - `countNurtureBanners()` — Heat Sheet banner counts (pending drafts + sent-but-unmarked-reply in last 7 days).
-- `lib/v2/manualReplyTracker.ts` — `markNurtureReply({nurtureMessageId, contactId, kind, replyText?, followUpInDays?})`. V1 manual classification per the spec's reply routing:
-  - `positive` → bump heat +20, set `rep_decision='active'`, update `last_contact_date`
-  - `negative` → set `do_not_contact=true`, `rep_decision='do_not_nurture'`
-  - `neutral` → flag the row, no contact mutation
-  - `later` → bump heat +10, set `next_followup_date` N days out
-- `components/v2/NurtureReviewer.tsx` — bulk review bottom sheet. Each row: avatar, name, trigger/hook/language pills, message (tap Edit to inline-edit before send), copy-rule violation warning, Skip / Send (`launchSms` fires `sms:` URL; marks the row sent on success).
-- `components/v2/MarkReplyButton.tsx` — opens an inline panel on a sent nurture: Positive / Neutral / Negative / Follow-up-later N days, plus a paste-the-reply text area for memory. Triggers `markNurtureReply`.
-- `components/v2/NurtureBanner.tsx` — Heat Sheet banner showing pending draft count (or "N sent · mark replies" when drafts are empty). Taps open the `NurtureReviewer`.
-- New action `schedule_nurture_blast` (`rexActions.ts`) — voice "send a holiday blast to my past customers" / "queue a quarterly check-in for dead leads". AppShell catches it, runs `scheduleNurtureBlast`, bumps the banner refetch key, opens the reviewer.
-
-**Out of V1 scope** (post-PR follow-ups):
-- Twilio webhook reply auto-classification — still deferred (needs Twilio account / phone / webhook host setup).
-
-**Shipped as PR #40 add-ons (this branch):**
-- `send-push` edge function (`verify_jwt=true`) — auth'd POST that resolves the caller's `auth.uid()`, reads their `user_push_tokens`, and fans out to Expo's `/api/v2/push/send`. Refuses to push to other users.
-- `nurture-scheduler` edge function (`verify_jwt=false`, guarded by `X-Cron-Secret` env header) — daily call. Looks up `holiday_calendar` for today; if it's a holiday, queues holiday nurtures for each rep. Mondays additionally queue a quarterly check-in batch (max 10/rep). Mirrors the client's cadence + variety rules exactly (re-uses the same brain prompt). Fires a push notification when a rep's queue grows.
-  - **Schedule via `pg_cron`**: `SELECT cron.schedule('nurture-scheduler', '0 14 * * *', $$SELECT net.http_post(url:='https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/nurture-scheduler', headers:='{"X-Cron-Secret":"<set CRON_SECRET via supabase secrets>"}'::jsonb)$$);` (14:00 UTC = ~9 AM ET).
-  - **Required secret**: `supabase secrets set CRON_SECRET=<random-32-char-string>` so unsanctioned callers can't trigger drafts.
-- `lib/v2/pushNotifications.ts` — Expo token registration on app boot (no-op on web / unsupported devices). `sendTestPush()` calls `send-push` for the QA row in Profile → REX → "Send a test push".
+- `dealers, customers, drafts, messages, appointment_signals` — older dealer-integration path. Not wired into v2.
 
 ---
 
-## 6. Roadmap items locked in (PR #35)
+## 7. Migrations history
 
-The four items the user called out as not-yet-architected:
+In order. All idempotent (`IF NOT EXISTS` / `ON CONFLICT DO NOTHING`). Live state matches the latest applied migration.
 
-### Cross-Deal Memory — **shipped**
-- `lib/v2/rexMemory.ts` — `getRexMemory()` reads `public.rex_memory.summary`,
-  `recordRexTurn()` appends each utterance + Rex's reply to `public.rex_messages`,
-  bumps the per-user message counter, and every 8 turns asks the brain to
-  regenerate the summary (4-6 short bullets covering recurring patterns,
-  open follow-ups, customer preferences).
-- `lib/v2/rexActions.ts` threads `memory.summary` into the brain prompt
-  ("WHAT YOU REMEMBER ABOUT THIS REP"), so Rex can disambiguate names and
-  reference past context.
-- `lib/v2/useHeyRex.ts` calls `recordRexTurn()` after every successful
-  `executeAction()` (fire-and-forget — UX continues if the memory write
-  fails).
+| File | What |
+|---|---|
+| `20260523_v2_schema_extensions.sql` | adds vehicle/trim/budget/trade_in/milestones/next_step/plan_label to contacts; new `tags` + `pay_plans` tables |
+| `20260523_v2_marcus_seed.sql` | `seed_marcus_for_user(uuid)` function + trigger on `auth.users` insert to call it |
+| `20260526_v2_handle_new_user_fix.sql` | adds `ON CONFLICT (id) DO NOTHING` to `handle_new_user()` (the Rex Lens V25 unblocker); revokes anon EXECUTE on SECURITY DEFINER funcs |
+| `20260526_v2_demo_user_and_backfill.sql` | backfills missing profiles + Marcus seed; creates `demo@pocketrep.pro` |
+| `20260526_v2_demo_full_seed.sql` | seeds 9 more mock contacts on the demo account |
+| `20260526_v2_demo_deals_seed.sql` | 25 Jan-Apr 2026 mock deals on demo |
+| `20260526_v2_demo_may_deals.sql` | 5 May 2026 deals so MTD ≠ 0 |
+| `20260526_v2_weekly_digests.sql` | weekly_digests table |
+| `20260527_v2_rex_intelligence_schema.sql` | contacts adds (rep_decision/lease_end_date/etc.) + contact_milestones/nurture_messages/holiday_calendar/rex_action_log/user_push_tokens + sequences extensions + 9 US 2026 holidays |
+| `20260527_v2_rex_intelligence_seed.sql` | backfill rep_decision='active', Sofia → preferred_language='es', demo lease-end milestones |
+| `20260527_v2_profiles_onboarding_complete.sql` | adds `profiles.onboarding_complete` |
+| `20260527_v2_contact_photos_bucket.sql` | public storage bucket `contact-photos` + RLS keyed to user_id prefix |
 
-### Custom Onboarding — **shipped**
-- `components/v2/Onboarding.tsx` ports `design/extracted/onboarding.jsx`:
-  8-step playbook with per-step kicker, title, body, optional bullets +
-  tip + RN-native illustration. Progress bar at top, skip button, back/next
-  CTAs at the bottom.
-- Shows automatically on first launch (after the Hey Rex disclosure);
-  `markOnboardingComplete()` in `lib/v2/rexSettings.ts` persists the
-  "seen" flag in localStorage.
-- Replay: Profile → LEARN → "Sales rep playbook" reopens the flow.
-
-### Sequences UI — **shipped (read-only)**
-- `lib/v2/useSequences.ts` joins `public.sequences` with
-  `public.sequence_steps` and counts active enrollments via
-  `public.contact_sequences`.
-- `components/v2/GamePlanSheet.tsx` is a full-screen overlay accessed
-  from Profile → COMPENSATION → "Game Plan". Lists each sequence as a
-  card with channel pipeline (text/call/email dots), enrollment count,
-  live/draft pill. Editor + enrollment flows are the next follow-up.
-
-### Weekly Digest — **shipped (manual generate)**
-- Migration `20260526_v2_weekly_digests.sql` adds `public.weekly_digests`
-  with one row per rep × ISO-week (units / commission / gross / new
-  contacts / contacts touched / summary / highlights). RLS-scoped to
-  `auth.uid()`.
-- `lib/v2/weeklyDigest.ts` — `getLatestDigest()` + `generateDigestForCurrentWeek()`.
-  The generator rolls up the deals/contacts in the current week and
-  asks the brain for a 2-4-bullet "what went well / what to chase /
-  one suggestion" narrative.
-- `components/v2/WeeklyDigestCard.tsx` mounts at the top of the Heat
-  Sheet with the latest stored digest + a Generate/Regen button.
-  Cron-based auto-generation is still pending; the Edge Function lives
-  in the next PR.
+Plus runtime-only, not in repo:
+- `pg_cron` + `pg_net` extensions enabled
+- Cron job `nurture-scheduler-daily` scheduled at `0 14 * * *` UTC
 
 ---
 
-## 7. Hey Rex always-listening + tool-use (PR #34, merged)
+## 8. Demo account
 
-Web-only for the first pass. Native iOS/Android falls through to push-to-talk.
+For QA + the v2 web auto-signin flow.
 
-- `lib/v2/heyRexListener.ts` — wake-word state machine over the Web Speech API.
-  States: `idle` (continuous listen, scan for "hey rex"/"hi rex"/"ok rex") →
-  `awake` (accumulate transcript, each new chunk resets a 4s silence timer) →
-  `processing` (emit utterance, pause until caller `.resume()`s). Auto-restarts
-  on Chrome's silent `onend` while still in the active states. Returns
-  `'unsupported'` / `'denied'` when the API is missing or permission is denied.
+- **Email**: `demo@pocketrep.pro`
+- **Password**: `PocketRepDemo2026!`
+- **UUID**: `d0000000-0000-0000-0000-000000000001`
+- **Plan**: pro · 30-day trial
 
-- `lib/v2/rexActions.ts` — tool schema + brain call + executor.
-  Actions: `add_contact`, `update_notes`, `delete_contact`, `log_deal`,
-  `schedule_followup`, `show_contact`, `clarify`, `say`. Brain prompt
-  includes the user's current contact list (name + id) so Rex can pick
-  the right id. Output is a single JSON object in a fenced block; parser
-  is loose so prose responses fall back to `say`.
+Seeded state:
+- 10 contacts (4 hot · 3 warm · 3 watch) with realistic vehicle data
+- 30 deals (Jan–May 2026) totaling ~$89K YTD commission
+- 12 starter tags
+- 3 lease-end milestones (Marcus, Priya, Derek)
+- Sofia Alvarez-Chen flagged `preferred_language='es'` for the bilingual smoke test
+- Ravi + Amelia flagged `is_past_customer=true` so the holiday nurture cron has something to chew on
 
-- `lib/v2/useHeyRex.ts` — owns the listener lifecycle, runs `rexInterpret`
-  on every captured utterance, exposes `{ state, partial, thinking, action,
-  executing, error, confirm, cancel }`.
+Test commands:
+```sql
+SELECT COUNT(*) FROM contacts WHERE user_id='d0000000-0000-0000-0000-000000000001' AND is_deleted=false;
+-- 10
 
-- `components/v2/HeyRexSheet.tsx` — confirmation card that mounts above the
-  tab bar whenever the listener is past idle or an action is pending.
-  Shows interim transcript, Rex's "say" line, a proposed-action summary,
-  and Cancel / Confirm buttons (write actions always confirm).
-
-- `components/v2/AppShell.tsx` — wires the controller, maps listener state
-  → orb visual, refetches contacts/deals after writes, opens contact
-  details after `show_contact` / `add_contact`. Listens for the always-on
-  toggle via `subscribeAlwaysListen` so flipping the Profile switch
-  starts/stops the listener live.
-
-Outstanding (next PR if needed):
-- Native (iOS/Android) wake-word — would need a small model (Picovoice
-  was removed in `remove-picovoice` branch). Push-to-talk via the orb
-  still works there.
-- Voice replay of Rex's "say" line via Web Speech `speechSynthesis`
-  (text-only today).
-- Audit log of Rex-initiated writes — currently no breadcrumb beyond
-  `contacts.updated_at`.
+SELECT COUNT(*) FROM deals WHERE user_id='d0000000-0000-0000-0000-000000000001';
+-- 30
+```
 
 ---
 
-## 7. Branch / push policy
+## 9. Sign-in flow
 
-- All v2 work lives on branch `claude/exciting-goodall-or4T2`.
-- After each squash-merge, the branch is force-pushed (`--force-with-lease`) to match `main` so the next PR starts cleanly.
-- `pocket-rep` and `project-t90u1` CI must both go green to merge. (The orphaned `his-palabra` Vercel project was deleted from the dashboard 2026-05-26 — if you see it on a PR, the deletion hasn't propagated yet.)
+Two paths:
 
----
+**Web v2 (auto-signin demo)**
+- `lib/v2/demoAuth.ts → ensureDemoSession()` runs once at `AppShell` mount
+- If no session exists, signs in as `demo@pocketrep.pro` with the hardcoded password
+- If a real session already exists (a real user signed in elsewhere) it no-ops
 
-## 8. Anti-patterns / known traps
-
-- **Don't touch** the `heat_tier` column on `contacts` — it has a legacy CHECK constraint (`red/orange/blue`). v2 derives the tier from `heat_score` client-side (`>=80` hot · `50-79` warm · `<50` watch).
-- **Don't break** the v1 surface on web. The flag gate (`shouldUseNewUi`) makes both available concurrently. Native iOS/Android still uses v1 entirely.
-- **Don't merge** PR #28 (Rex Lens V25) until the user re-confirms V25 works against production. The trigger hotfix that landed in this session was its blocker, but the user hasn't verified end-to-end.
-- **Don't widen access** on the demo account password. It's intentionally simple (`PocketRepDemo2026!`) because the account only ever sees seeded RLS-scoped data, but treat it as semi-public.
-
----
-
-## 9. Quick demo paths
-
-- **v2 with no flag (after cutover)**: `https://app.pocketrep.pro/`
-- **v2 with flag (any preview)**: `https://<deployment>.vercel.app/?v=2`
-- **v1 fallback**: drop `?v=2`, the existing app shell stays intact
-- **Force re-disclosure**: clear `pocketrep:v2:hey-rex-disclosure-seen` from localStorage
+**Real users**
+- The v1 auth screens at `app/(auth)/` handle email signup / sign in via Supabase magic link
+- On signup, the `handle_new_user()` trigger creates a `profiles` row + seeds Marcus Holloway for the new user (so every account starts with at least one contact to play with)
+- The trigger is idempotent (`ON CONFLICT (id) DO NOTHING`) — previously this was the V25 Rex Lens blocker
 
 ---
 
-## 10. Where to look next
+## 10. Edge functions
+
+Three live functions in `fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/`:
+
+### `ai-proxy` — brain (and STT/TTS stubs)
+- `verify_jwt: false` — gateway-level open; the function does its own JWT validation
+- Routes: `/ai-proxy`, `/ai-proxy/brain` → brain · `/stt` → 501 · `/tts` → 501
+- Brain calls OpenRouter with `BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6']` (primary → fallback)
+- **Per-user daily cap**: looks up `profiles.plan` (`rex_lens=75¢`, `pro=75¢`, `elite=125¢`); enforced by `daily_ai_usage` table. `profiles.unlimited=true` bypasses.
+- **Requires** `Authorization: Bearer <user JWT>` header (otherwise 401). Server-to-server callers can't use this directly.
+- Env: `POCKETREP_API_KEY` (OpenRouter), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- Source: `PocketRepApp/supabase/functions/ai-proxy/index.ts`
+
+### `nurture-scheduler` — daily holiday + weekly check-in cron
+- `verify_jwt: false`; access guarded by `X-Cron-Secret` header (only enforced if `CRON_SECRET` env is set)
+- Iterates `public.users`, for each rep:
+  - If today is a holiday → queue ≤30 holiday nurtures (audience: dead/dormant/past customers)
+  - If today is Monday → queue ≤10 quarterly check-ins (audience: dormant `heat_score 20-49`)
+- Cadence rules: skip `do_not_contact`, skip if last nurture <30d, skip 60d after a reply, 6-month pause after a negative reply
+- Variety: per-contact `last_3_hooks` injected as `hooks_to_avoid` in the brain prompt
+- **Brain calls** go DIRECTLY to OpenRouter (not back through `ai-proxy/brain`) because there's no per-user JWT to satisfy the rate limiter. Uses the same `POCKETREP_API_KEY`.
+- Fires Expo Push to each rep whose queue grew
+- Env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET` (optional but recommended), `POCKETREP_API_KEY`
+- Source: `PocketRepApp/supabase/functions/nurture-scheduler/index.ts`
+
+### `send-push` — Expo Push wrapper
+- `verify_jwt: true` — caller must have a valid Supabase session
+- POST `{ user_id?, title, body, data? }` — refuses to push to other users
+- Looks up `user_push_tokens` for the caller, fans out to Expo Push, bumps `last_used_at`
+- Env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- Source: `PocketRepApp/supabase/functions/send-push/index.ts`
+
+### Older functions (not v2)
+- `ai-closer` — older Rex flow, currently inactive
+- `stripe-webhook` — Stripe subscription webhook (untouched)
+
+### To deploy a function
+The MCP `deploy_edge_function` tool can deploy directly. Or via CLI:
+```bash
+supabase functions deploy nurture-scheduler
+```
+**Always use `https://esm.sh/...` imports**, not `jsr:`. Metro chokes on `jsr:` when scanning the repo. The existing `ai-proxy` is the canonical example.
+
+---
+
+## 11. The cron
+
+Scheduled via `pg_cron`:
+
+```sql
+SELECT cron.schedule(
+  'nurture-scheduler-daily',
+  '0 14 * * *',  -- 14:00 UTC = 9 AM ET / 6 AM PT
+  $$ SELECT net.http_post(
+       url := 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/nurture-scheduler',
+       headers := '{"Content-Type": "application/json"}'::jsonb,
+       body := '{}'::jsonb
+     ); $$
+);
+```
+
+Currently runs without `X-Cron-Secret`. If you want to lock it down:
+```bash
+supabase secrets set CRON_SECRET=<random 32 char string>
+```
+Then update the cron's `headers` JSON to include `"X-Cron-Secret": "<value>"`.
+
+**To inspect or change the schedule:**
+```sql
+SELECT * FROM cron.job;
+SELECT cron.unschedule('nurture-scheduler-daily');
+-- then re-schedule with new cron expression
+```
+
+**To trigger manually (from SQL editor or `execute_sql`):**
+```sql
+SELECT net.http_post(
+  url := 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/nurture-scheduler',
+  headers := '{"Content-Type": "application/json"}'::jsonb,
+  body := '{}'::jsonb
+);
+-- Poll the response:
+SELECT id, status_code, content::text FROM net._http_response ORDER BY id DESC LIMIT 5;
+```
+
+---
+
+## 12. Supabase Storage
+
+One bucket: **`contact-photos`** (public-read)
+
+- Path layout: `<user_id>/<contact_id>-<timestamp>.<ext>`
+- Public read so `<Image src=publicUrl>` works without auth tokens
+- Write / update / delete locked to the rep's own `user_id/` prefix via RLS
+- Client: `lib/v2/contactPhoto.ts → pickAndUploadContactPhoto(contactId)` runs `expo-image-picker` (lazy required), uploads to bucket, stamps `contacts.photo_url`
+
+---
+
+## 13. Expo Push
+
+- **Server side**: `send-push` edge function wraps the Expo Push API
+- **Client side**: `lib/v2/pushNotifications.ts → registerForPush()` runs on `AppShell` mount, lazy-requires `expo-notifications`, prompts permission, upserts the token into `user_push_tokens`
+- **Web no-ops** (Expo Push doesn't support web tokens in our setup); native iOS/Android registers
+- **Test path**: Profile → REX → "Send a test push" calls `sendTestPush()` which POSTs to `send-push` with the user's session JWT
+
+Notification triggers in v1:
+- Morning Heat Sheet ready (daily 8am local — TODO, not yet wired)
+- Holiday nurture drafts queued (fires from `nurture-scheduler`)
+- Quarterly check-in drafts queued (fires from `nurture-scheduler`)
+- Stalled lead alert (TODO, not yet wired)
+
+---
+
+## 14. v2 surface map — every tab + every overlay
+
+`PocketRepApp/components/v2/AppShell.tsx` is the top-level controller. Holds:
+- 4 tabs: `heat | contacts | metrics | profile`
+- All overlay state (selected contact, dealLoggerOpen, blastDraft, stalledOpen, nurtureReviewerOpen, gamePlanOpen, payPlanOpen, addContactOpen, disclosureOpen, onboardingOpen)
+- The `useContacts` + `usePayPlan` + `useTags` hooks are owned here and passed down
+
+### Tabs
+
+| Tab | File | What it shows | Source spec |
+|---|---|---|---|
+| Heat Sheet | `HeatSheetTab.tsx` | Today banner with overdue count · `WeeklyDigestCard` · `NurtureBanner` · HOT/WARM/WATCH sections with days-since counters | `design/extracted/tab-heat.jsx` |
+| Contacts | `ContactsTab.tsx` | Search · filter chips (All · 🔥/☀️/👁 + custom tags) · `+` add button · ＋ Tag bulk flow · alphabetical sections with avatar + tag pills + tier dot | `tab-contacts.jsx` |
+| Metrics | `MetricsTab.tsx` | YTD hero · 12-month bar chart · MTD + Projected · ＋ LOG A DEAL · monthly accordion | `tab-metrics.jsx` |
+| You (profile) | `ProfileTab.tsx` | Hero with avatar + name · Plan callout · `PayPlanSummary` (tappable) · COMPENSATION → Game Plan link · WORKSPACE/REX/ACCOUNT row groups · "Always listen for Hey Rex" Switch · Test push · LEARN replay-onboarding · Sign out · footer | `tab-profile.jsx` |
+
+### Overlays (mounted by AppShell, dismissable)
+
+| Component | Trigger | Source spec |
+|---|---|---|
+| `ContactDetail.tsx` | Tap a contact row anywhere | `contact-detail.jsx` (the big one, ~900 LOC) |
+| `DealLogger.tsx` | Metrics CTA `＋ LOG A DEAL`, ContactDetail `＋ LOG DEAL`, voice `log_deal` | `deal-logger.jsx` |
+| `AddContactModal.tsx` | Contacts tab `＋` button | designed inline |
+| `BulkTagFlow.tsx` | Contacts tab `＋ Tag` dashed chip | `tab-contacts.jsx → BulkTagFlow` |
+| `BlastSequenceDrafter.tsx` | Voice `create_blast_sequence` after confirm | designed inline |
+| `StalledLeadsAnalysis.tsx` | Voice `analyze_stalled_leads` | designed inline |
+| `NurtureReviewer.tsx` | Heat Sheet `NurtureBanner` tap; voice `schedule_nurture_blast` | designed inline |
+| `GamePlanSheet.tsx` | Profile COMPENSATION → Game Plan | `tab-gameplan.jsx` |
+| `SequenceEditor.tsx` | Tap a sequence card inside GamePlanSheet | `tab-gameplan.jsx → TemplateEditor` |
+| `PayPlanEditor.tsx` | Tap `PayPlanSummary` in Profile | `pay-plan.jsx` |
+| `Onboarding.tsx` | First launch after disclosure; Profile → LEARN → Sales rep playbook | `onboarding.jsx` |
+| `RexDisclosure.tsx` | First launch (`!hasSeenDisclosure()`) | designed inline |
+| `HeyRexSheet.tsx` | Listener state past idle or pending action | designed inline |
+
+### Small atomic UI in `components/v2/`
+
+- `atoms.tsx` — `Label`, `Pill`, `Avatar` (now image-aware), `StatNumber`, `SectionHead`, `HeatStripe`, `rgbaTint()` helper
+- `tokens.ts` — `TIERS` (hot/warm/watch with color/icon/label), `stalenessColor(days)`
+- `LanguageToggle.tsx` — EN/ES pill toggle (in ContactDetail hero)
+- `BookSummaryCard.tsx` — book_summary brain payload renderer in HeyRexSheet
+- `ContactListPreview.tsx` — filter_contacts payload renderer
+- `MarkReplyButton.tsx` — Positive/Neutral/Negative/Later inline panel
+- `NurtureBanner.tsx` — top of Heat Sheet, shows pending + sent-awaiting-reply counts
+- `PayPlanSummary.tsx` — Profile compensation card
+- `WeeklyDigestCard.tsx` — top of Heat Sheet
+
+---
+
+## 15. `lib/v2/` map — every helper
+
+| File | What it owns |
+|---|---|
+| `useContacts.ts` | Fetches contacts, sorts by heat desc + days asc, exposes `patchLocal` for optimistic updates and `reload` for forced refetch |
+| `useTags.ts` | Fetches user's tag library; supports `refetchKey` arg |
+| `useDeals.ts` | Per-contact deals (used by ContactDetail) |
+| `useUserDeals.ts` | All deals for current user (used by MetricsTab); supports `refetchKey` |
+| `useSequences.ts` | Joins sequences + sequence_steps + active enrollments; also exports `updateSequenceStep`, `renameSequence`, `archiveSequence` |
+| `useHeyRex.ts` | Top-level Hey Rex controller — owns listener lifecycle, runs `rexInterpret`, exposes `{state, partial, thinking, action, executing, error, filteredIds, confirm, cancel, dismissFiltered}` |
+| `usePayPlan.ts` (in `payPlan.ts`) | Loads + caches the user's saved pay plan |
+| `contactNurtures.ts` | `useContactNurtures(contactId)` for the "AWAITING REPLY" section in ContactDetail |
+| `useUserDeals.ts` | All deals for current user |
+| | |
+| `supabase.ts` (at `lib/`) | Supabase client init |
+| `demoAuth.ts` | `ensureDemoSession()` — web auto-signin |
+| `rexSettings.ts` | localStorage-backed Hey Rex prefs + onboarding flag (now mirrors to `profiles.onboarding_complete`); `subscribeAlwaysListen` event for live toggle propagation |
+| `featureFlags.ts` | `shouldUseNewUi()` |
+| | |
+| `bookContext.ts` | `loadBookContext()` builds the BOOK STATE payload Rex sees on every voice call; `bookContextForPrompt()` compacts it to text |
+| `rexActions.ts` | THE central tool-use file. Defines `RexAction` union, the brain prompt, `rexInterpret()`, `executeAction()`, `summarizeAction()`, `actionWritesData()`, `logRexAction()`, `REX_COPY_RULES` (exported, see §17) |
+| `rexMemory.ts` | `getRexMemory()` + `recordRexTurn()` + summary regeneration every 8 turns |
+| `heyRexListener.ts` | Web Speech API state machine (idle → awake → processing) with 4s silence trigger |
+| `callNext.ts` | Deterministic "who do I call next" picker; opener templates that already obey copy rules |
+| `batchActions.ts` | bulk add_tag / mark_dead / mark_active / archive |
+| `stalledLeads.ts` | `analyzeStalledLeads()` — KILL/PUSH/FENCE decision tree + brain re-engagement openers |
+| `blastSequences.ts` | `createBlastDraft()` + `recordSentBlast()` + `copyRuleViolations()` regex sanity net |
+| `gamePlan.ts` | One-off Game Plan per-contact AI (the button in ContactDetail) |
+| `nurtureEngine.ts` | `scheduleNurtureBlast()` (the client-side equivalent of the cron) + `loadPendingNurtures()` + `markNurtureSent()` + `dismissNurture()` + `countNurtureBanners()` |
+| `manualReplyTracker.ts` | `markNurtureReply({kind: positive|neutral|negative|later})` with the cascade side effects |
+| `weeklyDigest.ts` | `getLatestDigest()` + `generateDigestForCurrentWeek()` |
+| | |
+| `updateContact.ts` | `updateContactNotes`, `updateContactTags`, `createContact`, `deleteContact`, `updateContactPreferredLanguage` |
+| `tagMutations.ts` | `createTag`, `applyTagToContacts` |
+| `dealLogger.ts` | `calcCommission` (legacy default plan), `insertDeal` (now reads `pay_plans`) |
+| `payPlan.ts` | `loadPayPlan`, `savePayPlan`, `usePayPlan(refetchKey)`, `calcCommissionWithPlan`, `DEFAULT_PAY_PLAN` constants |
+| `contactPhoto.ts` | `pickAndUploadContactPhoto(contactId)` |
+| `pushNotifications.ts` | `registerForPush()` on boot, `sendTestPush()` |
+
+---
+
+## 16. Hey Rex — listener + tool-use
+
+### Listener state machine (`heyRexListener.ts`)
+
+```
+IDLE → continuous interim listen, scan for "hey rex" / "hi rex" / "ok rex"
+     ↓
+AWAKE → accumulate transcript, reset 4s silence timer on every chunk
+     ↓ (4s of silence)
+PROCESSING → emit utterance to caller, pause until .resume()
+     ↓
+back to IDLE
+```
+
+Also surfaces `'unsupported'` (Web Speech API not available) and `'denied'` (mic permission refused). Auto-restarts on Chrome's silent `onend`.
+
+### Wake words
+
+- "hey rex" / "hi rex" / "ok rex" — case-insensitive
+
+### Tool-use actions (`rexActions.ts`)
+
+Brain returns a single JSON object in a fenced block. Actions:
+
+| Action | What it does | Writes? |
+|---|---|---|
+| `add_contact` | Create a contact | ✅ |
+| `update_notes` | Append to `contacts.notes` | ✅ |
+| `delete_contact` | Soft delete | ✅ |
+| `log_deal` | Insert into `deals` | ✅ |
+| `schedule_followup` | Set `contacts.next_followup_date` | ✅ |
+| `show_contact` | Open detail card | — |
+| `filter_contacts` | Return matching ids + summary | — |
+| `book_summary` | Pipeline snapshot | — |
+| `call_next` | Pick the next call (deterministic local re-derivation after brain returns) | — |
+| `batch_action` | bulk add_tag / mark_dead / mark_active / archive | ✅ |
+| `create_blast_sequence` | Pivots into BlastSequenceDrafter | ✅ (eventually via the drafter) |
+| `analyze_stalled_leads` | Opens StalledLeadsAnalysis | — |
+| `schedule_nurture_blast` | Inserts pending nurture_messages, opens NurtureReviewer | ✅ |
+| `clarify` | Ask back when names collide | — |
+| `say` | Informational reply, no write | — |
+
+All write actions go through a Confirm card in `HeyRexSheet` first. `actionWritesData()` enumerates which require confirmation.
+
+### Memory
+
+- `rex_memory.summary` is threaded into every brain prompt as "WHAT YOU REMEMBER ABOUT THIS REP"
+- After every successful action, `recordRexTurn()` logs the utterance + Rex's reply to `rex_messages`
+- Every 8 turns, the brain regenerates the rolling summary (4-6 short bullets)
+
+---
+
+## 17. `REX_COPY_RULES` — the canonical tone spec
+
+Single source of truth. Lives in `lib/v2/rexActions.ts` and is appended to every brain prompt that produces user-facing copy. Mirrored in the `nurture-scheduler` edge function.
+
+```
+Tone
+- Casual, plain talk
+- Lowercase opener: "hey" / "hola" / "qué tal" / "qué onda"
+- No jargon, no filler, no emojis (unless contact uses them)
+
+Punctuation
+- NEVER use dashes (em-dash —, en-dash –, hyphen between phrases)
+- Hyphens inside compound words ("trade-in", "follow-up") are fine
+- Use commas, periods, line breaks
+- NEVER use bullets or numbered lists in draft text
+- No semicolons in drafts. Short sentences.
+
+Closers (pick one)
+- "let me know if I can help with anything"
+- "just say the word"
+- "let me know"
+- "avísame si te puedo ayudar con algo" (ES)
+- "nomás dime" (ES)
+NEVER use: "no rush", "no pressure", "no hurry"
+
+Anti-patterns (NEVER generate)
+- "just checking in"
+- "following up on our last conversation"
+- "hope this finds you well" / "hope all is well"
+- "I wanted to reach out" / "touching base"
+
+Bilingual
+- Spanish is a REWRITE not a translation
+- Target Mexican slang: "carro" not "coche", "chamba", "nomás", "qué onda"
+
+Length
+- Under 280 characters
+- 2-4 sentences max
+
+Vehicle language
+- Trade-ins = "potential equity in your current vehicle"
+- Don't say "your old car" — "your current ride" or "what you're driving"
+
+Inference language (when data is incomplete)
+- Mileage/lease-end INFERRED → soften ("if you're getting close to your cap")
+- Never fabricate specific numbers
+```
+
+`blastSequences.copyRuleViolations()` is a regex-based local sanity net — flags em-dash, en-dash, "no pressure", "just checking in", "touching base", "hope this finds you well", "wanted to reach out", "following up on" if the brain slips one past. Surfaced as a per-draft warning in BlastSequenceDrafter.
+
+---
+
+## 18. Nurture engine
+
+### Audiences
+- `dead` — `rep_decision IN ('dead','kill')` OR `heat_score < 20`
+- `dormant` — `heat_score 20-49 AND days_silent > 30`
+- `past_customers` — `is_past_customer = true`
+- `all_inactive` — union of the above
+
+### Cadence rules (enforced in `scheduleNurtureBlast`)
+
+| Skip if… | Reason |
+|---|---|
+| `do_not_contact = true` | permanent flag |
+| Last nurture sent <30 days ago | recent_nurture |
+| Last reply received <60 days ago | recent_reply (rep takes over) |
+| Last reply was `negative` and <180 days ago | negative_pause |
+
+### Variety rule
+Per-contact `last_3_hooks_used` is passed to the brain as `hooks_to_avoid`. Brain is instructed never to repeat a hook within the variety window.
+
+### Triggers
+- **Holiday** — every morning, `nurture-scheduler` checks `holiday_calendar`. 9 US 2026 holidays seeded.
+- **Quarterly** — Mondays, max 10/rep
+- **Custom (voice)** — rep says "queue a nurture about X" → `schedule_nurture_blast`
+
+### Reply routing (manual V1)
+Rep marks reply in ContactDetail or NurtureReviewer:
+- **Positive** → heat +20, `rep_decision = 'active'`, `last_contact_date = today`
+- **Negative** → `do_not_contact = true`, `rep_decision = 'do_not_nurture'`
+- **Neutral** → flag row only
+- **Later N days** → heat +10, `next_followup_date = today + N`
+
+Twilio webhook for auto-classification is explicitly deferred (the user said disregard).
+
+---
+
+## 19. Pay plan + commission math
+
+### Schema
+`public.pay_plans` — one row per user (PK on `user_id`). Columns map to the editor:
+
+| DB column | Editor field |
+|---|---|
+| `front_pct` | Front gross % |
+| `back_pct` | Back gross % |
+| `flat_mini` | Flat mini per unit |
+| `base_salary` | Monthly base |
+| `spiff_per_unit` | "Spiffs" per unit |
+| `unit_bonus` | "Unit bonus" per unit (CSI etc.) |
+| `unit_bonus_tiers` | jsonb `[{units, bonus}, …]` |
+
+### Default (`DEFAULT_PAY_PLAN`)
+```ts
+{ frontPct: 25, backPct: 5, flatMini: 200, baseSalary: 2000,
+  manuBonus: 250, csiBonus: 400,
+  unitBonuses: [{units: 10, bonus: 500}, {units: 15, bonus: 1000}, {units: 20, bonus: 1500}] }
+```
+Used for new users until they edit their plan.
+
+### Formula (`calcCommissionWithPlan`)
+```
+front = (frontGross * frontPct) / 100
+back  = (backGross  * backPct)  / 100
+base  = max(front + back, flatMini)
+total = round((base + manuBonus + csiBonus) * (split ? 0.5 : 1))
+```
+Unit bonus tiers are not yet applied in the per-deal math — they're a monthly bonus on top once units are tallied. (Future PR: surface this in Metrics.)
+
+### Where it runs
+- `DealLogger` live payout card uses `calcCommissionWithPlan` with the user's saved plan
+- `insertDeal` re-computes at insert time so the stored `deals.amount` reflects the plan at sale time
+- Changing the plan **does NOT** retroactively recompute historical deals — that's intentional
+
+---
+
+## 20. Sequences (Game Plan)
+
+### Read viewer (`GamePlanSheet`)
+Lists all the rep's sequences + the user's tags' templates. Reachable from Profile → COMPENSATION → "Game Plan".
+
+### Editor (`SequenceEditor`)
+Tap any sequence card. Per-step fields:
+- Channel toggle (`text` | `call` | `email`)
+- Delay days (integer)
+- Message template with `{{token}}` highlighting in preview · token-chip insert in raw mode
+
+Tokens supported: `first_name, rep_name, dealer, vehicle, color, trade_value, lease_end`
+
+Rename + Archive (soft-hide via `is_archived=true`) at the bottom.
+
+### AI-drafted sequences
+Blast sequences (`is_ai_drafted=true`) created by Rex use the same `sequences` + `sequence_steps` tables. Each contact gets its own step row with `contact_id` set (instead of being a template). Filtering live vs draft uses `draft_status`.
+
+---
+
+## 21. Cross-deal memory
+
+Every Rex voice call sees:
+
+1. **BOOK STATE** — built fresh by `loadBookContext()`. Includes tier buckets, stalled segment, past customers, by-make/model counts. Capped at 30 rows per tier; rep drills via `filter_contacts` for the rest.
+2. **WHAT YOU REMEMBER ABOUT THIS REP** — `rex_memory.summary` (4-6 short bullets covering recurring patterns, open follow-ups, customer preferences). Regenerated every 8 turns.
+
+This makes voice queries like "who haven't I touched in 2 weeks?" or "queue a Memorial Day nurture for my past customers" actually possible without the rep saying the names.
+
+---
+
+## 22. Onboarding
+
+8-step playbook. `Onboarding.tsx` ports `design/extracted/onboarding.jsx` 1:1 (per-step kicker, title, body, optional bullets + tip + illustration).
+
+Triggers on first launch after the disclosure modal, if `hasCompletedOnboarding()` is false. Replayable from Profile → LEARN → "Sales rep playbook".
+
+Completion state lives in **two places**:
+- `profiles.onboarding_complete` (canonical, follows the user across devices)
+- `localStorage:pocketrep:v2:onboarding-complete` (fast read-through cache so the disclosure doesn't flash on every load)
+
+`syncOnboardingFromProfile()` runs on boot and hydrates the cache from the profile.
+
+---
+
+## 23. Anti-patterns & traps
+
+- **Don't touch `contacts.heat_tier`** — legacy CHECK constraint with values `red/orange/blue`. v2 derives the tier from `heat_score` client-side (`>=80` hot · `50-79` warm · `<50` watch).
+- **Don't use `jsr:` imports in edge functions** — Metro bundler scans the repo and chokes. Use `https://esm.sh/...` instead (matches the existing `ai-proxy` convention).
+- **Don't call `ai-proxy/brain` from server-to-server** — it requires a per-user JWT. Server-side fan-out (cron, etc.) goes directly to OpenRouter with `POCKETREP_API_KEY`.
+- **Don't add dynamic `require(varname)`** — Metro requires string-literal `require('exact-module-name')` for static analysis. Use lazy `try { require('expo-notifications') } catch {}` pattern from `pushNotifications.ts`.
+- **`fontVariantNumeric` is not a valid RN Text style** — it's web/CSS only. Strip it from any port.
+- **Don't widen `last_contact_date`** — it's `date` (not `timestamptz`); changing it would break every reader.
+- **Demo password is semi-public** (`PocketRepDemo2026!`) — it's baked into client code for auto-signin. The demo account only sees seeded RLS-scoped data so leakage isn't dangerous, but don't treat it as secure.
+- **Don't push to `main`** — PR flow only.
+
+---
+
+## 24. Known gaps / explicitly deferred
+
+- **Twilio reply webhook** — user said disregard. Manual reply marking covers V1.
+- **Native iOS/Android wake-word** — needs Picovoice or similar (Picovoice was removed in `remove-picovoice` branch). Push-to-talk via orb still works on native.
+- **`tab-rex.jsx` full chat tab** — voice already covers it; not ported.
+- **`upgrade-sheet.jsx` Stripe upsell** — needs Stripe webhook + plan-limit enforcement first.
+- **Unit bonus tiers in commission math** — `pay_plans.unit_bonus_tiers` is editable but not yet applied in monthly bonus calculation (would surface in Metrics).
+- **Sequences enrollment UI** — editor exists but per-contact enroll flow doesn't (no "enroll Marcus in Fresh Up Follow Up" button yet).
+- **Audit log viewer** — `rex_action_log` is populated but nothing surfaces it in the UI.
+- **Morning Heat Sheet push notification** — wired in `nurture-scheduler` paths but no separate daily-summary trigger yet.
+- **`speechSynthesis` replay of Rex's "say" line** — text-only today.
+- **Email delivery for the weekly digest** — generates in-app card only.
+
+---
+
+## 25. Where to look next
 
 If a new session needs to pick up:
 
-1. Read `docs/HANDOFF.md` (this file) — top-down summary
-2. Read `docs/PORT_PLAN.md` — the original mock → live plan
-3. Read `design/extracted/*.jsx` — design source of truth for any tab not yet ported
-4. Read `components/v2/AppShell.tsx` — top-level wiring; mostly the navigation map for the rest of the v2 code
-5. Run the migrations folder bottom-up if standing up a fresh Supabase
+1. **Read this file top-down** — it's the orientation.
+2. **`components/v2/AppShell.tsx`** — the navigation map; every other component is reachable from there.
+3. **`lib/v2/rexActions.ts`** — the brain prompt + action union; every voice feature lives here.
+4. **`design/extracted/*.jsx`** — design source of truth for anything not yet ported.
+5. **Latest migrations folder** — check what's been applied vs. local repo.
+6. **Live Supabase dashboard** — https://supabase.com/dashboard/project/fwvrauqdoevwmwwqlfav — to inspect tables, RLS, edge function logs, cron schedule, and the secrets list.
+
+**Production URL**: https://app.pocketrep.pro — auto-signs in as the demo user on first visit.
+**Preview URL** (current branch): https://project-t90u1-git-claude-exci-dc8df9-dryvnagency-1422s-projects.vercel.app — append `?v=2` if v2 doesn't auto-load.
+
+---
+
+End of handoff. Anything missing is intentionally absent or a real gap — flag it back.
