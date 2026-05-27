@@ -46,6 +46,11 @@ export function markDisclosureSeen(): void {
   }
 }
 
+// Onboarding completion — primary source of truth is profiles.onboarding_complete
+// (follows the user across devices); localStorage is just a fast read-through
+// cache so the disclosure modal doesn't flash on every load.
+import { supabase } from '@/lib/supabase';
+
 const ONBOARDING_KEY = 'pocketrep:v2:onboarding-complete';
 let memOnboarding = false;
 
@@ -58,5 +63,37 @@ export function markOnboardingComplete(): void {
   memOnboarding = true;
   if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
     localStorage.setItem(ONBOARDING_KEY, '1');
+  }
+  // Fire-and-forget profile sync — failure shouldn't block UX.
+  (async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase
+      .from('profiles')
+      .update({ onboarding_complete: true })
+      .eq('id', user.id);
+  })().catch(() => undefined);
+}
+
+// Called on app boot — pulls the profile flag and seeds the localStorage
+// cache so future hasCompletedOnboarding() reads are fast + accurate even
+// after fresh installs.
+export async function syncOnboardingFromProfile(): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from('profiles')
+      .select('onboarding_complete')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (data?.onboarding_complete) {
+      memOnboarding = true;
+      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+        localStorage.setItem(ONBOARDING_KEY, '1');
+      }
+    }
+  } catch {
+    /* silent */
   }
 }

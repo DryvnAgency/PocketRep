@@ -1,5 +1,8 @@
 import { supabase } from '@/lib/supabase';
+import { loadPayPlan, calcCommissionWithPlan, type PayPlan as RealPayPlan } from './payPlan';
 
+// Kept for back-compat with existing imports — re-exported from lib/v2/payPlan.ts.
+// Use loadPayPlan() to get the user's actual saved plan.
 export const DEFAULT_PAY_PLAN = {
   frontPct: 25,
   backPct: 5,
@@ -33,11 +36,28 @@ export function calcCommission(d: Pick<DealDraft, 'frontGross' | 'backGross' | '
   return Math.round((base + plan.manuBonus + plan.csiBonus) * splitMult);
 }
 
-export async function insertDeal(draft: DealDraft, payPlan: PayPlan = DEFAULT_PAY_PLAN): Promise<void> {
+function mapLegacyPlan(p: PayPlan): Partial<RealPayPlan> {
+  return {
+    frontPct: p.frontPct,
+    backPct: p.backPct,
+    flatMini: p.flatMini,
+    manuBonus: p.manuBonus,
+    csiBonus: p.csiBonus,
+  };
+}
+
+export async function insertDeal(draft: DealDraft, payPlan?: PayPlan): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not signed in');
 
-  const amount = calcCommission(draft, payPlan);
+  // Use the rep's saved pay plan unless an explicit one is passed in.
+  const real: RealPayPlan = payPlan
+    ? { ...await loadPayPlan(), ...mapLegacyPlan(payPlan) }
+    : await loadPayPlan();
+  const amount = calcCommissionWithPlan(
+    { frontGross: draft.frontGross, backGross: draft.backGross, split: draft.split },
+    real,
+  );
 
   const { error } = await supabase.from('deals').insert({
     user_id: user.id,

@@ -76,3 +76,35 @@ export function useSequences(refetchKey: number = 0) {
 
   return { sequences, error };
 }
+
+// Edit a single step's message template + channel + delay. Returns the
+// updated step row.
+export async function updateSequenceStep(
+  stepId: string,
+  patch: { message_template?: string; channel?: 'text' | 'call' | 'email'; delay_days?: number },
+): Promise<void> {
+  const { error } = await supabase
+    .from('sequence_steps')
+    .update(patch)
+    .eq('id', stepId);
+  if (error) throw error;
+}
+
+// Rename a sequence.
+export async function renameSequence(sequenceId: string, name: string): Promise<void> {
+  const { error } = await supabase
+    .from('sequences')
+    .update({ name })
+    .eq('id', sequenceId);
+  if (error) throw error;
+}
+
+// Archive (soft hide). The viewer filters on is_archived=false so archived
+// sequences disappear from the list.
+export async function archiveSequence(sequenceId: string): Promise<void> {
+  const { error } = await supabase
+    .from('sequences')
+    .update({ is_archived: true })
+    .eq('id', sequenceId);
+  if (error) throw error;
+}

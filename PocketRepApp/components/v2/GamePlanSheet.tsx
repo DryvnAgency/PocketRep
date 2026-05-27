@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { Label, Pill, HeatStripe } from './atoms';
 import { useSequences, type V2Sequence } from '@/lib/v2/useSequences';
+import SequenceEditor from './SequenceEditor';
 
 const CHANNEL_ICON: Record<string, string> = {
   text: '💬',
@@ -9,18 +11,18 @@ const CHANNEL_ICON: Record<string, string> = {
   email: '✉',
 };
 
-function SequenceCard({ s }: { s: V2Sequence }) {
+function SequenceCard({ s, onPress }: { s: V2Sequence; onPress: () => void }) {
   const live = s.enrolledCount > 0;
   return (
-    <View style={[styles.card, { borderColor: live ? colors.goldBorder : colors.ink4 }]}>
+    <Pressable onPress={onPress} style={[styles.card, { borderColor: live ? colors.goldBorder : colors.ink4 }]}>
       <HeatStripe color={live ? colors.green : colors.grey} style={styles.stripe} />
       <View style={styles.cardHead}>
         <View style={{ flex: 1 }}>
           <Text style={styles.cardName}>{s.name}</Text>
           <Text style={styles.cardSub}>
             {live
-              ? `${s.enrolledCount} enrolled · ${s.steps.length} step${s.steps.length === 1 ? '' : 's'}`
-              : `Draft · ${s.steps.length} step${s.steps.length === 1 ? '' : 's'}`}
+              ? `${s.enrolledCount} enrolled · ${s.steps.length} step${s.steps.length === 1 ? '' : 's'} · tap to edit`
+              : `Draft · ${s.steps.length} step${s.steps.length === 1 ? '' : 's'} · tap to edit`}
           </Text>
         </View>
         <Pill color={live ? colors.green : colors.grey2}>
@@ -43,7 +45,7 @@ function SequenceCard({ s }: { s: V2Sequence }) {
           </View>
         ))}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -53,7 +55,9 @@ export default function GamePlanSheet({
   open: boolean;
   onClose: () => void;
 }) {
-  const { sequences, error } = useSequences(open ? 1 : 0);
+  const [editorTarget, setEditorTarget] = useState<V2Sequence | null>(null);
+  const [refetch, setRefetch] = useState(0);
+  const { sequences, error } = useSequences(open ? refetch + 1 : 0);
   if (!open) return null;
 
   return (
@@ -85,10 +89,23 @@ export default function GamePlanSheet({
             <Text style={styles.intro}>
               Multi-step cadences that text, call, or email contacts on your schedule. Enroll from any contact card.
             </Text>
-            {sequences.map(s => <SequenceCard key={s.id} s={s} />)}
+            {sequences.map(s => (
+              <SequenceCard
+                key={s.id}
+                s={s}
+                onPress={() => setEditorTarget(s)}
+              />
+            ))}
           </View>
         )}
       </ScrollView>
+
+      <SequenceEditor
+        open={!!editorTarget}
+        sequence={editorTarget}
+        onClose={() => setEditorTarget(null)}
+        onSaved={() => setRefetch(k => k + 1)}
+      />
     </View>
   );
 }

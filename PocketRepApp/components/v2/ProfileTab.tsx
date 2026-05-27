@@ -8,6 +8,8 @@ import {
   setAlwaysListenEnabled,
 } from '@/lib/v2/rexSettings';
 import { sendTestPush } from '@/lib/v2/pushNotifications';
+import { usePayPlan } from '@/lib/v2/payPlan';
+import PayPlanSummary from './PayPlanSummary';
 
 type ProfileRow = { email: string; full_name: string | null; plan: string };
 
@@ -45,12 +47,17 @@ function Row({
 export default function ProfileTab({
   onOpenGamePlan,
   onReplayOnboarding,
+  onOpenPayPlan,
+  payPlanRefetchKey = 0,
 }: {
   onOpenGamePlan?: () => void;
   onReplayOnboarding?: () => void;
+  onOpenPayPlan?: () => void;
+  payPlanRefetchKey?: number;
 } = {}) {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [alwaysListen, setAlwaysListen] = useState<boolean>(false);
+  const payPlan = usePayPlan(payPlanRefetchKey);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,9 +108,10 @@ export default function ProfileTab({
       </View>
 
       <SectionHead label="COMPENSATION" color={colors.gold} />
-      <View style={styles.group}>
-        <Row icon="💵" label="Pay plan" detail="Edit" />
-        <Row icon="📈" label="Commission MTD" detail="$4,280" />
+      {payPlan ? (
+        <PayPlanSummary plan={payPlan} onEdit={() => onOpenPayPlan?.()} />
+      ) : null}
+      <View style={[styles.group, { marginTop: 8 }]}>
         <Pressable onPress={onOpenGamePlan}>
           <Row icon="◐" label="Game Plan" detail="Sequences & templates" />
         </Pressable>

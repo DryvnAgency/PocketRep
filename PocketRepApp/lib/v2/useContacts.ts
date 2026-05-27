@@ -29,6 +29,7 @@ export type V2Contact = {
   currentMileage: number | null;
   isPastCustomer: boolean;
   doNotContact: boolean;
+  photoUrl: string | null;
 };
 
 export function tierFromScore(score: number): TierKey {
@@ -71,6 +72,7 @@ function rowToContact(r: any): V2Contact {
     currentMileage: r.current_mileage ?? null,
     isPastCustomer: !!r.is_past_customer,
     doNotContact: !!r.do_not_contact,
+    photoUrl: r.photo_url ?? null,
   };
 }
 
@@ -82,7 +84,7 @@ export function useContacts() {
     const { data, error } = await supabase
       .from('contacts')
       .select(
-        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,budget,trade_in,tags,notes,next_step,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact'
+        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,budget,trade_in,tags,notes,next_step,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url'
       )
       .eq('is_deleted', false);
 
