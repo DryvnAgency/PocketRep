@@ -16,7 +16,18 @@ import RexDisclosure from './RexDisclosure';
 import HeyRexSheet from './HeyRexSheet';
 import Onboarding from './Onboarding';
 import GamePlanSheet from './GamePlanSheet';
+import BlastSequenceDrafter from './BlastSequenceDrafter';
+import StalledLeadsAnalysis from './StalledLeadsAnalysis';
+import NurtureReviewer from './NurtureReviewer';
+import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
+import {
+  analyzeStalledLeads,
+  type StalledReport,
+  type StalledRecommendation,
+} from '@/lib/v2/stalledLeads';
+import { scheduleNurtureBlast } from '@/lib/v2/nurtureEngine';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
+import { registerForPush } from '@/lib/v2/pushNotifications';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
 import {
@@ -45,6 +56,14 @@ export default function AppShell() {
   const [alwaysListen, setAlwaysListen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [gamePlanOpen, setGamePlanOpen] = useState(false);
+  const [blastDraft, setBlastDraft] = useState<BlastDraft | null>(null);
+  const [blastDrafting, setBlastDrafting] = useState(false);
+  const [stalledOpen, setStalledOpen] = useState(false);
+  const [stalledReport, setStalledReport] = useState<StalledReport | null>(null);
+  const [stalledLoading, setStalledLoading] = useState(false);
+  const [nurtureReviewerOpen, setNurtureReviewerOpen] = useState(false);
+  const [nurtureRefetchKey, setNurtureRefetchKey] = useState(0);
+  const [schedulingNurture, setSchedulingNurture] = useState(false);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
   const tags = useTags(tagsRefetchKey);
@@ -65,6 +84,8 @@ export default function AppShell() {
       } else if (!hasCompletedOnboarding()) {
         setOnboardingOpen(true);
       }
+      // Fire-and-forget — push registration is silent on web/unsupported devices.
+      registerForPush().catch(() => undefined);
     });
     return subscribeAlwaysListen(setAlwaysListen);
   }, []);
@@ -103,20 +124,80 @@ export default function AppShell() {
   };
 
   const handleRexConfirm = async () => {
+    const actionType = rex.action?.type;
+    const blastPayload = rex.action?.type === 'create_blast_sequence' ? rex.action.payload : null;
+    const stalledPayload = rex.action?.type === 'analyze_stalled_leads' ? rex.action.payload : null;
+    const nurturePayload = rex.action?.type === 'schedule_nurture_blast' ? rex.action.payload : null;
     const result = await rex.confirm();
     // Refresh writers' downstream state
-    if (rex.action?.type === 'log_deal') {
+    if (actionType === 'log_deal') {
       setDealsRefetchKey(k => k + 1);
     }
-    if (rex.action?.type === 'add_contact'
-      || rex.action?.type === 'update_notes'
-      || rex.action?.type === 'delete_contact'
-      || rex.action?.type === 'schedule_followup'
+    if (actionType === 'add_contact'
+      || actionType === 'update_notes'
+      || actionType === 'delete_contact'
+      || actionType === 'schedule_followup'
+      || actionType === 'batch_action'
     ) {
       reloadContacts();
     }
     if (result?.openContactId) {
       setSelectedId(result.openContactId);
+    }
+    // Nurture blast: write pending drafts then open the reviewer.
+    if (nurturePayload) {
+      setSchedulingNurture(true);
+      try {
+        await scheduleNurtureBlast({
+          trigger: nurturePayload.trigger,
+          audience: nurturePayload.audience,
+          customIntent: nurturePayload.custom_intent,
+        });
+        setNurtureRefetchKey(k => k + 1);
+        setNurtureReviewerOpen(true);
+      } catch (e) {
+        console.warn('nurture blast failed', e);
+      } finally {
+        setSchedulingNurture(false);
+      }
+    }
+    // Stalled lead analysis: open the overlay, run the analyzer in parallel.
+    if (stalledPayload) {
+      setStalledOpen(true);
+      setStalledReport(null);
+      setStalledLoading(true);
+      try {
+        const report = await analyzeStalledLeads({
+          daysSilentThreshold: stalledPayload.days_silent_threshold ?? 14,
+          includeDead: stalledPayload.include_dead ?? false,
+        });
+        setStalledReport(report);
+      } catch (e) {
+        console.warn('stalled analysis failed', e);
+      } finally {
+        setStalledLoading(false);
+      }
+    }
+    // Blast sequence: confirm just opens the drafter. The drafter handles its
+    // own send-loop and DB writes; we kick off the per-contact brain call now.
+    if (blastPayload && (contacts?.length ?? 0) > 0) {
+      const selected = (contacts ?? []).filter(c => blastPayload.contact_ids.includes(c.id));
+      if (selected.length > 0) {
+        setBlastDrafting(true);
+        try {
+          const draft = await createBlastDraft({
+            intent: blastPayload.intent,
+            filterSummary: blastPayload.filter_summary,
+            promotion: blastPayload.promotion ?? {},
+            contacts: selected,
+          });
+          setBlastDraft(draft);
+        } catch (e) {
+          console.warn('blast draft failed', e);
+        } finally {
+          setBlastDrafting(false);
+        }
+      }
     }
   };
 
@@ -132,7 +213,13 @@ export default function AppShell() {
         {!authReady ? (
           <Text style={styles.placeholder}>Signing in…</Text>
         ) : active === 'heat' ? (
-          <HeatSheetTab contacts={contacts} error={error} onSelect={c => setSelectedId(c.id)} />
+          <HeatSheetTab
+            contacts={contacts}
+            error={error}
+            onSelect={c => setSelectedId(c.id)}
+            nurtureRefetchKey={nurtureRefetchKey}
+            onOpenNurture={() => setNurtureReviewerOpen(true)}
+          />
         ) : active === 'contacts' ? (
           <ContactsTab
             contacts={contacts}
@@ -227,12 +314,60 @@ export default function AppShell() {
       <HeyRexSheet
         state={rex.state}
         partial={rex.partial}
-        thinking={rex.thinking}
+        thinking={rex.thinking || blastDrafting || schedulingNurture}
         action={rex.action}
         executing={rex.executing}
         error={rex.error}
+        contacts={contacts ?? []}
         onConfirm={handleRexConfirm}
         onCancel={rex.cancel}
+        onOpenContact={(id) => setSelectedId(id)}
+      />
+
+      <BlastSequenceDrafter
+        open={!!blastDraft}
+        draft={blastDraft}
+        contacts={contacts ?? []}
+        onClose={() => setBlastDraft(null)}
+        onSent={() => {
+          setBlastDraft(null);
+          reloadContacts();
+        }}
+      />
+
+      <NurtureReviewer
+        open={nurtureReviewerOpen}
+        onClose={() => setNurtureReviewerOpen(false)}
+        onChanged={() => setNurtureRefetchKey(k => k + 1)}
+      />
+
+      <StalledLeadsAnalysis
+        open={stalledOpen}
+        report={stalledReport}
+        loading={stalledLoading}
+        onClose={() => { setStalledOpen(false); setStalledReport(null); }}
+        onKilled={() => { reloadContacts(); }}
+        onDispatchBlast={(rows: StalledRecommendation[]) => {
+          // Use the stalled openers as the starting blast — synthesize a
+          // BlastDraft directly (no second brain call) so the rep can review
+          // + edit + send in the same flow.
+          const draft: BlastDraft = {
+            sequence_id: '',
+            intent: 'Re-engage stalled leads',
+            filter_summary: `${rows.length} re-engagement${rows.length === 1 ? '' : 's'}`,
+            promotion: {},
+            drafted_steps: rows.map(r => ({
+              contact_id: r.contact_id,
+              contact_name: r.contact_name,
+              language: r.suggested_language,
+              message: r.suggested_opener,
+              game_plan: r.reason,
+              hook_used: r.recommendation === 'PUSH' ? 'calendar_event' : 'rapport',
+              char_count: r.suggested_opener.length,
+            })),
+          };
+          setBlastDraft(draft);
+        }}
       />
     </View>
   );

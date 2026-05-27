@@ -94,6 +94,71 @@ Once the domain points at `project-t90u1`, `shouldUseNewUi()` returns true autom
 
 ---
 
+## 5b. Rex Intelligence build (PRs #36-#39)
+
+The spec is in chat history (the "Rex Intelligence Build Spec" the user dropped 2026-05-26). This section tracks what's shipped vs pending against that spec.
+
+**Foundation migrations applied to `fwvrauqdoevwmwwqlfav`:**
+- `20260527_v2_rex_intelligence_schema.sql` — contacts adds (last_contact_method, last_contact_summary, rep_decision, do_not_contact, preferred_language, lease_end_date, current_mileage, vehicle_year/make/model, is_past_customer) + new tables (contact_milestones, nurture_messages, holiday_calendar, rex_action_log, user_push_tokens) + sequences/sequence_steps extensions + 2026 US holiday seed
+- `20260527_v2_rex_intelligence_seed.sql` — backfill rep_decision = 'active', demo lease_end milestones, Sofia → preferred_language = 'es'
+
+**Copy rules** — `REX_COPY_RULES` exported from `lib/v2/rexActions.ts`. Appended to every brain prompt that produces user-facing copy. Bake into any new brain prompt — never re-derive.
+
+### PR #36 — Cross-Deal Memory · **shipped**
+- `lib/v2/bookContext.ts` — `loadBookContext()` builds the full-book payload (hot/warm/watch/cold/dead, past customers, stalled list, by-make/model counts). `bookContextForPrompt()` compacts it to text for the brain (capped at 30 per tier).
+- `rexInterpret()` now loads book context + Rex memory in parallel and threads BOOK STATE into the prompt with hard guidance ("never invent ids — they must appear in BOOK STATE").
+- New actions: `filter_contacts`, `book_summary`, `call_next` (locally re-derived for copy safety), `batch_action`.
+- `lib/v2/batchActions.ts` — bulk tag / mark_dead / mark_active / archive.
+- `lib/v2/callNext.ts` — deterministic pick + opener templates (already obey copy rules so the brain can't drift on closers).
+- `components/v2/BookSummaryCard.tsx` — renders book_summary payload.
+- `components/v2/ContactListPreview.tsx` — renders filter_contacts payload with tap-to-open.
+- `components/v2/LanguageToggle.tsx` — EN/ES switch wired into ContactDetail hero. Persists to `contacts.preferred_language` via `updateContactPreferredLanguage`.
+- `useContacts` widened to surface `preferredLanguage`, `repDecision`, vehicle make/model/year, `leaseEndDate`, `currentMileage`, `isPastCustomer`, `doNotContact`.
+- `useHeyRex` now exposes `filteredIds`/`dismissFiltered` and threads `contacts` into `executeAction`; logs every action to `rex_action_log` (success / cancelled / failed).
+
+### PR #37 — Smart Blast Sequences · **shipped**
+- `lib/v2/blastSequences.ts`
+  - `createBlastDraft({intent, filterSummary, promotion, contacts})` — one brain call that drafts a personalized message per contact in the batch. Uses `REX_COPY_RULES` plus a "VARIETY RULE" that forbids repeating hooks or openers within the batch. Persists into `sequences` (with `is_ai_drafted=true`, `draft_status='pending_review'`) + `sequence_steps` so the rep can come back to a pending review later.
+  - `copyRuleViolations(message)` — local regex sanity check that flags any draft slipping forbidden tokens past the brain (em-dash, en-dash, "no pressure", "just checking in", etc.). Surfaced as a per-draft warning in the UI.
+  - `recordSentBlast` writes each sent draft to `nurture_messages` for variety tracking by future PR #39 nurture flows.
+  - `markBlastApproved` / `markBlastCancelled` flip `sequences.draft_status`.
+- `lib/v2/smsLauncher.ts` — `launchSms(draft)` fires `sms:` URLs through `Linking.openURL` (iOS uses `&body=`, Android `?body=`). One user gesture per message — the drafter drives the loop.
+- New action `create_blast_sequence` (`rexActions.ts`) — Rex parses the rep's voice intent ("text all my Murano lease customers about 499 SL promo"), returns matched `contact_ids` from BOOK STATE + parsed `promotion`. AppShell catches the confirmation, calls `createBlastDraft`, then opens the drafter sheet.
+- `components/v2/BlastSequenceDrafter.tsx` — bottom-sheet review UI. Per-contact card with: avatar, name, hook label, char count, language toggle, message (tap Edit to inline-edit), Rex's "game plan" line, copy-rule violation warning if any, and Skip / Send actions. Header shows the count, Cancel marks the sequence `cancelled`, "Send N" fires SMS one-by-one + marks the sequence `sent`.
+### PR #38 — Stalled Lead Intelligence · **shipped**
+- `lib/v2/stalledLeads.ts`
+  - `analyzeStalledLeads({daysSilentThreshold=14, includeDead=false})` — loads BookContext, runs the spec's decision tree (KILL / PUSH / FENCE / WATCH), and for any PUSH/FENCE asks the brain (one batched call) for a re-engagement opener per contact under `REX_COPY_RULES`. Falls back to a templated opener if the brain is unreachable.
+  - `batchKill(ids)` — flips `rep_decision='dead'` (KILL means "stop selling, start nurturing" per spec — not delete).
+- New action `analyze_stalled_leads` (`rexActions.ts`) — voice "who haven't I contacted in two weeks" / "show me stalled leads" lands here. AppShell catches the type, opens the overlay, and runs the analyzer.
+- `components/v2/StalledLeadsAnalysis.tsx` — overlay sorted by recommendation priority (PUSH > FENCE > KILL > WATCH). Each card: avatar, heat + days-silent, reason, PUSH/FENCE rows show the suggested opener in EN or ES. Multi-select check pattern; footer shows "Kill N" + "Push N" buttons that fan out to `batchKill` or to `BlastSequenceDrafter` pre-loaded with the openers.
+### PR #39 — Nurture Engine + manual reply tracker · **shipped (V1)**
+- `lib/v2/nurtureEngine.ts`
+  - `scheduleNurtureBlast({trigger, audience, customIntent?})` — loads BookContext, filters by audience (`dead` / `dormant` / `past_customers` / `all_inactive`), runs cadence checks (skip `do_not_contact`, skip if last nurture <30d, skip 60d after a reply, 6-month pause after a `negative` reply), fetches `last_3_hooks_used` per contact, then makes one batched brain call with `REX_COPY_RULES` plus a VARIETY RULE that forbids any hook in each contact's `hooks_to_avoid`. Inserts pending rows into `public.nurture_messages` (sent_at=null, scheduled_for=now).
+  - `loadPendingNurtures()` — joins nurture_messages → contacts for the reviewer UI.
+  - `markNurtureSent()` / `dismissNurture()` — manual send/skip from the reviewer.
+  - `countNurtureBanners()` — Heat Sheet banner counts (pending drafts + sent-but-unmarked-reply in last 7 days).
+- `lib/v2/manualReplyTracker.ts` — `markNurtureReply({nurtureMessageId, contactId, kind, replyText?, followUpInDays?})`. V1 manual classification per the spec's reply routing:
+  - `positive` → bump heat +20, set `rep_decision='active'`, update `last_contact_date`
+  - `negative` → set `do_not_contact=true`, `rep_decision='do_not_nurture'`
+  - `neutral` → flag the row, no contact mutation
+  - `later` → bump heat +10, set `next_followup_date` N days out
+- `components/v2/NurtureReviewer.tsx` — bulk review bottom sheet. Each row: avatar, name, trigger/hook/language pills, message (tap Edit to inline-edit before send), copy-rule violation warning, Skip / Send (`launchSms` fires `sms:` URL; marks the row sent on success).
+- `components/v2/MarkReplyButton.tsx` — opens an inline panel on a sent nurture: Positive / Neutral / Negative / Follow-up-later N days, plus a paste-the-reply text area for memory. Triggers `markNurtureReply`.
+- `components/v2/NurtureBanner.tsx` — Heat Sheet banner showing pending draft count (or "N sent · mark replies" when drafts are empty). Taps open the `NurtureReviewer`.
+- New action `schedule_nurture_blast` (`rexActions.ts`) — voice "send a holiday blast to my past customers" / "queue a quarterly check-in for dead leads". AppShell catches it, runs `scheduleNurtureBlast`, bumps the banner refetch key, opens the reviewer.
+
+**Out of V1 scope** (post-PR follow-ups):
+- Twilio webhook reply auto-classification — still deferred (needs Twilio account / phone / webhook host setup).
+
+**Shipped as PR #40 add-ons (this branch):**
+- `send-push` edge function (`verify_jwt=true`) — auth'd POST that resolves the caller's `auth.uid()`, reads their `user_push_tokens`, and fans out to Expo's `/api/v2/push/send`. Refuses to push to other users.
+- `nurture-scheduler` edge function (`verify_jwt=false`, guarded by `X-Cron-Secret` env header) — daily call. Looks up `holiday_calendar` for today; if it's a holiday, queues holiday nurtures for each rep. Mondays additionally queue a quarterly check-in batch (max 10/rep). Mirrors the client's cadence + variety rules exactly (re-uses the same brain prompt). Fires a push notification when a rep's queue grows.
+  - **Schedule via `pg_cron`**: `SELECT cron.schedule('nurture-scheduler', '0 14 * * *', $$SELECT net.http_post(url:='https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/nurture-scheduler', headers:='{"X-Cron-Secret":"<set CRON_SECRET via supabase secrets>"}'::jsonb)$$);` (14:00 UTC = ~9 AM ET).
+  - **Required secret**: `supabase secrets set CRON_SECRET=<random-32-char-string>` so unsanctioned callers can't trigger drafts.
+- `lib/v2/pushNotifications.ts` — Expo token registration on app boot (no-op on web / unsupported devices). `sendTestPush()` calls `send-push` for the QA row in Profile → REX → "Send a test push".
+
+---
+
 ## 6. Roadmap items locked in (PR #35)
 
 The four items the user called out as not-yet-architected:
@@ -194,7 +259,7 @@ Outstanding (next PR if needed):
 
 - All v2 work lives on branch `claude/exciting-goodall-or4T2`.
 - After each squash-merge, the branch is force-pushed (`--force-with-lease`) to match `main` so the next PR starts cleanly.
-- `pocket-rep` and `project-t90u1` CI must both go green to merge; `his-palabra` is permanent noise — ignore.
+- `pocket-rep` and `project-t90u1` CI must both go green to merge. (The orphaned `his-palabra` Vercel project was deleted from the dashboard 2026-05-26 — if you see it on a PR, the deletion hasn't propagated yet.)
 
 ---
 

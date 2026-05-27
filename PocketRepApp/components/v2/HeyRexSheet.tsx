@@ -4,6 +4,9 @@ import { Label } from './atoms';
 import type { RexAction } from '@/lib/v2/rexActions';
 import { actionWritesData, summarizeAction } from '@/lib/v2/rexActions';
 import type { RexListenerState } from '@/lib/v2/heyRexListener';
+import type { V2Contact } from '@/lib/v2/useContacts';
+import BookSummaryCard from './BookSummaryCard';
+import ContactListPreview from './ContactListPreview';
 
 export default function HeyRexSheet({
   state,
@@ -12,8 +15,10 @@ export default function HeyRexSheet({
   action,
   executing,
   error,
+  contacts,
   onConfirm,
   onCancel,
+  onOpenContact,
 }: {
   state: RexListenerState;
   partial: string;
@@ -21,8 +26,10 @@ export default function HeyRexSheet({
   action: RexAction | null;
   executing: boolean;
   error: string | null;
+  contacts: V2Contact[];
   onConfirm: () => void;
   onCancel: () => void;
+  onOpenContact?: (id: string) => void;
 }) {
   // Show the sheet whenever we're past the idle state OR there's a pending action.
   const open = state === 'awake' || state === 'processing' || !!action || thinking || executing;
@@ -66,7 +73,16 @@ export default function HeyRexSheet({
           <Text style={styles.say}>{action.say}</Text>
         ) : null}
 
-        {summary && !isSay ? (
+        {action?.type === 'book_summary' ? (
+          <BookSummaryCard payload={action.payload} />
+        ) : action?.type === 'filter_contacts' ? (
+          <ContactListPreview
+            contacts={contacts.filter(c => (action.payload.contact_ids ?? []).includes(c.id))}
+            filterSummary={action.payload.filter_summary}
+            matchedCount={action.payload.matched_count ?? action.payload.contact_ids?.length}
+            onTapContact={onOpenContact}
+          />
+        ) : summary && !isSay ? (
           <View style={styles.summary}>
             <Text style={styles.summaryLabel}>PROPOSED</Text>
             <Text style={styles.summaryText}>{summary}</Text>

@@ -8,8 +8,14 @@ import { TIERS } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import { useDeals, type V2Deal } from '@/lib/v2/useDeals';
 import { useTags } from '@/lib/v2/useTags';
-import { updateContactNotes, updateContactTags, deleteContact } from '@/lib/v2/updateContact';
+import {
+  updateContactNotes,
+  updateContactTags,
+  deleteContact,
+  updateContactPreferredLanguage,
+} from '@/lib/v2/updateContact';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
+import LanguageToggle from './LanguageToggle';
 
 const MILESTONE_ICONS: Record<string, { icon: string; color: string }> = {
   'visit':       { icon: '👋', color: colors.gold },
@@ -239,6 +245,18 @@ export default function ContactDetail({
             <View style={styles.heroPills}>
               <Pill color={tier.color}>{tier.icon} {tier.label}</Pill>
               {contact.planLabel ? <Pill color={colors.gold}>{contact.planLabel}</Pill> : null}
+              <LanguageToggle
+                value={contact.preferredLanguage}
+                onChange={async (next) => {
+                  onLocalUpdate({ ...contact, preferredLanguage: next });
+                  try {
+                    await updateContactPreferredLanguage(contact.id, next);
+                  } catch (e) {
+                    onLocalUpdate({ ...contact, preferredLanguage: contact.preferredLanguage });
+                    console.warn('language toggle failed', e);
+                  }
+                }}
+              />
             </View>
           </View>
         </View>
