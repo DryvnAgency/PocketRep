@@ -13,10 +13,12 @@ const FUNCTIONS_BASE = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1';
 
 let lastRegisteredToken: string | null = null;
 
-function safeRequire(name: string): any {
+function loadNotifications(): any {
+  // Static require so Metro can do dependency analysis. If the module isn't
+  // installed (or throws on web), the try/catch returns null and we no-op.
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require(name);
+    return require('expo-notifications');
   } catch {
     return null;
   }
@@ -25,7 +27,7 @@ function safeRequire(name: string): any {
 export async function registerForPush(): Promise<string | null> {
   if (Platform.OS === 'web') return null;
 
-  const Notifications = safeRequire('expo-notifications');
+  const Notifications = loadNotifications();
   if (!Notifications) return null;
 
   let token: string | null = null;
