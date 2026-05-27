@@ -5,9 +5,10 @@ import {
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import {
-  calcCommission, insertDeal, DEFAULT_PAY_PLAN,
+  insertDeal,
   type DealDraft,
 } from '@/lib/v2/dealLogger';
+import { usePayPlan, calcCommissionWithPlan, DEFAULT_PAY_PLAN } from '@/lib/v2/payPlan';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -64,8 +65,10 @@ export default function DealLogger({
     set(k, Number.isFinite(n) ? n : 0);
   };
 
+  const planFromHook = usePayPlan();
+  const plan = planFromHook ?? DEFAULT_PAY_PLAN;
   const totalGross = d.frontGross + d.backGross;
-  const commission = calcCommission(d, DEFAULT_PAY_PLAN);
+  const commission = calcCommissionWithPlan(d, plan);
   const canSave = !!d.name.trim() && !!d.stock.trim() && !!d.vehicle.trim() && totalGross > 0;
 
   const handleSave = async () => {
@@ -279,7 +282,7 @@ export default function DealLogger({
               <Label color={colors.gold}>YOUR PAYOUT</Label>
               <View style={{ flex: 1 }} />
               <Text style={styles.payoutFormula}>
-                {DEFAULT_PAY_PLAN.frontPct}% front · {DEFAULT_PAY_PLAN.backPct}% back · +${DEFAULT_PAY_PLAN.manuBonus + DEFAULT_PAY_PLAN.csiBonus}/unit
+                {plan.frontPct}% front · {plan.backPct}% back · +${plan.manuBonus + plan.csiBonus}/unit
                 {d.split ? ' · ×0.5 split' : ''}
               </Text>
             </View>

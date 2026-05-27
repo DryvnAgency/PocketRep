@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ViewStyle, TextStyle, StyleProp } from 'react-native';
+import { View, Text, Image, StyleSheet, ViewStyle, TextStyle, StyleProp } from 'react-native';
 import { colors } from '@/constants/theme';
 
 export function Label({
@@ -50,11 +50,27 @@ export function Avatar({
   name,
   size = 36,
   bg,
+  photoUrl,
 }: {
   name: string;
   size?: number;
   bg?: string;
+  photoUrl?: string | null;
 }) {
+  if (photoUrl) {
+    return (
+      <Image
+        source={{ uri: photoUrl }}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: 1,
+          borderColor: colors.goldBorder,
+        } as any}
+      />
+    );
+  }
   const initials = name
     .split(' ')
     .map((n) => n[0])

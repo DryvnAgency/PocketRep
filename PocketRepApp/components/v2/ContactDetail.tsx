@@ -15,7 +15,10 @@ import {
   updateContactPreferredLanguage,
 } from '@/lib/v2/updateContact';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
+import { useContactNurtures } from '@/lib/v2/contactNurtures';
+import { pickAndUploadContactPhoto } from '@/lib/v2/contactPhoto';
 import LanguageToggle from './LanguageToggle';
+import MarkReplyButton from './MarkReplyButton';
 
 const MILESTONE_ICONS: Record<string, { icon: string; color: string }> = {
   'visit':       { icon: '👋', color: colors.gold },
@@ -48,6 +51,9 @@ export default function ContactDetail({
   const tier = TIERS[contact.tier];
   const allTags = useTags();
   const deals = useDeals(contact.id, dealsRefetchKey);
+  const [nurtureRefetchKey, setNurtureRefetchKey] = useState(0);
+  const nurtures = useContactNurtures(contact.id, nurtureRefetchKey);
+  const unmarkedNurtures = nurtures.filter(n => n.sent_at && !n.reply_received);
 
   const [notes, setNotes] = useState(contact.notes ?? '');
   const [editingNotes, setEditingNotes] = useState(false);
@@ -239,7 +245,20 @@ export default function ContactDetail({
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}>
         <View style={styles.hero}>
-          <Avatar name={contact.name} size={68} />
+          <Pressable
+            onPress={async () => {
+              const result = await pickAndUploadContactPhoto(contact.id);
+              if (result.ok) {
+                onLocalUpdate({ ...contact, photoUrl: result.publicUrl });
+              }
+            }}
+            style={{ position: 'relative' }}
+          >
+            <Avatar name={contact.name} size={68} photoUrl={contact.photoUrl} />
+            <View style={styles.photoBadge}>
+              <Text style={styles.photoBadgeText}>{contact.photoUrl ? '↻' : '＋'}</Text>
+            </View>
+          </Pressable>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.heroName}>{contact.name}</Text>
             <View style={styles.heroPills}>
@@ -508,6 +527,35 @@ export default function ContactDetail({
           </View>
         ) : null}
 
+        {unmarkedNurtures.length > 0 ? (
+          <>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionLabel}>NURTURE · AWAITING REPLY</Text>
+              <View style={styles.dealCount}>
+                <Text style={styles.dealCountText}>{unmarkedNurtures.length}</Text>
+              </View>
+              <View style={{ flex: 1 }} />
+            </View>
+            {unmarkedNurtures.map(n => (
+              <View key={n.id} style={[styles.card, { gap: 8 }]}>
+                <Text style={styles.milestoneKind}>
+                  {n.trigger_type.replace('_', ' ').toUpperCase()} · sent {n.sent_at?.slice(0, 10)}
+                </Text>
+                <Text style={styles.notesText} numberOfLines={3}>{n.message_text}</Text>
+                <MarkReplyButton
+                  nurtureMessageId={n.id}
+                  contactId={contact.id}
+                  onMarked={() => {
+                    setNurtureRefetchKey(k => k + 1);
+                    // Heat/decision changes — let the list know via a stale refetch.
+                    onLocalUpdate({ ...contact });
+                  }}
+                />
+              </View>
+            ))}
+          </>
+        ) : null}
+
         <View style={styles.sectionHead}>
           <Text style={styles.sectionLabel}>DEAL LOG</Text>
           {deals.length > 0 ? (
@@ -665,6 +713,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconBtnText: { color: colors.gold, fontSize: 18, fontWeight: '700' },
+
+  photoBadge: {
+    position: 'absolute',
+    bottom: -2, right: -2,
+    width: 24, height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.gold,
+    borderWidth: 2, borderColor: colors.ink,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  photoBadgeText: { color: colors.ink, fontWeight: '800', fontSize: 12, lineHeight: 14 },
 
   menuCard: {
     position: 'absolute',

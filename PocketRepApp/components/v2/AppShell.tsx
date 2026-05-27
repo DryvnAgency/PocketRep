@@ -19,7 +19,9 @@ import GamePlanSheet from './GamePlanSheet';
 import BlastSequenceDrafter from './BlastSequenceDrafter';
 import StalledLeadsAnalysis from './StalledLeadsAnalysis';
 import NurtureReviewer from './NurtureReviewer';
+import PayPlanEditor from './PayPlanEditor';
 import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
+import { usePayPlan } from '@/lib/v2/payPlan';
 import {
   analyzeStalledLeads,
   type StalledReport,
@@ -38,6 +40,7 @@ import {
   subscribeAlwaysListen,
   hasCompletedOnboarding,
   markOnboardingComplete,
+  syncOnboardingFromProfile,
 } from '@/lib/v2/rexSettings';
 import { useHeyRex } from '@/lib/v2/useHeyRex';
 
@@ -64,6 +67,9 @@ export default function AppShell() {
   const [nurtureReviewerOpen, setNurtureReviewerOpen] = useState(false);
   const [nurtureRefetchKey, setNurtureRefetchKey] = useState(0);
   const [schedulingNurture, setSchedulingNurture] = useState(false);
+  const [payPlanOpen, setPayPlanOpen] = useState(false);
+  const [payPlanRefetchKey, setPayPlanRefetchKey] = useState(0);
+  const payPlan = usePayPlan(payPlanRefetchKey);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
   const tags = useTags(tagsRefetchKey);
@@ -76,7 +82,11 @@ export default function AppShell() {
   });
 
   useEffect(() => {
-    ensureDemoSession().finally(() => {
+    ensureDemoSession().finally(async () => {
+      // Hydrate the localStorage cache from the canonical profile flag so a
+      // fresh browser doesn't show the playbook again to a user who already
+      // ran through it on another device.
+      await syncOnboardingFromProfile().catch(() => undefined);
       setAuthReady(true);
       setAlwaysListen(getAlwaysListenEnabled());
       if (!hasSeenDisclosure()) {
@@ -233,6 +243,8 @@ export default function AppShell() {
           <ProfileTab
             onOpenGamePlan={() => setGamePlanOpen(true)}
             onReplayOnboarding={() => setOnboardingOpen(true)}
+            onOpenPayPlan={() => setPayPlanOpen(true)}
+            payPlanRefetchKey={payPlanRefetchKey}
           />
         ) : (
           <MetricsTab refetchKey={dealsRefetchKey} onLogDeal={() => openDealLogger()} />
@@ -333,6 +345,13 @@ export default function AppShell() {
           setBlastDraft(null);
           reloadContacts();
         }}
+      />
+
+      <PayPlanEditor
+        open={payPlanOpen}
+        plan={payPlan}
+        onClose={() => setPayPlanOpen(false)}
+        onSaved={() => setPayPlanRefetchKey(k => k + 1)}
       />
 
       <NurtureReviewer

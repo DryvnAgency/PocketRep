@@ -131,6 +131,18 @@ The spec is in chat history (the "Rex Intelligence Build Spec" the user dropped 
   - `batchKill(ids)` — flips `rep_decision='dead'` (KILL means "stop selling, start nurturing" per spec — not delete).
 - New action `analyze_stalled_leads` (`rexActions.ts`) — voice "who haven't I contacted in two weeks" / "show me stalled leads" lands here. AppShell catches the type, opens the overlay, and runs the analyzer.
 - `components/v2/StalledLeadsAnalysis.tsx` — overlay sorted by recommendation priority (PUSH > FENCE > KILL > WATCH). Each card: avatar, heat + days-silent, reason, PUSH/FENCE rows show the suggested opener in EN or ES. Multi-select check pattern; footer shows "Kill N" + "Push N" buttons that fan out to `batchKill` or to `BlastSequenceDrafter` pre-loaded with the openers.
+### PR #40 — final polish · **shipped**
+
+- **Pay Plan editor** — `components/v2/PayPlanEditor.tsx` ports `design/extracted/pay-plan.jsx`. Replaces the inert "Pay plan" row in Profile → COMPENSATION with `PayPlanSummary` (front/back/mini stat cards + pills) that opens a full editor. `lib/v2/payPlan.ts` loads from / saves to `public.pay_plans` and exposes `usePayPlan(refetchKey)` + `calcCommissionWithPlan`. DealLogger now reads the rep's real plan for the live payout preview + at insert time, so changing rates immediately affects future deal commission math.
+
+- **Sequences editor** — `components/v2/SequenceEditor.tsx`. Tapping any card in `GamePlanSheet` opens a full editor: rename, channel toggle (text/call/email) per step, delay days per step, message template with `{{token}}` highlighting in preview mode, token-chip insert in raw mode, and an Archive sequence link with confirm. `lib/v2/useSequences.ts` exposes `updateSequenceStep` / `renameSequence` / `archiveSequence`.
+
+- **Photo upload on Contact card** — `lib/v2/contactPhoto.ts` runs `expo-image-picker` (lazy-loaded), uploads to the new `contact-photos` Supabase Storage bucket (path `<user_id>/<contact_id>-<timestamp>.<ext>`), and stamps `contacts.photo_url`. ContactDetail hero now has a tap-to-upload affordance with a `+` / `↻` badge. `Avatar` atom renders the photo when `photoUrl` is provided, falls back to initials otherwise. RLS keys writes to the rep's own user_id prefix; bucket is publicly readable so `<Image>` works without auth.
+
+- **MarkReplyButton in ContactDetail** — recent sent nurtures that haven't been marked yet appear above the Deal Log as a "NURTURE · AWAITING REPLY" section. The collapsed pill opens the same inline panel from `NurtureReviewer` (Positive / Neutral / Negative / Follow-up later N days + optional reply text capture) and triggers the right side effects via `markNurtureReply` (heat bump, `rep_decision` update, `do_not_contact`, `next_followup_date`).
+
+- **Onboarding persisted to profile** — `profiles.onboarding_complete` column added; `markOnboardingComplete()` writes to Supabase + localStorage cache; `syncOnboardingFromProfile()` hydrates the cache on boot so a fresh browser doesn't replay the playbook for someone who already finished it.
+
 ### PR #39 — Nurture Engine + manual reply tracker · **shipped (V1)**
 - `lib/v2/nurtureEngine.ts`
   - `scheduleNurtureBlast({trigger, audience, customIntent?})` — loads BookContext, filters by audience (`dead` / `dormant` / `past_customers` / `all_inactive`), runs cadence checks (skip `do_not_contact`, skip if last nurture <30d, skip 60d after a reply, 6-month pause after a `negative` reply), fetches `last_3_hooks_used` per contact, then makes one batched brain call with `REX_COPY_RULES` plus a VARIETY RULE that forbids any hook in each contact's `hooks_to_avoid`. Inserts pending rows into `public.nurture_messages` (sent_at=null, scheduled_for=now).
