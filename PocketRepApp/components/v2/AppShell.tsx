@@ -87,6 +87,12 @@ export default function AppShell() {
     contacts,
     nurtureRefetchKey,
   );
+  // "active" = hot + warm leads (the rep's working pipeline).
+  const activeCount = useMemo(
+    () => (contacts ?? []).filter(c => c.tier === 'hot' || c.tier === 'warm').length,
+    [contacts],
+  );
+  const totalCount = contacts?.length ?? 0;
 
   const rex = useHeyRex({
     enabled: authReady && alwaysListen,
@@ -230,6 +236,8 @@ export default function AppShell() {
       <CustomNavBar
         active={active}
         unread={notifUnread}
+        activeCount={activeCount}
+        totalCount={totalCount}
         onNotifications={() => setNotifOpen(true)}
         onSearch={() => setActive('contacts')}
         onUpgrade={() => setActive('profile')}
