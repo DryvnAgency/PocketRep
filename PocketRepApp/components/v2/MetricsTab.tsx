@@ -44,10 +44,13 @@ function StatCard({
   );
 }
 
-function DealRow({ d }: { d: V2DealRich }) {
+function DealRow({ d, onPress }: { d: V2DealRich; onPress?: () => void }) {
   const dt = d.closedAt ? new Date(d.closedAt + 'T12:00:00') : new Date();
   return (
-    <View style={styles.dealRow}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.dealRow, pressed && { backgroundColor: colors.goldBg }]}
+    >
       <View style={styles.dealDate}>
         <Text style={styles.dealMo}>{MONTHS_SHORT[dt.getMonth()]}</Text>
         <Text style={styles.dealDay}>{dt.getDate()}</Text>
@@ -70,18 +73,19 @@ function DealRow({ d }: { d: V2DealRich }) {
           {d.funding ? <Pill color={FUNDING_COLOR[d.funding] ?? colors.grey2}>{FUNDING_LABEL[d.funding] ?? d.funding.toUpperCase()}</Pill> : null}
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 function MonthAccordion({
-  label, deals, expanded, onToggle, primary,
+  label, deals, expanded, onToggle, primary, onSelectDeal,
 }: {
   label: string;
   deals: V2DealRich[];
   expanded: boolean;
   onToggle: () => void;
   primary?: boolean;
+  onSelectDeal?: (d: V2DealRich) => void;
 }) {
   const total = deals.reduce((s, d) => s + d.amount, 0);
   const grossSum = deals.reduce((s, d) => s + (d.frontGross ?? 0) + (d.backGross ?? 0), 0);
@@ -105,7 +109,7 @@ function MonthAccordion({
       </Pressable>
       {expanded ? (
         <View style={styles.monthDeals}>
-          {deals.map(d => <DealRow key={d.id} d={d} />)}
+          {deals.map(d => <DealRow key={d.id} d={d} onPress={() => onSelectDeal?.(d)} />)}
         </View>
       ) : null}
     </View>
@@ -115,9 +119,11 @@ function MonthAccordion({
 export default function MetricsTab({
   refetchKey = 0,
   onLogDeal,
+  onSelectDeal,
 }: {
   refetchKey?: number;
   onLogDeal?: () => void;
+  onSelectDeal?: (d: V2DealRich) => void;
 } = {}) {
   const deals = useUserDeals(refetchKey);
   const now = new Date();
@@ -269,6 +275,7 @@ export default function MetricsTab({
             expanded={!!expanded[k]}
             onToggle={() => toggle(k)}
             primary={primary}
+            onSelectDeal={onSelectDeal}
           />
         );
       })}

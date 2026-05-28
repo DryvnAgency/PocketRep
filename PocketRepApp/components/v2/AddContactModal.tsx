@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { createContact, type NewContactDraft } from '@/lib/v2/updateContact';
+import { parseBirthdayInput } from '@/lib/v2/birthday';
 
 const PLAN_OPTIONS: Array<{ value: NewContactDraft['planLabel']; label: string }> = [
   { value: 'TODAY', label: 'Today' },
@@ -25,6 +26,7 @@ const blank = (): NewContactDraft => ({
   heatScore: 90,
   notes: '',
   tags: [],
+  birthday: '',
 });
 
 export default function AddContactModal({
@@ -55,10 +57,15 @@ export default function AddContactModal({
 
   const handleSave = async () => {
     if (!canSave) return;
+    const parsedBday = parseBirthdayInput(d.birthday ?? '');
+    if (parsedBday === false) {
+      setError('Birthday must be MM/DD/YYYY');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await createContact(d);
+      await createContact({ ...d, birthday: parsedBday });
       onCreated();
       onClose();
     } catch (e: any) {
@@ -137,15 +144,26 @@ export default function AddContactModal({
             />
           </Field>
 
-          <Field label="TRIM / COLOR">
-            <TextInput
-              value={d.trim}
-              onChangeText={t => set('trim', t)}
-              placeholder="Brooklyn Grey · xDrive"
-              placeholderTextColor={colors.grey}
-              style={styles.input}
-            />
-          </Field>
+          <View style={styles.row}>
+            <Field label="TRIM / COLOR" style={{ flex: 1 }}>
+              <TextInput
+                value={d.trim}
+                onChangeText={t => set('trim', t)}
+                placeholder="Brooklyn Grey · xDrive"
+                placeholderTextColor={colors.grey}
+                style={styles.input}
+              />
+            </Field>
+            <Field label="BIRTHDAY" style={{ flex: 1 }}>
+              <TextInput
+                value={d.birthday ?? ''}
+                onChangeText={t => set('birthday', t)}
+                placeholder="MM/DD/YYYY"
+                placeholderTextColor={colors.grey}
+                style={styles.input}
+              />
+            </Field>
+          </View>
 
           <View style={styles.row}>
             <Field label="BUDGET" style={{ flex: 1 }}>

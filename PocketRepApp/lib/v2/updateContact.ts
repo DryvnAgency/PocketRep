@@ -16,6 +16,15 @@ export async function updateContactTags(id: string, tags: string[]): Promise<voi
   if (error) throw error;
 }
 
+// `value` is a YYYY-MM-DD date string, or null to clear it.
+export async function updateContactBirthday(id: string, value: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('contacts')
+    .update({ birthday: value, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 export type NewContactDraft = {
   firstName: string;
   lastName: string;
@@ -28,6 +37,7 @@ export type NewContactDraft = {
   heatScore: number;
   notes: string;
   tags: string[];
+  birthday?: string | null;
 };
 
 export async function createContact(draft: NewContactDraft): Promise<string> {
@@ -50,6 +60,7 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
       heat_score: draft.heatScore,
       last_contact_date: today,
       notes: draft.notes.trim() || null,
+      birthday: draft.birthday || null,
       tags: draft.tags,
       stage: 'active',
       milestones: [],

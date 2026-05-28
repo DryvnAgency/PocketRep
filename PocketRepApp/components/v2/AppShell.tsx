@@ -10,6 +10,7 @@ import ContactDetail from './ContactDetail';
 import ProfileTab from './ProfileTab';
 import MetricsTab from './MetricsTab';
 import DealLogger, { type DealLoggerPrefill } from './DealLogger';
+import DealDetail from './DealDetail';
 import BulkTagFlow from './BulkTagFlow';
 import AddContactModal from './AddContactModal';
 import RexDisclosure from './RexDisclosure';
@@ -20,6 +21,8 @@ import BlastSequenceDrafter from './BlastSequenceDrafter';
 import StalledLeadsAnalysis from './StalledLeadsAnalysis';
 import NurtureReviewer from './NurtureReviewer';
 import PayPlanEditor from './PayPlanEditor';
+import NotificationsCenter from './NotificationsCenter';
+import RexCoach from './RexCoach';
 import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
 import { usePayPlan } from '@/lib/v2/payPlan';
 import {
@@ -28,10 +31,13 @@ import {
   type StalledRecommendation,
 } from '@/lib/v2/stalledLeads';
 import { scheduleNurtureBlast } from '@/lib/v2/nurtureEngine';
+import { useNotifications } from '@/lib/v2/notifications';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { registerForPush } from '@/lib/v2/pushNotifications';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
+import { deleteTag } from '@/lib/v2/tagMutations';
+import type { V2DealRich } from '@/lib/v2/useUserDeals';
 import {
   getAlwaysListenEnabled,
   hasSeenDisclosure,
@@ -52,6 +58,7 @@ export default function AppShell() {
   const [dealLoggerOpen, setDealLoggerOpen] = useState(false);
   const [dealLoggerPrefill, setDealLoggerPrefill] = useState<DealLoggerPrefill | undefined>();
   const [dealsRefetchKey, setDealsRefetchKey] = useState(0);
+  const [selectedDeal, setSelectedDeal] = useState<V2DealRich | null>(null);
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [tagsRefetchKey, setTagsRefetchKey] = useState(0);
   const [addContactOpen, setAddContactOpen] = useState(false);
@@ -69,11 +76,17 @@ export default function AppShell() {
   const [schedulingNurture, setSchedulingNurture] = useState(false);
   const [payPlanOpen, setPayPlanOpen] = useState(false);
   const [payPlanRefetchKey, setPayPlanRefetchKey] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [rexCoachOpen, setRexCoachOpen] = useState(false);
   const payPlan = usePayPlan(payPlanRefetchKey);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
   const tags = useTags(tagsRefetchKey);
   const tagNames = useMemo(() => tags.map(t => t.name), [tags]);
+  const { items: notifItems, unread: notifUnread } = useNotifications(
+    contacts,
+    nurtureRefetchKey,
+  );
 
   const rex = useHeyRex({
     enabled: authReady && alwaysListen,
@@ -109,20 +122,12 @@ export default function AppShell() {
     else setOrbState('idle');
   }, [rex.state, rex.thinking, rex.executing, alwaysListen]);
 
-  const cycleOrb = () => {
-    // With always-listen on, the orb is driven by the listener — tap to cancel
-    // a pending action. With it off, fall back to the demo cycle.
-    if (alwaysListen) {
-      if (rex.action || rex.state !== 'idle') rex.cancel();
-      return;
-    }
-    const order: OrbState[] = ['idle', 'listening', 'processing', 'saved'];
-    const next = order[(order.indexOf(orbState) + 1) % order.length];
-    setOrbState(next);
-    if (next === 'saved') {
-      setTimeout(() => setOrbState('idle'), 1800);
-    }
-  };
+  // Tapping the orb opens the Rex Coach chat. Voice ("Hey Rex") remains the
+  // only thing that triggers the action-taking assistant — the orb visual still
+  // animates with the listener state (see the effect above), but a tap is just
+  // the doorway to coaching. A pending voice action is cancelled from the
+  // HeyRexSheet's own Cancel button.
+  const handleOrbPress = () => setRexCoachOpen(true);
 
   const selected = selectedId
     ? contacts?.find(c => c.id === selectedId) ?? null
@@ -131,6 +136,25 @@ export default function AppShell() {
   const openDealLogger = (prefill?: DealLoggerPrefill) => {
     setDealLoggerPrefill(prefill);
     setDealLoggerOpen(true);
+  };
+
+  // Opens the Stalled Leads analysis overlay and runs the analyzer. Reachable
+  // both from a Rex voice action and the Heat Sheet "Review stalled leads" button.
+  const openStalledAnalysis = async (opts?: { daysSilentThreshold?: number; includeDead?: boolean }) => {
+    setStalledOpen(true);
+    setStalledReport(null);
+    setStalledLoading(true);
+    try {
+      const report = await analyzeStalledLeads({
+        daysSilentThreshold: opts?.daysSilentThreshold ?? 14,
+        includeDead: opts?.includeDead ?? false,
+      });
+      setStalledReport(report);
+    } catch (e) {
+      console.warn('stalled analysis failed', e);
+    } finally {
+      setStalledLoading(false);
+    }
   };
 
   const handleRexConfirm = async () => {
@@ -173,20 +197,10 @@ export default function AppShell() {
     }
     // Stalled lead analysis: open the overlay, run the analyzer in parallel.
     if (stalledPayload) {
-      setStalledOpen(true);
-      setStalledReport(null);
-      setStalledLoading(true);
-      try {
-        const report = await analyzeStalledLeads({
-          daysSilentThreshold: stalledPayload.days_silent_threshold ?? 14,
-          includeDead: stalledPayload.include_dead ?? false,
-        });
-        setStalledReport(report);
-      } catch (e) {
-        console.warn('stalled analysis failed', e);
-      } finally {
-        setStalledLoading(false);
-      }
+      await openStalledAnalysis({
+        daysSilentThreshold: stalledPayload.days_silent_threshold ?? 14,
+        includeDead: stalledPayload.include_dead ?? false,
+      });
     }
     // Blast sequence: confirm just opens the drafter. The drafter handles its
     // own send-loop and DB writes; we kick off the per-contact brain call now.
@@ -213,7 +227,13 @@ export default function AppShell() {
 
   return (
     <View style={styles.root}>
-      <CustomNavBar active={active} />
+      <CustomNavBar
+        active={active}
+        unread={notifUnread}
+        onNotifications={() => setNotifOpen(true)}
+        onSearch={() => setActive('contacts')}
+        onUpgrade={() => setActive('profile')}
+      />
 
       <ScrollView
         style={styles.content}
@@ -229,6 +249,7 @@ export default function AppShell() {
             onSelect={c => setSelectedId(c.id)}
             nurtureRefetchKey={nurtureRefetchKey}
             onOpenNurture={() => setNurtureReviewerOpen(true)}
+            onAnalyzeStalled={() => openStalledAnalysis()}
           />
         ) : active === 'contacts' ? (
           <ContactsTab
@@ -238,20 +259,30 @@ export default function AppShell() {
             onSelect={c => setSelectedId(c.id)}
             onBulkTag={() => setBulkTagOpen(true)}
             onAddContact={() => setAddContactOpen(true)}
+            onDeleteTag={async (name) => {
+              try { await deleteTag(name); } catch (e) { console.warn('deleteTag failed', e); }
+              setTagsRefetchKey(k => k + 1);
+              reloadContacts();
+            }}
           />
         ) : active === 'profile' ? (
           <ProfileTab
             onOpenGamePlan={() => setGamePlanOpen(true)}
             onReplayOnboarding={() => setOnboardingOpen(true)}
             onOpenPayPlan={() => setPayPlanOpen(true)}
+            onNavigate={setActive}
             payPlanRefetchKey={payPlanRefetchKey}
           />
         ) : (
-          <MetricsTab refetchKey={dealsRefetchKey} onLogDeal={() => openDealLogger()} />
+          <MetricsTab
+            refetchKey={dealsRefetchKey}
+            onLogDeal={() => openDealLogger()}
+            onSelectDeal={d => setSelectedDeal(d)}
+          />
         )}
       </ScrollView>
 
-      <TabBar active={active} onChange={setActive} orbState={orbState} onOrbPress={cycleOrb} />
+      <TabBar active={active} onChange={setActive} orbState={orbState} onOrbPress={handleOrbPress} />
 
       {selected ? (
         <ContactDetail
@@ -273,6 +304,12 @@ export default function AppShell() {
         prefill={dealLoggerPrefill}
         onClose={() => setDealLoggerOpen(false)}
         onSaved={() => setDealsRefetchKey(k => k + 1)}
+      />
+
+      <DealDetail
+        deal={selectedDeal}
+        onClose={() => setSelectedDeal(null)}
+        onDeleted={() => setDealsRefetchKey(k => k + 1)}
       />
 
       <BulkTagFlow
@@ -359,6 +396,16 @@ export default function AppShell() {
         onClose={() => setNurtureReviewerOpen(false)}
         onChanged={() => setNurtureRefetchKey(k => k + 1)}
       />
+
+      <NotificationsCenter
+        open={notifOpen}
+        items={notifItems}
+        onClose={() => setNotifOpen(false)}
+        onOpenContact={(id) => { setSelectedId(id); }}
+        onOpenNurture={() => setNurtureReviewerOpen(true)}
+      />
+
+      <RexCoach open={rexCoachOpen} onClose={() => setRexCoachOpen(false)} />
 
       <StalledLeadsAnalysis
         open={stalledOpen}

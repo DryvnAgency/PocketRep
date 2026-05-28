@@ -11,8 +11,7 @@
 import { supabase } from '@/lib/supabase';
 import { REX_COPY_RULES } from './rexActions';
 import { loadBookContext, type BookContact } from './bookContext';
-
-const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
+import { callBrain } from './aiProxy';
 
 export type NurtureAudience = 'dead' | 'dormant' | 'past_customers' | 'all_inactive';
 export type NurtureTrigger =
@@ -253,20 +252,13 @@ export async function scheduleNurtureBlast({
   }
 
   // Brain call: one message per contact
-  const res = await fetch(`${AI_PROXY_URL}/brain`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      max_tokens: 2500,
-      messages: [{
-        role: 'user',
-        content: buildPrompt(passing, trigger, toneGuidance, pitchIntensity, customIntent),
-      }],
-    }),
+  const raw = await callBrain({
+    maxTokens: 2500,
+    messages: [{
+      role: 'user',
+      content: buildPrompt(passing, trigger, toneGuidance, pitchIntensity, customIntent),
+    }],
   });
-  if (!res.ok) throw new Error(`ai-proxy ${res.status}`);
-  const json = await res.json();
-  const raw = (json.content?.[0]?.text ?? json.text ?? '') as string;
   const fence = raw.match(/```json\s*([\s\S]*?)```/i) ?? raw.match(/```\s*([\s\S]*?)```/);
   let messages: any[] = [];
   try {

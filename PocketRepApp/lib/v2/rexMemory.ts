@@ -8,8 +8,8 @@
 // the recent history into a new summary.
 
 import { supabase } from '@/lib/supabase';
+import { callBrain } from './aiProxy';
 
-const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 const SUMMARY_EVERY = 8;
 
 export type RexMemoryRow = {
@@ -87,17 +87,15 @@ ${turns}
 
 Return only the bullets.`;
 
-  const res = await fetch(`${AI_PROXY_URL}/brain`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      max_tokens: 400,
+  let text = '';
+  try {
+    text = (await callBrain({
+      maxTokens: 400,
       messages: [{ role: 'user', content: prompt }],
-    }),
-  });
-  if (!res.ok) return;
-  const json = await res.json();
-  const text = (json.content?.[0]?.text ?? json.text ?? '').trim();
+    })).trim();
+  } catch {
+    return;
+  }
   if (!text) return;
 
   await supabase

@@ -17,6 +17,7 @@ export type V2Contact = {
   tags: string[];
   notes: string | null;
   nextStep: string | null;
+  birthday: string | null;
   milestones: Array<{ kind: string; t: string; d: string }>;
 
   // Rex intelligence fields (PR #36+)
@@ -62,6 +63,7 @@ function rowToContact(r: any): V2Contact {
     tags: Array.isArray(r.tags) ? r.tags : [],
     notes: r.notes,
     nextStep: r.next_step,
+    birthday: r.birthday ?? null,
     milestones: Array.isArray(r.milestones) ? r.milestones : [],
     preferredLanguage: (r.preferred_language ?? 'en') as 'en' | 'es',
     repDecision: r.rep_decision ?? null,
@@ -84,7 +86,7 @@ export function useContacts() {
     const { data, error } = await supabase
       .from('contacts')
       .select(
-        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,budget,trade_in,tags,notes,next_step,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url'
+        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,budget,trade_in,tags,notes,next_step,birthday,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url'
       )
       .eq('is_deleted', false);
 

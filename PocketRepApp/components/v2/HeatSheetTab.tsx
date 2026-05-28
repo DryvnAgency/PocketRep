@@ -41,12 +41,14 @@ export default function HeatSheetTab({
   onSelect,
   nurtureRefetchKey = 0,
   onOpenNurture,
+  onAnalyzeStalled,
 }: {
   contacts: V2Contact[] | null;
   error: string | null;
   onSelect: (c: V2Contact) => void;
   nurtureRefetchKey?: number;
   onOpenNurture?: () => void;
+  onAnalyzeStalled?: () => void;
 }) {
   if (error) {
     return (
@@ -86,6 +88,17 @@ export default function HeatSheetTab({
 
       {onOpenNurture ? (
         <NurtureBanner refetchKey={nurtureRefetchKey} onOpenReviewer={onOpenNurture} />
+      ) : null}
+
+      {onAnalyzeStalled ? (
+        <Pressable onPress={onAnalyzeStalled} style={styles.stalledBtn}>
+          <Text style={styles.stalledIcon}>🧭</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.stalledTitle}>Review stalled leads</Text>
+            <Text style={styles.stalledSub}>Rex ranks who to kill, push, or fence</Text>
+          </View>
+          <Text style={styles.stalledChev}>›</Text>
+        </Pressable>
       ) : null}
 
       <SectionHead label="HOT" count={groups.hot.length} color={colors.red} icon="🔥" />
@@ -180,4 +193,23 @@ const styles = StyleSheet.create({
     marginTop: 4,
     letterSpacing: 0.6,
   },
+
+  stalledBtn: {
+    marginHorizontal: 14,
+    marginTop: 6,
+    marginBottom: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  stalledIcon: { fontSize: 18 },
+  stalledTitle: { fontSize: 14, fontWeight: '700', color: colors.white, letterSpacing: -0.2 },
+  stalledSub: { fontSize: 11, color: colors.grey2, marginTop: 2 },
+  stalledChev: { fontSize: 16, color: colors.gold },
 });

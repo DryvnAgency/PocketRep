@@ -12,9 +12,8 @@ import { getRexMemory, recordRexTurn } from './rexMemory';
 import { loadBookContext, bookContextForPrompt } from './bookContext';
 import { chooseNextCall } from './callNext';
 import { executeBatchAction, type BatchActionKind } from './batchActions';
+import { callBrain } from './aiProxy';
 import type { V2Contact } from './useContacts';
-
-const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 
 export type RexAction =
   | { type: 'add_contact'; payload: AddContactPayload; say: string }
@@ -312,17 +311,10 @@ export async function rexInterpret(
   ]);
 
   const bookSection = bookContextForPrompt(book);
-  const res = await fetch(`${AI_PROXY_URL}/brain`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      max_tokens: 800,
-      messages: [{ role: 'user', content: buildPrompt(transcript, contacts, tagNames, memory?.summary ?? '', bookSection) }],
-    }),
+  const raw = await callBrain({
+    maxTokens: 800,
+    messages: [{ role: 'user', content: buildPrompt(transcript, contacts, tagNames, memory?.summary ?? '', bookSection) }],
   });
-  if (!res.ok) throw new Error(`ai-proxy ${res.status}`);
-  const json = await res.json();
-  const raw = json.content?.[0]?.text ?? json.text ?? '';
   const action = parseAction(raw);
 
   // call_next is a "Rex picked" action, but the brain can drift on the

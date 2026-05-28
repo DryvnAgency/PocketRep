@@ -46,6 +46,11 @@ function mapLegacyPlan(p: PayPlan): Partial<RealPayPlan> {
   };
 }
 
+export async function deleteDeal(id: string): Promise<void> {
+  const { error } = await supabase.from('deals').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function insertDeal(draft: DealDraft, payPlan?: PayPlan): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not signed in');

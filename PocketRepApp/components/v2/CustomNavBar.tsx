@@ -16,10 +16,14 @@ export default function CustomNavBar({
   active,
   onSearch,
   onUpgrade,
+  onNotifications,
+  unread = 0,
 }: {
   active: TabId;
   onSearch?: () => void;
   onUpgrade?: () => void;
+  onNotifications?: () => void;
+  unread?: number;
 }) {
   const t = TITLES[active];
   return (
@@ -47,7 +51,7 @@ export default function CustomNavBar({
           </Svg>
         </Pressable>
 
-        <View style={styles.iconBtn}>
+        <Pressable onPress={onNotifications} style={styles.iconBtn}>
           <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
             <Path
               d="M5 17v-5a7 7 0 1114 0v5l1.5 2H3.5L5 17z"
@@ -57,8 +61,12 @@ export default function CustomNavBar({
             />
             <Path d="M10 21a2 2 0 004 0" stroke={colors.gold} strokeWidth={1.6} strokeLinecap="round" />
           </Svg>
-          <View style={styles.notifDot} />
-        </View>
+          {unread > 0 ? (
+            <View style={styles.notifBadge}>
+              <Text style={styles.notifBadgeText}>{unread > 9 ? '9+' : unread}</Text>
+            </View>
+          ) : null}
+        </Pressable>
       </View>
 
       <Text style={styles.title}>{t.title}</Text>
@@ -110,17 +118,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  notifDot: {
+  notifBadge: {
     position: 'absolute',
-    top: 7,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 2,
+    right: 1,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: 8,
     backgroundColor: colors.red,
     borderWidth: 1.5,
-    borderColor: colors.surface2,
+    borderColor: colors.ink2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  notifBadgeText: { fontSize: 9, fontWeight: '800', color: colors.white },
   title: {
     fontSize: 30,
     fontWeight: '800',
