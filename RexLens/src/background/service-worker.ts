@@ -85,6 +85,52 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 const AI_TIMEOUT_MS = 120_000; // 120 second timeout — 30-task batches with 32K output need headroom
 
+interface BatchContact {
+  contact: string | null;
+  channel: 'call' | 'text' | 'email';
+  priority_score: number;
+  priority_reason: string;
+  draft: { subject: string | null; body: string | null };
+  missing_fields: string[];
+  needs_review: boolean;
+  review_note: string | null;
+}
+
+function formatBatchResults(rawJson: string): string {
+  let contacts: BatchContact[];
+  try {
+    contacts = JSON.parse(rawJson);
+    if (!Array.isArray(contacts)) contacts = [contacts];
+  } catch {
+    return rawJson;
+  }
+
+  contacts.sort((a, b) => (b.priority_score || 0) - (a.priority_score || 0));
+
+  return contacts.map((c, i) => {
+    const num = i + 1;
+    const name = c.contact || 'Unknown';
+    const channel = (c.channel || 'call').toUpperCase();
+    const score = c.priority_score ?? 0;
+    const reason = c.priority_reason || '';
+
+    let block = `${num}. ${name} | ${channel} | Priority: ${score} (${reason})`;
+
+    if (c.needs_review) {
+      block += `\n   NEEDS REVIEW: ${c.review_note || 'Check this contact manually.'}`;
+    } else if (c.draft?.body) {
+      if (c.draft.subject) {
+        block += `\n   Subject: ${c.draft.subject}`;
+      }
+      block += `\n   ${c.draft.body}`;
+    } else {
+      block += '\n   No draft generated.';
+    }
+
+    return block;
+  }).join('\n\n');
+}
+
 function isOverloadError(status: number, errMsg: string): boolean {
   if (status === 429 || status === 503 || status === 529) return true;
   const lower = errMsg.toLowerCase();
@@ -660,11 +706,23 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       if (!authState.hasAccess) return { error: 'Sign in to Rex Lens to use this feature.' };
       const { tasks, rawText } = message.payload as { tasks: StructuredTask[]; rawText: string };
       try {
-        // Get rep name and dealership from storage (set by landing page signup)
         const storageData = await chrome.storage.sync.get(['repName', 'dealershipName']);
         const repName = storageData.repName || authState.profile?.full_name || 'admin';
         const dealershipName = storageData.dealershipName || 'the dealership';
 
+        // Structured tasks: send as batch for per-contact fan-out on the proxy
+        if (tasks.length > 0) {
+          const reply = await callAIProxy({
+            model: REX_MODEL,
+            max_tokens: 4096,
+            tasks,
+            repName,
+            dealershipName,
+          });
+          return { reply: formatBatchResults(reply) };
+        }
+
+        // Fallback: unstructured page text, use old single-prompt approach
         const prompt = buildScanBatchPrompt(tasks, rawText);
         const system = SCAN_BATCH_SYSTEM
           + `\n\nThe rep's name is ${repName} and they work at ${dealershipName}. Use their actual name in scripts instead of placeholders.`;

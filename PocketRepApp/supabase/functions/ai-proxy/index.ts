@@ -158,6 +158,62 @@ async function authAndPlan(req: Request) {
 }
 
 // ── Rex Lens route (Anthropic Claude) ───────────────────────────────────────
+
+function formatContactForPrompt(task: Record<string, unknown>, repName: string, dealershipName: string): string {
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  return `Today is ${dateStr}. The rep's name is ${repName} and they work at ${dealershipName}.
+
+Contact CRM record:
+Name: ${task.customerName || 'unknown'}
+Vehicle of Interest: ${task.vehicle || 'not listed'}
+Status: ${task.status || 'unknown'}
+Source: ${task.source || 'unknown'}
+Age: ${task.age || 'unknown'}
+Section: ${task.section || 'unknown'}
+Task: ${task.taskDescription || 'unknown'}${task.template ? `\nTemplate: ${task.template}` : ''}${task.rawContext ? `\nContext/Notes: ${task.rawContext}` : ''}`;
+}
+
+async function callAnthropic(
+  apiKey: string,
+  model: string,
+  maxTokens: number,
+  systemText: string,
+  userContent: string,
+): Promise<{ json: any; error?: any }> {
+  const anthropicBody = {
+    model,
+    max_tokens: maxTokens,
+    messages: [{ role: 'user', content: userContent }],
+    system: [
+      { type: 'text', text: systemText, cache_control: { type: 'ephemeral' } },
+    ],
+  };
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(ANTHROPIC_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': ANTHROPIC_VERSION,
+        },
+        body: JSON.stringify(anthropicBody),
+      });
+      const json = await res.json();
+      if (res.ok && !json.error) return { json };
+      const retryable = res.status === 429 || res.status === 503 || res.status === 529;
+      if (!retryable) return { json: null, error: json.error ?? json };
+      if (attempt < 1) await sleep(2000);
+    } catch (err: unknown) {
+      if (attempt < 1) await sleep(2000);
+      else return { json: null, error: { message: err instanceof Error ? err.message : 'Unknown error' } };
+    }
+  }
+  return { json: null, error: { message: 'Retries exhausted' } };
+}
+
 async function handleRexLens(req: Request) {
   const REXLENS_API_KEY = Deno.env.get('REXLENS_API_KEY');
   if (!REXLENS_API_KEY) {
@@ -177,81 +233,132 @@ async function handleRexLens(req: Request) {
 
   const model = (body.model as string) || REXLENS_DEFAULT_MODEL;
   const maxTokens = typeof body.max_tokens === 'number' ? body.max_tokens : 4096;
-  const messages = (body.messages as Array<{ role: string; content: unknown }>) || [];
+  const tasks = body.tasks as Array<Record<string, unknown>> | undefined;
 
-  // System prompt: use the extension's if provided, otherwise the default Rex Lens prompt.
-  // Wrap with cache_control for prompt caching (saves ~90% on repeated calls).
+  // ── Batch mode: fan out one call per contact ────────────────────────────
+  if (tasks && Array.isArray(tasks) && tasks.length > 0) {
+    const repName = (body.repName as string) || 'the rep';
+    const dealershipName = (body.dealershipName as string) || 'the dealership';
+
+    const promises = tasks.map(task =>
+      callAnthropic(
+        REXLENS_API_KEY,
+        model,
+        maxTokens,
+        REXLENS_SYSTEM_PROMPT,
+        formatContactForPrompt(task, repName, dealershipName),
+      )
+    );
+
+    const settled = await Promise.allSettled(promises);
+
+    const results: any[] = [];
+    let totalInput = 0;
+    let totalOutput = 0;
+    let totalCacheWrite = 0;
+    let totalCacheRead = 0;
+
+    for (let i = 0; i < settled.length; i++) {
+      const s = settled[i];
+      if (s.status === 'fulfilled' && s.value.json) {
+        const text = s.value.json.content?.[0]?.text ?? '';
+        try {
+          results.push(JSON.parse(text));
+        } catch {
+          results.push({
+            contact: (tasks[i] as any).customerName || null,
+            channel: 'call',
+            priority_score: 50,
+            priority_reason: 'parse error',
+            draft: { subject: null, body: text },
+            missing_fields: [],
+            needs_review: true,
+            review_note: 'Could not parse JSON from AI response',
+          });
+        }
+        const u = s.value.json.usage ?? {};
+        totalInput += u.input_tokens ?? 0;
+        totalOutput += u.output_tokens ?? 0;
+        totalCacheWrite += u.cache_creation_input_tokens ?? 0;
+        totalCacheRead += u.cache_read_input_tokens ?? 0;
+      } else {
+        results.push({
+          contact: (tasks[i] as any).customerName || null,
+          channel: 'call',
+          priority_score: 0,
+          priority_reason: 'api error',
+          draft: { subject: null, body: null },
+          missing_fields: [],
+          needs_review: true,
+          review_note: s.status === 'rejected' ? s.reason?.message : (s.value.error?.message || 'Unknown error'),
+        });
+      }
+    }
+
+    // Cost tracking
+    const uncachedInput = Math.max(0, totalInput - totalCacheWrite - totalCacheRead);
+    const costUsd = (
+      uncachedInput * REXLENS_PRICING.input +
+      totalCacheWrite * REXLENS_PRICING.cacheWrite +
+      totalCacheRead * REXLENS_PRICING.cacheRead +
+      totalOutput * REXLENS_PRICING.output
+    ) / 1_000_000;
+    const costCents = costUsd * 100;
+
+    try {
+      await supabase!.rpc('increment_daily_usage', {
+        p_user_id: user!.id,
+        p_date: today,
+        p_input_tokens: totalInput,
+        p_output_tokens: totalOutput,
+        p_cost_cents: costCents,
+      });
+    } catch {
+      await supabase!.from('daily_ai_usage').upsert({
+        user_id: user!.id, usage_date: today,
+        input_tokens: totalInput, output_tokens: totalOutput,
+        cost_cents: costCents, request_count: tasks.length,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,usage_date' });
+    }
+
+    return jsonResponse({
+      content: [{ type: 'text', text: JSON.stringify(results) }],
+      usage: {
+        input_tokens: totalInput,
+        output_tokens: totalOutput,
+        cache_creation_input_tokens: totalCacheWrite,
+        cache_read_input_tokens: totalCacheRead,
+      },
+      model,
+      batch_size: tasks.length,
+    });
+  }
+
+  // ── Single mode: pass through as-is (chat, customer detail, etc.) ──────
+  const messages = (body.messages as Array<{ role: string; content: unknown }>) || [];
   const systemText = typeof body.system === 'string' && body.system.length > 0
     ? body.system
     : REXLENS_SYSTEM_PROMPT;
 
-  const anthropicBody: Record<string, unknown> = {
-    model,
-    max_tokens: maxTokens,
-    messages,
-    system: [
-      { type: 'text', text: systemText, cache_control: { type: 'ephemeral' } },
-    ],
-  };
+  const result = await callAnthropic(REXLENS_API_KEY, model, maxTokens, systemText, messages[0]?.content as string || '');
 
-  // Retry on overload
-  const isOverload = (status: number, errObj: any): boolean => {
-    if (status === 429 || status === 503 || status === 529) return true;
-    const msg = typeof errObj === 'string'
-      ? errObj.toLowerCase()
-      : (errObj?.message || errObj?.type || '').toString().toLowerCase();
-    return msg.includes('overload') || msg.includes('rate') || msg.includes('capacity') || msg.includes('unavailable');
-  };
-
-  let apiJson: any = null;
-  let lastError: any = null;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const res = await fetch(ANTHROPIC_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': REXLENS_API_KEY,
-          'anthropic-version': ANTHROPIC_VERSION,
-        },
-        body: JSON.stringify(anthropicBody),
-      });
-      const json = await res.json();
-
-      if (res.ok && !json.error) {
-        apiJson = json;
-        break;
-      }
-
-      lastError = { status: res.status, error: json.error ?? json };
-      if (!isOverload(res.status, json.error)) {
-        return jsonResponse({ error: json.error ?? json }, res.status);
-      }
-      if (attempt < 2) await sleep(2000 * Math.pow(2, attempt));
-    } catch (err: unknown) {
-      lastError = { error: { message: err instanceof Error ? err.message : 'Unknown error' } };
-      if (attempt < 2) await sleep(2000 * Math.pow(2, attempt));
-    }
-  }
-
-  if (!apiJson) {
+  if (!result.json) {
     return jsonResponse({
       error: {
         type: 'OVERLOADED',
         message: 'AI is at capacity right now. Try again in 30 seconds.',
-        detail: lastError?.error?.message || 'All retries exhausted',
+        detail: result.error?.message || 'All retries exhausted',
       },
     }, 503);
   }
 
-  const text = apiJson.content?.[0]?.text ?? '';
+  const text = result.json.content?.[0]?.text ?? '';
   if (!text) {
-    return jsonResponse({ error: { type: 'empty_response', message: 'Claude returned no text', raw: apiJson } }, 502);
+    return jsonResponse({ error: { type: 'empty_response', message: 'Claude returned no text', raw: result.json } }, 502);
   }
 
-  // Cache-aware cost tracking
-  const usage = apiJson.usage ?? {};
+  const usage = result.json.usage ?? {};
   const inputTokens = usage.input_tokens ?? 0;
   const outputTokens = usage.output_tokens ?? 0;
   const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0;
@@ -267,38 +374,24 @@ async function handleRexLens(req: Request) {
 
   try {
     await supabase!.rpc('increment_daily_usage', {
-      p_user_id: user!.id,
-      p_date: today,
-      p_input_tokens: inputTokens,
-      p_output_tokens: outputTokens,
+      p_user_id: user!.id, p_date: today,
+      p_input_tokens: inputTokens, p_output_tokens: outputTokens,
       p_cost_cents: costCents,
     });
   } catch {
-    await supabase!
-      .from('daily_ai_usage')
-      .upsert(
-        {
-          user_id: user!.id,
-          usage_date: today,
-          input_tokens: inputTokens,
-          output_tokens: outputTokens,
-          cost_cents: costCents,
-          request_count: 1,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id,usage_date' }
-      );
+    await supabase!.from('daily_ai_usage').upsert({
+      user_id: user!.id, usage_date: today,
+      input_tokens: inputTokens, output_tokens: outputTokens,
+      cost_cents: costCents, request_count: 1,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,usage_date' });
   }
 
   return jsonResponse({
-    content: apiJson.content,
-    usage: {
-      input_tokens: inputTokens,
-      output_tokens: outputTokens,
-      cache_creation_input_tokens: cacheWriteTokens,
-      cache_read_input_tokens: cacheReadTokens,
-    },
-    model: apiJson.model || model,
+    content: result.json.content,
+    usage: { input_tokens: inputTokens, output_tokens: outputTokens,
+      cache_creation_input_tokens: cacheWriteTokens, cache_read_input_tokens: cacheReadTokens },
+    model: result.json.model || model,
   });
 }
 
