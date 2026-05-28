@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet, ActivityIndicator,
+  Alert, Platform,
 } from 'react-native';
 import { colors, radius, spacing } from '@/constants/theme';
 import { Avatar, rgbaTint } from './atoms';
@@ -101,6 +102,7 @@ export default function ContactsTab({
   onSelect,
   onBulkTag,
   onAddContact,
+  onDeleteTag,
 }: {
   contacts: V2Contact[] | null;
   error: string | null;
@@ -108,9 +110,23 @@ export default function ContactsTab({
   onSelect: (c: V2Contact) => void;
   onBulkTag?: () => void;
   onAddContact?: () => void;
+  onDeleteTag?: (name: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterTag>(null);
+
+  const confirmDeleteTag = (name: string) => {
+    const proceed = () => { onDeleteTag?.(name); setFilter(null); };
+    const msg = `Delete the "${name}" tag? It'll be removed from all contacts.`;
+    if (Platform.OS === 'web') {
+      if (typeof window === 'undefined' || window.confirm(msg)) proceed();
+    } else {
+      Alert.alert('Delete tag', msg, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: proceed },
+      ]);
+    }
+  };
 
   const filtered = useMemo(() => {
     if (!contacts) return [];
@@ -229,6 +245,11 @@ export default function ContactsTab({
             · {filtered.length} contact{filtered.length === 1 ? '' : 's'}
           </Text>
           <View style={{ flex: 1 }} />
+          {filter.kind === 'custom' && onDeleteTag ? (
+            <Pressable onPress={() => confirmDeleteTag(filter.name)} hitSlop={8}>
+              <Text style={styles.filterDelete}>DELETE TAG</Text>
+            </Pressable>
+          ) : null}
           <Pressable onPress={() => setFilter(null)} hitSlop={8}>
             <Text style={styles.filterClear}>CLEAR</Text>
           </Pressable>
@@ -341,6 +362,9 @@ const styles = StyleSheet.create({
   filterCount: { fontSize: 11, color: colors.grey2 },
   filterClear: {
     fontSize: 11, fontWeight: '700', color: colors.gold, letterSpacing: 0.3,
+  },
+  filterDelete: {
+    fontSize: 11, fontWeight: '700', color: colors.red, letterSpacing: 0.3, marginRight: 12,
   },
 
   empty: {

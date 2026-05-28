@@ -1,7 +1,6 @@
 import type { V2Contact } from './useContacts';
 import { TIERS } from '@/components/v2/tokens';
-
-const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
+import { callBrain } from './aiProxy';
 
 export type GamePlanChannel = 'call' | 'text' | 'email';
 export type GamePlanResult = {
@@ -47,18 +46,9 @@ function parseResponse(raw: string): GamePlanResult {
 }
 
 export async function generateGamePlan(c: V2Contact, notes: string): Promise<GamePlanResult> {
-  const res = await fetch(`${AI_PROXY_URL}/brain`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      max_tokens: 600,
-      messages: [{ role: 'user', content: buildPrompt(c, notes) }],
-    }),
+  const raw = await callBrain({
+    maxTokens: 600,
+    messages: [{ role: 'user', content: buildPrompt(c, notes) }],
   });
-  if (!res.ok) {
-    throw new Error(`ai-proxy ${res.status}`);
-  }
-  const json = await res.json();
-  const raw = json.content?.[0]?.text ?? json.text ?? '';
   return parseResponse(raw);
 }

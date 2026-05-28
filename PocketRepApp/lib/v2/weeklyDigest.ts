@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase';
-
-const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
+import { callBrain } from './aiProxy';
 
 export type WeeklyDigest = {
   id: string;
@@ -84,18 +83,10 @@ Stats:
 - Deals this week: ${deals.map((d: any) => `${d.title ?? '?'} (${d.vehicle ?? '?'}, $${d.amount})`).join('; ') || '(none)'}
 
 Write 2-4 short bullets — what went well, what needs attention next week, one specific suggestion. Each bullet under 18 words. No preamble.`;
-    const res = await fetch(`${AI_PROXY_URL}/brain`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        max_tokens: 400,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    if (res.ok) {
-      const json = await res.json();
-      highlights = (json.content?.[0]?.text ?? json.text ?? '').trim();
-    }
+    highlights = (await callBrain({
+      maxTokens: 400,
+      messages: [{ role: 'user', content: prompt }],
+    })).trim();
   } catch {
     // Brain unreachable — stats-only digest is still fine.
   }

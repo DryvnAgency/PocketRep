@@ -13,10 +13,12 @@ import {
   updateContactTags,
   deleteContact,
   updateContactPreferredLanguage,
+  updateContactBirthday,
 } from '@/lib/v2/updateContact';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 import { useContactNurtures } from '@/lib/v2/contactNurtures';
 import { pickAndUploadContactPhoto } from '@/lib/v2/contactPhoto';
+import { formatBirthday, parseBirthdayInput } from '@/lib/v2/birthday';
 import LanguageToggle from './LanguageToggle';
 import MarkReplyButton from './MarkReplyButton';
 
@@ -58,6 +60,9 @@ export default function ContactDetail({
   const [notes, setNotes] = useState(contact.notes ?? '');
   const [editingNotes, setEditingNotes] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
+  const [bday, setBday] = useState(contact.birthday ?? '');
+  const [editingBday, setEditingBday] = useState(false);
+  const [savingBday, setSavingBday] = useState(false);
   const [stepView, setStepView] = useState<'latest' | 'next'>('latest');
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
 
@@ -76,6 +81,8 @@ export default function ContactDetail({
   useEffect(() => {
     setNotes(contact.notes ?? '');
     setEditingNotes(false);
+    setBday(contact.birthday ?? '');
+    setEditingBday(false);
     setAiOpen(false);
     setAiScript('');
     setAiError(null);
@@ -104,6 +111,27 @@ export default function ContactDetail({
       console.warn('saveNotes failed', e);
     } finally {
       setSavingNotes(false);
+    }
+  };
+
+  const cancelBday = () => {
+    setBday(contact.birthday ?? '');
+    setEditingBday(false);
+  };
+
+  const saveBday = async () => {
+    const parsed = parseBirthdayInput(bday);
+    if (parsed === false) return; // unparseable — keep editing so the rep can fix it
+    setSavingBday(true);
+    try {
+      await updateContactBirthday(contact.id, parsed);
+      onLocalUpdate({ ...contact, birthday: parsed });
+      setBday(parsed ?? '');
+      setEditingBday(false);
+    } catch (e) {
+      console.warn('saveBday failed', e);
+    } finally {
+      setSavingBday(false);
     }
   };
 
@@ -331,6 +359,45 @@ export default function ContactDetail({
             </View>
           </View>
         </View>
+
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionLabel}>BIRTHDAY</Text>
+          <View style={{ flex: 1 }} />
+          {editingBday ? (
+            <>
+              <Pressable onPress={cancelBday} hitSlop={6}>
+                <Text style={styles.linkSecondary}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={saveBday} hitSlop={6} disabled={savingBday}>
+                <Text style={styles.linkPrimary}>{savingBday ? 'SAVING…' : 'SAVE'}</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable onPress={() => setEditingBday(true)} hitSlop={6}>
+              <Text style={styles.linkPrimary}>{contact.birthday ? 'EDIT ›' : '＋ ADD'}</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <Pressable
+          onPress={() => !editingBday && setEditingBday(true)}
+          style={[styles.card, editingBday && { borderColor: colors.gold }, { paddingVertical: 14 }]}
+        >
+          {editingBday ? (
+            <TextInput
+              value={bday}
+              onChangeText={setBday}
+              autoFocus
+              placeholder="MM/DD/YYYY"
+              placeholderTextColor={colors.grey}
+              style={styles.bdayInput}
+            />
+          ) : (
+            <Text style={[styles.bdayText, !contact.birthday && styles.bdayPlaceholder]}>
+              {contact.birthday ? `🎂 ${formatBirthday(contact.birthday)}` : 'Tap to add a birthday…'}
+            </Text>
+          )}
+        </Pressable>
 
         <View style={styles.toggleWrap}>
           <View style={styles.toggle}>
@@ -920,6 +987,10 @@ const styles = StyleSheet.create({
   } as any,
   notesText: { fontSize: 13, color: colors.grey3, lineHeight: 20 },
   notesPlaceholder: { color: colors.grey, fontStyle: 'italic' },
+
+  bdayInput: { color: colors.white, fontSize: 15, padding: 0 } as any,
+  bdayText: { fontSize: 15, color: colors.white, letterSpacing: -0.2 },
+  bdayPlaceholder: { color: colors.grey, fontStyle: 'italic' },
 
   gamePlan: {
     paddingVertical: 14,

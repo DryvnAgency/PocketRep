@@ -1,0 +1,267 @@
+// Rex Coach — the tap-to-open text coaching chat (ported from
+// design/extracted/tab-rex.jsx "Coach Mode"). This is the ONLY thing the gold
+// orb opens. It's conversational coaching only: ask for scripts, rebuttals,
+// objection role-play, next-move ideas. It never writes to the database —
+// taking actions (add contact, log deal, etc.) is reserved for "Hey Rex" voice.
+
+import { useEffect, useRef, useState } from 'react';
+import {
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet, ActivityIndicator,
+} from 'react-native';
+import { colors, radius } from '@/constants/theme';
+import { Label } from './atoms';
+import { callBrain } from '@/lib/v2/aiProxy';
+import { REX_COPY_RULES } from '@/lib/v2/rexActions';
+
+type ChatMessage = { from: 'rex' | 'user'; text: string; time: string };
+
+const QUICK_CHIPS = [
+  'Coach me on a price objection',
+  'Lease vs finance pitch',
+  'Reframe this customer response',
+  "What's my best move today?",
+];
+
+const COACH_OPENERS = [
+  "Morning. What are we working on, a deal, a rebuttal, or your day?",
+  "Quick read on your week, what do you want to sharpen first?",
+  "I'm here. Throw me a customer situation and I'll give you the move.",
+];
+
+function stamp(): string {
+  const n = new Date();
+  return `${n.getHours()}:${String(n.getMinutes()).padStart(2, '0')}`;
+}
+
+function buildPrompt(history: ChatMessage[], text: string): string {
+  const convo = history
+    .slice(-12)
+    .map(m => `${m.from === 'rex' ? 'Rex' : 'Rep'}: ${m.text}`)
+    .join('\n');
+  return `You are Rex, the AI sales coach inside PocketRep. You coach a car sales rep — find deals, sharpen rebuttals, role-play objections, and call the next move. Be direct: short sentences, specific actions, no fluff, no long lectures. If they ask for a script, give one ready to copy. If they're stuck, ask one sharp diagnostic question.
+
+${REX_COPY_RULES}
+
+Recent conversation:
+${convo || '(none yet)'}
+
+Rep: ${text}
+Rex:`;
+}
+
+export default function RexCoach({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const greeting = useRef(COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [typing, setTyping] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+
+  // Seed a fresh greeting each time the sheet opens.
+  useEffect(() => {
+    if (open) {
+      greeting.current = COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)];
+      setMessages([{ from: 'rex', text: greeting.current, time: stamp() }]);
+      setInput('');
+      setTyping(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (open) requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+  }, [messages, typing, open]);
+
+  if (!open) return null;
+
+  const send = async (raw?: string) => {
+    const text = (raw ?? input).trim();
+    if (!text || typing) return;
+    const history = messages;
+    setMessages(m => [...m, { from: 'user', text, time: stamp() }]);
+    setInput('');
+    setTyping(true);
+    try {
+      const reply = await callBrain({
+        maxTokens: 700,
+        messages: [{ role: 'user', content: buildPrompt(history, text) }],
+      });
+      setMessages(m => [...m, {
+        from: 'rex',
+        text: reply.trim() || "Say more and I'll give you the move.",
+        time: stamp(),
+      }]);
+    } catch (e: any) {
+      setMessages(m => [...m, {
+        from: 'rex',
+        text: `Couldn't reach me just now (${e?.message ?? 'error'}). Try again in a sec.`,
+        time: stamp(),
+      }]);
+    } finally {
+      setTyping(false);
+    }
+  };
+
+  return (
+    <View style={StyleSheet.absoluteFillObject as any}>
+      <Pressable style={styles.scrim} onPress={onClose} />
+      <View style={styles.sheet}>
+        <View style={styles.header}>
+          <View style={styles.live} />
+          <Text style={styles.headerLabel}>REX · COACH</Text>
+          <View style={{ flex: 1 }} />
+          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={6}>
+            <Text style={styles.closeText}>✕</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={styles.messages}>
+          {messages.map((m, i) => (
+            <View
+              key={i}
+              style={[styles.bubbleRow, { justifyContent: m.from === 'user' ? 'flex-end' : 'flex-start' }]}
+            >
+              <View style={{ maxWidth: '84%' }}>
+                {m.from === 'rex' ? <Label color={colors.gold}>REX · COACH</Label> : null}
+                <View style={[styles.bubble, m.from === 'user' ? styles.bubbleUser : styles.bubbleRex]}>
+                  <Text style={[styles.bubbleText, m.from === 'user' && { color: colors.white }]}>
+                    {m.text}
+                  </Text>
+                </View>
+                <Text style={[styles.time, { textAlign: m.from === 'user' ? 'right' : 'left' }]}>{m.time}</Text>
+              </View>
+            </View>
+          ))}
+          {typing ? (
+            <View style={styles.bubbleRow}>
+              <View style={[styles.bubble, styles.bubbleRex, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+                <ActivityIndicator color={colors.gold} size="small" />
+                <Text style={styles.bubbleText}>Rex is thinking…</Text>
+              </View>
+            </View>
+          ) : null}
+        </ScrollView>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chips}
+        >
+          {QUICK_CHIPS.map(chip => (
+            <Pressable key={chip} onPress={() => send(chip)} style={styles.chip} disabled={typing}>
+              <Text style={styles.chipText}>{chip}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <View style={styles.inputBar}>
+          <TextInput
+            value={input}
+            onChangeText={setInput}
+            placeholder="Ask Rex anything…"
+            placeholderTextColor={colors.grey}
+            style={styles.input}
+            onSubmitEditing={() => send()}
+            returnKeyType="send"
+            editable={!typing}
+          />
+          <Pressable
+            onPress={() => send()}
+            disabled={!input.trim() || typing}
+            style={[styles.sendBtn, (!input.trim() || typing) && { opacity: 0.5 }]}
+          >
+            <Text style={styles.sendIcon}>➤</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.8)' },
+  sheet: {
+    position: 'absolute',
+    left: 0, right: 0, bottom: 0, top: '6%',
+    backgroundColor: colors.ink,
+    borderTopWidth: 1,
+    borderTopColor: colors.goldBorder,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+  } as any,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: colors.ink2,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink4,
+  },
+  live: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: colors.green,
+  },
+  headerLabel: { fontSize: 11, fontWeight: '800', color: colors.gold, letterSpacing: 1.4 },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: colors.surface2,
+    borderWidth: 1, borderColor: colors.ink4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  closeText: { color: colors.grey2, fontSize: 14 },
+
+  messages: { padding: 14, gap: 4 },
+  bubbleRow: { flexDirection: 'row', paddingVertical: 6 },
+  bubble: {
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  bubbleRex: { backgroundColor: colors.surface2, borderColor: colors.ink4, borderTopLeftRadius: 4 },
+  bubbleUser: { backgroundColor: colors.goldBg, borderColor: colors.goldBorder, borderBottomRightRadius: 4 },
+  bubbleText: { fontSize: 14, color: colors.grey3, lineHeight: 20, letterSpacing: -0.15 },
+  time: { fontSize: 10, color: colors.grey, marginTop: 4 },
+
+  chips: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6, gap: 8 },
+  chip: {
+    paddingHorizontal: 12, paddingVertical: 8,
+    backgroundColor: colors.surface2,
+    borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: radius.full,
+  },
+  chipText: { fontSize: 12, fontWeight: '600', color: colors.gold },
+
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 24,
+    backgroundColor: colors.ink2,
+    borderTopWidth: 1,
+    borderTopColor: colors.ink4,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: colors.ink3,
+    borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: 22,
+    paddingHorizontal: 16, paddingVertical: 11,
+    color: colors.white, fontSize: 14,
+  },
+  sendBtn: {
+    width: 42, height: 42, borderRadius: 21,
+    backgroundColor: colors.gold,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sendIcon: { color: colors.ink, fontSize: 16, fontWeight: '800' },
+});

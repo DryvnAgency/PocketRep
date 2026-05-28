@@ -5,8 +5,7 @@
 import { supabase } from '@/lib/supabase';
 import { REX_COPY_RULES } from './rexActions';
 import { loadBookContext, type BookContact } from './bookContext';
-
-const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
+import { callBrain } from './aiProxy';
 
 export type StalledRecommendation = {
   contact_id: string;
@@ -91,17 +90,10 @@ type BrainOpener = { contact_id: string; opener: string; language: 'en' | 'es' }
 async function fetchOpeners(contacts: BookContact[]): Promise<Map<string, BrainOpener>> {
   if (contacts.length === 0) return new Map();
   try {
-    const res = await fetch(`${AI_PROXY_URL}/brain`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        max_tokens: 1200,
-        messages: [{ role: 'user', content: buildOpenerPrompt(contacts) }],
-      }),
+    const raw = await callBrain({
+      maxTokens: 1200,
+      messages: [{ role: 'user', content: buildOpenerPrompt(contacts) }],
     });
-    if (!res.ok) throw new Error(`ai-proxy ${res.status}`);
-    const json = await res.json();
-    const raw = (json.content?.[0]?.text ?? json.text ?? '') as string;
     const fence = raw.match(/```json\s*([\s\S]*?)```/i) ?? raw.match(/```\s*([\s\S]*?)```/);
     const obj = JSON.parse((fence ? fence[1] : raw).trim());
     const out = new Map<string, BrainOpener>();

@@ -7,8 +7,7 @@
 import { supabase } from '@/lib/supabase';
 import { REX_COPY_RULES } from './rexActions';
 import type { V2Contact } from './useContacts';
-
-const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
+import { callBrain } from './aiProxy';
 
 export type BlastPromotion = {
   vehicle?: string;
@@ -171,17 +170,10 @@ export async function createBlastDraft({
   }
 
   // 1) Ask the brain to draft one message per contact.
-  const res = await fetch(`${AI_PROXY_URL}/brain`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: buildBlastPrompt({ intent, promotion, contacts }) }],
-    }),
+  const raw = await callBrain({
+    maxTokens: 2000,
+    messages: [{ role: 'user', content: buildBlastPrompt({ intent, promotion, contacts }) }],
   });
-  if (!res.ok) throw new Error(`ai-proxy ${res.status}`);
-  const json = await res.json();
-  const raw = json.content?.[0]?.text ?? json.text ?? '';
   const drafted = parseDraftedSteps(raw);
 
   // 2) Persist the sequence + per-contact steps so the rep can come back to it.
