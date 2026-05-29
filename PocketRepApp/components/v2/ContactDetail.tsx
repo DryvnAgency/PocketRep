@@ -14,6 +14,7 @@ import {
   deleteContact,
   updateContactPreferredLanguage,
   updateContactBirthday,
+  logContactTouch,
 } from '@/lib/v2/updateContact';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 import { useContactNurtures } from '@/lib/v2/contactNurtures';
@@ -73,6 +74,7 @@ export default function ContactDetail({
   const [aiScript, setAiScript] = useState('');
   const [aiError, setAiError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [touchMsg, setTouchMsg] = useState<string | null>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -147,20 +149,52 @@ export default function ContactDetail({
     }
   };
 
-  const openCall = () => contact.phone && Linking.openURL(`tel:${digitsOnly(contact.phone)}`);
-  const openText = (body?: string) => {
+  // Auto-log a touch: stamp last_contact_date, reset the follow-up clock, and
+  // optimistically zero the days-since counter. Working a lead is logging it.
+  const noteTouch = (method: 'call' | 'text' | 'email', summary?: string) => {
+    logContactTouch(contact.id, method, summary).catch(e => console.warn('logContactTouch', e));
+    onLocalUpdate({ ...contact, days: 0 });
+    setTouchMsg(
+      method === 'call' ? '✓ Call logged' : method === 'text' ? '✓ Text logged' : '✓ Email logged',
+    );
+    setTimeout(() => setTouchMsg(null), 1700);
+  };
+
+  const webCopy = async (text: string) => {
+    try {
+      if (typeof navigator !== 'undefined' && (navigator as any).clipboard) {
+        await (navigator as any).clipboard.writeText(text);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const openCall = async () => {
     if (!contact.phone) return;
-    const url = body
-      ? `sms:${digitsOnly(contact.phone)}?&body=${encodeURIComponent(body)}`
-      : `sms:${digitsOnly(contact.phone)}`;
-    Linking.openURL(url);
+    // tel: opens a blank tab on web — copy the number instead.
+    if (Platform.OS === 'web') await webCopy(contact.phone);
+    else Linking.openURL(`tel:${digitsOnly(contact.phone)}`);
+    noteTouch('call');
+  };
+  const openText = async (body?: string) => {
+    if (!contact.phone) return;
+    if (Platform.OS === 'web') {
+      await webCopy(body ? `${contact.phone}\n${body}` : contact.phone);
+    } else {
+      const url = body
+        ? `sms:${digitsOnly(contact.phone)}?&body=${encodeURIComponent(body)}`
+        : `sms:${digitsOnly(contact.phone)}`;
+      Linking.openURL(url);
+    }
+    noteTouch('text', body);
   };
   const openEmail = (body?: string) => {
+    // mailto opens the mail client on web and native (no blank tab).
     const subject = encodeURIComponent(`Following up on the ${contact.vehicle ?? ''}`);
     const url = body
       ? `mailto:?subject=${subject}&body=${encodeURIComponent(body)}`
       : `mailto:?subject=${subject}`;
     Linking.openURL(url);
+    noteTouch('email', body);
   };
 
   const runGamePlan = async () => {
@@ -172,6 +206,7 @@ export default function ContactDetail({
     setCopied(false);
     try {
       const result = await generateGamePlan(contact, notes);
+      if (!result.script.trim()) throw new Error('Rex came back empty');
       setAiChannel(result.channel);
       setAiWhy(result.why);
       setAiScript(result.script);
@@ -220,6 +255,12 @@ export default function ContactDetail({
           <Text style={[styles.iconBtnText, { color: colors.grey2, fontSize: 14 }]}>⋯</Text>
         </Pressable>
       </View>
+
+      {touchMsg ? (
+        <View style={styles.touchToast} pointerEvents="none">
+          <Text style={styles.touchToastText}>{touchMsg}</Text>
+        </View>
+      ) : null}
 
       {menuOpen ? (
         <View style={StyleSheet.absoluteFillObject as any}>
@@ -549,6 +590,9 @@ export default function ContactDetail({
             {aiError ? (
               <View style={styles.aiBody}>
                 <Text style={styles.aiError}>Couldn't reach Rex: {aiError}</Text>
+                <Pressable onPress={runGamePlan} hitSlop={6} style={{ marginTop: 10 }}>
+                  <Text style={styles.linkPrimary}>↻ TAP TO RETRY</Text>
+                </Pressable>
               </View>
             ) : aiLoading ? (
               <View style={[styles.aiBody, { paddingVertical: 24 }]}>
@@ -757,6 +801,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
     zIndex: 80,
   } as any,
+  touchToast: {
+    position: 'absolute',
+    left: 0, right: 0, bottom: 40,
+    alignItems: 'center',
+    zIndex: 90,
+  } as any,
+  touchToastText: {
+    backgroundColor: colors.ink3,
+    borderWidth: 1, borderColor: colors.gold,
+    color: colors.gold,
+    fontSize: 12, fontWeight: '700',
+    paddingHorizontal: 16, paddingVertical: 9,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
 
   topBar: {
     paddingTop: Platform.OS === 'web' ? 16 : 52,

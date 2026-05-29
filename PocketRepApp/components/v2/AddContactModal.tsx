@@ -104,7 +104,7 @@ export default function AddContactModal({
             <TextInput
               value={d.firstName}
               onChangeText={t => set('firstName', t)}
-              placeholder="Marcus"
+              placeholder="First name"
               placeholderTextColor={colors.grey}
               autoCapitalize="words"
               style={styles.input}
@@ -116,7 +116,7 @@ export default function AddContactModal({
               <TextInput
                 value={d.lastName}
                 onChangeText={t => set('lastName', t)}
-                placeholder="Holloway"
+                placeholder="Last name"
                 placeholderTextColor={colors.grey}
                 autoCapitalize="words"
                 style={styles.input}
@@ -126,7 +126,7 @@ export default function AddContactModal({
               <TextInput
                 value={d.phone}
                 onChangeText={t => set('phone', t)}
-                placeholder="(312) 555-0184"
+                placeholder="(555) 555-0123"
                 placeholderTextColor={colors.grey}
                 keyboardType="phone-pad"
                 style={styles.input}
@@ -138,7 +138,7 @@ export default function AddContactModal({
             <TextInput
               value={d.vehicle}
               onChangeText={t => set('vehicle', t)}
-              placeholder="'26 M3 Competition"
+              placeholder="Vehicle of interest"
               placeholderTextColor={colors.grey}
               style={styles.input}
             />
@@ -149,7 +149,7 @@ export default function AddContactModal({
               <TextInput
                 value={d.trim}
                 onChangeText={t => set('trim', t)}
-                placeholder="Brooklyn Grey · xDrive"
+                placeholder="Trim / color"
                 placeholderTextColor={colors.grey}
                 style={styles.input}
               />
@@ -170,7 +170,7 @@ export default function AddContactModal({
               <TextInput
                 value={d.budget}
                 onChangeText={t => set('budget', t)}
-                placeholder="82K"
+                placeholder="Budget"
                 placeholderTextColor={colors.grey}
                 style={styles.input}
               />
@@ -179,7 +179,7 @@ export default function AddContactModal({
               <TextInput
                 value={d.tradeIn}
                 onChangeText={t => set('tradeIn', t)}
-                placeholder="'22 M240i"
+                placeholder="Trade-in"
                 placeholderTextColor={colors.grey}
                 style={styles.input}
               />

@@ -87,6 +87,12 @@ export default function AppShell() {
     contacts,
     nurtureRefetchKey,
   );
+  // "active" = hot + warm leads (the rep's working pipeline).
+  const activeCount = useMemo(
+    () => (contacts ?? []).filter(c => c.tier === 'hot' || c.tier === 'warm').length,
+    [contacts],
+  );
+  const totalCount = contacts?.length ?? 0;
 
   const rex = useHeyRex({
     enabled: authReady && alwaysListen,
@@ -146,7 +152,9 @@ export default function AppShell() {
     setStalledLoading(true);
     try {
       const report = await analyzeStalledLeads({
-        daysSilentThreshold: opts?.daysSilentThreshold ?? 14,
+        // 7d (not 14) so a lead that's already flagged "overdue" (4d+) on the
+        // Heat Sheet also surfaces here — keeps the two views consistent.
+        daysSilentThreshold: opts?.daysSilentThreshold ?? 7,
         includeDead: opts?.includeDead ?? false,
       });
       setStalledReport(report);
@@ -230,6 +238,8 @@ export default function AppShell() {
       <CustomNavBar
         active={active}
         unread={notifUnread}
+        activeCount={activeCount}
+        totalCount={totalCount}
         onNotifications={() => setNotifOpen(true)}
         onSearch={() => setActive('contacts')}
         onUpgrade={() => setActive('profile')}

@@ -163,7 +163,7 @@ export default function ProfileTab({
           <Label color={colors.grey2}>PLAN · {planLabel} ANNUAL</Label>
           <Text style={styles.planRenews}>Renews Aug 12, 2026</Text>
         </View>
-        <Pressable onPress={() => editSetting('title', 'Your title', 'TITLE / ROLE')} style={styles.manageBtn}>
+        <Pressable onPress={() => onOpenPayPlan?.()} style={styles.manageBtn}>
           <Text style={styles.manageText}>MANAGE</Text>
         </Pressable>
       </View>

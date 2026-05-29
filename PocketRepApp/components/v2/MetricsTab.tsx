@@ -5,6 +5,7 @@ import {
 import { colors, radius, spacing } from '@/constants/theme';
 import { Label, Pill, SectionHead } from './atoms';
 import { useUserDeals, type V2DealRich } from '@/lib/v2/useUserDeals';
+import { usePayPlan, calcCommissionWithPlan, DEFAULT_PAY_PLAN } from '@/lib/v2/payPlan';
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const FUNDING_LABEL: Record<string, string> = { finance: 'FIN', lease: 'LEA', cash: 'CASH' };
@@ -125,7 +126,27 @@ export default function MetricsTab({
   onLogDeal?: () => void;
   onSelectDeal?: (d: V2DealRich) => void;
 } = {}) {
-  const deals = useUserDeals(refetchKey);
+  const rawDeals = useUserDeals(refetchKey);
+  const plan = usePayPlan() ?? DEFAULT_PAY_PLAN;
+  // Harden against deals saved with a null/0 `amount` (older or Rex-logged
+  // rows): fall back to computing commission from gross via the pay plan, so
+  // a real-gross deal never shows $0.
+  const deals = useMemo(
+    () =>
+      rawDeals == null
+        ? null
+        : rawDeals.map(d => ({
+            ...d,
+            amount:
+              d.amount > 0
+                ? d.amount
+                : calcCommissionWithPlan(
+                    { frontGross: d.frontGross ?? 0, backGross: d.backGross ?? 0, split: d.split },
+                    plan,
+                  ),
+          })),
+    [rawDeals, plan],
+  );
   const now = new Date();
   const curMo = now.getMonth();
   const curYr = now.getFullYear();

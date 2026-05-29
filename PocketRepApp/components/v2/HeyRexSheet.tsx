@@ -1,10 +1,12 @@
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Animated, Easing, Platform } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import type { RexAction } from '@/lib/v2/rexActions';
 import { actionWritesData, summarizeAction } from '@/lib/v2/rexActions';
 import type { RexListenerState } from '@/lib/v2/heyRexListener';
 import type { V2Contact } from '@/lib/v2/useContacts';
+import { speak, stopSpeaking } from '@/lib/v2/speech';
 import BookSummaryCard from './BookSummaryCard';
 import ContactListPreview from './ContactListPreview';
 
@@ -33,6 +35,33 @@ export default function HeyRexSheet({
 }) {
   // Show the sheet whenever we're past the idle state OR there's a pending action.
   const open = state === 'awake' || state === 'processing' || !!action || thinking || executing;
+
+  // Hooks must stay above the early return (same React #310 trap as DealLogger).
+  // Siri-style: speak Rex's reply aloud once per new line.
+  const spokenRef = useRef<string | null>(null);
+  useEffect(() => {
+    const line = action?.say?.trim();
+    if (open && line && !executing && spokenRef.current !== line) {
+      spokenRef.current = line;
+      speak(line);
+    }
+    if (!action) spokenRef.current = null;
+  }, [action, open, executing]);
+
+  // Pulse the orb while listening/thinking (the "Hey Siri" breathing dot).
+  const pulse = useRef(new Animated.Value(0)).current;
+  const isActive = state === 'awake' || thinking || state === 'processing';
+  useEffect(() => {
+    if (!open) { stopSpeaking(); return; }
+    if (!isActive) { pulse.stopAnimation(); pulse.setValue(0); return; }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 650, easing: Easing.inOut(Easing.ease), useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(pulse, { toValue: 0, duration: 650, easing: Easing.inOut(Easing.ease), useNativeDriver: Platform.OS !== 'web' }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [open, isActive, pulse]);
+
   if (!open) return null;
 
   const summary = action ? summarizeAction(action) : '';
@@ -44,7 +73,15 @@ export default function HeyRexSheet({
     <View style={styles.wrap} pointerEvents="box-none">
       <View style={styles.card}>
         <View style={styles.head}>
-          <View style={styles.orb} />
+          <Animated.View
+            style={[
+              styles.orb,
+              {
+                opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.95, 0.5] }),
+                transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.35] }) }],
+              },
+            ]}
+          />
           <Label color={colors.gold}>
             HEY REX · {state === 'awake' ? 'LISTENING' : thinking || state === 'processing' ? 'THINKING' : executing ? 'WORKING' : 'READY'}
           </Label>

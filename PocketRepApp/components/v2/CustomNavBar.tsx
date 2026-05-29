@@ -5,12 +5,18 @@ import { colors } from '@/constants/theme';
 
 export type TabId = 'heat' | 'contacts' | 'metrics' | 'profile';
 
-const TITLES: Record<TabId, { title: string; sub: string }> = {
-  heat: { title: 'Heat Sheet', sub: 'Tuesday · 248 active' },
-  contacts: { title: 'Contacts', sub: '248 total · 24 last 30d' },
-  metrics: { title: 'Metrics', sub: 'April 2026' },
-  profile: { title: 'You', sub: '34-month streak' },
-};
+// Built from the device's local clock — i.e. wherever the rep actually is.
+function localSubs(activeCount: number, totalCount: number): Record<TabId, { title: string; sub: string }> {
+  const now = new Date();
+  const weekday = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const monthYear = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  return {
+    heat: { title: 'Heat Sheet', sub: `${weekday} · ${activeCount} active` },
+    contacts: { title: 'Contacts', sub: `${totalCount} total · ${activeCount} active` },
+    metrics: { title: 'Metrics', sub: monthYear },
+    profile: { title: 'You', sub: '34-month streak' },
+  };
+}
 
 export default function CustomNavBar({
   active,
@@ -18,14 +24,18 @@ export default function CustomNavBar({
   onUpgrade,
   onNotifications,
   unread = 0,
+  activeCount = 0,
+  totalCount = 0,
 }: {
   active: TabId;
   onSearch?: () => void;
   onUpgrade?: () => void;
   onNotifications?: () => void;
   unread?: number;
+  activeCount?: number;
+  totalCount?: number;
 }) {
-  const t = TITLES[active];
+  const t = localSubs(activeCount, totalCount)[active];
   return (
     <View style={styles.root}>
       <View style={styles.row}>
