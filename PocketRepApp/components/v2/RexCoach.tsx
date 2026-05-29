@@ -86,19 +86,16 @@ export default function RexCoach({
     setInput('');
     setTyping(true);
     try {
-      const reply = await callBrain({
+      const reply = (await callBrain({
         maxTokens: 700,
         messages: [{ role: 'user', content: buildPrompt(history, text) }],
-      });
+      })).trim();
+      if (!reply) throw new Error('empty');
+      setMessages(m => [...m, { from: 'rex', text: reply, time: stamp() }]);
+    } catch {
       setMessages(m => [...m, {
         from: 'rex',
-        text: reply.trim() || "Say more and I'll give you the move.",
-        time: stamp(),
-      }]);
-    } catch (e: any) {
-      setMessages(m => [...m, {
-        from: 'rex',
-        text: `Couldn't reach me just now (${e?.message ?? 'error'}). Try again in a sec.`,
+        text: "Couldn't reach Rex just now. Tap send to try again.",
         time: stamp(),
       }]);
     } finally {
@@ -149,6 +146,7 @@ export default function RexCoach({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.chipsScroll}
           contentContainerStyle={styles.chips}
         >
           {QUICK_CHIPS.map(chip => (
@@ -230,8 +228,10 @@ const styles = StyleSheet.create({
   bubbleText: { fontSize: 14, color: colors.grey3, lineHeight: 20, letterSpacing: -0.15 },
   time: { fontSize: 10, color: colors.grey, marginTop: 4 },
 
-  chips: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6, gap: 8 },
+  chipsScroll: { flexGrow: 0, flexShrink: 0 },
+  chips: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6, gap: 8, alignItems: 'center' },
   chip: {
+    alignSelf: 'center',
     paddingHorizontal: 12, paddingVertical: 8,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.goldBorder,

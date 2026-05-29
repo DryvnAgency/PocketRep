@@ -46,5 +46,13 @@ export async function callBrain(opts: {
 
   if (!res.ok) throw new Error(`ai-proxy ${res.status}`);
   const json = await res.json();
-  return (json.content?.[0]?.text ?? json.text ?? '') as string;
+  // The deployed /brain route returns the raw OpenRouter (OpenAI-shape) response
+  // — choices[0].message.content. Fall back to the Anthropic shape for the
+  // rexlens route / older deployments.
+  return (
+    json.choices?.[0]?.message?.content ??
+    json.content?.[0]?.text ??
+    json.text ??
+    ''
+  ) as string;
 }

@@ -55,6 +55,11 @@ export default function DealLogger({
     }
   }, [open, prefill]);
 
+  // Hooks must run unconditionally on every render — keep usePayPlan ABOVE the
+  // early return below, or the hook count changes when `open` flips (React #310).
+  const planFromHook = usePayPlan();
+  const plan = planFromHook ?? DEFAULT_PAY_PLAN;
+
   if (!open) return null;
 
   const set = <K extends keyof DealDraft>(k: K, v: DealDraft[K]) =>
@@ -65,8 +70,6 @@ export default function DealLogger({
     set(k, Number.isFinite(n) ? n : 0);
   };
 
-  const planFromHook = usePayPlan();
-  const plan = planFromHook ?? DEFAULT_PAY_PLAN;
   const totalGross = d.frontGross + d.backGross;
   const commission = calcCommissionWithPlan(d, plan);
   const canSave = !!d.name.trim() && !!d.stock.trim() && !!d.vehicle.trim() && totalGross > 0;

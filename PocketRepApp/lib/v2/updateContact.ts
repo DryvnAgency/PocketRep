@@ -1,5 +1,11 @@
 import { supabase } from '@/lib/supabase';
 
+// Capitalize the first letter of each word without lowercasing the rest, so
+// "lalo ponce" -> "Lalo Ponce" while preserving intentional caps (e.g. McLaren).
+function titleCase(s: string): string {
+  return s.trim().replace(/(^|[\s-])([a-z])/g, (_, p, c) => p + c.toUpperCase());
+}
+
 export async function updateContactNotes(id: string, notes: string): Promise<void> {
   const { error } = await supabase
     .from('contacts')
@@ -12,6 +18,29 @@ export async function updateContactTags(id: string, tags: string[]): Promise<voi
   const { error } = await supabase
     .from('contacts')
     .update({ tags, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Records a call/text/email touch: stamps last_contact_date=today, the method
+// and a short summary, and pushes the follow-up clock out a few days. This is
+// what makes "working a lead IS logging it" — no double entry.
+export async function logContactTouch(
+  id: string,
+  method: 'call' | 'text' | 'email',
+  summary?: string,
+): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  const nextFollowUp = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+  const { error } = await supabase
+    .from('contacts')
+    .update({
+      last_contact_date: today,
+      last_contact_method: method,
+      last_contact_summary: (summary ?? `${method} sent`).slice(0, 140),
+      next_followup_date: nextFollowUp,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id);
   if (error) throw error;
 }
@@ -49,8 +78,8 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
     .from('contacts')
     .insert({
       user_id: user.id,
-      first_name: draft.firstName.trim(),
-      last_name: draft.lastName.trim() || null,
+      first_name: titleCase(draft.firstName),
+      last_name: titleCase(draft.lastName) || null,
       phone: draft.phone.trim() || null,
       vehicle: draft.vehicle.trim() || null,
       trim: draft.trim.trim() || null,
