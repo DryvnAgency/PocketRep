@@ -127,7 +127,7 @@ export default function SignupScreen() {
           <Text style={s.sub}>PocketRep tailors everything — templates, Rex's language, and follow-up sequences — to your industry.</Text>
 
           <View style={s.industryGrid}>
-            {INDUSTRY_KEYS.map((key) => {
+            {(['auto'] as IndustryKey[]).map((key) => {
               const cfg = INDUSTRY_CONFIG[key];
               const active = industry === key;
               return (

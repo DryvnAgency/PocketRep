@@ -23,227 +23,122 @@ const MASS_TEXT_KEY = 'pocketrep_mass_text_v1';
 const { width: screenWidth } = Dimensions.get('window');
 
 const CHANNEL_ICON: Record<string, string> = { text: '💬', call: '📞', email: '📧' };
-const INDUSTRIES = ['auto', 'mortgage', 'realestate', 'insurance', 'solar', 'b2b', 'hvac', 'staffing', 'd2d', 'roofing', 'fence', 'prospect', 'other'];
-const TEMPLATE_FILTERS = ['all', 'auto', 'mortgage', 'realestate', 'hvac', 'staffing', 'd2d', 'roofing', 'fence', 'insurance', 'solar', 'b2b', 'prospect', 'other'] as const;
+const INDUSTRIES = ['auto']; // auto-first: other industries hidden (re-add keys here to restore)
+const TEMPLATE_FILTERS = ['all', 'auto'] as const;
 type TemplateFilter = typeof TEMPLATE_FILTERS[number];
 
 const TEMPLATES: Sequence[] = [
-  // ── AUTO ─────────────────────────────────────────────────────────────────
+  // ── NEW SOLD CUSTOMER — first 90 days (onboarding, CSI, referral, trade seed) ──
   {
     id: 'tpl_1',
-    name: 'Last Month Sold Customer',
+    name: 'New Sold Customer (90-Day)',
     industry: 'auto',
-    description: 'Re-engage customers sold in the past 30 days.',
+    description: 'The complete post-delivery sequence: onboarding, CSI survey prep, referral asks, and the first trade-up seed.',
     user_id: null, is_template: true, is_custom: false, created_at: '',
     sequence_steps: [
-      { id: 's1', sequence_id: 'tpl_1', step_number: 1, delay_days: 0, channel: 'text', message_template: 'Hey {{first_name}}, just checking in — how are you loving your new ride?', ai_personalize: false },
-      { id: 's2', sequence_id: 'tpl_1', step_number: 2, delay_days: 7, channel: 'text', message_template: 'Hi {{first_name}}! Any questions about your vehicle so far? I\'m here if you need anything.', ai_personalize: false },
-      { id: 's3', sequence_id: 'tpl_1', step_number: 3, delay_days: 21, channel: 'call', message_template: '21-day check-in call. Start with the experience — how is the vehicle, any issues, any questions. Once they say they\'re happy, ask: "Do you know anyone in the market? I\'d love to take care of them the way I took care of you."', ai_personalize: false },
-      { id: 's4', sequence_id: 'tpl_1', step_number: 4, delay_days: 45, channel: 'text', message_template: 'Hey {{first_name}}, hope everything\'s going great with the vehicle! If you know anyone looking, send them my way — I always take great care of referrals. 🙌', ai_personalize: false },
-      { id: 's5', sequence_id: 'tpl_1', step_number: 5, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}! Coming up on 90 days — how\'s the {{vehicle}} treating you?', ai_personalize: false },
+      { id: 't1s1', sequence_id: 'tpl_1', step_number: 1, delay_days: 1, channel: 'text', message_template: 'hey {{first_name}}, congrats again on the {{vehicle}}! hope the drive home put a big smile on your face. reach out anytime, i love hearing how it is going.', ai_personalize: false },
+      { id: 't1s2', sequence_id: 'tpl_1', step_number: 2, delay_days: 3, channel: 'text', message_template: 'hey {{first_name}}, want to set up a quick 15 minute second delivery? i can walk you through bluetooth, the safety tech, and the little features most people miss. when works for you?', ai_personalize: false },
+      { id: 't1s3', sequence_id: 'tpl_1', step_number: 3, delay_days: 5, channel: 'text', message_template: 'hey {{first_name}}, heads up, the manufacturer will send a short survey about your experience. if i took good care of you, a top score means a lot and helps me keep doing this. anything i can make right before it lands, just say the word.', ai_personalize: false },
+      { id: 't1s4', sequence_id: 'tpl_1', step_number: 4, delay_days: 10, channel: 'text', message_template: 'hey {{first_name}}, one week in, how is the {{vehicle}} treating you? first service is a ways out, but i am here if anything comes up.', ai_personalize: false },
+      { id: 't1s5', sequence_id: 'tpl_1', step_number: 5, delay_days: 17, channel: 'call', message_template: 'Two-week check-in call. Ask how they are loving it, clear up any questions, no pitch. Be useful and human, and warm up the relationship before any referral ask.', ai_personalize: false },
+      { id: 't1s6', sequence_id: 'tpl_1', step_number: 6, delay_days: 30, channel: 'text', message_template: 'hey {{first_name}}, one month in! hope the {{vehicle}} is everything you wanted. if a friend or family member is ever looking, send them my way and i will take great care of them.', ai_personalize: false },
+      { id: 't1s7', sequence_id: 'tpl_1', step_number: 7, delay_days: 60, channel: 'text', message_template: 'hey {{first_name}}, two months in, how are the miles adding up? hope every drive has been a good one. anything you need, i have got you.', ai_personalize: false },
+      { id: 't1s8', sequence_id: 'tpl_1', step_number: 8, delay_days: 90, channel: 'call', message_template: '90-day call. Check in on the vehicle, ask about mileage and how life is going. Gently plant the trade-up seed: if they are driving more than expected, they may have real equity sooner than they think.', ai_personalize: false },
     ],
   },
-  {
-    id: 'tpl_4',
-    name: 'Sold Customer Retention',
-    industry: 'auto',
-    description: 'CSI survey prep, referral asks, and annual anniversary. The complete post-delivery sequence.',
-    user_id: null, is_template: true, is_custom: false, created_at: '',
-    sequence_steps: [
-      { id: 't4s1', sequence_id: 'tpl_4', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, congratulations again on your new {{vehicle}}! Hope the drive home put a huge smile on your face 😊 Reach out anytime if you have questions about any of the features!', ai_personalize: false },
-      { id: 't4s2', sequence_id: 'tpl_4', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, how are you loving the {{vehicle}} so far? I\'d love to set up a quick secondary delivery — 15 minutes to walk you through Bluetooth, remote start, lane assist, all of it. When works for you?', ai_personalize: false },
-      { id: 't4s3', sequence_id: 'tpl_4', step_number: 3, delay_days: 5, channel: 'text', message_template: 'Hey {{first_name}}, heads up — you should be getting a short survey from the manufacturer in the next day or two about your experience. If I took great care of you, a top rating means the world to me and helps me keep doing what I do. Any questions before then, I\'m here.', ai_personalize: false },
-      { id: 't4s4', sequence_id: 'tpl_4', step_number: 4, delay_days: 10, channel: 'text', message_template: 'Hey {{first_name}}, coming up on about a week with the {{vehicle}} — how\'s everything feeling? First oil change isn\'t until 3,000–5,000 miles but I\'m always here if anything comes up!', ai_personalize: false },
-      { id: 't4s5', sequence_id: 'tpl_4', step_number: 5, delay_days: 17, channel: 'call', message_template: 'Two-week check-in call. Ask how they\'re loving it, answer any lingering questions. Warm up the relationship before the referral ask. Don\'t pitch — just be genuinely helpful.', ai_personalize: false },
-      { id: 't4s6', sequence_id: 'tpl_4', step_number: 6, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, one month in! 🎉 Hope the {{vehicle}} is treating you exactly how you expected. If anything comes up — service, questions, features — I\'m still your rep. And if you know anyone who\'s looking, send them my way. I take great care of referrals.', ai_personalize: false },
-      { id: 't4s7', sequence_id: 'tpl_4', step_number: 7, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, 3 months already — time flies! Hope every drive\'s been a good one. You know anyone looking for a vehicle? I love a good referral and I\'ll make sure they\'re taken care of.', ai_personalize: false },
-      { id: 't4s8', sequence_id: 'tpl_4', step_number: 8, delay_days: 180, channel: 'text', message_template: 'Hey {{first_name}}, 6 months in — the {{vehicle}} treating you well? Any service coming up, I can point you in the right direction. Also, when your friends or family are ready for their next vehicle, I hope you think of me first.', ai_personalize: false },
-      { id: 't4s9', sequence_id: 'tpl_4', step_number: 9, delay_days: 365, channel: 'text', message_template: 'Happy 1-year anniversary with your {{vehicle}}, {{first_name}}! 🎉 It\'s been a genuine pleasure being your rep. Thank you for trusting me. If you ever need anything — trade-up, second vehicle, or want to send someone my way — I\'m always here.', ai_personalize: false },
-    ],
-  },
-  // ── MORTGAGE ─────────────────────────────────────────────────────────────
+  // ── QUICK SOLD FOLLOW-UP (lighter post-sale touch) ──────────────────────────
   {
     id: 'tpl_2',
-    name: 'Rate Drop Alert',
-    industry: 'mortgage',
-    description: 'Notify leads when rates drop to re-engage fence-sitters.',
+    name: 'Quick Sold Follow-Up',
+    industry: 'auto',
+    description: 'A lighter five-touch post-sale sequence to stay close and earn the referral.',
     user_id: null, is_template: true, is_custom: false, created_at: '',
     sequence_steps: [
-      { id: 's6', sequence_id: 'tpl_2', step_number: 1, delay_days: 0, channel: 'text', message_template: 'Hey {{first_name}}, rates just dropped — this could save you significantly on your monthly payment. Want to run numbers?', ai_personalize: false },
-      { id: 's7', sequence_id: 'tpl_2', step_number: 2, delay_days: 2, channel: 'call', message_template: 'Follow-up call to discuss rate drop impact on their specific scenario.', ai_personalize: false },
-      { id: 's8', sequence_id: 'tpl_2', step_number: 3, delay_days: 5, channel: 'email', message_template: 'Hi {{first_name}}, sending over a personalized rate comparison for your situation. Let me know if you have questions!', ai_personalize: false },
+      { id: 't2s1', sequence_id: 'tpl_2', step_number: 1, delay_days: 0, channel: 'text', message_template: 'hey {{first_name}}, how is the {{vehicle}} treating you so far? hope you love it.', ai_personalize: false },
+      { id: 't2s2', sequence_id: 'tpl_2', step_number: 2, delay_days: 7, channel: 'text', message_template: 'hey {{first_name}}, any questions about the {{vehicle}} now that you have had a week with it? i am here for anything.', ai_personalize: false },
+      { id: 't2s3', sequence_id: 'tpl_2', step_number: 3, delay_days: 21, channel: 'call', message_template: '21-day check-in call. Start with the ownership experience, any issues, any questions. Once they are happy, ask: do you know anyone in the market? I would love to take care of them the way I took care of you.', ai_personalize: false },
+      { id: 't2s4', sequence_id: 'tpl_2', step_number: 4, delay_days: 45, channel: 'text', message_template: 'hey {{first_name}}, hope everything is great with the {{vehicle}}. if you know anyone looking, send them my way, i always take care of referrals.', ai_personalize: false },
+      { id: 't2s5', sequence_id: 'tpl_2', step_number: 5, delay_days: 90, channel: 'text', message_template: 'hey {{first_name}}, coming up on 90 days, how is the {{vehicle}} running? anything you need, i am right here.', ai_personalize: false },
     ],
   },
-  {
-    id: 'tpl_5',
-    name: 'Closed Loan Follow-Up',
-    industry: 'mortgage',
-    description: 'Post-closing retention: first payment, refi alerts, referrals, and 1-year check-in.',
-    user_id: null, is_template: true, is_custom: false, created_at: '',
-    sequence_steps: [
-      { id: 't5s1', sequence_id: 'tpl_5', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, congratulations on closing! 🏡 What a day. Thank you for trusting me with one of the biggest financial moves of your life — honored to have been your loan officer.', ai_personalize: false },
-      { id: 't5s2', sequence_id: 'tpl_5', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, just checking in as you\'re getting settled. Any questions about your first payment, escrow account, or anything about the loan? No question too small — that\'s what I\'m here for.', ai_personalize: false },
-      { id: 't5s3', sequence_id: 'tpl_5', step_number: 3, delay_days: 7, channel: 'call', message_template: 'One-week call. Confirm they received closing documents, answer questions, remind them of the NPS survey coming. Make sure they feel completely taken care of.', ai_personalize: false },
-      { id: 't5s4', sequence_id: 'tpl_5', step_number: 4, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, hope the new home is feeling more like home every day! Let me know if you need any contractor or service recommendations — I have a great network.', ai_personalize: false },
-      { id: 't5s5', sequence_id: 'tpl_5', step_number: 5, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, first full month in the books! Just wanted to check in and make sure everything went smoothly with your first payment. Any issues, I can help connect you with the right people.', ai_personalize: false },
-      { id: 't5s6', sequence_id: 'tpl_5', step_number: 6, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, rates have been shifting — if they drop meaningfully I\'ll let you know right away because a refi could save you real money. For now, hoping the home is treating you great!', ai_personalize: false },
-      { id: 't5s7', sequence_id: 'tpl_5', step_number: 7, delay_days: 180, channel: 'text', message_template: 'Hey {{first_name}}, 6 months in! Your equity is building and you\'re in a great spot. If rates ever shift in your favor I\'ll be the first to tell you. Do you know anyone looking to buy or refinance? I\'d love to help them the way I helped you — referrals are everything to me.', ai_personalize: false },
-      { id: 't5s8', sequence_id: 'tpl_5', step_number: 8, delay_days: 365, channel: 'text', message_template: 'Happy 1-year in your home, {{first_name}}! 🥂 What a journey it\'s been. Thank you for being a client — hope the home has given you everything you hoped for. I\'m always here if you need anything.', ai_personalize: false },
-    ],
-  },
-  // ── REAL ESTATE ──────────────────────────────────────────────────────────
+  // ── UNSOLD LEAD RE-ENGAGEMENT (revive cold prospects) ───────────────────────
   {
     id: 'tpl_3',
-    name: 'Homeowner Equity Check',
-    industry: 'realestate',
-    description: 'Touch base with homeowners about their equity position.',
+    name: 'Unsold Lead Re-engagement',
+    industry: 'auto',
+    description: 'A 30-day sequence to reopen the conversation with prospects who went cold.',
     user_id: null, is_template: true, is_custom: false, created_at: '',
     sequence_steps: [
-      { id: 's9', sequence_id: 'tpl_3', step_number: 1, delay_days: 0, channel: 'text', message_template: 'Hey {{first_name}}, just thinking of you and wanted to pass along a quick update on your neighborhood. Values in your area have shifted since you bought — if you\'re ever curious what your home is worth today, I\'m happy to pull a number. No agenda, just staying in touch.', ai_personalize: false },
-      { id: 's10', sequence_id: 'tpl_3', step_number: 2, delay_days: 3, channel: 'call', message_template: 'Call to discuss current market conditions and equity estimate.', ai_personalize: false },
-      { id: 's11', sequence_id: 'tpl_3', step_number: 3, delay_days: 10, channel: 'email', message_template: 'Hi {{first_name}}, I ran a quick market analysis on homes near yours — attached is what I found. Happy to chat!', ai_personalize: false },
-      { id: 's12', sequence_id: 'tpl_3', step_number: 4, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, just checking back in. The market\'s still moving — let me know if you want an updated number.', ai_personalize: false },
+      { id: 't3s1', sequence_id: 'tpl_3', step_number: 1, delay_days: 0, channel: 'text', message_template: 'hey {{first_name}}, {{rep_name}} here. still thinking about the {{vehicle}}? happy to answer anything whenever you are ready.', ai_personalize: false },
+      { id: 't3s2', sequence_id: 'tpl_3', step_number: 2, delay_days: 5, channel: 'text', message_template: 'hey {{first_name}}, we just got fresh inventory in. worth a quick look while it is here?', ai_personalize: false },
+      { id: 't3s3', sequence_id: 'tpl_3', step_number: 3, delay_days: 12, channel: 'call', message_template: 'Re-engagement call. Ask questions, find out what changed since last time. Do not pitch, just reopen the conversation and listen.', ai_personalize: false },
+      { id: 't3s4', sequence_id: 'tpl_3', step_number: 4, delay_days: 20, channel: 'text', message_template: 'hey {{first_name}}, anything i can answer for you on the {{vehicle}}? happy to help whenever.', ai_personalize: false },
+      { id: 't3s5', sequence_id: 'tpl_3', step_number: 5, delay_days: 30, channel: 'text', message_template: 'hey {{first_name}}, last check-in from me for a bit. you have my number, reach out whenever the timing is right.', ai_personalize: false },
     ],
   },
+  // ── LEASE-END UPGRADE (start ~6 months before maturity) ─────────────────────
+  {
+    id: 'tpl_4',
+    name: 'Lease-End Upgrade',
+    industry: 'auto',
+    description: 'Start the upgrade conversation about six months before lease maturity so they stay in the family.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't4s1', sequence_id: 'tpl_4', step_number: 1, delay_days: 0, channel: 'text', message_template: 'hey {{first_name}}, your lease on the {{vehicle}} should be wrapping up in the next few months. want me to walk you through your options before then?', ai_personalize: false },
+      { id: 't4s2', sequence_id: 'tpl_4', step_number: 2, delay_days: 14, channel: 'call', message_template: 'Lease-end call. Talk pull-ahead programs and current equity. Goal is a smooth upgrade so they stay in the family instead of shopping elsewhere.', ai_personalize: false },
+      { id: 't4s3', sequence_id: 'tpl_4', step_number: 3, delay_days: 30, channel: 'text', message_template: 'hey {{first_name}}, found a couple options that could fit you nicely for your next one. want me to send a few over?', ai_personalize: false },
+      { id: 't4s4', sequence_id: 'tpl_4', step_number: 4, delay_days: 45, channel: 'text', message_template: 'hey {{first_name}}, happy to set up a quick appraisal and lease-end review whenever works. just say the word and i will get it on the calendar.', ai_personalize: false },
+    ],
+  },
+  // ── TRADE-UP EQUITY CHECK (owners 2-4 yrs in / positive equity) ─────────────
+  {
+    id: 'tpl_5',
+    name: 'Trade-Up Equity Check',
+    industry: 'auto',
+    description: 'Reach owners who likely have positive equity about a payment-neutral upgrade.',
+    user_id: null, is_template: true, is_custom: false, created_at: '',
+    sequence_steps: [
+      { id: 't5s1', sequence_id: 'tpl_5', step_number: 1, delay_days: 0, channel: 'text', message_template: 'hey {{first_name}}, the market has been wild and your {{vehicle}} may be worth more than you would guess. want me to pull your current trade equity?', ai_personalize: false },
+      { id: 't5s2', sequence_id: 'tpl_5', step_number: 2, delay_days: 7, channel: 'call', message_template: 'Equity call. Run a payment-neutral number: what could they get into for the same monthly. Lead with value, not urgency.', ai_personalize: false },
+      { id: 't5s3', sequence_id: 'tpl_5', step_number: 3, delay_days: 21, channel: 'text', message_template: 'hey {{first_name}}, a few of the newer models just landed. if you ever want to see what an upgrade looks like with your equity, i am here.', ai_personalize: false },
+    ],
+  },
+  // ── SERVICE & MAINTENANCE (top-of-mind that seeds the next sale) ────────────
   {
     id: 'tpl_6',
-    name: 'Closed Sale Follow-Up',
-    industry: 'realestate',
-    description: 'Keys-to-anniversary sequence: settlement help, market updates, and referral asks.',
+    name: 'Service & Maintenance Reminder',
+    industry: 'auto',
+    description: 'Stay top of mind with service and seasonal maintenance touches that also seed the next sale.',
     user_id: null, is_template: true, is_custom: false, created_at: '',
     sequence_steps: [
-      { id: 't6s1', sequence_id: 'tpl_6', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, CONGRATULATIONS! 🔑 Keys are yours! Thank you for letting me be your agent — this one meant a lot to me. Go enjoy your new home!', ai_personalize: false },
-      { id: 't6s2', sequence_id: 'tpl_6', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, hope the move is going smoothly! If you need any recommendations — movers, contractors, painters, plumbers — I have a great list of trusted people. Just ask!', ai_personalize: false },
-      { id: 't6s3', sequence_id: 'tpl_6', step_number: 3, delay_days: 7, channel: 'call', message_template: 'One-week call. See how they\'re settling in, answer any HOA or utility questions, ask if they know anyone looking to buy or sell. Low pressure, high value.', ai_personalize: false },
-      { id: 't6s4', sequence_id: 'tpl_6', step_number: 4, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, hope you\'re getting all settled in! Quick reminder — keep your closing docs and insurance info somewhere accessible. Let me know if you need anything.', ai_personalize: false },
-      { id: 't6s5', sequence_id: 'tpl_6', step_number: 5, delay_days: 30, channel: 'text', message_template: 'One month homeowner! 🎉 Hey {{first_name}}, how\'s the neighborhood treating you? If friends or family are ever looking to buy or sell in this market, I\'d be honored to help them.', ai_personalize: false },
-      { id: 't6s6', sequence_id: 'tpl_6', step_number: 6, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, market\'s always moving. Your home is already building equity. If you ever want a quick valuation update or know someone ready to make a move, I\'m your person.', ai_personalize: false },
-      { id: 't6s7', sequence_id: 'tpl_6', step_number: 7, delay_days: 365, channel: 'text', message_template: 'Happy 1-year in your home, {{first_name}}! 🏡 I still remember the day we got those keys. Thank you for trusting me. If you ever need me — or know someone who does — I\'m always a text away.', ai_personalize: false },
+      { id: 't6s1', sequence_id: 'tpl_6', step_number: 1, delay_days: 0, channel: 'text', message_template: 'hey {{first_name}}, looks like the {{vehicle}} may be due for service soon. want me to help you get it scheduled?', ai_personalize: false },
+      { id: 't6s2', sequence_id: 'tpl_6', step_number: 2, delay_days: 30, channel: 'text', message_template: 'hey {{first_name}}, seasons are changing, good time to check the tires and get everything looked over. let me know if you want me to set it up.', ai_personalize: false },
+      { id: 't6s3', sequence_id: 'tpl_6', step_number: 3, delay_days: 90, channel: 'text', message_template: 'hey {{first_name}}, hope the {{vehicle}} is running great. next time you are in for service i would love to say hi, and if you are curious i can show you what your trade equity looks like.', ai_personalize: false },
     ],
   },
-  // ── HVAC ─────────────────────────────────────────────────────────────────
+  // ── BIRTHDAY & ANNIVERSARY (personal top-of-mind) ───────────────────────────
   {
     id: 'tpl_7',
-    name: 'After Service Follow-Up',
-    industry: 'hvac',
-    description: '30-day satisfaction check, filter reminder, seasonal tune-up, and referral ask.',
+    name: 'Birthday & Anniversary',
+    industry: 'auto',
+    description: 'Annual personal touchpoints so you never miss a moment that matters.',
     user_id: null, is_template: true, is_custom: false, created_at: '',
     sequence_steps: [
-      { id: 't7s1', sequence_id: 'tpl_7', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, thank you for letting us take care of your system today! Means a lot. Everything running comfortably? Let me know if anything feels off.', ai_personalize: false },
-      { id: 't7s2', sequence_id: 'tpl_7', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, just checking in — is the system running smoothly since the service? Any unusual sounds, temps not right, anything at all — reach out and I\'ll make it right.', ai_personalize: false },
-      { id: 't7s3', sequence_id: 'tpl_7', step_number: 3, delay_days: 7, channel: 'text', message_template: 'Hey {{first_name}}, one week out and hoping everything\'s perfect! Quick tip: put a filter change reminder in your phone for 90 days. Small habit, big difference in efficiency.', ai_personalize: false },
-      { id: 't7s4', sequence_id: 'tpl_7', step_number: 4, delay_days: 30, channel: 'call', message_template: '30-day quality check call. Ask about comfort level, any issues, and gently mention the seasonal tune-up program. Ask if they know anyone who needs HVAC service.', ai_personalize: false },
-      { id: 't7s5', sequence_id: 'tpl_7', step_number: 5, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, 3-month filter reminder! 🔧 Also, if you\'re heading into a hot or cold season, a quick tune-up now prevents emergency calls later. Want me to get you on the schedule?', ai_personalize: false },
-      { id: 't7s6', sequence_id: 'tpl_7', step_number: 6, delay_days: 180, channel: 'text', message_template: 'Hey {{first_name}}, 6-month check-in! Hope the system\'s been reliable all season. If you know anyone with HVAC needs — new system, repair, tune-up — send them my way. I\'ll take great care of them.', ai_personalize: false },
+      { id: 't7s1', sequence_id: 'tpl_7', step_number: 1, delay_days: 0, channel: 'text', message_template: 'happy birthday {{first_name}}! hope your day is a great one. {{rep_name}} here, just thinking of you, no agenda at all.', ai_personalize: false },
+      { id: 't7s2', sequence_id: 'tpl_7', step_number: 2, delay_days: 1, channel: 'call', message_template: 'Day-after birthday call. Two minutes, ask how the birthday was. No pitch, pure connection. This is what keeps you top of mind.', ai_personalize: false },
     ],
   },
-  // ── PROSPECT NURTURE ─────────────────────────────────────────────────────
+  // ── PAST-CUSTOMER WIN-BACK (long-term top-of-mind) ──────────────────────────
   {
     id: 'tpl_8',
-    name: 'New Prospect Nurture',
-    industry: 'prospect',
-    description: 'Direct, natural follow-up sequence for new prospects. Edit before sending to add any timing context that fits the moment — end of month, upcoming holiday, current deal. Keep it conversational.',
+    name: 'Past-Customer Win-Back',
+    industry: 'auto',
+    description: 'Long-term touches to win back past customers when they are ready for their next vehicle.',
     user_id: null, is_template: true, is_custom: false, created_at: '',
     sequence_steps: [
-      { id: 't8s1', sequence_id: 'tpl_8', step_number: 1, delay_days: 0, channel: 'text', message_template: 'Hey {{first_name}}, great connecting with you! I\'ll do everything on my end to make this easy. Reach out anytime — I\'m here.', ai_personalize: false },
-      { id: 't8s2', sequence_id: 'tpl_8', step_number: 2, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, just following up from yesterday. I\'ve been thinking about what you\'re looking for — when can we connect for 10 minutes? I think I can help.', ai_personalize: false },
-      { id: 't8s3', sequence_id: 'tpl_8', step_number: 3, delay_days: 2, channel: 'text', message_template: 'Hey {{first_name}}, I\'d hate for you to miss out on something that\'s a real fit for you. What\'s the best time to connect this week?', ai_personalize: false },
-      { id: 't8s4', sequence_id: 'tpl_8', step_number: 4, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, keeping it short — I have something specific in mind for your situation. Worth a 10-minute call. When works?', ai_personalize: false },
-      { id: 't8s5', sequence_id: 'tpl_8', step_number: 5, delay_days: 5, channel: 'text', message_template: 'Hey {{first_name}}, still thinking about what you told me and I genuinely think we can make something work. What would it take to get you moving this week?', ai_personalize: false },
-      { id: 't8s6', sequence_id: 'tpl_8', step_number: 6, delay_days: 7, channel: 'call', message_template: 'One-week follow-up call. Reference exactly what they told you — show you remembered. Lead with a specific idea for their situation, not a generic pitch. Ask what\'s holding them up and listen.', ai_personalize: false },
-      { id: 't8s7', sequence_id: 'tpl_8', step_number: 7, delay_days: 10, channel: 'text', message_template: 'Hey {{first_name}}, still here. I know the timing hasn\'t clicked yet — just want you to know I\'m your person when it does.', ai_personalize: false },
-      { id: 't8s8', sequence_id: 'tpl_8', step_number: 8, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, last one for a while — I don\'t want to be in your inbox if the timing isn\'t right. When you\'re ready, reach out. I\'ll make it worth it. 🤝', ai_personalize: false },
-    ],
-  },
-  // ── STAFFING ─────────────────────────────────────────────────────────────
-  {
-    id: 'tpl_9',
-    name: 'Post-Placement Follow-Up',
-    industry: 'staffing',
-    description: 'Keep candidates and clients happy through the first 6 months. Drives retention, referrals, and repeat placements.',
-    user_id: null, is_template: true, is_custom: false, created_at: '',
-    sequence_steps: [
-      { id: 't9s1', sequence_id: 'tpl_9', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, congrats on the new role — hope day one was everything you expected! I\'m here if you have any questions getting settled. Reach out anytime.', ai_personalize: false },
-      { id: 't9s2', sequence_id: 'tpl_9', step_number: 2, delay_days: 3, channel: 'call', message_template: 'Quick check-in call with the hiring manager. Ask: How is the new placement settling in? Any gaps or surprises? Make sure both sides are happy early.', ai_personalize: false },
-      { id: 't9s3', sequence_id: 'tpl_9', step_number: 3, delay_days: 7, channel: 'text', message_template: 'Hey {{first_name}}, one week in! How are you feeling about the role? Team good? Anything I can help clarify or smooth out on my end?', ai_personalize: false },
-      { id: 't9s4', sequence_id: 'tpl_9', step_number: 4, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, two weeks in — hope you\'re getting into your groove! If anything feels off about the fit, better to surface it now than later. I\'m in your corner.', ai_personalize: false },
-      { id: 't9s5', sequence_id: 'tpl_9', step_number: 5, delay_days: 30, channel: 'call', message_template: '30-day satisfaction call. One goal: make sure they\'re happy. Ask how the role is matching expectations, if there\'s anything that\'s felt off, if the team has been what they expected. Nothing else — just confirm the placement is working for both sides.', ai_personalize: false },
-      { id: 't9s6', sequence_id: 'tpl_9', step_number: 6, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, 3 months in — you\'re officially past the honeymoon phase! Hope the role is delivering for you. If you know anyone in your network looking for their next move, I\'d love the intro.', ai_personalize: false },
-      { id: 't9s7', sequence_id: 'tpl_9', step_number: 7, delay_days: 180, channel: 'text', message_template: 'Hey {{first_name}}, 6 months already! How are things going? If you\'re thinking about the next chapter — more money, better title, different culture — let\'s talk before you even start browsing. I find better fits faster.', ai_personalize: false },
-    ],
-  },
-  // ── DOOR-TO-DOOR ─────────────────────────────────────────────────────────
-  {
-    id: 'tpl_10',
-    name: 'Post-Knock Follow-Up',
-    industry: 'd2d',
-    description: 'Keep the conversation alive after the door. Most D2D closes happen on the 2nd or 3rd contact.',
-    user_id: null, is_template: true, is_custom: false, created_at: '',
-    sequence_steps: [
-      { id: 't10s1', sequence_id: 'tpl_10', step_number: 1, delay_days: 0, channel: 'text', message_template: 'Hey {{first_name}}, great meeting you today! I\'m [rep] — I stopped by to share something that could genuinely save you money. No pressure. Just reach out when you want that conversation.', ai_personalize: false },
-      { id: 't10s2', sequence_id: 'tpl_10', step_number: 2, delay_days: 2, channel: 'text', message_template: 'Hey {{first_name}}, quick follow-up from Tuesday. I know you were in the middle of your day when I stopped by — totally fine. The offer I mentioned is still on the table. 5 minutes on a call could put money back in your pocket.', ai_personalize: false },
-      { id: 't10s3', sequence_id: 'tpl_10', step_number: 3, delay_days: 5, channel: 'text', message_template: 'Hey {{first_name}}, I\'d hate for you to miss a good window on this. Pricing and availability look good right now — happy to get you taken care of quickly if you want to connect today.', ai_personalize: false },
-      { id: 't10s4', sequence_id: 'tpl_10', step_number: 4, delay_days: 10, channel: 'call', message_template: 'Final follow-up call. Keep it short — "Hey {{first_name}}, just checking if there\'s anything I can answer for you before I close out this area." If no, thank them and move on gracefully.', ai_personalize: false },
-      { id: 't10s5', sequence_id: 'tpl_10', step_number: 5, delay_days: 21, channel: 'text', message_template: 'Hey {{first_name}}, been a few weeks — still think this is a good fit for you. Want to get it sorted out before things shift? Happy to make it quick.', ai_personalize: false },
-    ],
-  },
-  // ── ROOFING ──────────────────────────────────────────────────────────────
-  {
-    id: 'tpl_11',
-    name: 'Post-Estimate Follow-Up',
-    industry: 'roofing',
-    description: 'Keep the lead warm after the inspection and estimate. Most roofing closes need 2-3 follow-ups.',
-    user_id: null, is_template: true, is_custom: false, created_at: '',
-    sequence_steps: [
-      { id: 't11s1', sequence_id: 'tpl_11', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, great meeting you for the inspection! Your estimate should be in your inbox now. Happy to walk through it on a quick call if anything looks unclear. What questions do you have?', ai_personalize: false },
-      { id: 't11s2', sequence_id: 'tpl_11', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, just following up on the estimate. One thing worth knowing — if you have any storm damage from last year\'s season, your insurance may cover a significant portion of the cost. I can walk you through the claims process. It\'s easier than most people think.', ai_personalize: false },
-      { id: 't11s3', sequence_id: 'tpl_11', step_number: 3, delay_days: 7, channel: 'call', message_template: 'One-week follow-up call. Ask: Did they review the estimate? Any concerns? If insurance is in play, ask if they\'ve contacted their adjuster yet. Offer to be on the call with them.', ai_personalize: false },
-      { id: 't11s4', sequence_id: 'tpl_11', step_number: 4, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, just checking in — storm season is ramping up and our schedule fills fast once the rush starts. If you want to lock in a slot before the backlog hits, this week is the time. Want me to pencil you in?', ai_personalize: false },
-      { id: 't11s5', sequence_id: 'tpl_11', step_number: 5, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, I know it\'s been a few weeks. If you went with another company, I genuinely hope the job went well. If you\'re still deciding or the other quote fell through, I\'m still here and the estimate stands. Just let me know.', ai_personalize: false },
-    ],
-  },
-  {
-    id: 'tpl_12',
-    name: 'Post-Install Retention',
-    industry: 'roofing',
-    description: 'Post-install sequence to drive referrals, reviews, and repeat business for maintenance.',
-    user_id: null, is_template: true, is_custom: false, created_at: '',
-    sequence_steps: [
-      { id: 't12s1', sequence_id: 'tpl_12', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, job\'s done! Hope everything looks great from the curb. We clean up after ourselves, but do a quick walk around — if anything looks off, send me a photo and I\'ll take care of it. Thank you for the business!', ai_personalize: false },
-      { id: 't12s2', sequence_id: 'tpl_12', step_number: 2, delay_days: 7, channel: 'text', message_template: 'Hey {{first_name}}, one week post-install check-in. Everything holding up? Any concerns? Also — if the experience was great, a quick Google review goes a long way for a small business like ours. No pressure, just means a lot.', ai_personalize: false },
-      { id: 't12s3', sequence_id: 'tpl_12', step_number: 3, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, one month in on the new roof! Hope it\'s given you peace of mind already. Quick reminder — your warranty docs were emailed to you. Keep them somewhere safe. And if you know any neighbors who\'ve been putting off their roof, I\'d love the intro.', ai_personalize: false },
-      { id: 't12s4', sequence_id: 'tpl_12', step_number: 4, delay_days: 90, channel: 'text', message_template: 'Hey {{first_name}}, just checking in as the seasons change. Roofs can take a beating during the transition — gutters, flashing, and vents are the usual suspects. If you want a quick seasonal inspection (on us), just say the word.', ai_personalize: false },
-      { id: 't12s5', sequence_id: 'tpl_12', step_number: 5, delay_days: 365, channel: 'text', message_template: 'Hey {{first_name}}, one year on your new roof! 🏠 Hope it\'s been leak-free and worry-free. Annual inspection keeps the warranty valid — want me to schedule a quick one? And as always, any referrals are the biggest compliment you can give me.', ai_personalize: false },
-    ],
-  },
-  // ── INSURANCE ────────────────────────────────────────────────────────────
-  {
-    id: 'tpl_13',
-    name: 'New Policy Welcome',
-    industry: 'insurance',
-    description: 'Post-close retention sequence: onboard the client, prep for renewal, drive referrals.',
-    user_id: null, is_template: true, is_custom: false, created_at: '',
-    sequence_steps: [
-      { id: 't13s1', sequence_id: 'tpl_13', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, welcome to the policy! Your documents should be in your inbox. Take a look when you get a chance — key info: your policy number, deductible, and claims contact. Any questions, I\'m your person.', ai_personalize: false },
-      { id: 't13s2', sequence_id: 'tpl_13', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, one thing most people don\'t know — you should review your policy whenever there\'s a major life change: new car, new home, new baby, major income shift. I\'ll remind you at renewal, but feel free to flag anything sooner.', ai_personalize: false },
-      { id: 't13s3', sequence_id: 'tpl_13', step_number: 3, delay_days: 30, channel: 'call', message_template: '30-day satisfaction call. Ask: Has there been any confusion about the policy? Any changes in their situation? Check if there are gaps (home, auto, life, umbrella) and mention a quick coverage review.', ai_personalize: false },
-      { id: 't13s4', sequence_id: 'tpl_13', step_number: 4, delay_days: 180, channel: 'text', message_template: 'Hey {{first_name}}, 6-month check-in! Quick question — has anything changed in the last 6 months that might affect your coverage? New vehicle, renovation, anyone new in the household? Let\'s make sure you\'re fully protected.', ai_personalize: false },
-      { id: 't13s5', sequence_id: 'tpl_13', step_number: 5, delay_days: 335, channel: 'text', message_template: 'Hey {{first_name}}, your renewal is coming up in about 30 days. I\'m reviewing your policy now and will have any changes or savings opportunities for you before then. Also — if you know friends or family who could use a second opinion on their coverage, I\'d love to help them.', ai_personalize: false },
-    ],
-  },
-  // ── SOLAR ─────────────────────────────────────────────────────────────────
-  {
-    id: 'tpl_14',
-    name: 'Post-Proposal Follow-Up',
-    industry: 'solar',
-    description: 'Keep the proposal alive through the typical 2-4 week solar decision cycle.',
-    user_id: null, is_template: true, is_custom: false, created_at: '',
-    sequence_steps: [
-      { id: 't14s1', sequence_id: 'tpl_14', step_number: 1, delay_days: 1, channel: 'text', message_template: 'Hey {{first_name}}, great meeting today! Your proposal should be in your inbox — it shows your current usage vs. what solar covers, the 30% federal tax credit, and the 25-year savings projection. Walk through it and let me know your questions.', ai_personalize: false },
-      { id: 't14s2', sequence_id: 'tpl_14', step_number: 2, delay_days: 3, channel: 'text', message_template: 'Hey {{first_name}}, the most common question I get: "What if I move?" Solar adds $15K–$25K in home value on average and homes with solar sell faster. Buyers pay a premium for locked-in energy costs. Just wanted to address that before you ask!', ai_personalize: false },
-      { id: 't14s3', sequence_id: 'tpl_14', step_number: 3, delay_days: 7, channel: 'call', message_template: 'One-week follow-up call. Ask: Did they review the proposal? Do they have questions about financing, the tax credit, or the installation process? If they\'re comparing quotes, ask what the other company offered — you can usually match or beat it.', ai_personalize: false },
-      { id: 't14s4', sequence_id: 'tpl_14', step_number: 4, delay_days: 14, channel: 'text', message_template: 'Hey {{first_name}}, utility rates just went up again — did you see the news? Every month you wait is another month of paying the utility company instead of locking in your rate. I can still honor the proposal numbers we put together. Want to move forward?', ai_personalize: false },
-      { id: 't14s5', sequence_id: 'tpl_14', step_number: 5, delay_days: 30, channel: 'text', message_template: 'Hey {{first_name}}, last follow-up — I don\'t want to be in your inbox if the timing isn\'t right. If you\'re still interested, the 30% federal tax credit is available now and I can still lock in your current roof conditions for installation. Just let me know either way.', ai_personalize: false },
+      { id: 't8s1', sequence_id: 'tpl_8', step_number: 1, delay_days: 0, channel: 'text', message_template: 'hey {{first_name}}, hope you and the family are doing great. however your year is going, just know i am still here whenever you need anything.', ai_personalize: false },
+      { id: 't8s2', sequence_id: 'tpl_8', step_number: 2, delay_days: 60, channel: 'text', message_template: 'hey {{first_name}}, been a minute! how is the {{vehicle}} holding up? if you are ever thinking about what is next, i would love to help.', ai_personalize: false },
+      { id: 't8s3', sequence_id: 'tpl_8', step_number: 3, delay_days: 180, channel: 'text', message_template: 'hey {{first_name}}, we have some great new inventory and i thought of you. if you ever want to take a look, you know where to find me.', ai_personalize: false },
     ],
   },
 ];
@@ -358,10 +253,7 @@ export default function SequencesScreen() {
       ]);
       if (prof) {
         setUserPlan(prof.plan ?? 'pro');
-        const ind = prof.industry as TemplateFilter;
-        if (ind && (TEMPLATE_FILTERS as readonly string[]).includes(ind)) {
-          setTemplateFilter(ind);
-        }
+        // Auto-first: every template is automotive, so no industry pre-filter.
       }
       setMySequences(seqs ?? []);
       setAllContacts((ctcts ?? []) as any);
