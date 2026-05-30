@@ -309,8 +309,23 @@ Three live functions in `fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/`:
 - Source: `PocketRepApp/supabase/functions/send-push/index.ts`
 
 ### Older functions (not v2)
-- `ai-closer` — older Rex flow, currently inactive
-- `stripe-webhook` — Stripe subscription webhook (untouched)
+Both were live in prod but had **no source in the repo** — now captured verbatim
+(deployed bytes) so prod is version-controlled. Neither was redeployed.
+
+- `ai-closer` (deployed v25, `verify_jwt: true`) — older Rex flow, **inactive**
+  (the app routes every Rex feature through `ai-proxy`; no client refs, no recent
+  invocations, `rex_usage` empty).
+  Source: `PocketRepApp/supabase/functions/ai-closer/index.ts`
+  ⚠️ **Latent plan split-brain (dormant):** it reads the rate-limit `plan` from
+  `users.plan`, but billing/Stripe and `ai-proxy` use `profiles.plan` + `profiles.unlimited`.
+  `users.plan` is stale (`pro` for everyone), so if this function were ever
+  re-activated, Elite reps would be wrongly throttled at the Pro 100/day cap.
+  Fix-on-revive: read `plan`/`unlimited` from `profiles` (rep-name fields still
+  come from `users`).
+- `stripe-webhook` (deployed v15, `verify_jwt: false` — Stripe HMAC signature auth)
+  — Stripe subscription webhook. **Active and healthy:** writes `plan` /
+  `stripe_customer_id` / `trial_ends_at` to the canonical `profiles` table.
+  Source: `PocketRepApp/supabase/functions/stripe-webhook/index.ts`
 
 ### To deploy a function
 The MCP `deploy_edge_function` tool can deploy directly. Or via CLI:
