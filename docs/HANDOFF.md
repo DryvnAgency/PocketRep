@@ -309,22 +309,18 @@ Three live functions in `fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/`:
 - Source: `PocketRepApp/supabase/functions/send-push/index.ts`
 
 ### Older functions (not v2)
-Both were live in prod but had **no source in the repo** — now captured verbatim
-(deployed bytes) so prod is version-controlled. Neither was redeployed.
 
-- `ai-closer` (deployed **v26**, `verify_jwt: true`) — older Rex flow. Fixed and
-  redeployed: the **plan split-brain is resolved** — it now reads `plan` +
-  `unlimited` from the canonical `profiles` table (same source Stripe writes to
-  and `ai-proxy` reads), while rep identity (`rep_name_for_ai`) still comes from
-  the legacy `users` table. Previously it read the rate-limit plan from the stale
-  `users.plan` (`pro` for everyone), which throttled paying Elite reps at the Pro
-  100/day cap; v26 gives Elite/`unlimited` reps unlimited Rex as intended.
-  Note: the client still routes every Rex feature through `ai-proxy`, so `ai-closer`
-  stands as a corrected standby — wiring it into the app would be a separate change.
-  Source: `PocketRepApp/supabase/functions/ai-closer/index.ts`
+- `ai-closer` — **removed.** It was an older Rex flow fully superseded by `ai-proxy`
+  (0 client refs, no recent invocations, `rex_usage` empty), so it was deleted from
+  the repo. The deployed function should be deleted from the dashboard:
+  **supabase.com → project `fwvrauqdoevwmwwqlfav` → Edge Functions → `ai-closer` →
+  Delete function** (or `supabase functions delete ai-closer --project-ref
+  fwvrauqdoevwmwwqlfav`). Last source is recoverable from git history if ever needed.
 - `stripe-webhook` (deployed v15, `verify_jwt: false` — Stripe HMAC signature auth)
-  — Stripe subscription webhook. **Active and healthy:** writes `plan` /
-  `stripe_customer_id` / `trial_ends_at` to the canonical `profiles` table.
+  — Stripe subscription webhook. Was live in prod with **no source in the repo**;
+  now captured verbatim (deployed bytes) so prod is version-controlled (not
+  redeployed). **Active and healthy:** writes `plan` / `stripe_customer_id` /
+  `trial_ends_at` to the canonical `profiles` table.
   Source: `PocketRepApp/supabase/functions/stripe-webhook/index.ts`
 
 ### To deploy a function
