@@ -11,7 +11,7 @@ export type GamePlanResult = {
 
 function buildPrompt(c: V2Contact, notes: string): string {
   const tier = TIERS[c.tier];
-  return `You are Rex, the AI sales coach inside PocketRep. Coach Jake (senior BMW advisor) on his next move with this customer.
+  return `You are Rex, the AI sales coach inside PocketRep. Coach the rep (a seasoned automotive sales pro) on the single best next move with this customer.
 
 Customer context:
 - Name: ${c.name}
@@ -21,16 +21,16 @@ Customer context:
 - Plan: ${c.planLabel ?? '—'}
 - Tier: ${tier.label} (${c.days} day${c.days === 1 ? '' : 's'} since last contact)
 
-Jake's notes on this customer:
+Rep's notes on this customer:
 ${notes || '(no notes yet)'}
 
-Pick the single best NEXT action: call, text, or email. Then draft the exact script.
+Pick the single best NEXT action: call, text, or email. Lean on automotive retention angles when they fit — trade equity, lease timing, service or maintenance, referrals, or an anniversary touch. Then draft the exact script.
 
 Respond in EXACTLY this format (no extra text):
 CHANNEL: <call | text | email>
 WHY: <one sentence, max 18 words>
 SCRIPT:
-<For a call: opening line + 2-3 key questions. For text: 2-3 sentences, no emojis. For email: short body, no signature. End with "Jake" only on text/email.>`;
+<For a call: opening line + 2-3 key questions. For text: 2-3 sentences, no emojis. For email: short body. Do not sign off with a name — the rep sends from their own phone.>`;
 }
 
 function parseResponse(raw: string): GamePlanResult {
