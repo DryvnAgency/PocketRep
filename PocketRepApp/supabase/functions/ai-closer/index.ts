@@ -1,6 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// PocketRep — Supabase Edge Function  v4 — Rex + Rate Limiting
+// PocketRep — Supabase Edge Function  v5 — Rex + Rate Limiting
 // File: supabase/functions/ai-closer/index.ts
+//
+// Plan + unlimited are read from the canonical `profiles` table (the same source
+// Stripe writes to and ai-proxy reads from). Rep identity (rep_name_for_ai) still
+// comes from the legacy `users` table, which is where those fields live.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -256,11 +260,18 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) throw new Error("Unauthorized");
 
-    const { data: profile } = await supabase
-      .from("users").select("*").eq("id", user.id).single();
+    // Rep identity/personalization lives in the legacy `users` table
+    // (rep_name_for_ai exists only there). Plan + unlimited are canonical in
+    // `profiles` — the same source Stripe writes to and ai-proxy reads from.
+    // (Reading plan from users.plan throttled paying Elite reps at the Pro cap.)
+    const { data: repRow } = await supabase
+      .from("users").select("rep_name_for_ai, full_name").eq("id", user.id).single();
+    const { data: billing } = await supabase
+      .from("profiles").select("plan, unlimited").eq("id", user.id).single();
 
-    const repName = profile?.rep_name_for_ai || profile?.full_name?.split(" ")[0] || "Rep";
-    const plan = profile?.plan || "pro";
+    const repName = repRow?.rep_name_for_ai || repRow?.full_name?.split(" ")[0] || "Rep";
+    const plan =
+      billing?.unlimited === true || billing?.plan === "elite" ? "elite" : (billing?.plan || "pro");
 
     const body = await req.json();
     const { action, contact_id, objection, interaction_type, outcome, notes,

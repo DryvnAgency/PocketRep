@@ -312,16 +312,16 @@ Three live functions in `fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/`:
 Both were live in prod but had **no source in the repo** — now captured verbatim
 (deployed bytes) so prod is version-controlled. Neither was redeployed.
 
-- `ai-closer` (deployed v25, `verify_jwt: true`) — older Rex flow, **inactive**
-  (the app routes every Rex feature through `ai-proxy`; no client refs, no recent
-  invocations, `rex_usage` empty).
+- `ai-closer` (deployed **v26**, `verify_jwt: true`) — older Rex flow. Fixed and
+  redeployed: the **plan split-brain is resolved** — it now reads `plan` +
+  `unlimited` from the canonical `profiles` table (same source Stripe writes to
+  and `ai-proxy` reads), while rep identity (`rep_name_for_ai`) still comes from
+  the legacy `users` table. Previously it read the rate-limit plan from the stale
+  `users.plan` (`pro` for everyone), which throttled paying Elite reps at the Pro
+  100/day cap; v26 gives Elite/`unlimited` reps unlimited Rex as intended.
+  Note: the client still routes every Rex feature through `ai-proxy`, so `ai-closer`
+  stands as a corrected standby — wiring it into the app would be a separate change.
   Source: `PocketRepApp/supabase/functions/ai-closer/index.ts`
-  ⚠️ **Latent plan split-brain (dormant):** it reads the rate-limit `plan` from
-  `users.plan`, but billing/Stripe and `ai-proxy` use `profiles.plan` + `profiles.unlimited`.
-  `users.plan` is stale (`pro` for everyone), so if this function were ever
-  re-activated, Elite reps would be wrongly throttled at the Pro 100/day cap.
-  Fix-on-revive: read `plan`/`unlimited` from `profiles` (rep-name fields still
-  come from `users`).
 - `stripe-webhook` (deployed v15, `verify_jwt: false` — Stripe HMAC signature auth)
   — Stripe subscription webhook. **Active and healthy:** writes `plan` /
   `stripe_customer_id` / `trial_ends_at` to the canonical `profiles` table.
