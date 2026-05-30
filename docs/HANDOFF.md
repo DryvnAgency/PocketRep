@@ -63,11 +63,15 @@ This document is the single source of truth. If anything in the codebase contrad
 │   ├── PocketRep-Standalone.html   Original static mock
 │   └── extracted/           17 .jsx modules pulled out of the mock — design source of truth
 ├── docs/
-│   ├── HANDOFF.md           THIS FILE
+│   ├── POCKETREP_OVERVIEW.md  Start-here map: what PocketRep is/does/could do + next-chat handoff prompt
+│   ├── HANDOFF.md           THIS FILE — technical source of truth
 │   ├── PORT_PLAN.md         Original "mock → live" plan (historical)
 │   └── VERCEL_SETUP.md      Vercel project conventions
-└── HANDOVER_PROMPT.txt      Older handover (superseded by this doc)
 ```
+
+> **New here?** Read `docs/POCKETREP_OVERVIEW.md` first for the product/system map and
+> the paste-in handoff prompt, then come back here for engineering depth. (The old
+> root `HANDOVER_PROMPT.txt` / `PROJECT_MASTER_CONTEXT.txt` were stale and removed.)
 
 ---
 
