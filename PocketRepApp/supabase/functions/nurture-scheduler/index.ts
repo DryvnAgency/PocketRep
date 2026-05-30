@@ -5,7 +5,7 @@
 //
 // What it does on every invocation:
 //   1. Look up today's row in public.holiday_calendar.
-//   2. If a holiday is today — for each rep in public.users, queue holiday
+//   2. If a holiday is today — for each rep in public.profiles, queue holiday
 //      nurture drafts for eligible contacts (cadence + variety enforced).
 //   3. On Mondays, also run a quarterly check-in (max 10 contacts/rep).
 //   4. Fire a push notification to each rep whose queue grew.
@@ -60,8 +60,11 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, ran: 'nothing', today });
   }
 
-  const { data: users } = await admin.from('users').select('id,email');
-  const repList = (users ?? []) as Array<{ id: string; email: string | null }>;
+  // Reps live in public.profiles (id = auth user id, same as contacts.user_id).
+  // There is no public.users table — querying it returned an error and an empty
+  // rep list, which silently no-op'd the entire scheduler on every run.
+  const { data: reps } = await admin.from('profiles').select('id,email');
+  const repList = (reps ?? []) as Array<{ id: string; email: string | null }>;
 
   const results: any[] = [];
   for (const rep of repList) {
