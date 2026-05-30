@@ -166,6 +166,12 @@ All tables live in `public`. Every user-data table has RLS enabled and is scoped
   `id, sequence_id, step_number, delay_days, channel (text|call|email), message_template, ai_personalize, contact_id (for blast sequences), personalization (jsonb), game_plan, language, hook_used, rep_edited, created_at`
 - **`public.contact_sequences`** — active enrollments
   `id, user_id, contact_id, sequence_id, current_step, status (active|paused|completed|cancelled), started_at, next_step_at, completed_at`
+- **Auto-first (2026-05):** all seed templates are **automotive only**, tuned for retention +
+  staying top of mind. Templates live in two synced places — hardcoded `TEMPLATES` in
+  `app/(tabs)/sequences.tsx` (v1) and global rows in `public.sequences` (v2 via `useSequences`,
+  `is_template=true`); migration `20260530_auto_only_sequence_templates.sql` set the DB side.
+  Other industries are hidden in the UI (`INDUSTRIES`/`TEMPLATE_FILTERS` in `sequences.tsx`,
+  the picker in `signup.tsx`) but the multi-industry code is kept — restore those keys to re-enable.
 
 ### Rex / AI
 
