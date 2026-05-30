@@ -76,7 +76,7 @@ export default function ProfileTab({
   const [userId, setUserId] = useState<string | null>(null);
   const [alwaysListen, setAlwaysListen] = useState<boolean>(false);
   const [editTarget, setEditTarget] = useState<{ key: EditKey; config: SettingEditConfig } | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   const payPlan = usePayPlan(payPlanRefetchKey);
 
@@ -127,14 +127,18 @@ export default function ProfileTab({
     }
   };
 
+  const flash = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 1600);
+  };
+
   const copy = async (text: string, label: string) => {
     try {
       if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
         await navigator.clipboard.writeText(text);
       }
     } catch { /* ignore */ }
-    setCopied(label);
-    setTimeout(() => setCopied(null), 1600);
+    flash(`✓ ${label}`);
   };
 
   const displayName = profile?.full_name?.trim() || 'Jake Morales';
@@ -211,8 +215,8 @@ export default function ProfileTab({
           onPress={() => editSetting('customPrompts', 'Custom prompts', 'YOUR SAVED PROMPTS', { multiline: true })} />
         <Pressable
           onPress={async () => {
-            const result = await sendTestPush();
-            console.log('[push] test result', result);
+            const r = await sendTestPush();
+            flash(r.ok ? '✓ Test push sent' : `Couldn't send: ${r.reason ?? 'unknown'}`);
           }}
         >
           <Row icon="🔔" label="Send a test push" detail="ping →" chevron={false} />
@@ -252,9 +256,9 @@ export default function ProfileTab({
 
       <Text style={styles.footer}>PocketRep v3.2.4 · build 1042</Text>
 
-      {copied ? (
+      {toast ? (
         <View style={styles.toast} pointerEvents="none">
-          <Text style={styles.toastText}>✓ {copied}</Text>
+          <Text style={styles.toastText}>{toast}</Text>
         </View>
       ) : null}
 
