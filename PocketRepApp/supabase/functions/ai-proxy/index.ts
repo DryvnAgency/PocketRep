@@ -7,20 +7,13 @@
  *   /ai-proxy/stt      → 501 stub
  *   /ai-proxy/tts      → 501 stub
  *   /ai-proxy           → PocketRep brain (back-compat root)
- *
- * Deploy:
- *   supabase secrets set REXLENS_API_KEY=sk-ant-...   # Anthropic
- *   supabase secrets set POCKETREP_API_KEY=sk-or-v1-... # OpenRouter
- *   supabase functions deploy ai-proxy
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-// ── OpenRouter (PocketRep brain) ────────────────────────────────────────────
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6'];
 
-// ── Anthropic (Rex Lens) ────────────────────────────────────────────────────
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const REXLENS_DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
@@ -71,15 +64,10 @@ Never fabricate a contact, number, date, or vehicle. If the record is too thin t
 
 const REXLENS_PRICING = { input: 1.00, output: 5.00, cacheWrite: 1.25, cacheRead: 0.10 };
 
-// ── Shared ──────────────────────────────────────────────────────────────────
-const DAILY_CAP_CENTS: Record<string, number> = {
-  rex_lens: 75,
-  pro: 75,
-  elite: 125,
-};
+const DAILY_CAP_CENTS: Record<string, number> = { rex_lens: 75, pro: 75, elite: 125 };
 const DEFAULT_CAP_CENTS = 75;
 
-function corsHeaders() {
+function cors() {
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -87,11 +75,8 @@ function corsHeaders() {
   };
 }
 
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
-  });
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { ...cors(), 'Content-Type': 'application/json' } });
 }
 
 function routeOf(req: Request): 'rexlens' | 'brain' | 'stt' | 'tts' | 'root' {
@@ -105,429 +90,132 @@ function routeOf(req: Request): 'rexlens' | 'brain' | 'stt' | 'tts' | 'root' {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// ── Auth + plan helper ──────────────────────────────────────────────────────
-async function authAndPlan(req: Request) {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
-    return { error: jsonResponse({ error: { type: 'auth_error', message: 'Missing authorization' } }, 401) };
-  }
-
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) {
-    return { error: jsonResponse({ error: { type: 'auth_error', message: 'Invalid or expired token' } }, 401) };
-  }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('plan, unlimited')
-    .eq('id', user.id)
-    .single();
-
+async function authAndPlan(authHeader: string | null) {
+  if (!authHeader) return { error: json({ error: { type: 'auth_error', message: 'Missing authorization' } }, 401) };
+  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const { data: { user }, error } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+  if (error || !user) return { error: json({ error: { type: 'auth_error', message: 'Invalid or expired token' } }, 401) };
+  const { data: profile } = await supabase.from('profiles').select('plan, unlimited').eq('id', user.id).single();
   const plan = profile?.plan || 'pro';
   const isUnlimited = profile?.unlimited === true;
   const capCents = DAILY_CAP_CENTS[plan] ?? DEFAULT_CAP_CENTS;
   const today = new Date().toISOString().slice(0, 10);
-
   if (!isUnlimited) {
-    const { data: usage } = await supabase
-      .from('daily_ai_usage')
-      .select('cost_cents')
-      .eq('user_id', user.id)
-      .eq('usage_date', today)
-      .single();
-
-    const currentCostCents = Number(usage?.cost_cents ?? 0);
-    if (currentCostCents >= capCents) {
-      return {
-        error: jsonResponse({
-          error: {
-            type: 'DAILY_LIMIT',
-            message: `Daily limit reached ($${(capCents / 100).toFixed(2)}/day on your ${plan} plan). Resets at midnight.`,
-          },
-        }, 429),
-      };
+    const { data: usage } = await supabase.from('daily_ai_usage').select('cost_cents').eq('user_id', user.id).eq('usage_date', today).single();
+    if (Number(usage?.cost_cents ?? 0) >= capCents) {
+      return { error: json({ error: { type: 'DAILY_LIMIT', message: `Daily limit reached ($${(capCents / 100).toFixed(2)}/day). Resets at midnight.` } }, 429) };
     }
   }
-
-  return { user, supabase, today, plan };
+  return { user, supabase, today };
 }
 
-// ── Rex Lens route (Anthropic Claude) ───────────────────────────────────────
-
-function formatContactForPrompt(task: Record<string, unknown>, repName: string, dealershipName: string): string {
-  const today = new Date();
-  const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  return `Today is ${dateStr}. The rep's name is ${repName} and they work at ${dealershipName}.
-
-Contact CRM record:
-Name: ${task.customerName || 'unknown'}
-Vehicle of Interest: ${task.vehicle || 'not listed'}
-Status: ${task.status || 'unknown'}
-Source: ${task.source || 'unknown'}
-Age: ${task.age || 'unknown'}
-Section: ${task.section || 'unknown'}
-Task: ${task.taskDescription || 'unknown'}${task.template ? `\nTemplate: ${task.template}` : ''}${task.rawContext ? `\nContext/Notes: ${task.rawContext}` : ''}`;
+function fmtContact(task: Record<string, unknown>, rep: string, dealer: string): string {
+  const d = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  return `Today is ${d}. The rep is ${rep} at ${dealer}.\n\nContact CRM record:\nName: ${task.customerName || 'unknown'}\nVehicle: ${task.vehicle || 'not listed'}\nStatus: ${task.status || 'unknown'}\nSource: ${task.source || 'unknown'}\nAge: ${task.age || 'unknown'}\nSection: ${task.section || 'unknown'}\nTask: ${task.taskDescription || 'unknown'}${task.template ? '\nTemplate: ' + task.template : ''}${task.rawContext ? '\nContext: ' + task.rawContext : ''}`;
 }
 
-async function callAnthropic(
-  apiKey: string,
-  model: string,
-  maxTokens: number,
-  systemText: string,
-  userContent: string,
-): Promise<{ json: any; error?: any }> {
-  const anthropicBody = {
-    model,
-    max_tokens: maxTokens,
-    messages: [{ role: 'user', content: userContent }],
-    system: [
-      { type: 'text', text: systemText, cache_control: { type: 'ephemeral' } },
-    ],
-  };
-
-  for (let attempt = 0; attempt < 2; attempt++) {
+async function callClaude(key: string, model: string, max: number, sys: string, user: string): Promise<{ json: any; error?: any }> {
+  for (let i = 0; i < 2; i++) {
     try {
-      const res = await fetch(ANTHROPIC_URL, {
+      const r = await fetch(ANTHROPIC_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': ANTHROPIC_VERSION,
-        },
-        body: JSON.stringify(anthropicBody),
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': ANTHROPIC_VERSION },
+        body: JSON.stringify({ model, max_tokens: max, messages: [{ role: 'user', content: user }], system: [{ type: 'text', text: sys, cache_control: { type: 'ephemeral' } }] }),
       });
-      const json = await res.json();
-      if (res.ok && !json.error) return { json };
-      const retryable = res.status === 429 || res.status === 503 || res.status === 529;
-      if (!retryable) return { json: null, error: json.error ?? json };
-      if (attempt < 1) await sleep(2000);
-    } catch (err: unknown) {
-      if (attempt < 1) await sleep(2000);
-      else return { json: null, error: { message: err instanceof Error ? err.message : 'Unknown error' } };
+      const j = await r.json();
+      if (r.ok && !j.error) return { json: j };
+      if (r.status !== 429 && r.status !== 503 && r.status !== 529) return { json: null, error: j.error ?? j };
+      if (i < 1) await sleep(2000);
+    } catch (e: unknown) {
+      if (i < 1) await sleep(2000); else return { json: null, error: { message: e instanceof Error ? e.message : 'Unknown' } };
     }
   }
   return { json: null, error: { message: 'Retries exhausted' } };
 }
 
 async function handleRexLens(req: Request) {
-  const REXLENS_API_KEY = Deno.env.get('REXLENS_API_KEY');
-  if (!REXLENS_API_KEY) {
-    return jsonResponse({ error: { type: 'server_error', message: 'REXLENS_API_KEY not configured' } }, 500);
-  }
-
-  const auth = await authAndPlan(req);
+  const KEY = Deno.env.get('REXLENS_API_KEY');
+  if (!KEY) return json({ error: { type: 'server_error', message: 'REXLENS_API_KEY not configured' } }, 500);
+  const auth = await authAndPlan(req.headers.get('Authorization'));
   if (auth.error) return auth.error;
   const { user, supabase, today } = auth;
-
   let body: Record<string, unknown>;
-  try {
-    body = await req.json();
-  } catch {
-    return jsonResponse({ error: { type: 'invalid_request', message: 'Invalid JSON body' } }, 400);
-  }
-
+  try { body = await req.json(); } catch { return json({ error: { type: 'invalid_request', message: 'Invalid JSON' } }, 400); }
   const model = (body.model as string) || REXLENS_DEFAULT_MODEL;
-  const maxTokens = typeof body.max_tokens === 'number' ? body.max_tokens : 4096;
+  const maxTok = typeof body.max_tokens === 'number' ? body.max_tokens : 4096;
   const tasks = body.tasks as Array<Record<string, unknown>> | undefined;
 
-  // ── Batch mode: fan out one call per contact ────────────────────────────
   if (tasks && Array.isArray(tasks) && tasks.length > 0) {
-    const repName = (body.repName as string) || 'the rep';
-    const dealershipName = (body.dealershipName as string) || 'the dealership';
-
-    const promises = tasks.map(task =>
-      callAnthropic(
-        REXLENS_API_KEY,
-        model,
-        maxTokens,
-        REXLENS_SYSTEM_PROMPT,
-        formatContactForPrompt(task, repName, dealershipName),
-      )
-    );
-
-    const settled = await Promise.allSettled(promises);
-
-    const results: any[] = [];
-    let totalInput = 0;
-    let totalOutput = 0;
-    let totalCacheWrite = 0;
-    let totalCacheRead = 0;
-
+    const rep = (body.repName as string) || 'the rep';
+    const dealer = (body.dealershipName as string) || 'the dealership';
+    const settled = await Promise.allSettled(tasks.map(t => callClaude(KEY, model, maxTok, REXLENS_SYSTEM_PROMPT, fmtContact(t, rep, dealer))));
+    const results: any[] = []; let tIn = 0, tOut = 0, tCW = 0, tCR = 0;
     for (let i = 0; i < settled.length; i++) {
       const s = settled[i];
       if (s.status === 'fulfilled' && s.value.json) {
-        const text = s.value.json.content?.[0]?.text ?? '';
-        try {
-          results.push(JSON.parse(text));
-        } catch {
-          results.push({
-            contact: (tasks[i] as any).customerName || null,
-            channel: 'call',
-            priority_score: 50,
-            priority_reason: 'parse error',
-            draft: { subject: null, body: text },
-            missing_fields: [],
-            needs_review: true,
-            review_note: 'Could not parse JSON from AI response',
-          });
-        }
-        const u = s.value.json.usage ?? {};
-        totalInput += u.input_tokens ?? 0;
-        totalOutput += u.output_tokens ?? 0;
-        totalCacheWrite += u.cache_creation_input_tokens ?? 0;
-        totalCacheRead += u.cache_read_input_tokens ?? 0;
+        const txt = s.value.json.content?.[0]?.text ?? '';
+        try { results.push(JSON.parse(txt)); } catch { results.push({ contact: (tasks[i] as any).customerName || null, channel: 'call', priority_score: 50, priority_reason: 'parse error', draft: { subject: null, body: txt }, missing_fields: [], needs_review: true, review_note: 'JSON parse failed' }); }
+        const u = s.value.json.usage ?? {}; tIn += u.input_tokens ?? 0; tOut += u.output_tokens ?? 0; tCW += u.cache_creation_input_tokens ?? 0; tCR += u.cache_read_input_tokens ?? 0;
       } else {
-        results.push({
-          contact: (tasks[i] as any).customerName || null,
-          channel: 'call',
-          priority_score: 0,
-          priority_reason: 'api error',
-          draft: { subject: null, body: null },
-          missing_fields: [],
-          needs_review: true,
-          review_note: s.status === 'rejected' ? s.reason?.message : (s.value.error?.message || 'Unknown error'),
-        });
+        results.push({ contact: (tasks[i] as any).customerName || null, channel: 'call', priority_score: 0, priority_reason: 'api error', draft: { subject: null, body: null }, missing_fields: [], needs_review: true, review_note: s.status === 'rejected' ? s.reason?.message : (s.value.error?.message || 'Unknown') });
       }
     }
-
-    // Cost tracking
-    const uncachedInput = Math.max(0, totalInput - totalCacheWrite - totalCacheRead);
-    const costUsd = (
-      uncachedInput * REXLENS_PRICING.input +
-      totalCacheWrite * REXLENS_PRICING.cacheWrite +
-      totalCacheRead * REXLENS_PRICING.cacheRead +
-      totalOutput * REXLENS_PRICING.output
-    ) / 1_000_000;
-    const costCents = costUsd * 100;
-
-    try {
-      await supabase!.rpc('increment_daily_usage', {
-        p_user_id: user!.id,
-        p_date: today,
-        p_input_tokens: totalInput,
-        p_output_tokens: totalOutput,
-        p_cost_cents: costCents,
-      });
-    } catch {
-      await supabase!.from('daily_ai_usage').upsert({
-        user_id: user!.id, usage_date: today,
-        input_tokens: totalInput, output_tokens: totalOutput,
-        cost_cents: costCents, request_count: tasks.length,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,usage_date' });
-    }
-
-    return jsonResponse({
-      content: [{ type: 'text', text: JSON.stringify(results) }],
-      usage: {
-        input_tokens: totalInput,
-        output_tokens: totalOutput,
-        cache_creation_input_tokens: totalCacheWrite,
-        cache_read_input_tokens: totalCacheRead,
-      },
-      model,
-      batch_size: tasks.length,
-    });
+    const uncached = Math.max(0, tIn - tCW - tCR);
+    const cost = (uncached * REXLENS_PRICING.input + tCW * REXLENS_PRICING.cacheWrite + tCR * REXLENS_PRICING.cacheRead + tOut * REXLENS_PRICING.output) / 1e6 * 100;
+    try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: tIn, p_output_tokens: tOut, p_cost_cents: cost }); } catch { await supabase!.from('daily_ai_usage').upsert({ user_id: user!.id, usage_date: today, input_tokens: tIn, output_tokens: tOut, cost_cents: cost, request_count: tasks.length, updated_at: new Date().toISOString() }, { onConflict: 'user_id,usage_date' }); }
+    return json({ content: [{ type: 'text', text: JSON.stringify(results) }], usage: { input_tokens: tIn, output_tokens: tOut, cache_creation_input_tokens: tCW, cache_read_input_tokens: tCR }, model, batch_size: tasks.length });
   }
 
-  // ── Single mode: pass through as-is (chat, customer detail, etc.) ──────
   const messages = (body.messages as Array<{ role: string; content: unknown }>) || [];
-  const systemText = typeof body.system === 'string' && body.system.length > 0
-    ? body.system
-    : REXLENS_SYSTEM_PROMPT;
-
-  const result = await callAnthropic(REXLENS_API_KEY, model, maxTokens, systemText, messages[0]?.content as string || '');
-
-  if (!result.json) {
-    return jsonResponse({
-      error: {
-        type: 'OVERLOADED',
-        message: 'AI is at capacity right now. Try again in 30 seconds.',
-        detail: result.error?.message || 'All retries exhausted',
-      },
-    }, 503);
-  }
-
-  const text = result.json.content?.[0]?.text ?? '';
-  if (!text) {
-    return jsonResponse({ error: { type: 'empty_response', message: 'Claude returned no text', raw: result.json } }, 502);
-  }
-
-  const usage = result.json.usage ?? {};
-  const inputTokens = usage.input_tokens ?? 0;
-  const outputTokens = usage.output_tokens ?? 0;
-  const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0;
-  const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
-  const uncachedInput = Math.max(0, inputTokens - cacheWriteTokens - cacheReadTokens);
-  const costUsd = (
-    uncachedInput * REXLENS_PRICING.input +
-    cacheWriteTokens * REXLENS_PRICING.cacheWrite +
-    cacheReadTokens * REXLENS_PRICING.cacheRead +
-    outputTokens * REXLENS_PRICING.output
-  ) / 1_000_000;
-  const costCents = costUsd * 100;
-
-  try {
-    await supabase!.rpc('increment_daily_usage', {
-      p_user_id: user!.id, p_date: today,
-      p_input_tokens: inputTokens, p_output_tokens: outputTokens,
-      p_cost_cents: costCents,
-    });
-  } catch {
-    await supabase!.from('daily_ai_usage').upsert({
-      user_id: user!.id, usage_date: today,
-      input_tokens: inputTokens, output_tokens: outputTokens,
-      cost_cents: costCents, request_count: 1,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,usage_date' });
-  }
-
-  return jsonResponse({
-    content: result.json.content,
-    usage: { input_tokens: inputTokens, output_tokens: outputTokens,
-      cache_creation_input_tokens: cacheWriteTokens, cache_read_input_tokens: cacheReadTokens },
-    model: result.json.model || model,
-  });
+  const sys = typeof body.system === 'string' && body.system.length > 0 ? body.system : REXLENS_SYSTEM_PROMPT;
+  const r = await callClaude(KEY, model, maxTok, sys, (messages[0]?.content as string) || '');
+  if (!r.json) return json({ error: { type: 'OVERLOADED', message: 'AI at capacity. Try again in 30s.', detail: r.error?.message } }, 503);
+  const txt = r.json.content?.[0]?.text ?? '';
+  if (!txt) return json({ error: { type: 'empty_response', message: 'No text returned' } }, 502);
+  const u = r.json.usage ?? {};
+  const iT = u.input_tokens ?? 0, oT = u.output_tokens ?? 0, cW = u.cache_creation_input_tokens ?? 0, cR = u.cache_read_input_tokens ?? 0;
+  const cost = (Math.max(0, iT - cW - cR) * REXLENS_PRICING.input + cW * REXLENS_PRICING.cacheWrite + cR * REXLENS_PRICING.cacheRead + oT * REXLENS_PRICING.output) / 1e6 * 100;
+  try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost }); } catch { await supabase!.from('daily_ai_usage').upsert({ user_id: user!.id, usage_date: today, input_tokens: iT, output_tokens: oT, cost_cents: cost, request_count: 1, updated_at: new Date().toISOString() }, { onConflict: 'user_id,usage_date' }); }
+  return json({ content: r.json.content, usage: { input_tokens: iT, output_tokens: oT, cache_creation_input_tokens: cW, cache_read_input_tokens: cR }, model: r.json.model || model });
 }
 
-// ── PocketRep brain route (OpenRouter) ──────────────────────────────────────
 async function handleBrain(req: Request) {
-  const POCKETREP_API_KEY = Deno.env.get('POCKETREP_API_KEY');
-  if (!POCKETREP_API_KEY) {
-    return jsonResponse({ error: { type: 'server_error', message: 'POCKETREP_API_KEY not configured' } }, 500);
-  }
-
-  const auth = await authAndPlan(req);
+  const KEY = Deno.env.get('POCKETREP_API_KEY');
+  if (!KEY) return json({ error: { type: 'server_error', message: 'POCKETREP_API_KEY not configured' } }, 500);
+  const auth = await authAndPlan(req.headers.get('Authorization'));
   if (auth.error) return auth.error;
   const { user, supabase, today } = auth;
-
   let body: Record<string, unknown>;
-  try {
-    body = await req.json();
-  } catch {
-    return jsonResponse({ error: { type: 'invalid_request', message: 'Invalid JSON body' } }, 400);
-  }
-
-  const maxTokens = typeof body.max_tokens === 'number' ? body.max_tokens : 2048;
-  const incomingMessages = (body.messages as Array<{ role: string; content: unknown }>) || [];
-  const systemText = typeof body.system === 'string' ? body.system : '';
-
-  const messages = systemText
-    ? [{ role: 'system', content: systemText }, ...incomingMessages]
-    : incomingMessages;
-
-  const orBody: Record<string, unknown> = {
-    models: BRAIN_MODELS,
-    messages,
-    max_tokens: maxTokens,
-    usage: { include: true },
-  };
-
-  let apiJson: any = null;
-  let lastError: any = null;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
+  try { body = await req.json(); } catch { return json({ error: { type: 'invalid_request', message: 'Invalid JSON' } }, 400); }
+  const maxTok = typeof body.max_tokens === 'number' ? body.max_tokens : 2048;
+  const msgs = (body.messages as Array<{ role: string; content: unknown }>) || [];
+  const sys = typeof body.system === 'string' ? body.system : '';
+  const messages = sys ? [{ role: 'system', content: sys }, ...msgs] : msgs;
+  let apiJson: any = null; let lastErr: any = null;
+  for (let i = 0; i < 3; i++) {
     try {
-      const res = await fetch(OPENROUTER_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${POCKETREP_API_KEY}`,
-          'HTTP-Referer': 'https://pocketrep.pro',
-          'X-Title': 'PocketRep',
-        },
-        body: JSON.stringify(orBody),
-      });
-      const json = await res.json();
-
-      if (res.ok && !json.error && json.choices?.length) {
-        apiJson = json;
-        break;
-      }
-
-      lastError = { status: res.status, error: json.error ?? json };
-      const retryable = res.status === 429 || res.status === 503 || (res.status >= 500 && res.status < 600);
-      if (!retryable) {
-        return jsonResponse({ error: json.error ?? json }, res.status);
-      }
-      if (attempt < 2) await sleep(2000 * Math.pow(2, attempt));
-    } catch (err: unknown) {
-      lastError = { error: { message: err instanceof Error ? err.message : 'Unknown error' } };
-      if (attempt < 2) await sleep(2000 * Math.pow(2, attempt));
-    }
+      const r = await fetch(OPENROUTER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' }, body: JSON.stringify({ models: BRAIN_MODELS, messages, max_tokens: maxTok, usage: { include: true } }) });
+      const j = await r.json();
+      if (r.ok && !j.error && j.choices?.length) { apiJson = j; break; }
+      lastErr = { status: r.status, error: j.error ?? j };
+      if (!(r.status === 429 || r.status === 503 || r.status >= 500)) return json({ error: j.error ?? j }, r.status);
+      if (i < 2) await sleep(2000 * Math.pow(2, i));
+    } catch (e: unknown) { lastErr = { error: { message: e instanceof Error ? e.message : 'Unknown' } }; if (i < 2) await sleep(2000 * Math.pow(2, i)); }
   }
-
-  if (!apiJson) {
-    return jsonResponse({
-      error: {
-        type: 'OVERLOADED',
-        message: 'AI is at capacity right now. Try again in 30 seconds.',
-        detail: lastError?.error?.message || 'All retries exhausted',
-      },
-    }, 503);
-  }
-
-  const usage = apiJson.usage ?? {};
-  const inputTokens = Number(usage.prompt_tokens ?? 0);
-  const outputTokens = Number(usage.completion_tokens ?? 0);
-  const costUsd = Number(usage.cost ?? 0);
-  const costCents = costUsd * 100;
-
-  try {
-    await supabase!.rpc('increment_daily_usage', {
-      p_user_id: user!.id,
-      p_date: today,
-      p_input_tokens: inputTokens,
-      p_output_tokens: outputTokens,
-      p_cost_cents: costCents,
-    });
-  } catch {
-    await supabase!
-      .from('daily_ai_usage')
-      .upsert(
-        {
-          user_id: user!.id,
-          usage_date: today,
-          input_tokens: inputTokens,
-          output_tokens: outputTokens,
-          cost_cents: costCents,
-          request_count: 1,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id,usage_date' }
-      );
-  }
-
-  return jsonResponse(apiJson);
+  if (!apiJson) return json({ error: { type: 'OVERLOADED', message: 'AI at capacity.', detail: lastErr?.error?.message } }, 503);
+  const u = apiJson.usage ?? {}; const iT = Number(u.prompt_tokens ?? 0); const oT = Number(u.completion_tokens ?? 0); const cost = Number(u.cost ?? 0) * 100;
+  try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost }); } catch { await supabase!.from('daily_ai_usage').upsert({ user_id: user!.id, usage_date: today, input_tokens: iT, output_tokens: oT, cost_cents: cost, request_count: 1, updated_at: new Date().toISOString() }, { onConflict: 'user_id,usage_date' }); }
+  return json(apiJson);
 }
 
-// ── Main router ─────────────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() });
-  if (req.method === 'GET') {
-    return jsonResponse({ status: 'ok', service: 'ai-proxy', brain: BRAIN_MODELS, rexlens: REXLENS_DEFAULT_MODEL });
-  }
-  if (req.method !== 'POST') {
-    return jsonResponse({ error: { type: 'invalid_request', message: 'POST required' } }, 405);
-  }
-
-  const route = routeOf(req);
-
-  switch (route) {
-    case 'rexlens':
-      return handleRexLens(req);
-    case 'stt':
-      return jsonResponse({ error: 'not_implemented', message: 'Deepgram Nova-3 STT lands in next PR' }, 501);
-    case 'tts':
-      return jsonResponse({ error: 'not_implemented', message: 'OpenAI gpt-4o-mini-tts lands in next PR' }, 501);
-    case 'brain':
-    case 'root':
-    default:
-      return handleBrain(req);
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors() });
+  if (req.method === 'GET') return json({ status: 'ok', service: 'ai-proxy', brain: BRAIN_MODELS, rexlens: REXLENS_DEFAULT_MODEL });
+  if (req.method !== 'POST') return json({ error: { type: 'invalid_request', message: 'POST required' } }, 405);
+  switch (routeOf(req)) {
+    case 'rexlens': return handleRexLens(req);
+    case 'stt': return json({ error: 'not_implemented', message: 'STT stub' }, 501);
+    case 'tts': return json({ error: 'not_implemented', message: 'TTS stub' }, 501);
+    case 'brain': case 'root': default: return handleBrain(req);
   }
 });
