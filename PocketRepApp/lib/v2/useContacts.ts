@@ -12,6 +12,7 @@ export type V2Contact = {
   heatScore: number;
   planLabel: string | null;
   phone: string | null;
+  email: string | null;
   budget: string | null;
   tradeIn: string | null;
   tags: string[];
@@ -58,6 +59,7 @@ function rowToContact(r: any): V2Contact {
     heatScore: score,
     planLabel: r.plan_label,
     phone: r.phone,
+    email: r.email ?? null,
     budget: r.budget,
     tradeIn: r.trade_in,
     tags: Array.isArray(r.tags) ? r.tags : [],
@@ -86,7 +88,7 @@ export function useContacts() {
     const { data, error } = await supabase
       .from('contacts')
       .select(
-        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,budget,trade_in,tags,notes,next_step,birthday,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url'
+        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,email,budget,trade_in,tags,notes,next_step,birthday,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url'
       )
       .eq('is_deleted', false);
 

@@ -58,6 +58,7 @@ export type NewContactDraft = {
   firstName: string;
   lastName: string;
   phone: string;
+  email?: string;
   vehicle: string;
   trim: string;
   budget: string;
@@ -81,6 +82,7 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
       first_name: titleCase(draft.firstName),
       last_name: titleCase(draft.lastName) || null,
       phone: draft.phone.trim() || null,
+      email: draft.email?.trim() || null,
       vehicle: draft.vehicle.trim() || null,
       trim: draft.trim.trim() || null,
       budget: draft.budget.trim() || null,

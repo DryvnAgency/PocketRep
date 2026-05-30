@@ -20,7 +20,7 @@ const TIER_OPTIONS: Array<{ label: string; score: number; color: string; icon: s
 ];
 
 const blank = (): NewContactDraft => ({
-  firstName: '', lastName: '', phone: '',
+  firstName: '', lastName: '', phone: '', email: '',
   vehicle: '', trim: '', budget: '', tradeIn: '',
   planLabel: 'THIS WEEK',
   heatScore: 90,
@@ -133,6 +133,18 @@ export default function AddContactModal({
               />
             </Field>
           </View>
+
+          <Field label="EMAIL">
+            <TextInput
+              value={d.email}
+              onChangeText={t => set('email', t)}
+              placeholder="name@email.com"
+              placeholderTextColor={colors.grey}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.input}
+            />
+          </Field>
 
           <Field label="VEHICLE OF INTEREST">
             <TextInput

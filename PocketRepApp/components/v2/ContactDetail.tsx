@@ -149,15 +149,17 @@ export default function ContactDetail({
     }
   };
 
+  const flash = (msg: string) => {
+    setTouchMsg(msg);
+    setTimeout(() => setTouchMsg(null), 1700);
+  };
+
   // Auto-log a touch: stamp last_contact_date, reset the follow-up clock, and
   // optimistically zero the days-since counter. Working a lead is logging it.
   const noteTouch = (method: 'call' | 'text' | 'email', summary?: string) => {
     logContactTouch(contact.id, method, summary).catch(e => console.warn('logContactTouch', e));
     onLocalUpdate({ ...contact, days: 0 });
-    setTouchMsg(
-      method === 'call' ? '✓ Call logged' : method === 'text' ? '✓ Text logged' : '✓ Email logged',
-    );
-    setTimeout(() => setTouchMsg(null), 1700);
+    flash(method === 'call' ? '✓ Call logged' : method === 'text' ? '✓ Text logged' : '✓ Email logged');
   };
 
   const webCopy = async (text: string) => {
@@ -169,14 +171,14 @@ export default function ContactDetail({
   };
 
   const openCall = async () => {
-    if (!contact.phone) return;
+    if (!contact.phone) { flash('No number on file'); return; }
     // tel: opens a blank tab on web — copy the number instead.
     if (Platform.OS === 'web') await webCopy(contact.phone);
     else Linking.openURL(`tel:${digitsOnly(contact.phone)}`);
     noteTouch('call');
   };
   const openText = async (body?: string) => {
-    if (!contact.phone) return;
+    if (!contact.phone) { flash('No number on file'); return; }
     if (Platform.OS === 'web') {
       await webCopy(body ? `${contact.phone}\n${body}` : contact.phone);
     } else {
@@ -188,11 +190,13 @@ export default function ContactDetail({
     noteTouch('text', body);
   };
   const openEmail = (body?: string) => {
+    if (!contact.email) { flash('No email on file'); return; }
     // mailto opens the mail client on web and native (no blank tab).
-    const subject = encodeURIComponent(`Following up on the ${contact.vehicle ?? ''}`);
+    const subject = encodeURIComponent(contact.vehicle ? `Following up on the ${contact.vehicle}` : 'Following up');
+    const to = encodeURIComponent(contact.email);
     const url = body
-      ? `mailto:?subject=${subject}&body=${encodeURIComponent(body)}`
-      : `mailto:?subject=${subject}`;
+      ? `mailto:${to}?subject=${subject}&body=${encodeURIComponent(body)}`
+      : `mailto:${to}?subject=${subject}`;
     Linking.openURL(url);
     noteTouch('email', body);
   };
