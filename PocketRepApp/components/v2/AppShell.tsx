@@ -78,6 +78,7 @@ export default function AppShell() {
   const [payPlanRefetchKey, setPayPlanRefetchKey] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [rexCoachOpen, setRexCoachOpen] = useState(false);
+  const [rexActionError, setRexActionError] = useState<string | null>(null);
   const payPlan = usePayPlan(payPlanRefetchKey);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
@@ -98,6 +99,7 @@ export default function AppShell() {
     enabled: authReady && alwaysListen,
     contacts: contacts ?? [],
     tagNames,
+    onOpenContact: setSelectedId,
   });
 
   useEffect(() => {
@@ -127,6 +129,22 @@ export default function AppShell() {
     else if (rex.executing) setOrbState('saved');
     else setOrbState('idle');
   }, [rex.state, rex.thinking, rex.executing, alwaysListen]);
+
+  // Surface mic problems on the always-listen path + auto-clear voice-action
+  // errors — replaces the old silent console.warns so failures are visible.
+  useEffect(() => {
+    if (rex.state === 'denied') {
+      setRexActionError('Microphone access is blocked. Enable it in your browser settings to use Hey Rex.');
+    } else if (rex.state === 'unsupported') {
+      setRexActionError("Voice isn't supported in this browser — try Chrome or Safari.");
+    }
+  }, [rex.state]);
+
+  useEffect(() => {
+    if (!rexActionError) return;
+    const id = setTimeout(() => setRexActionError(null), 6000);
+    return () => clearTimeout(id);
+  }, [rexActionError]);
 
   // Tapping the orb opens the Rex Coach chat. Voice ("Hey Rex") remains the
   // only thing that triggers the action-taking assistant — the orb visual still
@@ -160,6 +178,7 @@ export default function AppShell() {
       setStalledReport(report);
     } catch (e) {
       console.warn('stalled analysis failed', e);
+      setRexActionError('Could not analyze stalled leads. Try again.');
     } finally {
       setStalledLoading(false);
     }
@@ -199,6 +218,7 @@ export default function AppShell() {
         setNurtureReviewerOpen(true);
       } catch (e) {
         console.warn('nurture blast failed', e);
+        setRexActionError('Could not queue the nurture blast. Try again.');
       } finally {
         setSchedulingNurture(false);
       }
@@ -226,6 +246,7 @@ export default function AppShell() {
           setBlastDraft(draft);
         } catch (e) {
           console.warn('blast draft failed', e);
+          setRexActionError('Could not draft the blast. Try again.');
         } finally {
           setBlastDrafting(false);
         }
@@ -374,6 +395,8 @@ export default function AppShell() {
         state={rex.state}
         partial={rex.partial}
         thinking={rex.thinking || blastDrafting || schedulingNurture}
+        streamingSay={rex.streamingSay}
+        speaking={rex.speaking}
         action={rex.action}
         executing={rex.executing}
         error={rex.error}
@@ -450,6 +473,12 @@ export default function AppShell() {
           setBlastDraft(draft);
         }}
       />
+
+      {rexActionError ? (
+        <View style={styles.errorBanner} pointerEvents="box-none">
+          <Text style={styles.errorBannerText}>{rexActionError}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -473,4 +502,15 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: 18,
   },
+  errorBanner: {
+    position: 'absolute',
+    left: 12, right: 12, bottom: 168,
+    backgroundColor: colors.ink2,
+    borderWidth: 1,
+    borderColor: colors.red,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  errorBannerText: { color: colors.red, fontSize: 13, fontWeight: '600' },
 });

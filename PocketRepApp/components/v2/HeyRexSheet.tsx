@@ -6,14 +6,45 @@ import type { RexAction } from '@/lib/v2/rexActions';
 import { actionWritesData, summarizeAction } from '@/lib/v2/rexActions';
 import type { RexListenerState } from '@/lib/v2/heyRexListener';
 import type { V2Contact } from '@/lib/v2/useContacts';
-import { speak, stopSpeaking } from '@/lib/v2/speech';
 import BookSummaryCard from './BookSummaryCard';
 import ContactListPreview from './ContactListPreview';
+
+// Siri-style equalizer. Bars breathe while Rex is listening / thinking /
+// talking and rest flat otherwise. Animation is timer-driven (not amplitude),
+// which keeps it web-safe with no extra mic plumbing.
+function OrbWave({ active }: { active: boolean }) {
+  const bars = useRef([0, 1, 2, 3].map(() => new Animated.Value(0.4))).current;
+  useEffect(() => {
+    if (!active) {
+      bars.forEach(b => { b.stopAnimation(); b.setValue(0.4); });
+      return;
+    }
+    const loops = bars.map((b, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(b, { toValue: 1, duration: 380 + i * 90, delay: i * 70, easing: Easing.inOut(Easing.ease), useNativeDriver: Platform.OS !== 'web' }),
+          Animated.timing(b, { toValue: 0.35, duration: 380 + i * 90, easing: Easing.inOut(Easing.ease), useNativeDriver: Platform.OS !== 'web' }),
+        ]),
+      ),
+    );
+    loops.forEach(l => l.start());
+    return () => loops.forEach(l => l.stop());
+  }, [active, bars]);
+  return (
+    <View style={styles.wave}>
+      {bars.map((b, i) => (
+        <Animated.View key={i} style={[styles.waveBar, { transform: [{ scaleY: b }] }]} />
+      ))}
+    </View>
+  );
+}
 
 export default function HeyRexSheet({
   state,
   partial,
   thinking,
+  streamingSay,
+  speaking,
   action,
   executing,
   error,
@@ -25,6 +56,8 @@ export default function HeyRexSheet({
   state: RexListenerState;
   partial: string;
   thinking: boolean;
+  streamingSay: string;
+  speaking: boolean;
   action: RexAction | null;
   executing: boolean;
   error: string | null;
@@ -33,34 +66,12 @@ export default function HeyRexSheet({
   onCancel: () => void;
   onOpenContact?: (id: string) => void;
 }) {
-  // Show the sheet whenever we're past the idle state OR there's a pending action.
-  const open = state === 'awake' || state === 'processing' || !!action || thinking || executing;
+  // Show the sheet whenever we're past idle, mid-reply, or have something to say.
+  const open =
+    state === 'awake' || state === 'processing' ||
+    !!action || thinking || executing || speaking || !!streamingSay || !!error;
 
-  // Hooks must stay above the early return (same React #310 trap as DealLogger).
-  // Siri-style: speak Rex's reply aloud once per new line.
-  const spokenRef = useRef<string | null>(null);
-  useEffect(() => {
-    const line = action?.say?.trim();
-    if (open && line && !executing && spokenRef.current !== line) {
-      spokenRef.current = line;
-      speak(line);
-    }
-    if (!action) spokenRef.current = null;
-  }, [action, open, executing]);
-
-  // Pulse the orb while listening/thinking (the "Hey Siri" breathing dot).
-  const pulse = useRef(new Animated.Value(0)).current;
-  const isActive = state === 'awake' || thinking || state === 'processing';
-  useEffect(() => {
-    if (!open) { stopSpeaking(); return; }
-    if (!isActive) { pulse.stopAnimation(); pulse.setValue(0); return; }
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 650, easing: Easing.inOut(Easing.ease), useNativeDriver: Platform.OS !== 'web' }),
-      Animated.timing(pulse, { toValue: 0, duration: 650, easing: Easing.inOut(Easing.ease), useNativeDriver: Platform.OS !== 'web' }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [open, isActive, pulse]);
+  const isActive = state === 'awake' || thinking || state === 'processing' || executing || speaking;
 
   if (!open) return null;
 
@@ -68,23 +79,21 @@ export default function HeyRexSheet({
   const isClarify = action?.type === 'clarify';
   const isSay = action?.type === 'say' || isClarify;
   const needsConfirm = action && actionWritesData(action.type);
+  const sayText = action?.say || streamingSay;
+
+  const statusLabel =
+    state === 'awake' ? 'LISTENING'
+      : thinking || state === 'processing' ? 'THINKING'
+        : executing ? 'WORKING'
+          : speaking ? 'SPEAKING'
+            : 'READY';
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       <View style={styles.card}>
         <View style={styles.head}>
-          <Animated.View
-            style={[
-              styles.orb,
-              {
-                opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.95, 0.5] }),
-                transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.35] }) }],
-              },
-            ]}
-          />
-          <Label color={colors.gold}>
-            HEY REX · {state === 'awake' ? 'LISTENING' : thinking || state === 'processing' ? 'THINKING' : executing ? 'WORKING' : 'READY'}
-          </Label>
+          <OrbWave active={isActive} />
+          <Label color={colors.gold}>HEY REX · {statusLabel}</Label>
           <View style={{ flex: 1 }} />
           {!executing ? (
             <Pressable onPress={onCancel} hitSlop={6}>
@@ -99,15 +108,15 @@ export default function HeyRexSheet({
           <Text style={styles.hintItalic}>Listening… speak naturally.</Text>
         ) : null}
 
-        {thinking ? (
+        {thinking && !streamingSay ? (
           <View style={styles.thinkingRow}>
             <ActivityIndicator color={colors.gold} size="small" />
             <Text style={styles.hint}>Rex is figuring out what to do…</Text>
           </View>
         ) : null}
 
-        {action?.say ? (
-          <Text style={styles.say}>{action.say}</Text>
+        {sayText ? (
+          <Text style={styles.say}>{sayText}</Text>
         ) : null}
 
         {action?.type === 'book_summary' ? (
@@ -145,14 +154,6 @@ export default function HeyRexSheet({
             <Text style={styles.hint}>Saving…</Text>
           </View>
         ) : null}
-
-        {action && !needsConfirm && !executing ? (
-          <View style={styles.actions}>
-            <Pressable onPress={onCancel} style={styles.confirmBtn}>
-              <Text style={styles.confirmBtnText}>OK</Text>
-            </Pressable>
-          </View>
-        ) : null}
       </View>
     </View>
   );
@@ -172,8 +173,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   head: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  orb: {
-    width: 22, height: 22, borderRadius: 11,
+  wave: {
+    width: 22, height: 22,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 2.5,
+  },
+  waveBar: {
+    width: 3, height: 16, borderRadius: 2,
     backgroundColor: colors.gold,
   },
   cancel: { fontSize: 16, color: colors.grey2, paddingHorizontal: 4 },

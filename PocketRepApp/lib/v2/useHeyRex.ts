@@ -1,8 +1,10 @@
 // Top-level Hey Rex controller. Owns the listener lifecycle, calls Rex for
-// interpretation when a complete utterance is captured, and exposes the
-// pending action so AppShell can show the confirmation sheet.
+// interpretation when a complete utterance is captured, speaks the reply
+// (streaming, Siri-style), auto-runs read-only actions, and exposes the
+// pending write-action so AppShell can show the confirmation sheet.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import {
   createHeyRexListener,
   type RexListenerEvent,
@@ -12,21 +14,33 @@ import {
   rexInterpret,
   executeAction,
   logRexAction,
+  actionWritesData,
   type RexAction,
 } from './rexActions';
 import { recordRexTurn } from './rexMemory';
+import {
+  speakStreaming,
+  finishStreaming,
+  stopSpeaking,
+  isSpeaking,
+} from './speech';
+import type { BrainMessage } from './aiProxy';
 import type { V2Contact } from './useContacts';
 
 export type UseHeyRexInput = {
   enabled: boolean;
   contacts: V2Contact[];
   tagNames: string[];
+  // Lets auto-run open a contact card directly (show_contact / call_next).
+  onOpenContact?: (id: string) => void;
 };
 
 export type UseHeyRexOutput = {
   state: RexListenerState;
   partial: string;
   thinking: boolean;
+  streamingSay: string;
+  speaking: boolean;
   action: RexAction | null;
   executing: boolean;
   error: string | null;
@@ -36,59 +50,190 @@ export type UseHeyRexOutput = {
   dismissFiltered: () => void;
 };
 
+// Defense-in-depth watchdog: callBrain already times out at 20s, but never let
+// the UI hang in "thinking" if something downstream stalls.
+const PROCESS_TIMEOUT_MS = 25_000;
+// How long a read-only result stays up before we auto-dismiss + re-arm.
+const NAV_DISMISS_MS = 2_200;     // show_contact / call_next — card is the result
+const INFO_DISMISS_MS = 9_000;    // book_summary / filter_contacts / say — readable
+const CLARIFY_DISMISS_MS = 15_000; // safety net if the rep never answers
+
 export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
   const [state, setState] = useState<RexListenerState>('idle');
   const [partial, setPartial] = useState('');
   const [thinking, setThinking] = useState(false);
+  const [streamingSay, setStreamingSay] = useState('');
+  const [speaking, setSpeaking] = useState(false);
   const [action, setAction] = useState<RexAction | null>(null);
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filteredIds, setFilteredIds] = useState<string[] | null>(null);
+
   const listenerRef = useRef<ReturnType<typeof createHeyRexListener> | null>(null);
   const lastUtteranceRef = useRef<string>('');
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const convoRef = useRef<BrainMessage[]>([]); // in-session multi-turn context
 
   // Keep the latest data in refs so the listener callback (created once) can
   // always see fresh values without needing to be torn down on every render.
   const contactsRef = useRef(input.contacts);
   const tagsRef = useRef(input.tagNames);
+  const onOpenRef = useRef(input.onOpenContact);
   useEffect(() => { contactsRef.current = input.contacts; }, [input.contacts]);
   useEffect(() => { tagsRef.current = input.tagNames; }, [input.tagNames]);
+  useEffect(() => { onOpenRef.current = input.onOpenContact; }, [input.onOpenContact]);
+
+  const clearWatchdog = () => {
+    if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null; }
+  };
+  const clearDismiss = () => {
+    if (dismissRef.current) { clearTimeout(dismissRef.current); dismissRef.current = null; }
+  };
+
+  // Mirror the actual SpeechSynthesis queue into `speaking` so the orb can show
+  // a distinct talking state (and so the waveform stops when Rex stops).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !input.enabled) { setSpeaking(false); return; }
+    const id = setInterval(() => setSpeaking(isSpeaking()), 250);
+    return () => clearInterval(id);
+  }, [input.enabled]);
+
+  // Voice-path errors auto-clear so a transient blip doesn't pin the sheet open.
+  useEffect(() => {
+    if (!error) return;
+    const id = setTimeout(() => setError(null), 6_000);
+    return () => clearTimeout(id);
+  }, [error]);
 
   useEffect(() => {
     if (!input.enabled) {
       listenerRef.current?.stop();
       listenerRef.current = null;
+      stopSpeaking();
+      clearWatchdog();
+      clearDismiss();
       setState('idle');
       return;
     }
+
+    // Auto-dismiss a read-only result, then re-open the mic for a hands-free
+    // follow-up (silence falls back to idle wake-word scanning on its own).
+    const scheduleAutoDismiss = (act: RexAction) => {
+      clearDismiss();
+      const navigates = act.type === 'show_contact' || act.type === 'call_next';
+      const ms = navigates ? NAV_DISMISS_MS : INFO_DISMISS_MS;
+      dismissRef.current = setTimeout(() => {
+        setAction(null);
+        setStreamingSay('');
+        setPartial('');
+        listenerRef.current?.resume({ awake: !navigates });
+      }, ms);
+    };
+
+    // Read-only action → run it now (no Confirm tap), surface side-effects.
+    const autoRunSafe = async (act: RexAction) => {
+      try {
+        const result = await executeAction(act, contactsRef.current);
+        if (result.openContactId) onOpenRef.current?.(result.openContactId);
+        if (result.filteredIds && result.filteredIds.length > 0) setFilteredIds(result.filteredIds);
+        recordRexTurn(lastUtteranceRef.current, act.say || '(no spoken reply)', result.openContactId)
+          .catch(() => undefined);
+        logRexAction(act, 'success').catch(() => undefined);
+      } catch (e: any) {
+        // Even "safe" actions can fail (e.g. a Supabase read) — surface it
+        // instead of silently doing nothing.
+        setError(e?.message ?? 'Something went wrong');
+        logRexAction(act, 'failed').catch(() => undefined);
+      }
+      scheduleAutoDismiss(act);
+    };
+
+    const handleActionArrived = (act: RexAction) => {
+      if (actionWritesData(act.type)) {
+        // Write action → keep the Confirm card; AppShell.handleRexConfirm runs
+        // the execution (+ downstream overlays) when the rep taps Confirm.
+        return;
+      }
+      if (act.type === 'clarify') {
+        // Keep the question up and re-open the mic so the rep just answers.
+        listenerRef.current?.resume({ awake: true });
+        clearDismiss();
+        dismissRef.current = setTimeout(() => {
+          setAction(null);
+          setStreamingSay('');
+          setPartial('');
+          listenerRef.current?.resume();
+        }, CLARIFY_DISMISS_MS);
+        return;
+      }
+      autoRunSafe(act);
+    };
+
+    const runTurn = (text: string) => {
+      clearDismiss();
+      clearWatchdog();
+      stopSpeaking(); // reset the streaming-speech cursor for the new reply
+      setThinking(true);
+      setError(null);
+      setAction(null);
+      setStreamingSay('');
+      lastUtteranceRef.current = text;
+      convoRef.current.push({ role: 'user', content: text });
+
+      watchdogRef.current = setTimeout(() => {
+        setThinking(false);
+        setError('Rex took too long — try again.');
+        listenerRef.current?.resume();
+      }, PROCESS_TIMEOUT_MS);
+
+      rexInterpret(text, contactsRef.current, tagsRef.current, {
+        recentTurns: convoRef.current.slice(-6),
+        onSayDelta: (spoken) => {
+          setStreamingSay(spoken);
+          speakStreaming(spoken); // enqueue completed sentences as they land
+        },
+      })
+        .then((act) => {
+          clearWatchdog();
+          finishStreaming(act.say ?? ''); // flush any trailing fragment
+          setSpeaking(true);
+          convoRef.current.push({ role: 'assistant', content: act.say || '(no spoken reply)' });
+          setThinking(false);
+          setAction(act);
+          handleActionArrived(act);
+        })
+        .catch((err) => {
+          clearWatchdog();
+          setThinking(false);
+          setError(err?.message ?? 'Rex is unreachable');
+          listenerRef.current?.resume();
+        });
+    };
 
     const handle = (e: RexListenerEvent) => {
       switch (e.type) {
         case 'state':
           setState(e.state);
-          if (e.state === 'idle') setPartial('');
+          if (e.state === 'idle' || e.state === 'awake') setPartial('');
           break;
         case 'wake':
+          // Real wake word → barge-in: stop Rex talking and start fresh.
+          stopSpeaking();
+          clearDismiss();
           setError(null);
+          setAction(null);
+          setStreamingSay('');
           setPartial(e.afterText);
+          if (Platform.OS === 'web') { try { (navigator as any).vibrate?.(8); } catch { /* no haptics */ } }
           break;
         case 'partial':
+          stopSpeaking(); // the rep is speaking — don't talk over them
           setPartial(e.text);
           break;
-        case 'utterance': {
-          setThinking(true);
-          setError(null);
-          lastUtteranceRef.current = e.text;
-          rexInterpret(e.text, contactsRef.current, tagsRef.current)
-            .then((act) => {
-              setAction(act);
-            })
-            .catch((err) => {
-              setError(err?.message ?? 'Rex is unreachable');
-            })
-            .finally(() => setThinking(false));
+        case 'utterance':
+          runTurn(e.text);
           break;
-        }
         case 'error':
           setError(e.message);
           break;
@@ -101,16 +246,23 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
 
     return () => {
       listener.stop();
+      stopSpeaking();
+      clearWatchdog();
+      clearDismiss();
     };
   }, [input.enabled]);
 
   const cancel = useCallback(() => {
     if (action) logRexAction(action, 'cancelled').catch(() => undefined);
+    clearDismiss();
+    clearWatchdog();
+    stopSpeaking();
     setAction(null);
     setThinking(false);
     setExecuting(false);
     setError(null);
     setPartial('');
+    setStreamingSay('');
     listenerRef.current?.resume();
   }, [action]);
 
@@ -120,6 +272,8 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
 
   const confirm = useCallback(async (): Promise<{ openContactId?: string; filteredIds?: string[] } | null> => {
     if (!action) return null;
+    clearDismiss();
+    stopSpeaking();
     setExecuting(true);
     setError(null);
     try {
@@ -135,8 +289,10 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
       setAction(null);
       setExecuting(false);
       setPartial('');
+      setStreamingSay('');
       if (filtered && filtered.length > 0) setFilteredIds(filtered);
-      listenerRef.current?.resume();
+      // Multi-turn: re-open the mic after a write too ("...and his number is").
+      listenerRef.current?.resume({ awake: true });
       return (opened || filtered) ? { openContactId: opened, filteredIds: filtered } : null;
     } catch (e: any) {
       setError(e?.message ?? 'Save failed');
@@ -146,5 +302,8 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
     }
   }, [action]);
 
-  return { state, partial, thinking, action, executing, error, filteredIds, confirm, cancel, dismissFiltered };
+  return {
+    state, partial, thinking, streamingSay, speaking, action, executing, error,
+    filteredIds, confirm, cancel, dismissFiltered,
+  };
 }

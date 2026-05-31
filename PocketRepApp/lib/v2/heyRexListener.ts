@@ -147,10 +147,22 @@ export function createHeyRexListener(opts: Options) {
     };
     recognition.onend = () => {
       // Chrome stops every few seconds when there's silence; auto-restart while
-      // the caller still wants us running and we're not processing.
+      // the caller still wants us running and we're not processing. start()
+      // throws if the engine hasn't fully released yet, so retry with a short
+      // backoff instead of giving up once — otherwise the listener silently
+      // dies and the orb looks alive while the mic is dead.
       if (wantRunning && state !== 'processing' && state !== 'denied' && state !== 'unsupported') {
         restartAfterEnd = true;
-        try { recognition.start(); } catch { restartAfterEnd = false; }
+        const tryStart = (attempt: number) => {
+          if (!wantRunning || !recognition) { restartAfterEnd = false; return; }
+          try {
+            recognition.start();
+          } catch {
+            if (attempt < 3) setTimeout(() => tryStart(attempt + 1), 200 * (attempt + 1));
+            else restartAfterEnd = false;
+          }
+        };
+        tryStart(0);
       } else {
         restartAfterEnd = false;
       }
@@ -167,20 +179,36 @@ export function createHeyRexListener(opts: Options) {
     wantRunning = false;
     clearSilenceTimer();
     if (recognition) {
-      try { recognition.stop(); } catch { /* ignore */ }
+      // Detach handlers first so a trailing onend can't auto-restart us, then
+      // abort() (immediate teardown, no final results) rather than stop().
+      recognition.onend = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      try { recognition.abort(); } catch { /* ignore */ }
       recognition = null;
     }
     setState('idle');
   };
 
-  // Caller can resume after handling an utterance to return to idle scanning.
-  const resume = () => {
+  // Caller resumes after handling an utterance. By default we return to idle
+  // wake-word scanning; pass { awake: true } to re-open the mic for a
+  // hands-free follow-up (multi-turn) without requiring "hey rex" again.
+  const resume = (resumeOpts: { awake?: boolean } = {}) => {
     awakeBuffer = '';
     clearSilenceTimer();
     if (!wantRunning) return;
     if (!recognition) { start(); return; }
-    setState('idle');
     try { recognition.start(); } catch { /* already running */ }
+    if (resumeOpts.awake) {
+      // Re-open in AWAKE without emitting a wake event: this is a programmatic
+      // follow-up window, NOT the rep saying "hey rex", so it must not be
+      // treated as barge-in (which would cut off Rex's current reply). A real
+      // follow-up arrives as a normal 'partial' once the rep actually speaks.
+      setState('awake');
+      scheduleSilence();
+    } else {
+      setState('idle');
+    }
   };
 
   return { start, stop, resume, getState: () => state };
