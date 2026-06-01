@@ -12,6 +12,9 @@ import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import { callBrain } from '@/lib/v2/aiProxy';
 import { REX_COPY_RULES } from '@/lib/v2/rexActions';
+import { serializeRepContext, loadMtdSummary, type MtdSummary } from '@/lib/v2/repContext';
+import type { V2Contact } from '@/lib/v2/useContacts';
+import type { PayPlan } from '@/lib/v2/payPlan';
 
 type ChatMessage = { from: 'rex' | 'user'; text: string; time: string };
 
@@ -33,14 +36,18 @@ function stamp(): string {
   return `${n.getHours()}:${String(n.getMinutes()).padStart(2, '0')}`;
 }
 
-function buildPrompt(history: ChatMessage[], text: string): string {
+function buildPrompt(history: ChatMessage[], text: string, repContext: string): string {
   const convo = history
     .slice(-12)
     .map(m => `${m.from === 'rex' ? 'Rex' : 'Rep'}: ${m.text}`)
     .join('\n');
   return `You are Rex, the AI sales coach inside PocketRep. You coach a car sales rep — find deals, sharpen rebuttals, role-play objections, and call the next move. Be direct: short sentences, specific actions, no fluff, no long lectures. If they ask for a script, give one ready to copy. If they're stuck, ask one sharp diagnostic question.
 
+When the rep asks who to work, what their best move is, or how they're tracking, ground your answer in the real book below — name specific leads and their heat/staleness. Never invent customers.
+
 ${REX_COPY_RULES}
+
+${repContext}
 
 Recent conversation:
 ${convo || '(none yet)'}
@@ -52,23 +59,30 @@ Rex:`;
 export default function RexCoach({
   open,
   onClose,
+  contacts,
+  payPlan,
 }: {
   open: boolean;
   onClose: () => void;
+  contacts: V2Contact[];
+  payPlan: PayPlan | null;
 }) {
   const greeting = useRef(COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
+  const [mtd, setMtd] = useState<MtdSummary | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
-  // Seed a fresh greeting each time the sheet opens.
+  // Seed a fresh greeting each time the sheet opens, and refresh month-to-date
+  // numbers so coaching reflects the rep's current standing.
   useEffect(() => {
     if (open) {
       greeting.current = COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)];
       setMessages([{ from: 'rex', text: greeting.current, time: stamp() }]);
       setInput('');
       setTyping(false);
+      loadMtdSummary().then(setMtd).catch(() => setMtd(null));
     }
   }, [open]);
 
@@ -86,9 +100,10 @@ export default function RexCoach({
     setInput('');
     setTyping(true);
     try {
+      const repContext = serializeRepContext({ contacts, payPlan, mtd });
       const reply = (await callBrain({
         maxTokens: 700,
-        messages: [{ role: 'user', content: buildPrompt(history, text) }],
+        messages: [{ role: 'user', content: buildPrompt(history, text, repContext) }],
       })).trim();
       if (!reply) throw new Error('empty');
       setMessages(m => [...m, { from: 'rex', text: reply, time: stamp() }]);
