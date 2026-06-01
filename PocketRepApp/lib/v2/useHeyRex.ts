@@ -75,6 +75,7 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const convoRef = useRef<BrainMessage[]>([]); // in-session multi-turn context
+  const turnAbortRef = useRef<AbortController | null>(null); // in-flight rexInterpret
 
   // Keep the latest data in refs so the listener callback (created once) can
   // always see fresh values without needing to be torn down on every render.
@@ -90,6 +91,12 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
   };
   const clearDismiss = () => {
     if (dismissRef.current) { clearTimeout(dismissRef.current); dismissRef.current = null; }
+  };
+  // Abort the in-flight turn so its promise can't resolve late and pop a stale
+  // action (after a timeout, a ✕ cancel, or a new utterance superseding it).
+  const abortTurn = () => {
+    turnAbortRef.current?.abort();
+    turnAbortRef.current = null;
   };
 
   // Mirror the actual SpeechSynthesis queue into `speaking` so the orb can show
@@ -172,6 +179,7 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
     };
 
     const runTurn = (text: string) => {
+      abortTurn(); // a new utterance supersedes any still-in-flight turn
       clearDismiss();
       clearWatchdog();
       stopSpeaking(); // reset the streaming-speech cursor for the new reply
@@ -182,7 +190,11 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
       lastUtteranceRef.current = text;
       convoRef.current.push({ role: 'user', content: text });
 
+      const ctrl = new AbortController();
+      turnAbortRef.current = ctrl;
+
       watchdogRef.current = setTimeout(() => {
+        ctrl.abort(); // stop the request so it can't resolve and speak late
         setThinking(false);
         setError('Rex took too long — try again.');
         listenerRef.current?.resume();
@@ -190,13 +202,17 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
 
       rexInterpret(text, contactsRef.current, tagsRef.current, {
         recentTurns: convoRef.current.slice(-6),
+        signal: ctrl.signal,
         onSayDelta: (spoken) => {
+          if (ctrl.signal.aborted) return; // don't voice a superseded turn
           setStreamingSay(spoken);
           speakStreaming(spoken); // enqueue completed sentences as they land
         },
       })
         .then((act) => {
+          if (ctrl.signal.aborted) return; // timed out / cancelled / superseded
           clearWatchdog();
+          turnAbortRef.current = null;
           finishStreaming(act.say ?? ''); // flush any trailing fragment
           setSpeaking(true);
           convoRef.current.push({ role: 'assistant', content: act.say || '(no spoken reply)' });
@@ -205,7 +221,9 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
           handleActionArrived(act);
         })
         .catch((err) => {
+          if (ctrl.signal.aborted) return; // we aborted on purpose — stay quiet
           clearWatchdog();
+          turnAbortRef.current = null;
           setThinking(false);
           setError(err?.message ?? 'Rex is unreachable');
           listenerRef.current?.resume();
@@ -250,11 +268,13 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
       stopSpeaking();
       clearWatchdog();
       clearDismiss();
+      abortTurn(); // don't let a late resolve setState after unmount
     };
   }, [input.enabled]);
 
   const cancel = useCallback(() => {
     if (action) logRexAction(action, 'cancelled').catch(() => undefined);
+    abortTurn(); // drop any in-flight request so it can't pop a stale action
     clearDismiss();
     clearWatchdog();
     stopSpeaking();
