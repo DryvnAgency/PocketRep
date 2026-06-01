@@ -9,6 +9,8 @@ import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 import type { Contact, RexMessage, RexMemory, Profile } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
+import { callBrain } from '@/lib/v2/aiProxy';
+import { buildCoachMessages } from '@/lib/v2/coachBrain';
 
 // ── Model: Gemini 2.5 Flash for speed + cost on every Rex call ──────────────
 const REX_MODEL = 'gemini-2.5-flash';
@@ -35,6 +37,41 @@ function parseRexAction(text: string): RexAction | null {
 
 function stripActionTag(text: string): string {
   return text.replace(/<action>[\s\S]*?<\/action>/g, '').trim();
+}
+
+// An explicit "do something in the app" request (mass text, follow-up list, log
+// a customer, start a sequence) stays on the Gemini action path below. Everything
+// else is a coaching question and routes to the real coaching engine.
+function isActionIntent(text: string): boolean {
+  const q = text.toLowerCase();
+  return (
+    /\b(mass text|blast|text (?:all|everyone|my)|send (?:a )?text to)\b/.test(q) ||
+    /\b(who should i (?:call|contact|hit)|follow[- ]?up list|who needs|who'?s due|pull (?:my )?follow)\b/.test(q) ||
+    /\blog (?:this|a|the|him|her|them)\b/.test(q) ||
+    /\b(start (?:a )?sequence|enroll|drip)\b/.test(q)
+  );
+}
+
+// CRM context for the coaching engine, built from this surface's v1 Contact
+// shape (lib/v2/repContext.ts serializes the v2 shape; same idea, v1 fields).
+function buildRexRepContext(contacts: Contact[], active: Contact | null): string {
+  if (active) {
+    const vehicle = [active.vehicle_year, active.vehicle_make, active.vehicle_model].filter(Boolean).join(' ') || 'unknown';
+    return [
+      'ACTIVE CUSTOMER (coach about this lead by name):',
+      `- ${active.first_name} ${active.last_name}`,
+      `- Current vehicle / trade: ${vehicle}${active.mileage ? `, ${active.mileage} mi` : ''}`,
+      `- Lease end: ${active.lease_end_date ?? 'n/a'} | Heat: ${active.heat_tier ?? 'unscored'}`,
+      `- Notes: ${active.notes ?? 'none'}`,
+    ].join('\n');
+  }
+  if (contacts.length === 0) return '';
+  const hot = contacts.filter(c => c.heat_tier === 'hot');
+  const show = (hot.length ? hot : contacts).slice(0, 8);
+  const list = show
+    .map(c => `- ${c.first_name} ${c.last_name}${c.vehicle_make ? ` (${[c.vehicle_year, c.vehicle_make, c.vehicle_model].filter(Boolean).join(' ')})` : ''}${c.heat_tier === 'hot' ? ' · hot' : ''}`)
+    .join('\n');
+  return `THE REP'S BOOK (${contacts.length} contacts; use real names when relevant):\n${list}`;
 }
 
 const REX_SYSTEM = (repName: string, memory: string, contact: Contact | null, industry = 'auto') => `
@@ -282,27 +319,45 @@ export default function RexScreen() {
     ];
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${AI_PROXY_URL}/gemini`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token ?? ''}`,
-        },
-        body: JSON.stringify({
-          model: REX_MODEL,
-          max_tokens: 600,
-          system: REX_SYSTEM(profile?.full_name ?? '', memory?.summary ?? '', activeContact, profile?.industry ?? 'auto'),
-          messages: apiMessages,
-        }),
-      });
+      let rawReply: string;
+      if (!imageToSend && !isActionIntent(text)) {
+        // Coaching question → the real methodology engine on /brain (the SAME
+        // path as the gold-orb RexCoach). This replaces the old /gemini+action
+        // route that returned a "give me a sec to run the match" stub and never
+        // actually answered. 1200 tokens so the structured answer never truncates.
+        const coachMessages = buildCoachMessages({
+          history: messages.map(m => ({
+            from: m.role === 'assistant' ? ('rex' as const) : ('user' as const),
+            text: m.content,
+          })),
+          text,
+          repContext: buildRexRepContext(contacts, activeContact),
+        });
+        rawReply = (await callBrain({ maxTokens: 1200, messages: coachMessages })).trim()
+          || 'Rex hit an error. Try again.';
+      } else {
+        // Screenshot (needs vision) or an explicit app-action/inventory request →
+        // keep the Gemini path that can read images and emit <action> blocks.
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`${AI_PROXY_URL}/gemini`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token ?? ''}`,
+          },
+          body: JSON.stringify({
+            model: REX_MODEL,
+            max_tokens: 600,
+            system: REX_SYSTEM(profile?.full_name ?? '', memory?.summary ?? '', activeContact, profile?.industry ?? 'auto'),
+            messages: apiMessages,
+          }),
+        });
+        const json = await res.json();
+        rawReply = json.content?.[0]?.text ?? 'Rex hit an error. Try again.';
+        const action = parseRexAction(rawReply);
+        if (action) setPendingAction(action);
+      }
 
-      const json = await res.json();
-      const rawReply = json.content?.[0]?.text ?? 'Rex hit an error. Try again.';
-
-      // Detect action intent from Rex reply
-      const action = parseRexAction(rawReply);
-      if (action) setPendingAction(action);
       const replyText = stripActionTag(rawReply);
 
       const { data: savedReply } = await supabase.from('rex_messages').insert({
