@@ -415,7 +415,12 @@ export default function AppShell() {
         onOpenNurture={() => setNurtureReviewerOpen(true)}
       />
 
-      <RexCoach open={rexCoachOpen} onClose={() => setRexCoachOpen(false)} />
+      <RexCoach
+        open={rexCoachOpen}
+        onClose={() => setRexCoachOpen(false)}
+        contacts={contacts ?? []}
+        payPlan={payPlan}
+      />
 
       <StalledLeadsAnalysis
         open={stalledOpen}
