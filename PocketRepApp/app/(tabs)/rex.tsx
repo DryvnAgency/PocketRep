@@ -321,10 +321,11 @@ export default function RexScreen() {
     try {
       let rawReply: string;
       if (!imageToSend && !isActionIntent(text)) {
-        // Coaching question → the real methodology engine on /brain (the SAME
-        // path as the gold-orb RexCoach). This replaces the old /gemini+action
-        // route that returned a "give me a sec to run the match" stub and never
-        // actually answered. 1200 tokens so the structured answer never truncates.
+        // Coaching question → the real methodology engine on /brain: the SAME
+        // path as the gold-orb RexCoach (buildCoachMessages + callBrain). 1200
+        // tokens so the full structured answer comes back without truncation.
+        // Only screenshots (vision) and explicit app-actions fall through to the
+        // /gemini else-branch below.
         const coachMessages = buildCoachMessages({
           history: messages.map(m => ({
             from: m.role === 'assistant' ? ('rex' as const) : ('user' as const),
