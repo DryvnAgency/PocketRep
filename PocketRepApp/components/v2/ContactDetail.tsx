@@ -18,6 +18,7 @@ import {
 } from '@/lib/v2/updateContact';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 import { useContactNurtures } from '@/lib/v2/contactNurtures';
+import { logInteraction, useInteractions, type InteractionType } from '@/lib/v2/interactions';
 import { pickAndUploadContactPhoto } from '@/lib/v2/contactPhoto';
 import { formatBirthday, parseBirthdayInput } from '@/lib/v2/birthday';
 import LanguageToggle from './LanguageToggle';
@@ -32,8 +33,26 @@ const MILESTONE_ICONS: Record<string, { icon: string; color: string }> = {
   'no-response': { icon: '∅',  color: colors.red },
 };
 
+const INTERACTION_META: Record<InteractionType, { icon: string; color: string; label: string; verb: string }> = {
+  call:  { icon: '📞', color: colors.green, label: 'CALL',  verb: 'Logged a call' },
+  text:  { icon: '💬', color: colors.gold,  label: 'TEXT',  verb: 'Sent a text' },
+  email: { icon: '✉️', color: colors.gold2, label: 'EMAIL', verb: 'Sent an email' },
+  note:  { icon: '📝', color: colors.grey2, label: 'NOTE',  verb: 'Added a note' },
+};
+
 function digitsOnly(s: string | null): string {
   return (s ?? '').replace(/[^\d]/g, '');
+}
+
+// Short timeline stamp: time if today, else "Mon D".
+function activityStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 export default function ContactDetail({
@@ -57,6 +76,10 @@ export default function ContactDetail({
   const [nurtureRefetchKey, setNurtureRefetchKey] = useState(0);
   const nurtures = useContactNurtures(contact.id, nurtureRefetchKey);
   const unmarkedNurtures = nurtures.filter(n => n.sent_at && !n.reply_received);
+  const [interactionsKey, setInteractionsKey] = useState(0);
+  const interactions = useInteractions(contact.id, interactionsKey);
+  // Web compose modal (Call/Text). Native goes straight to Linking.openURL.
+  const [compose, setCompose] = useState<{ mode: 'call' | 'text'; body: string } | null>(null);
 
   const [notes, setNotes] = useState(contact.notes ?? '');
   const [editingNotes, setEditingNotes] = useState(false);
@@ -88,6 +111,7 @@ export default function ContactDetail({
     setAiOpen(false);
     setAiScript('');
     setAiError(null);
+    setCompose(null);
   }, [contact.id]);
 
   const totalCommission = useMemo(
@@ -109,6 +133,12 @@ export default function ContactDetail({
       await updateContactNotes(contact.id, notes);
       onLocalUpdate({ ...contact, notes });
       setEditingNotes(false);
+      // Mirror Call/Text/Email: a saved note also lands on the activity timeline.
+      if (notes.trim() && notes !== (contact.notes ?? '')) {
+        logInteraction(contact.id, 'note', notes)
+          .then(() => setInteractionsKey(k => k + 1))
+          .catch(e => console.warn('logInteraction note', e));
+      }
     } catch (e) {
       console.warn('saveNotes failed', e);
     } finally {
@@ -154,12 +184,21 @@ export default function ContactDetail({
     setTimeout(() => setTouchMsg(null), 1700);
   };
 
-  // Auto-log a touch: stamp last_contact_date, reset the follow-up clock, and
-  // optimistically zero the days-since counter. Working a lead is logging it.
-  const noteTouch = (method: 'call' | 'text' | 'email', summary?: string) => {
-    logContactTouch(contact.id, method, summary).catch(e => console.warn('logContactTouch', e));
+  // Record a touch: stamp last_contact_date + reset the follow-up clock, append
+  // an entry to the activity timeline (interactions), and optimistically zero
+  // the days-since counter. Working a lead is logging it.
+  const recordTouch = (method: InteractionType, summary?: string) => {
+    if (method !== 'note') {
+      logContactTouch(contact.id, method, summary).catch(e => console.warn('logContactTouch', e));
+    }
+    logInteraction(contact.id, method, summary)
+      .then(() => setInteractionsKey(k => k + 1))
+      .catch(e => console.warn('logInteraction', e));
     onLocalUpdate({ ...contact, days: 0 });
-    flash(method === 'call' ? '✓ Call logged' : method === 'text' ? '✓ Text logged' : '✓ Email logged');
+    const labels: Record<InteractionType, string> = {
+      call: '✓ Call logged', text: '✓ Text logged', email: '✓ Email logged', note: '✓ Note logged',
+    };
+    flash(labels[method]);
   };
 
   const webCopy = async (text: string) => {
@@ -170,35 +209,38 @@ export default function ContactDetail({
     } catch { /* ignore */ }
   };
 
-  const openCall = async () => {
-    if (!contact.phone) { flash('No number on file'); return; }
-    // tel: opens a blank tab on web — copy the number instead.
-    if (Platform.OS === 'web') await webCopy(contact.phone);
-    else Linking.openURL(`tel:${digitsOnly(contact.phone)}`);
-    noteTouch('call');
-  };
-  const openText = async (body?: string) => {
-    if (!contact.phone) { flash('No number on file'); return; }
-    if (Platform.OS === 'web') {
-      await webCopy(body ? `${contact.phone}\n${body}` : contact.phone);
-    } else {
-      const url = body
-        ? `sms:${digitsOnly(contact.phone)}?&body=${encodeURIComponent(body)}`
-        : `sms:${digitsOnly(contact.phone)}`;
-      Linking.openURL(url);
+  // Platform URL for a channel. sms/tel use digits only; mailto carries a subject.
+  const channelUrl = (mode: 'call' | 'text' | 'email', body?: string) => {
+    if (mode === 'call') return `tel:${digitsOnly(contact.phone)}`;
+    if (mode === 'text') {
+      const n = digitsOnly(contact.phone);
+      return body ? `sms:${n}?&body=${encodeURIComponent(body)}` : `sms:${n}`;
     }
-    noteTouch('text', body);
+    const subject = encodeURIComponent(contact.vehicle ? `Following up on the ${contact.vehicle}` : 'Following up');
+    const to = encodeURIComponent(contact.email ?? '');
+    return body ? `mailto:${to}?subject=${subject}&body=${encodeURIComponent(body)}` : `mailto:${to}?subject=${subject}`;
   };
+
+  // Call/Text: native dials/opens Messages directly; web opens a compose modal
+  // (tel:/sms: are no-ops in most desktop browsers, so the modal is the result).
+  const openCall = () => {
+    if (!contact.phone) { flash('No number on file'); return; }
+    if (Platform.OS === 'web') { setCompose({ mode: 'call', body: '' }); return; }
+    Linking.openURL(channelUrl('call'));
+    recordTouch('call');
+  };
+  const openText = (body?: string) => {
+    if (!contact.phone) { flash('No number on file'); return; }
+    if (Platform.OS === 'web') { setCompose({ mode: 'text', body: body ?? '' }); return; }
+    Linking.openURL(channelUrl('text', body));
+    recordTouch('text', body);
+  };
+  // mailto opens the mail client on web and native (no blank tab), so it has a
+  // clear result on both — no compose modal needed.
   const openEmail = (body?: string) => {
     if (!contact.email) { flash('No email on file'); return; }
-    // mailto opens the mail client on web and native (no blank tab).
-    const subject = encodeURIComponent(contact.vehicle ? `Following up on the ${contact.vehicle}` : 'Following up');
-    const to = encodeURIComponent(contact.email);
-    const url = body
-      ? `mailto:${to}?subject=${subject}&body=${encodeURIComponent(body)}`
-      : `mailto:${to}?subject=${subject}`;
-    Linking.openURL(url);
-    noteTouch('email', body);
+    Linking.openURL(channelUrl('email', body));
+    recordTouch('email', body);
   };
 
   const runGamePlan = async () => {
@@ -471,40 +513,59 @@ export default function ContactDetail({
 
         {stepView === 'latest' ? (
           <View style={styles.card}>
-            {contact.milestones.length === 0 ? (
-              <Text style={styles.empty}>No milestones logged yet.</Text>
+            {interactions.length === 0 && contact.milestones.length === 0 ? (
+              <Text style={styles.empty}>No activity logged yet.</Text>
             ) : (
-              contact.milestones.map((m, i) => {
-                const meta = MILESTONE_ICONS[m.kind] ?? { icon: '●', color: colors.gold };
-                return (
-                  <View
-                    key={i}
-                    style={[
-                      styles.milestoneRow,
-                      i < contact.milestones.length - 1 && styles.divider,
-                    ]}
-                  >
+              <>
+                {interactions.map((it, i) => {
+                  const meta = INTERACTION_META[it.type] ?? INTERACTION_META.note;
+                  const last = i === interactions.length - 1 && contact.milestones.length === 0;
+                  return (
+                    <View key={it.id} style={[styles.milestoneRow, !last && styles.divider]}>
+                      <View
+                        style={[
+                          styles.milestoneIcon,
+                          { backgroundColor: rgbaTint(meta.color, 0.14), borderColor: rgbaTint(meta.color, 0.3) },
+                        ]}
+                      >
+                        <Text style={{ fontSize: 13, color: meta.color }}>{meta.icon}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.milestoneKind, { color: meta.color }]}>{meta.label}</Text>
+                        <Text style={styles.milestoneText} numberOfLines={3}>
+                          {it.notes?.trim() ? it.notes : meta.verb}
+                        </Text>
+                      </View>
+                      <Text style={styles.milestoneDate}>{activityStamp(it.interactionDate)}</Text>
+                    </View>
+                  );
+                })}
+                {contact.milestones.map((m, i) => {
+                  const meta = MILESTONE_ICONS[m.kind] ?? { icon: '●', color: colors.gold };
+                  return (
                     <View
-                      style={[
-                        styles.milestoneIcon,
-                        {
-                          backgroundColor: rgbaTint(meta.color, 0.14),
-                          borderColor: rgbaTint(meta.color, 0.3),
-                        },
-                      ]}
+                      key={'m' + i}
+                      style={[styles.milestoneRow, i < contact.milestones.length - 1 && styles.divider]}
                     >
-                      <Text style={{ fontSize: 13, color: meta.color }}>{meta.icon}</Text>
+                      <View
+                        style={[
+                          styles.milestoneIcon,
+                          { backgroundColor: rgbaTint(meta.color, 0.14), borderColor: rgbaTint(meta.color, 0.3) },
+                        ]}
+                      >
+                        <Text style={{ fontSize: 13, color: meta.color }}>{meta.icon}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.milestoneKind, { color: meta.color }]}>
+                          {m.kind.replace('-', ' ').toUpperCase()}
+                        </Text>
+                        <Text style={styles.milestoneText}>{m.t}</Text>
+                      </View>
+                      <Text style={styles.milestoneDate}>{m.d}</Text>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.milestoneKind, { color: meta.color }]}>
-                        {m.kind.replace('-', ' ').toUpperCase()}
-                      </Text>
-                      <Text style={styles.milestoneText}>{m.t}</Text>
-                    </View>
-                    <Text style={styles.milestoneDate}>{m.d}</Text>
-                  </View>
-                );
-              })
+                  );
+                })}
+              </>
             )}
           </View>
         ) : (
@@ -717,6 +778,61 @@ export default function ContactDetail({
           onClose={() => setTagPickerOpen(false)}
           onToggle={toggleTag}
         />
+      ) : null}
+
+      {compose ? (
+        <View style={StyleSheet.absoluteFillObject}>
+          <Pressable style={styles.scrim} onPress={() => setCompose(null)} />
+          <View style={styles.composeCard}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.composeTitle}>
+              {compose.mode === 'call' ? `Call ${contact.name}` : `Text ${contact.name}`}
+            </Text>
+            <Text style={styles.composeTarget}>{contact.phone}</Text>
+            {compose.mode === 'text' ? (
+              <TextInput
+                value={compose.body}
+                onChangeText={(t) => setCompose(c => (c ? { ...c, body: t } : c))}
+                multiline
+                autoFocus
+                placeholder="Type your message…"
+                placeholderTextColor={colors.grey}
+                style={styles.composeInput}
+              />
+            ) : null}
+            <View style={styles.composeActions}>
+              <Pressable
+                onPress={async () => {
+                  const body = compose.mode === 'text' ? compose.body : undefined;
+                  await webCopy(compose.mode === 'text' && compose.body ? compose.body : (contact.phone ?? ''));
+                  recordTouch(compose.mode, body);
+                  setCompose(null);
+                }}
+                style={styles.aiAction}
+              >
+                <Text style={styles.aiActionText}>
+                  {compose.mode === 'text' ? '⧉ COPY MESSAGE' : '⧉ COPY NUMBER'}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const body = compose.mode === 'text' ? compose.body : undefined;
+                  try { Linking.openURL(channelUrl(compose.mode, body || undefined)); } catch { /* ignore */ }
+                  recordTouch(compose.mode, body);
+                  setCompose(null);
+                }}
+                style={[styles.aiAction, styles.aiActionPrimary]}
+              >
+                <Text style={styles.aiActionPrimaryText}>
+                  {compose.mode === 'call' ? '📞 OPEN DIALER' : '💬 OPEN SMS'}
+                </Text>
+              </Pressable>
+            </View>
+            <Pressable onPress={() => setCompose(null)} style={{ alignSelf: 'center', paddingVertical: 8 }}>
+              <Text style={styles.linkSecondary}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
       ) : null}
     </View>
   );
@@ -1219,4 +1335,32 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   sheetTagText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+
+  composeCard: {
+    position: 'absolute',
+    left: 0, right: 0, bottom: 0,
+    backgroundColor: colors.ink2,
+    borderTopWidth: 1,
+    borderTopColor: colors.goldBorder,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingBottom: 28,
+  } as any,
+  composeTitle: { fontSize: 16, fontWeight: '700', color: colors.white, letterSpacing: -0.2, marginTop: 4 },
+  composeTarget: { fontSize: 14, color: colors.gold, fontWeight: '600', marginTop: 4, marginBottom: 12 },
+  composeInput: {
+    minHeight: 96,
+    color: colors.white,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlignVertical: 'top',
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.md,
+    padding: 12,
+    marginBottom: 12,
+  } as any,
+  composeActions: { flexDirection: 'row', gap: 8 },
 });
