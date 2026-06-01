@@ -55,8 +55,15 @@ export function useInteractions(
       .eq('contact_id', contactId)
       .order('interaction_date', { ascending: false })
       .limit(20)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (cancelled) return;
+        if (error) {
+          // Surface read failures (RLS / network) instead of silently rendering
+          // an empty timeline. Keep any previously-loaded rows rather than
+          // blanking on a failed refetch.
+          console.error('useInteractions: failed to load interactions', error);
+          return;
+        }
         setRows(
           ((data ?? []) as any[]).map((r) => ({
             id: r.id,
