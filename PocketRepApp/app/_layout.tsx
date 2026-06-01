@@ -6,6 +6,7 @@ import { colors, spacing, radius } from '@/constants/theme';
 import { setupNotificationHandler } from '@/lib/notifications';
 import { shouldUseNewUi } from '@/lib/featureFlags';
 import NewUiShell from '@/components/NewUiShell';
+import { log } from '@/lib/v2/logger';
 
 // ── Error Boundary ─────────────────────────────────────────────────────────────
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -14,7 +15,13 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Er
     this.state = { error: null };
   }
   static getDerivedStateFromError(error: Error) { return { error }; }
-  componentDidCatch(error: Error, info: any) { console.error('App error:', error, info); }
+  componentDidCatch(error: Error, info: any) {
+    log.error('error-boundary', error.message, {
+      name: error.name,
+      stack: error.stack,
+      componentStack: info?.componentStack,
+    });
+  }
   render() {
     if (this.state.error) {
       return (

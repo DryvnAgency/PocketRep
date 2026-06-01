@@ -5,6 +5,7 @@ import {
 import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, Pill } from './atoms';
 import { batchKill, type StalledReport, type StalledRecommendation } from '@/lib/v2/stalledLeads';
+import { useSlowCallHint } from '@/lib/v2/useSlowCallHint';
 
 const REC_META: Record<StalledRecommendation['recommendation'], { color: string; label: string }> = {
   KILL:  { color: colors.red,    label: 'KILL' },
@@ -67,6 +68,7 @@ export default function StalledLeadsAnalysis({
 }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [working, setWorking] = useState<'kill' | 'push' | null>(null);
+  const slowPhase = useSlowCallHint(loading);
 
   if (!open) return null;
 
@@ -126,7 +128,11 @@ export default function StalledLeadsAnalysis({
           {loading ? (
             <View style={styles.center}>
               <ActivityIndicator color={colors.gold} />
-              <Text style={styles.centerHint}>Rex is sorting through your book…</Text>
+              <Text style={styles.centerHint}>
+                {slowPhase === 'slow'
+                  ? 'Still working — Rex is reading every lead. A few more seconds…'
+                  : 'Rex is sorting through your book…'}
+              </Text>
             </View>
           ) : recommendations.length === 0 ? (
             <View style={styles.empty}>
