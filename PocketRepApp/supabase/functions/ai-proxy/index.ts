@@ -191,6 +191,66 @@ async function handleBrain(req: Request) {
   const msgs = (body.messages as Array<{ role: string; content: unknown }>) || [];
   const sys = typeof body.system === 'string' ? body.system : '';
   const messages = sys ? [{ role: 'system', content: sys }, ...msgs] : msgs;
+
+  // Streaming passthrough (opt-in via { stream: true }). Pipe OpenRouter's SSE
+  // straight to the client for a Siri-style token-by-token reply, teeing the
+  // frames so usage/cost is still recorded from the final chunk. Existing
+  // non-streaming callers (gamePlan, blast, nurture, digest, stalled) never set
+  // stream, so they're unaffected.
+  if (body.stream === true) {
+    let upstream: Response;
+    try {
+      upstream = await fetch(OPENROUTER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' },
+        body: JSON.stringify({ models: BRAIN_MODELS, messages, max_tokens: maxTok, stream: true, usage: { include: true } }),
+      });
+    } catch (e: unknown) {
+      return json({ error: { type: 'OVERLOADED', message: 'AI at capacity.', detail: e instanceof Error ? e.message : 'Unknown' } }, 503);
+    }
+    if (!upstream.ok || !upstream.body) {
+      const j = await upstream.json().catch(() => ({}));
+      return json({ error: (j as any).error ?? { type: 'upstream_error', message: 'Stream upstream error' } }, upstream.status || 502);
+    }
+
+    const decoder = new TextDecoder();
+    let sseBuf = '';
+    const meter = new TransformStream({
+      transform(chunk, controller) {
+        controller.enqueue(chunk); // deliver untouched, immediately
+        try { sseBuf += decoder.decode(chunk, { stream: true }); } catch { /* ignore */ }
+      },
+      async flush() {
+        try {
+          let iT = 0, oT = 0, cost = 0;
+          for (const line of sseBuf.split('\n')) {
+            const t = line.trim();
+            if (!t.startsWith('data:')) continue;
+            const d = t.slice(5).trim();
+            if (!d || d === '[DONE]') continue;
+            try {
+              const obj = JSON.parse(d);
+              if (obj.usage) {
+                iT = Number(obj.usage.prompt_tokens ?? 0);
+                oT = Number(obj.usage.completion_tokens ?? 0);
+                cost = Number(obj.usage.cost ?? 0) * 100;
+              }
+            } catch { /* partial / non-JSON frame */ }
+          }
+          if (iT || oT || cost) {
+            try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost }); }
+            catch { await supabase!.from('daily_ai_usage').upsert({ user_id: user!.id, usage_date: today, input_tokens: iT, output_tokens: oT, cost_cents: cost, request_count: 1, updated_at: new Date().toISOString() }, { onConflict: 'user_id,usage_date' }); }
+          }
+        } catch { /* usage metering is best-effort */ }
+      },
+    });
+
+    return new Response(upstream.body.pipeThrough(meter), {
+      status: 200,
+      headers: { ...cors(), 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' },
+    });
+  }
+
   let apiJson: any = null; let lastErr: any = null;
   for (let i = 0; i < 3; i++) {
     try {

@@ -12,7 +12,7 @@ import { getRexMemory, recordRexTurn } from './rexMemory';
 import { loadBookContext, bookContextForPrompt } from './bookContext';
 import { chooseNextCall } from './callNext';
 import { executeBatchAction, type BatchActionKind } from './batchActions';
-import { callBrain } from './aiProxy';
+import { callBrainStream, type BrainMessage } from './aiProxy';
 import type { V2Contact } from './useContacts';
 
 export type RexAction =
@@ -265,19 +265,19 @@ Actions you can take, with required + optional payload fields:
 EXISTING TAGS the rep uses: ${tagList}
 
 RULES:
-- Return ONLY a single JSON object inside a \`\`\`json fenced block. No prose outside.
+- FORMAT (read carefully): FIRST write your spoken reply to the rep as ONE short plain-text line — this is exactly what Rex says out loud, so make it natural, under 18 words, and obey the COPY RULES. THEN, on the next line, output the action as a single \`\`\`json fenced block: { "action": "...", "payload": { ... } }. Put NOTHING after the closing fence. Your spoken line streams to the rep as you type it, so always lead with it.
+- The spoken line IS your reply to the rep — do not also put it in a JSON "say" field (you may omit "say" entirely).
 - For filter_contacts / book_summary / call_next / batch_action, derive answers from the BOOK STATE above. Never invent ids — they must appear in BOOK STATE.
-- For batch / write actions, ALWAYS produce a "say" line that confirms the count ("You want to text 7 contacts, right?").
+- For batch / write actions, your spoken line MUST confirm the count ("You want to text 7 contacts, right?").
 - Match contacts by name fuzzy + context. If multiple match, use "clarify".
 - Currency amounts ("twenty eight hundred", "$2,800") → integer 2800.
-- The "say" field is what you'll speak back to the rep. Keep it under 18 words, conversational.
 
 ${REX_COPY_RULES}
 
 The rep said:
 "${transcript}"
 
-Respond now with the JSON only.`;
+Respond now: your spoken line first, then the \`\`\`json block.`;
 }
 
 function parseAction(raw: string): RexAction {
@@ -300,10 +300,27 @@ function parseAction(raw: string): RexAction {
   }
 }
 
+export type RexInterpretOpts = {
+  // Recent conversation turns (this session) so follow-ups like "text him too"
+  // resolve against what was just said.
+  recentTurns?: BrainMessage[];
+  // Streams Rex's spoken line as it's generated (the text before the ```json).
+  onSayDelta?: (spokenSoFar: string) => void;
+  signal?: AbortSignal;
+};
+
+// Everything before the first ```fence is Rex's spoken line (it's prompted to
+// lead with it). Used both for live streaming and for the final say.
+function spokenPortion(raw: string): string {
+  const idx = raw.indexOf('```');
+  return (idx >= 0 ? raw.slice(0, idx) : raw).trim();
+}
+
 export async function rexInterpret(
   transcript: string,
   contacts: V2Contact[],
   tagNames: string[],
+  opts: RexInterpretOpts = {},
 ): Promise<RexAction> {
   const [memory, book] = await Promise.all([
     getRexMemory(),
@@ -311,11 +328,25 @@ export async function rexInterpret(
   ]);
 
   const bookSection = bookContextForPrompt(book);
-  const raw = await callBrain({
+  const prompt = buildPrompt(transcript, contacts, tagNames, memory?.summary ?? '', bookSection);
+  const raw = await callBrainStream({
     maxTokens: 800,
-    messages: [{ role: 'user', content: buildPrompt(transcript, contacts, tagNames, memory?.summary ?? '', bookSection) }],
+    signal: opts.signal,
+    messages: [
+      ...(opts.recentTurns ?? []),
+      { role: 'user', content: prompt },
+    ],
+    onDelta: opts.onSayDelta
+      ? (fullText) => opts.onSayDelta!(spokenPortion(fullText))
+      : undefined,
   });
   const action = parseAction(raw);
+
+  // Prefer the streamed spoken line as the say — it's what the rep already
+  // heard and watched type out. (If Rex led straight with the fence, keep the
+  // JSON say.)
+  const spoken = spokenPortion(raw);
+  if (spoken && (raw.includes('```') || action.type === 'say')) action.say = spoken;
 
   // call_next is a "Rex picked" action, but the brain can drift on the
   // suggested_opener (copy rules are easy to break on auto-generated text).
