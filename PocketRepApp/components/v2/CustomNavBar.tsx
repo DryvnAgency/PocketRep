@@ -39,7 +39,7 @@ export default function CustomNavBar({
   return (
     <View style={styles.root}>
       <View style={styles.row}>
-        <Pressable onPress={onUpgrade}>
+        <Pressable onPress={onUpgrade} accessibilityRole="button" accessibilityLabel="Upgrade plan">
           <LinearGradient
             colors={[colors.gold2, colors.gold]}
             start={{ x: 0, y: 0 }}
@@ -54,14 +54,19 @@ export default function CustomNavBar({
 
         <View style={{ flex: 1 }} />
 
-        <Pressable onPress={onSearch} style={styles.iconBtn}>
+        <Pressable onPress={onSearch} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Search contacts">
           <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
             <Circle cx={11} cy={11} r={6} stroke={colors.gold} strokeWidth={1.8} />
             <Path d="M16 16l4 4" stroke={colors.gold} strokeWidth={1.8} strokeLinecap="round" />
           </Svg>
         </Pressable>
 
-        <Pressable onPress={onNotifications} style={styles.iconBtn}>
+        <Pressable
+          onPress={onNotifications}
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+        >
           <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
             <Path
               d="M5 17v-5a7 7 0 1114 0v5l1.5 2H3.5L5 17z"

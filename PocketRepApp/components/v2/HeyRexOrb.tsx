@@ -138,7 +138,15 @@ export default function HeyRexOrb({
         />
       ) : null}
 
-      <Pressable onPress={onPress}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={
+          state === 'listening' ? 'Rex, listening'
+          : state === 'processing' ? 'Rex, thinking'
+          : 'Open Rex coach'
+        }
+      >
         <Animated.View style={[styles.orbShadow, { transform: [{ scale }] }]}>
           <LinearGradient
             colors={[colors.gold2, colors.gold, '#9a7530']}

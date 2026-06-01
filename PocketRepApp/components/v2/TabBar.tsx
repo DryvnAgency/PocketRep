@@ -47,7 +47,13 @@ function TabButton({
 }) {
   const color = active ? colors.gold : colors.grey2;
   return (
-    <Pressable onPress={onPress} style={styles.tabBtn}>
+    <Pressable
+      onPress={onPress}
+      style={styles.tabBtn}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={`${t.label} tab`}
+    >
       {active ? <View style={styles.activeMark} /> : null}
       {renderIcon(t.id, color)}
       <Text style={[styles.tabLabel, { color }]}>{t.label}</Text>

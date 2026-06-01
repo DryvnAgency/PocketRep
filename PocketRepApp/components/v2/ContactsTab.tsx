@@ -184,9 +184,10 @@ export default function ContactsTab({
             placeholder={`Search ${contacts.length} contacts`}
             placeholderTextColor={colors.grey}
             style={styles.searchInput}
+            accessibilityLabel="Search contacts"
           />
           {query ? (
-            <Pressable onPress={() => setQuery('')} hitSlop={8}>
+            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
               <Text style={styles.searchClear}>✕</Text>
             </Pressable>
           ) : null}
