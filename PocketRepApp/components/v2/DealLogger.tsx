@@ -9,6 +9,7 @@ import {
   type DealDraft,
 } from '@/lib/v2/dealLogger';
 import { usePayPlan, calcCommissionWithPlan, DEFAULT_PAY_PLAN } from '@/lib/v2/payPlan';
+import { formatMoney } from '@/lib/v2/format';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -292,12 +293,12 @@ export default function DealLogger({
             <View style={styles.payoutRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.payoutLabel}>Total gross</Text>
-                <Text style={styles.payoutGross}>${totalGross.toLocaleString()}</Text>
+                <Text style={styles.payoutGross}>{formatMoney(totalGross)}</Text>
               </View>
               <View style={styles.payoutDivider} />
               <View style={{ flex: 1, alignItems: 'flex-end' }}>
                 <Text style={styles.payoutCommissionLabel}>COMMISSION</Text>
-                <Text style={styles.payoutCommission}>${commission.toLocaleString()}</Text>
+                <Text style={styles.payoutCommission}>{formatMoney(commission)}</Text>
               </View>
             </View>
           </View>

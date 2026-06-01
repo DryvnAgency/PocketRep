@@ -6,6 +6,7 @@ import { colors, radius, spacing } from '@/constants/theme';
 import { Label, Pill, SectionHead } from './atoms';
 import { useUserDeals, type V2DealRich } from '@/lib/v2/useUserDeals';
 import { usePayPlan, calcCommissionWithPlan, DEFAULT_PAY_PLAN } from '@/lib/v2/payPlan';
+import { formatMoney, formatMoneyCompact } from '@/lib/v2/format';
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const FUNDING_LABEL: Record<string, string> = { finance: 'FIN', lease: 'LEA', cash: 'CASH' };
@@ -68,7 +69,7 @@ function DealRow({ d, onPress }: { d: V2DealRich; onPress?: () => void }) {
         </View>
       </View>
       <View style={{ alignItems: 'flex-end' }}>
-        <Text style={styles.dealAmount}>${d.amount.toLocaleString()}</Text>
+        <Text style={styles.dealAmount}>{formatMoney(d.amount)}</Text>
         <View style={styles.dealPills}>
           {d.dealType ? <Pill color={d.dealType === 'CPO' ? colors.grey2 : colors.gold}>{d.dealType}</Pill> : null}
           {d.funding ? <Pill color={FUNDING_COLOR[d.funding] ?? colors.grey2}>{FUNDING_LABEL[d.funding] ?? d.funding.toUpperCase()}</Pill> : null}
@@ -97,7 +98,7 @@ function MonthAccordion({
         <View style={{ flex: 1 }}>
           <Text style={[styles.monthLabel, { color: primary ? colors.gold : colors.grey2 }]}>{label}</Text>
           <Text style={[styles.monthSub, { color: primary ? colors.white : colors.grey3 }]}>
-            {fmtUnits(units)} unit{units === 1 ? '' : 's'} · ${grossSum.toLocaleString()} gross
+            {fmtUnits(units)} unit{units === 1 ? '' : 's'} · {formatMoney(grossSum)} gross
           </Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
@@ -225,9 +226,7 @@ export default function MetricsTab({
           <View style={styles.ytdDivider} />
           <View style={[styles.ytdStat, { flex: 1.2 }]}>
             <Text style={styles.ytdStatLabel}>GROSS</Text>
-            <Text style={styles.ytdStatValue}>
-              ${(stats.ytdGross / 1000).toFixed(1)}<Text style={{ fontSize: 14, opacity: 0.6 }}>K</Text>
-            </Text>
+            <Text style={styles.ytdStatValue}>{formatMoneyCompact(stats.ytdGross)}</Text>
           </View>
         </View>
       </View>

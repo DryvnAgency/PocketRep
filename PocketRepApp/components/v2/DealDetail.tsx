@@ -6,6 +6,7 @@ import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import type { V2DealRich } from '@/lib/v2/useUserDeals';
 import { deleteDeal } from '@/lib/v2/dealLogger';
+import { formatMoney } from '@/lib/v2/format';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const TYPE_LABEL: Record<string, string> = { NEW: 'New', CPO: 'Certified Pre-Owned', USED: 'Used' };
@@ -19,7 +20,7 @@ function fmtDate(iso: string | null): string {
 }
 
 function money(n: number | null | undefined): string {
-  return n == null ? '—' : `$${Number(n).toLocaleString()}`;
+  return n == null ? '—' : formatMoney(n);
 }
 
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
