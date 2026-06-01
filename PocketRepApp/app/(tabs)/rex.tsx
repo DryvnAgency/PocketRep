@@ -404,21 +404,13 @@ export default function RexScreen() {
     if (!allMsgs) return;
 
     const transcript = allMsgs.map(m => `${m.role === 'user' ? 'Rep' : 'Rex'}: ${m.content}`).join('\n');
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch(`${AI_PROXY_URL}/gemini`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${session?.access_token ?? ''}` },
-      body: JSON.stringify({
-        model: REX_MODEL,
-        max_tokens: 300,
-        messages: [{
-          role: 'user',
-          content: `Summarise key facts about this sales rep from their conversation with Rex. Focus on their style, common customers, recurring challenges. Be concise.\n\n${transcript}`,
-        }],
-      }),
-    });
-    const json = await res.json();
-    const summary = json.content?.[0]?.text ?? '';
+    const summary = await callBrain({
+      maxTokens: 400,
+      messages: [{
+        role: 'user',
+        content: `Summarise key facts about this sales rep from their conversation with Rex. Focus on their style, common customers, recurring challenges. Be concise.\n\n${transcript}`,
+      }],
+    }).catch(() => '');
     await supabase.from('rex_memory').upsert({ user_id: userId, summary, message_count: count });
   }
 
@@ -428,14 +420,8 @@ export default function RexScreen() {
     try {
       const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ');
       const prompt = `In 2 sentences max, give the rep their immediate game plan for ${contact.first_name} ${contact.last_name}. Vehicle: ${vehicle || 'unknown'}. Lease end: ${contact.lease_end_date ?? 'unknown'}. Notes: ${contact.notes ?? 'none'}. Be direct — what to do next and the one thing to lead with.`;
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${AI_PROXY_URL}/gemini`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${session?.access_token ?? ''}` },
-        body: JSON.stringify({ model: REX_MODEL, max_tokens: 150, messages: [{ role: 'user', content: prompt }] }),
-      });
-      const rj = await res.json();
-      setProactiveCoach(rj.content?.[0]?.text ?? '');
+      const reply = await callBrain({ maxTokens: 250, messages: [{ role: 'user', content: prompt }] });
+      setProactiveCoach(reply);
     } catch {
       setProactiveCoach(''); // clear loading state on error
     }
@@ -591,17 +577,7 @@ export default function RexScreen() {
       const prompt = newAngle
         ? `Give me a DIFFERENT fresh angle for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences.\n\nObjection: "${objection}"`
         : `Give me a sharp, specific rebuttal for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences.\n\nObjection: "${objection}"`;
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${AI_PROXY_URL}/gemini`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token ?? ''}`,
-        },
-        body: JSON.stringify({ model: REX_MODEL, max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
-      });
-      const json = await res.json();
-      const text = json.content?.[0]?.text ?? fallback;
+      const text = (await callBrain({ maxTokens: 600, messages: [{ role: 'user', content: prompt }] })) || fallback;
       setAiRebuttals(prev => ({ ...prev, [key]: text }));
     } catch {
       setAiRebuttals(prev => ({ ...prev, [key]: fallback }));
