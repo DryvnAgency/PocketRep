@@ -11,17 +11,17 @@ import {
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import { callBrain } from '@/lib/v2/aiProxy';
-import { REX_COPY_RULES } from '@/lib/v2/rexActions';
 import { serializeRepContext, loadMtdSummary, type MtdSummary } from '@/lib/v2/repContext';
+import { buildCoachMessages } from '@/lib/v2/coachBrain';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
 
 type ChatMessage = { from: 'rex' | 'user'; text: string; time: string };
 
 const QUICK_CHIPS = [
-  'Coach me on a price objection',
-  'Lease vs finance pitch',
-  'Reframe this customer response',
+  "Payment's too high",
+  'They want to think about it',
+  'Lead went quiet — how do I follow up?',
   "What's my best move today?",
 ];
 
@@ -34,26 +34,6 @@ const COACH_OPENERS = [
 function stamp(): string {
   const n = new Date();
   return `${n.getHours()}:${String(n.getMinutes()).padStart(2, '0')}`;
-}
-
-function buildPrompt(history: ChatMessage[], text: string, repContext: string): string {
-  const convo = history
-    .slice(-12)
-    .map(m => `${m.from === 'rex' ? 'Rex' : 'Rep'}: ${m.text}`)
-    .join('\n');
-  return `You are Rex, the AI sales coach inside PocketRep. You coach a car sales rep — find deals, sharpen rebuttals, role-play objections, and call the next move. Be direct: short sentences, specific actions, no fluff, no long lectures. If they ask for a script, give one ready to copy. If they're stuck, ask one sharp diagnostic question.
-
-When the rep asks who to work, what their best move is, or how they're tracking, ground your answer in the real book below — name specific leads and their heat/staleness. Never invent customers.
-
-${REX_COPY_RULES}
-
-${repContext}
-
-Recent conversation:
-${convo || '(none yet)'}
-
-Rep: ${text}
-Rex:`;
 }
 
 export default function RexCoach({
@@ -102,8 +82,10 @@ export default function RexCoach({
     try {
       const repContext = serializeRepContext({ contacts, payPlan, mtd });
       const reply = (await callBrain({
-        maxTokens: 700,
-        messages: [{ role: 'user', content: buildPrompt(history, text, repContext) }],
+        // 1200 (was 700) so a complete, structured coaching answer never gets cut
+        // off mid-sentence — the system prompt still asks Rex to stay tight (~220 words).
+        maxTokens: 1200,
+        messages: buildCoachMessages({ history, text, repContext }),
       })).trim();
       if (!reply) throw new Error('empty');
       setMessages(m => [...m, { from: 'rex', text: reply, time: stamp() }]);
