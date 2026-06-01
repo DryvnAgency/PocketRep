@@ -1,10 +1,5 @@
 import { supabase } from '@/lib/supabase';
-
-// Capitalize the first letter of each word without lowercasing the rest, so
-// "lalo ponce" -> "Lalo Ponce" while preserving intentional caps (e.g. McLaren).
-function titleCase(s: string): string {
-  return s.trim().replace(/(^|[\s-])([a-z])/g, (_, p, c) => p + c.toUpperCase());
-}
+import { titleCase, normalizeVehicle } from './format';
 
 export async function updateContactNotes(id: string, notes: string): Promise<void> {
   const { error } = await supabase
@@ -83,8 +78,8 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
       last_name: titleCase(draft.lastName) || null,
       phone: draft.phone.trim() || null,
       email: draft.email?.trim() || null,
-      vehicle: draft.vehicle.trim() || null,
-      trim: draft.trim.trim() || null,
+      vehicle: normalizeVehicle(draft.vehicle) || null,
+      trim: normalizeVehicle(draft.trim) || null,
       budget: draft.budget.trim() || null,
       trade_in: draft.tradeIn.trim() || null,
       plan_label: draft.planLabel || null,
