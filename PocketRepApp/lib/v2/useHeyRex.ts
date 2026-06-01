@@ -50,8 +50,9 @@ export type UseHeyRexOutput = {
   dismissFiltered: () => void;
 };
 
-// Defense-in-depth watchdog: callBrain already times out at 20s, but never let
-// the UI hang in "thinking" if something downstream stalls.
+// Defense-in-depth watchdog. callBrainStream only has a 20s *idle* timeout (it
+// resets on every chunk), so a steadily-streaming reply can outlive it — this
+// wall-clock cap is what guarantees the UI never hangs in "thinking".
 const PROCESS_TIMEOUT_MS = 25_000;
 // How long a read-only result stays up before we auto-dismiss + re-arm.
 const NAV_DISMISS_MS = 2_200;     // show_contact / call_next — card is the result

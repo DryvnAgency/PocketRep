@@ -17,10 +17,16 @@ export type BrainMessage = {
   content: string;
 };
 
-// Hard ceiling so a stalled model never leaves Rex hanging in "thinking"
-// forever. For the streaming call this is an *idle* timeout (reset on every
-// chunk via kick()); for the one-shot call it's the total budget.
-const DEFAULT_TIMEOUT_MS = 20_000;
+// Two different timeout semantics, so two different ceilings:
+//   - Streaming: an *idle* timeout, reset on every chunk via kick(). 20s
+//     without a single token is a dead stream. Keeps the voice UX snappy.
+//   - One-shot: the *total* budget for the whole request. Batch callers
+//     (nurture 2500 tok, blast 2000 tok) plus the edge function's own retry
+//     backoff routinely run past 20s, and before this path had a timeout at
+//     all they were unbounded — so the one-shot ceiling is generous and acts
+//     only as a hang-guard, not a latency cap.
+const STREAM_IDLE_TIMEOUT_MS = 20_000;
+const ONESHOT_TIMEOUT_MS = 60_000;
 
 type TimeoutHandle = { signal: AbortSignal; kick: () => void; cancel: () => void };
 
@@ -83,7 +89,7 @@ export async function callBrain(opts: {
   const token = session?.access_token;
   if (!token) throw new Error('ai-proxy 401');
 
-  const t = withTimeout(opts.signal, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const t = withTimeout(opts.signal, opts.timeoutMs ?? ONESHOT_TIMEOUT_MS);
   try {
     const res = await fetch(`${AI_PROXY_URL}/brain`, {
       method: 'POST',
@@ -125,7 +131,7 @@ export async function callBrainStream(opts: {
   const token = session?.access_token;
   if (!token) throw new Error('ai-proxy 401');
 
-  const t = withTimeout(opts.signal, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const t = withTimeout(opts.signal, opts.timeoutMs ?? STREAM_IDLE_TIMEOUT_MS);
   try {
     const res = await fetch(`${AI_PROXY_URL}/brain`, {
       method: 'POST',
