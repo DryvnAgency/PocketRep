@@ -319,6 +319,8 @@ export default function AppShell() {
       {selected ? (
         <ContactDetail
           contact={selected}
+          allContacts={contacts ?? []}
+          onOpenContact={(id) => setSelectedId(id)}
           onClose={() => setSelectedId(null)}
           onLocalUpdate={(next: V2Contact) => patchLocal(next.id, next)}
           onDeleted={() => { reloadContacts(); setSelectedId(null); }}
@@ -357,6 +359,7 @@ export default function AppShell() {
 
       <AddContactModal
         open={addContactOpen}
+        allContacts={contacts ?? []}
         onClose={() => setAddContactOpen(false)}
         onCreated={() => { reloadContacts(); setActive('contacts'); }}
       />

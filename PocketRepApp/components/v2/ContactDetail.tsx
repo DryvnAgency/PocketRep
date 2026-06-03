@@ -15,6 +15,7 @@ import {
   updateContactTier,
   updateContactPreferredLanguage,
   updateContactBirthday,
+  updateContactReferredBy,
   logContactTouch,
 } from '@/lib/v2/updateContact';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
@@ -63,6 +64,8 @@ export default function ContactDetail({
   onDeleted,
   dealsRefetchKey = 0,
   onLogDeal,
+  allContacts = [],
+  onOpenContact,
 }: {
   contact: V2Contact;
   onClose: () => void;
@@ -70,6 +73,8 @@ export default function ContactDetail({
   onDeleted?: (id: string) => void;
   dealsRefetchKey?: number;
   onLogDeal?: () => void;
+  allContacts?: V2Contact[];
+  onOpenContact?: (id: string) => void;
 }) {
   const tier = TIERS[contact.tier];
   const allTags = useTags();
@@ -104,16 +109,79 @@ export default function ContactDetail({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [editingReferral, setEditingReferral] = useState(false);
+  const [referralInput, setReferralInput] = useState('');
+  const [savingReferral, setSavingReferral] = useState(false);
+
   useEffect(() => {
     setNotes(contact.notes ?? '');
     setEditingNotes(false);
     setBday(contact.birthday ?? '');
     setEditingBday(false);
+    setEditingReferral(false);
+    setReferralInput('');
     setAiOpen(false);
     setAiScript('');
     setAiError(null);
     setCompose(null);
   }, [contact.id]);
+
+  // Referral link: resolve the referrer (linked contact wins over free-text),
+  // and the reverse list of everyone this contact has referred.
+  const referrer = contact.referredByContactId
+    ? allContacts.find(c => c.id === contact.referredByContactId) ?? null
+    : null;
+  const referrerLabel = referrer?.name ?? contact.referredByName ?? null;
+  const referrals = allContacts.filter(c => c.referredByContactId === contact.id);
+  const referralMatches = editingReferral && referralInput.trim()
+    ? allContacts
+        .filter(c => c.id !== contact.id && c.name.toLowerCase().includes(referralInput.trim().toLowerCase()))
+        .slice(0, 5)
+    : [];
+
+  const startEditReferral = () => {
+    setReferralInput(referrerLabel ?? '');
+    setEditingReferral(true);
+  };
+
+  // Save the referral. A name that exactly matches a contact links the two; an
+  // explicit pick (opts) always links; anything else stores free text.
+  const saveReferral = async (opts?: { contactId: string; name: string }) => {
+    const next = opts ?? (() => {
+      const typed = referralInput.trim();
+      if (!typed) return { contactId: null as string | null, name: null as string | null };
+      const exact = allContacts.find(
+        c => c.id !== contact.id && c.name.toLowerCase() === typed.toLowerCase(),
+      );
+      return exact
+        ? { contactId: exact.id, name: exact.name }
+        : { contactId: null as string | null, name: typed };
+    })();
+    setSavingReferral(true);
+    try {
+      await updateContactReferredBy(contact.id, next);
+      onLocalUpdate({ ...contact, referredByContactId: next.contactId, referredByName: next.name });
+      setEditingReferral(false);
+    } catch (e) {
+      console.warn('saveReferral failed', e);
+    } finally {
+      setSavingReferral(false);
+    }
+  };
+
+  const clearReferral = async () => {
+    setSavingReferral(true);
+    try {
+      await updateContactReferredBy(contact.id, { contactId: null, name: null });
+      onLocalUpdate({ ...contact, referredByContactId: null, referredByName: null });
+      setEditingReferral(false);
+      setReferralInput('');
+    } catch (e) {
+      console.warn('clearReferral failed', e);
+    } finally {
+      setSavingReferral(false);
+    }
+  };
 
   const totalCommission = useMemo(
     () => deals.reduce((s, d) => s + d.amount, 0),
@@ -504,6 +572,100 @@ export default function ContactDetail({
             </Text>
           )}
         </Pressable>
+
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionLabel}>REFERRED BY</Text>
+          <View style={{ flex: 1 }} />
+          {editingReferral ? (
+            <>
+              <Pressable onPress={() => setEditingReferral(false)} hitSlop={6}>
+                <Text style={styles.linkSecondary}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={() => saveReferral()} hitSlop={6} disabled={savingReferral}>
+                <Text style={styles.linkPrimary}>{savingReferral ? 'SAVING…' : 'SAVE'}</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable onPress={startEditReferral} hitSlop={6}>
+              <Text style={styles.linkPrimary}>{referrerLabel ? 'EDIT ›' : '＋ ADD'}</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {editingReferral ? (
+          <View style={[styles.card, { borderColor: colors.gold, gap: 10 }]}>
+            <TextInput
+              value={referralInput}
+              onChangeText={setReferralInput}
+              autoFocus
+              placeholder="Who referred them? Type a name…"
+              placeholderTextColor={colors.grey}
+              style={styles.bdayInput}
+            />
+            {referralMatches.length > 0 ? (
+              <View style={{ gap: 6 }}>
+                <Text style={styles.referralHint}>Tap to link a contact:</Text>
+                <View style={styles.referralChips}>
+                  {referralMatches.map(m => (
+                    <Pressable
+                      key={m.id}
+                      onPress={() => saveReferral({ contactId: m.id, name: m.name })}
+                      style={styles.referralChip}
+                    >
+                      <Text style={styles.referralChipText}>👥 {m.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+            {referrerLabel ? (
+              <Pressable onPress={clearReferral} hitSlop={6} disabled={savingReferral}>
+                <Text style={styles.linkSecondary}>Remove referral</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <Pressable
+            onPress={() => (referrer ? onOpenContact?.(referrer.id) : startEditReferral())}
+            style={[styles.card, { paddingVertical: 14 }]}
+          >
+            {referrerLabel ? (
+              <Text style={referrer ? styles.referralLinked : styles.bdayText}>
+                👥 {referrerLabel}{referrer ? ' ›' : ''}
+              </Text>
+            ) : (
+              <Text style={[styles.bdayText, styles.bdayPlaceholder]}>
+                Tap to add who referred them…
+              </Text>
+            )}
+          </Pressable>
+        )}
+
+        {referrals.length > 0 ? (
+          <>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionLabel}>REFERRALS</Text>
+              <View style={styles.dealCount}>
+                <Text style={styles.dealCountText}>{referrals.length}</Text>
+              </View>
+              <View style={{ flex: 1 }} />
+            </View>
+            <View style={styles.card}>
+              {referrals.map((r, i) => (
+                <Pressable
+                  key={r.id}
+                  onPress={() => onOpenContact?.(r.id)}
+                  style={[styles.referralRow, i < referrals.length - 1 && styles.divider]}
+                >
+                  <Avatar name={r.name} size={28} photoUrl={r.photoUrl} />
+                  <Text style={styles.referralRowName} numberOfLines={1}>{r.name}</Text>
+                  <View style={{ flex: 1 }} />
+                  <Text style={styles.referralRowChev}>›</Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         <View style={styles.toggleWrap}>
           <View style={styles.toggle}>
@@ -1199,6 +1361,20 @@ const styles = StyleSheet.create({
   bdayInput: { color: colors.white, fontSize: 15, padding: 0 } as any,
   bdayText: { fontSize: 15, color: colors.white, letterSpacing: -0.2 },
   bdayPlaceholder: { color: colors.grey, fontStyle: 'italic' },
+
+  referralLinked: { fontSize: 15, color: colors.gold, fontWeight: '600', letterSpacing: -0.2 },
+  referralHint: { fontSize: 11, color: colors.grey2, fontWeight: '600' },
+  referralChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  referralChip: {
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1, borderColor: colors.goldBorder,
+  },
+  referralChipText: { fontSize: 12, fontWeight: '700', color: colors.gold },
+  referralRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  referralRowName: { fontSize: 14, fontWeight: '600', color: colors.white, maxWidth: '70%' },
+  referralRowChev: { fontSize: 16, color: colors.gold },
 
   gamePlan: {
     paddingVertical: 14,
