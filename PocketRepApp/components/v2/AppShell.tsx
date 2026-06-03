@@ -198,6 +198,7 @@ export default function AppShell() {
       || actionType === 'update_notes'
       || actionType === 'delete_contact'
       || actionType === 'schedule_followup'
+      || actionType === 'retier_contact'
       || actionType === 'batch_action'
     ) {
       reloadContacts();
