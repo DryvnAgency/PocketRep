@@ -3,8 +3,8 @@ import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-nati
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import {
-  getLatestDigest,
-  generateDigestForCurrentWeek,
+  autoPopulateReviewDigest,
+  generateReviewDigest,
   type WeeklyDigest,
 } from '@/lib/v2/weeklyDigest';
 
@@ -21,10 +21,12 @@ export default function WeeklyDigestCard() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // On open, surface the prior-week review digest — generating it on Sunday's
+  // first look and finalizing it Monday morning (handled in autoPopulate).
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getLatestDigest().then(d => {
+    autoPopulateReviewDigest().then(d => {
       if (cancelled) return;
       setDigest(d);
       setLoading(false);
@@ -35,7 +37,7 @@ export default function WeeklyDigestCard() {
   const refresh = async () => {
     setRefreshing(true);
     try {
-      const next = await generateDigestForCurrentWeek();
+      const next = await generateReviewDigest();
       if (next) setDigest(next);
     } catch (e) {
       console.warn('digest refresh failed', e);

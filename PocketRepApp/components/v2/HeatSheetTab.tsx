@@ -72,6 +72,10 @@ export default function HeatSheetTab({
 
   return (
     <View style={styles.root}>
+      {/* Weekly Digest sits at the very top — it's the Monday-morning review the
+          rep opens to. The daily TODAY banner follows underneath. */}
+      <WeeklyDigestCard />
+
       <View style={styles.banner}>
         <View style={{ flex: 1 }}>
           <Text style={styles.bannerLabel}>TODAY · {TODAY_LABEL}</Text>
@@ -83,8 +87,6 @@ export default function HeatSheetTab({
         </View>
         <StatNumber value={String(overdueCount)} size={32} color={colors.gold2} />
       </View>
-
-      <WeeklyDigestCard />
 
       {onOpenNurture ? (
         <NurtureBanner refetchKey={nurtureRefetchKey} onOpenReviewer={onOpenNurture} />
