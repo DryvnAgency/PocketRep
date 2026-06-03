@@ -46,7 +46,16 @@ export default function CustomNavBar({
             end={{ x: 1, y: 1 }}
             style={styles.mark}
           >
-            <Text style={styles.markText}>PR</Text>
+            {/* Radar mark — concentric rings + a gold sweep, the PocketRep brand
+                icon. Ink lines for contrast on the gold badge. */}
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+              <Circle cx={12} cy={12} r={10} stroke={colors.ink} strokeWidth={1.6} opacity={0.9} />
+              <Circle cx={12} cy={12} r={6.5} stroke={colors.ink} strokeWidth={1.3} opacity={0.6} />
+              <Circle cx={12} cy={12} r={3} stroke={colors.ink} strokeWidth={1.1} opacity={0.45} />
+              <Path d="M12 12 L19 5" stroke={colors.ink} strokeWidth={1.8} strokeLinecap="round" />
+              <Circle cx={12} cy={12} r={1.6} fill={colors.ink} />
+              <Circle cx={16.4} cy={8.3} r={1.2} fill={colors.ink} />
+            </Svg>
           </LinearGradient>
         </Pressable>
 
@@ -108,12 +117,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  markText: {
-    color: colors.ink,
-    fontWeight: '900',
-    fontSize: 13,
-    letterSpacing: -0.5,
   },
   wordmark: {
     fontSize: 11,

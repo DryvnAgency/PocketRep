@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import {
@@ -55,7 +56,7 @@ export default function WeeklyDigestCard() {
         <View style={{ flex: 1 }} />
         <Pressable onPress={refresh} disabled={refreshing} hitSlop={6}>
           {refreshing ? (
-            <ActivityIndicator color={colors.gold} size="small" />
+            <RadarLoader size={18} />
           ) : (
             <Text style={styles.refresh}>{digest ? '↻ Regen' : '＋ Generate'}</Text>
           )}

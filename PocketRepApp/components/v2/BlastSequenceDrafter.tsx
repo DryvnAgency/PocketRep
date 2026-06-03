@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
 } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Label, Avatar } from './atoms';
 import LanguageToggle from './LanguageToggle';
@@ -154,7 +155,7 @@ export default function BlastSequenceDrafter({
         <ScrollView contentContainerStyle={styles.body}>
           {steps.length === 0 ? (
             <View style={styles.empty}>
-              <ActivityIndicator color={colors.gold} />
+              <RadarLoader size={28} />
               <Text style={styles.emptyText}>Drafting…</Text>
             </View>
           ) : steps.map(step => {
@@ -182,7 +183,7 @@ export default function BlastSequenceDrafter({
 
                 {step.translating ? (
                   <View style={styles.translating}>
-                    <ActivityIndicator color={colors.gold} size="small" />
+                    <RadarLoader size={16} />
                     <Text style={styles.translatingText}>
                       Translating to {step.language === 'es' ? 'Spanish' : 'English'}…
                     </Text>

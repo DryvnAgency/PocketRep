@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, ActivityIndicator,
+  View, Text, Pressable, StyleSheet,
 } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius, spacing } from '@/constants/theme';
 import { Label, Pill, SectionHead } from './atoms';
 import { useUserDeals, type V2DealRich } from '@/lib/v2/useUserDeals';
@@ -190,7 +191,7 @@ export default function MetricsTab({
   if (deals === null) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.gold} />
+        <RadarLoader size={36} />
       </View>
     );
   }

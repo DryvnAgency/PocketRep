@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, Animated, Easing, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Animated, Easing, Platform } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import type { RexAction } from '@/lib/v2/rexActions';
@@ -110,7 +111,7 @@ export default function HeyRexSheet({
 
         {thinking && !streamingSay ? (
           <View style={styles.thinkingRow}>
-            <ActivityIndicator color={colors.gold} size="small" />
+            <RadarLoader size={18} />
             <Text style={styles.hint}>Rex is figuring out what to do…</Text>
           </View>
         ) : null}
@@ -150,7 +151,7 @@ export default function HeyRexSheet({
 
         {executing ? (
           <View style={styles.thinkingRow}>
-            <ActivityIndicator color={colors.gold} size="small" />
+            <RadarLoader size={18} />
             <Text style={styles.hint}>Saving…</Text>
           </View>
         ) : null}

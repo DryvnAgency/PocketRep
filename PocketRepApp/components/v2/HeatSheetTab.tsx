@@ -1,4 +1,5 @@
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius, spacing } from '@/constants/theme';
 import { HeatStripe, SectionHead, StatNumber } from './atoms';
 import { TIERS, stalenessColor, type TierKey } from './tokens';
@@ -60,7 +61,7 @@ export default function HeatSheetTab({
   if (!contacts) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.gold} />
+        <RadarLoader size={36} />
       </View>
     );
   }

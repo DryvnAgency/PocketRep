@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
   Alert, Platform,
 } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius, spacing } from '@/constants/theme';
 import { Avatar, rgbaTint } from './atoms';
 import { TIERS, type TierKey } from './tokens';
@@ -168,7 +169,7 @@ export default function ContactsTab({
   if (!contacts) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.gold} />
+        <RadarLoader size={36} />
       </View>
     );
   }
