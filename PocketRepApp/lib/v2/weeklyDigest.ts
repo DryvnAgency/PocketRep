@@ -14,12 +14,19 @@ export type WeeklyDigest = {
   generated_at: string;
 };
 
+// Local YYYY-MM-DD. NOT toISOString().slice(0,10): for any rep in a negative-UTC
+// offset (i.e. the Americas), a Monday-evening local time serializes to a UTC
+// Tuesday, which would shift the whole week window forward a day.
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function isoMonday(d: Date): string {
   const x = new Date(d);
   const day = x.getDay(); // 0 Sun .. 6 Sat
   const diff = (day === 0 ? -6 : 1 - day);
   x.setDate(x.getDate() + diff);
-  return x.toISOString().slice(0, 10);
+  return ymd(x);
 }
 
 export async function getLatestDigest(): Promise<WeeklyDigest | null> {
@@ -44,18 +51,21 @@ export async function generateDigestForCurrentWeek(): Promise<WeeklyDigest | nul
   const weekStartDate = new Date(weekStart + 'T00:00:00');
   const weekEndDate = new Date(weekStartDate);
   weekEndDate.setDate(weekEndDate.getDate() + 7);
-  const weekEnd = weekEndDate.toISOString().slice(0, 10);
+  const weekEnd = ymd(weekEndDate);
 
-  // Pull deals + contacts touched in that range
+  // Pull deals + contacts touched in that range. Scope to user_id explicitly
+  // (as getLatestDigest does) rather than relying on RLS alone for the counts.
   const [dealsRes, contactsRes] = await Promise.all([
     supabase
       .from('deals')
       .select('amount,front_gross,back_gross,split,vehicle,title,closed_at')
+      .eq('user_id', user.id)
       .gte('closed_at', weekStart)
       .lt('closed_at', weekEnd),
     supabase
       .from('contacts')
       .select('id,first_name,last_name,created_at,last_contact_date')
+      .eq('user_id', user.id)
       .eq('is_deleted', false),
   ]);
 
