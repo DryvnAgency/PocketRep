@@ -79,8 +79,8 @@ export default function ContactDetail({
   const unmarkedNurtures = nurtures.filter(n => n.sent_at && !n.reply_received);
   const [interactionsKey, setInteractionsKey] = useState(0);
   const interactions = useInteractions(contact.id, interactionsKey);
-  // Web compose modal (Call/Text). Native goes straight to Linking.openURL.
-  const [compose, setCompose] = useState<{ mode: 'call' | 'text'; body: string } | null>(null);
+  // Web compose modal (Call/Text/Email). Native goes straight to Linking.openURL.
+  const [compose, setCompose] = useState<{ mode: 'call' | 'text' | 'email'; body: string } | null>(null);
 
   const [notes, setNotes] = useState(contact.notes ?? '');
   const [editingNotes, setEditingNotes] = useState(false);
@@ -250,10 +250,12 @@ export default function ContactDetail({
     Linking.openURL(channelUrl('text', body));
     recordTouch('text', body);
   };
-  // mailto opens the mail client on web and native (no blank tab), so it has a
-  // clear result on both — no compose modal needed.
+  // Email mirrors Call/Text: web opens the compose modal (mailto: silently
+  // no-ops when no desktop mail client is registered, which read as a dead
+  // button); native opens the mail client directly.
   const openEmail = (body?: string) => {
     if (!contact.email) { flash('No email on file'); return; }
+    if (Platform.OS === 'web') { setCompose({ mode: 'email', body: body ?? '' }); return; }
     Linking.openURL(channelUrl('email', body));
     recordTouch('email', body);
   };
@@ -803,16 +805,22 @@ export default function ContactDetail({
           <View style={styles.composeCard}>
             <View style={styles.sheetHandle} />
             <Text style={styles.composeTitle}>
-              {compose.mode === 'call' ? `Call ${contact.name}` : `Text ${contact.name}`}
+              {compose.mode === 'call'
+                ? `Call ${contact.name}`
+                : compose.mode === 'email'
+                ? `Email ${contact.name}`
+                : `Text ${contact.name}`}
             </Text>
-            <Text style={styles.composeTarget}>{contact.phone}</Text>
-            {compose.mode === 'text' ? (
+            <Text style={styles.composeTarget}>
+              {compose.mode === 'email' ? contact.email : contact.phone}
+            </Text>
+            {compose.mode === 'text' || compose.mode === 'email' ? (
               <TextInput
                 value={compose.body}
                 onChangeText={(t) => setCompose(c => (c ? { ...c, body: t } : c))}
                 multiline
                 autoFocus
-                placeholder="Type your message…"
+                placeholder={compose.mode === 'email' ? 'Type your email…' : 'Type your message…'}
                 placeholderTextColor={colors.grey}
                 style={styles.composeInput}
               />
@@ -820,20 +828,24 @@ export default function ContactDetail({
             <View style={styles.composeActions}>
               <Pressable
                 onPress={async () => {
-                  const body = compose.mode === 'text' ? compose.body : undefined;
-                  await webCopy(compose.mode === 'text' && compose.body ? compose.body : (contact.phone ?? ''));
+                  const hasBody = compose.mode === 'text' || compose.mode === 'email';
+                  const body = hasBody ? compose.body : undefined;
+                  const copyText = hasBody && compose.body
+                    ? compose.body
+                    : compose.mode === 'email' ? (contact.email ?? '') : (contact.phone ?? '');
+                  await webCopy(copyText);
                   recordTouch(compose.mode, body);
                   setCompose(null);
                 }}
                 style={styles.aiAction}
               >
                 <Text style={styles.aiActionText}>
-                  {compose.mode === 'text' ? '⧉ COPY MESSAGE' : '⧉ COPY NUMBER'}
+                  {compose.mode === 'call' ? '⧉ COPY NUMBER' : '⧉ COPY MESSAGE'}
                 </Text>
               </Pressable>
               <Pressable
                 onPress={() => {
-                  const body = compose.mode === 'text' ? compose.body : undefined;
+                  const body = (compose.mode === 'text' || compose.mode === 'email') ? compose.body : undefined;
                   try { Linking.openURL(channelUrl(compose.mode, body || undefined)); } catch { /* ignore */ }
                   recordTouch(compose.mode, body);
                   setCompose(null);
@@ -841,7 +853,7 @@ export default function ContactDetail({
                 style={[styles.aiAction, styles.aiActionPrimary]}
               >
                 <Text style={styles.aiActionPrimaryText}>
-                  {compose.mode === 'call' ? '📞 OPEN DIALER' : '💬 OPEN SMS'}
+                  {compose.mode === 'call' ? '📞 OPEN DIALER' : compose.mode === 'email' ? '✉️ OPEN MAIL' : '💬 OPEN SMS'}
                 </Text>
               </Pressable>
             </View>

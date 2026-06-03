@@ -126,7 +126,7 @@ export default function DealLogger({
   };
 
   return (
-    <View style={StyleSheet.absoluteFillObject as any}>
+    <View style={styles.overlay}>
       <Pressable style={styles.scrim} onPress={onClose} />
       <View style={styles.sheet}>
         <View style={styles.handle} />
@@ -327,6 +327,10 @@ function Field({
 }
 
 const styles = StyleSheet.create({
+  // Sits above ContactDetail (zIndex 80) so "Log Deal" opened from the contact
+  // card paints on top instead of behind it. An explicit zIndex beats a sibling
+  // with `auto`, regardless of mount order.
+  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 100, elevation: 100 } as any,
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.72)' },
   sheet: {
     position: 'absolute',
