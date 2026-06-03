@@ -394,16 +394,32 @@ export default function ContactsScreen() {
   }
 
   async function deleteContact(c: Contact) {
-    Alert.alert('Delete contact', `Remove ${c.first_name} ${c.last_name} from your book?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          await supabase.from('contacts').delete().eq('id', c.id);
-          load();
-        },
-      },
-    ]);
+    const name = `${c.first_name} ${c.last_name}`.trim();
+    const msg = `Remove ${name} from your book? This can't be undone.`;
+
+    const proceed = async () => {
+      const { error } = await supabase.from('contacts').delete().eq('id', c.id);
+      if (error) {
+        if (Platform.OS === 'web') (globalThis as any).alert?.(`Couldn't delete ${name}: ${error.message}`);
+        else Alert.alert('Delete failed', error.message);
+        return;
+      }
+      // Drop it locally right away so the row disappears even before the refetch.
+      setContacts(prev => prev.filter(x => x.id !== c.id));
+      load();
+    };
+
+    // React Native Web's Alert.alert never renders buttons (the destructive
+    // onPress never fires), so on web we use window.confirm — same pattern the
+    // v2 UI uses. Native keeps the standard Alert dialog.
+    if (Platform.OS === 'web') {
+      if (typeof window === 'undefined' || window.confirm(msg)) proceed();
+    } else {
+      Alert.alert('Delete contact', msg, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: proceed },
+      ]);
+    }
   }
 
   async function sendMassText() {
