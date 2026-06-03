@@ -20,11 +20,70 @@ function getSynth(): SpeechSynthesis | undefined {
   return typeof window !== 'undefined' ? window.speechSynthesis : undefined;
 }
 
+// Rex is male. The Web Speech default voice is frequently female, so we pick a
+// male voice for the utterance language. Names are platform-specific and carry
+// no gender flag, so we match against known-male voice names (and the generic
+// "...Male" suffix), guarding against "female" containing "male".
+const MALE_VOICE_HINTS = [
+  'male', // e.g. "Google UK English Male", "...Male"
+  // English (Apple / Windows / Google)
+  'alex', 'daniel', 'fred', 'aaron', 'arthur', 'tom', 'rishi', 'oliver', 'james',
+  'david', 'guy', 'mark', 'christopher', 'eric', 'brian', 'roger',
+  // Spanish
+  'jorge', 'diego', 'juan', 'carlos', 'enrique', 'miguel', 'pablo', 'andrés', 'álvaro',
+];
+
+let cachedVoices: SpeechSynthesisVoice[] = [];
+let voicesHooked = false;
+
+function ensureVoices(synth: SpeechSynthesis): SpeechSynthesisVoice[] {
+  try {
+    if (!cachedVoices.length) {
+      const v = synth.getVoices();
+      if (v && v.length) cachedVoices = v;
+    }
+    if (!voicesHooked && typeof (synth as any).addEventListener === 'function') {
+      voicesHooked = true;
+      (synth as any).addEventListener('voiceschanged', () => {
+        try {
+          const v = synth.getVoices();
+          if (v && v.length) cachedVoices = v;
+        } catch { /* silent */ }
+      });
+    }
+  } catch { /* silent */ }
+  return cachedVoices;
+}
+
+function isMaleVoice(name: string): boolean {
+  const n = (name ?? '').toLowerCase();
+  if (n.includes('female')) return false;
+  if (n.includes('male')) return true;
+  return MALE_VOICE_HINTS.some(h => n.includes(h));
+}
+
+function pickMaleVoice(synth: SpeechSynthesis, lang: string): SpeechSynthesisVoice | undefined {
+  const voices = ensureVoices(synth);
+  if (!voices.length) return undefined; // not loaded yet — browser default this turn
+  const prefix = lang.slice(0, 2).toLowerCase();
+  const sameLang = voices.filter(v => (v.lang ?? '').toLowerCase().startsWith(prefix));
+  const pool = sameLang.length ? sameLang : voices;
+  return (
+    pool.find(v => isMaleVoice(v.name)) ??
+    pool.find(v => (v.lang ?? '').toLowerCase() === lang.toLowerCase()) ??
+    pool[0]
+  );
+}
+
 function utter(synth: SpeechSynthesis, text: string, lang?: string): void {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = lang ?? pickVoiceLang(text);
+  const voice = pickMaleVoice(synth, u.lang);
+  if (voice) u.voice = voice;
   u.rate = 1.02;
-  u.pitch = 1.0;
+  // Bias slightly lower so Rex reads masculine even when only a neutral voice is
+  // available on the device.
+  u.pitch = 0.9;
   synth.speak(u);
 }
 
