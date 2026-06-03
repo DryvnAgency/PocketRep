@@ -10,18 +10,18 @@
 //   3. On Mondays, also run a quarterly check-in (max 10 contacts/rep).
 //   4. Fire a push notification to each rep whose queue grew.
 //
-// Brain calls go DIRECTLY to OpenRouter (same model list as ai-proxy) rather
-// than back through ai-proxy/brain — server-side fan-out has no user JWT to
-// satisfy ai-proxy's per-user rate limiter.
+// Draft generation goes through the shared Claude backend (_shared/claude.ts,
+// Anthropic) with the copy rules in a cached system block. Server-side fan-out
+// has no user JWT, so this never touches ai-proxy's per-user rate limiter.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { anthropicMessages, MODELS } from '../_shared/claude.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
-const POCKETREP_API_KEY = Deno.env.get('POCKETREP_API_KEY') ?? '';
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6'];
+// Anthropic key for claude.ts (the module itself falls back to REXLENS_API_KEY).
+const ANTHROPIC_KEY = Deno.env.get('ANTHROPIC_POCKETREP_API_KEY') ?? Deno.env.get('REXLENS_API_KEY') ?? '';
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 const REX_COPY_RULES = `COPY RULES (apply to every draft):
@@ -33,6 +33,22 @@ Spanish is a rewrite, target Mexican slang ("carro" not "coche", "chamba" for wo
 Under 280 characters, 2-4 sentences. One hook, one CTA, done.
 Inferred mileage / lease-end — soften ("if you're getting close to your cap") instead of fabricating numbers.`;
 
+// Static (byte-identical) system block so Anthropic prompt-caching fires across
+// every contact, rep, and trigger. All variable detail goes in the user message.
+const NURTURE_SYSTEM = `You are Rex generating nurture messages, one per contact provided.
+
+For each contact:
+1. Acknowledge the trigger in ONE line, then pivot to a personal angle.
+2. Hook into ONE of: personal_detail, vehicle_interest, calendar_event, past_purchase, holiday, pricing, inventory, rapport.
+3. NEVER use any hook listed in that contact's hooks_to_avoid.
+4. Past customers get a warmer tone.
+5. Spanish rewrite (Mexican slang) if preferred_language is "es".
+
+${REX_COPY_RULES}
+
+Return ONLY a single JSON object inside a \`\`\`json fenced block:
+{"messages": [{"contact_id": "...", "message": "...", "language": "en"|"es", "hook_used": "...", "char_count": <n>}]}`;
+
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST' && req.method !== 'GET') {
     return new Response('method not allowed', { status: 405 });
@@ -41,8 +57,8 @@ Deno.serve(async (req: Request) => {
     const got = req.headers.get('X-Cron-Secret') ?? '';
     if (got !== CRON_SECRET) return new Response('forbidden', { status: 403 });
   }
-  if (!POCKETREP_API_KEY) {
-    return json({ ok: false, error: 'POCKETREP_API_KEY not configured' }, 500);
+  if (!ANTHROPIC_KEY) {
+    return json({ ok: false, error: 'No Anthropic key (ANTHROPIC_POCKETREP_API_KEY / REXLENS_API_KEY) configured' }, 500);
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
@@ -158,31 +174,20 @@ async function runBlast(
     hooks_to_avoid: c.hooks_to_avoid,
   })).join(',\n');
 
-  const prompt = `You are Rex generating a ${trigger} nurture message for each contact below.
+  // Variable half only — the static instructions live in NURTURE_SYSTEM (cached).
+  const userPrompt = `Trigger: ${trigger}
 
 Trigger details:
 ${toneGuidance}
 
 Pitch intensity: ${pitchIntensity}
 
-For each contact:
-1. Acknowledge the trigger in ONE line, then pivot to a personal angle.
-2. Hook into ONE of: personal_detail, vehicle_interest, calendar_event, past_purchase, holiday, pricing, inventory, rapport.
-3. NEVER use any hook listed in that contact's hooks_to_avoid.
-4. Past customers get warmer tone.
-5. Spanish rewrite (Mexican slang) if preferred_language is "es".
-
-${REX_COPY_RULES}
-
 CONTACTS:
 [
 ${rows}
-]
+]`;
 
-Return ONLY a single JSON object inside a \`\`\`json fenced block:
-{"messages": [{"contact_id": "...", "message": "...", "language": "en"|"es", "hook_used": "...", "char_count": <n>}]}`;
-
-  const messages = await callBrain(prompt);
+  const messages = await generateDrafts(userPrompt);
 
   const inserts = messages.map((m: any) => ({
     user_id: userId,
@@ -201,33 +206,26 @@ Return ONLY a single JSON object inside a \`\`\`json fenced block:
   return error ? 0 : inserts.length;
 }
 
-async function callBrain(prompt: string): Promise<any[]> {
+// One Anthropic call per (rep, trigger) via the shared backend. NURTURE_SYSTEM is
+// cached, so only userPrompt (the contact list + trigger detail) varies and the
+// big instruction block bills at the 90%-off cache-read rate after the first call.
+async function generateDrafts(userPrompt: string): Promise<any[]> {
   try {
-    const res = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${POCKETREP_API_KEY}`,
-        'HTTP-Referer': 'https://pocketrep.pro',
-        'X-Title': 'PocketRep nurture-scheduler',
-      },
-      body: JSON.stringify({
-        models: BRAIN_MODELS,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 2500,
-      }),
+    const { text } = await anthropicMessages({
+      model: MODELS.haiku,
+      maxTokens: 2500,
+      system: NURTURE_SYSTEM,
+      messages: [{ role: 'user', content: userPrompt }],
+      retries: 1,
     });
-    if (!res.ok) {
-      console.warn('openrouter failed', res.status, await res.text().catch(() => ''));
-      return [];
-    }
-    const data = await res.json();
-    const raw = data.choices?.[0]?.message?.content ?? '';
-    const fence = raw.match(/```json\s*([\s\S]*?)```/i) ?? raw.match(/```\s*([\s\S]*?)```/);
-    const obj = JSON.parse((fence ? fence[1] : raw).trim());
+    const fence = text.match(/```json\s*([\s\S]*?)```/i) ?? text.match(/```\s*([\s\S]*?)```/);
+    const raw = (fence ? fence[1] : text).trim();
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    const obj = JSON.parse(start >= 0 && end >= start ? raw.slice(start, end + 1) : raw);
     return Array.isArray(obj.messages) ? obj.messages : [];
   } catch (e) {
-    console.warn('brain parse failed', e);
+    console.warn('nurture generate failed', e instanceof Error ? e.message : e);
     return [];
   }
 }

@@ -10,12 +10,11 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { anthropicMessages } from '../_shared/claude.ts';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6'];
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_VERSION = '2023-06-01';
 const REXLENS_DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
 
 const REXLENS_SYSTEM_PROMPT = `You are Rex Lens, the CRM-reading mode of Rex, a 30-year car-sales veteran helping one rep work their daily worklist. You read one contact's CRM record at a time, figure out what the dealership's CRM is asking the rep to do for that person (call, text, or email), and produce a ready-to-use draft plus a priority score. Plain first person, no corporate jargon, blunt is fine.
@@ -114,23 +113,21 @@ function fmtContact(task: Record<string, unknown>, rep: string, dealer: string):
   return `Today is ${d}. The rep is ${rep} at ${dealer}.\n\nContact CRM record:\nName: ${task.customerName || 'unknown'}\nVehicle: ${task.vehicle || 'not listed'}\nStatus: ${task.status || 'unknown'}\nSource: ${task.source || 'unknown'}\nAge: ${task.age || 'unknown'}\nSection: ${task.section || 'unknown'}\nTask: ${task.taskDescription || 'unknown'}${task.template ? '\nTemplate: ' + task.template : ''}${task.rawContext ? '\nContext: ' + task.rawContext : ''}`;
 }
 
+// Delegates to the shared Claude backend (_shared/claude.ts) while preserving the
+// { json, error } contract the Rex Lens handlers below expect. `data` is the raw
+// Anthropic Messages response — identical in shape to the previous inline fetch,
+// so the content[].text / usage parsing downstream is unchanged.
 async function callClaude(key: string, model: string, max: number, sys: string, user: string): Promise<{ json: any; error?: any }> {
-  for (let i = 0; i < 2; i++) {
-    try {
-      const r = await fetch(ANTHROPIC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': ANTHROPIC_VERSION },
-        body: JSON.stringify({ model, max_tokens: max, messages: [{ role: 'user', content: user }], system: [{ type: 'text', text: sys, cache_control: { type: 'ephemeral' } }] }),
-      });
-      const j = await r.json();
-      if (r.ok && !j.error) return { json: j };
-      if (r.status !== 429 && r.status !== 503 && r.status !== 529) return { json: null, error: j.error ?? j };
-      if (i < 1) await sleep(2000);
-    } catch (e: unknown) {
-      if (i < 1) await sleep(2000); else return { json: null, error: { message: e instanceof Error ? e.message : 'Unknown' } };
-    }
+  try {
+    const { data } = await anthropicMessages({
+      model, maxTokens: max, system: sys,
+      messages: [{ role: 'user', content: user }],
+      apiKey: key, retries: 1,
+    });
+    return { json: data };
+  } catch (e: unknown) {
+    return { json: null, error: { message: e instanceof Error ? e.message : 'Unknown' } };
   }
-  return { json: null, error: { message: 'Retries exhausted' } };
 }
 
 async function handleRexLens(req: Request) {
