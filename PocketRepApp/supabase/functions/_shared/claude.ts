@@ -163,6 +163,37 @@ export async function anthropicMessages(opts: {
   throw new Error(`anthropic ${opts.model}: ${msg}`);
 }
 
+/**
+ * Streaming sibling of anthropicMessages: returns the upstream Anthropic SSE
+ * Response (an event stream) so the caller can translate/pipe it. The caller
+ * owns parsing Anthropic's event frames (message_start / content_block_delta /
+ * message_delta).
+ */
+export async function anthropicStream(opts: {
+  model: string;
+  maxTokens: number;
+  system: string;
+  messages: Msg[];
+  apiKey?: string;
+}): Promise<Response> {
+  const key = opts.apiKey ?? apiKeyOrThrow();
+  return await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "x-api-key": key,
+      "anthropic-version": VERSION,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: opts.model,
+      max_tokens: opts.maxTokens,
+      system: systemBlocks(opts.system),
+      messages: opts.messages,
+      stream: true,
+    }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // 6. HIGH-LEVEL CALL (task-routed, Sonnet -> Haiku fallback)
 // ---------------------------------------------------------------------------

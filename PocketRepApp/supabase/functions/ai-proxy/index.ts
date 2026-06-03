@@ -3,17 +3,14 @@
  *
  * Routes:
  *   /ai-proxy/gemini   → Rex Lens (Anthropic Claude via REXLENS_API_KEY)
- *   /ai-proxy/brain    → PocketRep brain (OpenRouter via POCKETREP_API_KEY)
+ *   /ai-proxy/brain    → PocketRep brain (Anthropic Claude Sonnet via _shared/claude.ts)
  *   /ai-proxy/stt      → 501 stub
  *   /ai-proxy/tts      → 501 stub
  *   /ai-proxy           → PocketRep brain (back-compat root)
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { anthropicMessages } from '../_shared/claude.ts';
-
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6'];
+import { anthropicMessages, anthropicStream, computeCostCents, MODELS } from '../_shared/claude.ts';
 
 const REXLENS_DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
 
@@ -86,8 +83,6 @@ function routeOf(req: Request): 'rexlens' | 'brain' | 'stt' | 'tts' | 'root' {
   if (path.endsWith('/tts')) return 'tts';
   return 'root';
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function authAndPlan(authHeader: string | null) {
   if (!authHeader) return { error: json({ error: { type: 'auth_error', message: 'Missing authorization' } }, 401) };
@@ -177,31 +172,48 @@ async function handleRexLens(req: Request) {
 }
 
 async function handleBrain(req: Request) {
-  const KEY = Deno.env.get('POCKETREP_API_KEY');
-  if (!KEY) return json({ error: { type: 'server_error', message: 'POCKETREP_API_KEY not configured' } }, 500);
+  // The brain now runs on Anthropic Claude (Sonnet, with a Haiku fallback) via
+  // the shared backend. Key falls back to REXLENS_API_KEY so no new secret is
+  // required. POCKETREP_API_KEY (OpenRouter) is no longer used here.
+  const KEY = Deno.env.get('ANTHROPIC_POCKETREP_API_KEY') ?? Deno.env.get('REXLENS_API_KEY');
+  if (!KEY) return json({ error: { type: 'server_error', message: 'No Anthropic key (ANTHROPIC_POCKETREP_API_KEY / REXLENS_API_KEY) configured' } }, 500);
   const auth = await authAndPlan(req.headers.get('Authorization'));
   if (auth.error) return auth.error;
   const { user, supabase, today } = auth;
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: { type: 'invalid_request', message: 'Invalid JSON' } }, 400); }
   const maxTok = typeof body.max_tokens === 'number' ? body.max_tokens : 2048;
-  const msgs = (body.messages as Array<{ role: string; content: unknown }>) || [];
-  const sys = typeof body.system === 'string' ? body.system : '';
-  const messages = sys ? [{ role: 'system', content: sys }, ...msgs] : msgs;
 
-  // Streaming passthrough (opt-in via { stream: true }). Pipe OpenRouter's SSE
-  // straight to the client for a Siri-style token-by-token reply, teeing the
-  // frames so usage/cost is still recorded from the final chunk. Existing
-  // non-streaming callers (gamePlan, blast, nurture, digest, stalled) never set
-  // stream, so they're unaffected.
+  // Anthropic wants the system prompt OUT of the messages array. Pull any
+  // system-role messages (+ a top-level `system`) into one cached system block,
+  // and pass only the user/assistant turns as messages.
+  const rawMsgs = (body.messages as Array<{ role: string; content: unknown }>) || [];
+  const system = [
+    typeof body.system === 'string' ? body.system : '',
+    ...rawMsgs.filter(m => m.role === 'system').map(m => String(m.content ?? '')),
+  ].filter(Boolean).join('\n\n');
+  const messages = rawMsgs
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .map(m => ({ role: m.role as 'user' | 'assistant', content: String(m.content ?? '') }));
+
+  const record = async (
+    usage: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number },
+    model: 'sonnet' | 'haiku',
+  ) => {
+    const iT = usage.input_tokens ?? 0, oT = usage.output_tokens ?? 0;
+    const cost = computeCostCents(usage as any, model);
+    try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost }); }
+    catch { await supabase!.from('daily_ai_usage').upsert({ user_id: user!.id, usage_date: today, input_tokens: iT, output_tokens: oT, cost_cents: cost, request_count: 1, updated_at: new Date().toISOString() }, { onConflict: 'user_id,usage_date' }); }
+  };
+
+  // Streaming (opt-in via { stream: true }) — Siri-style token-by-token reply.
+  // Anthropic emits event-based SSE; translate it into the OpenAI-shape frames
+  // the client already parses (choices[0].delta.content), metering usage from
+  // message_start (input) + message_delta (output).
   if (body.stream === true) {
     let upstream: Response;
     try {
-      upstream = await fetch(OPENROUTER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' },
-        body: JSON.stringify({ models: BRAIN_MODELS, messages, max_tokens: maxTok, stream: true, usage: { include: true } }),
-      });
+      upstream = await anthropicStream({ model: MODELS.sonnet, maxTokens: maxTok, system, messages, apiKey: KEY });
     } catch (e: unknown) {
       return json({ error: { type: 'OVERLOADED', message: 'AI at capacity.', detail: e instanceof Error ? e.message : 'Unknown' } }, 503);
     }
@@ -210,64 +222,71 @@ async function handleBrain(req: Request) {
       return json({ error: (j as any).error ?? { type: 'upstream_error', message: 'Stream upstream error' } }, upstream.status || 502);
     }
 
+    const encoder = new TextEncoder();
     const decoder = new TextDecoder();
-    let sseBuf = '';
-    const meter = new TransformStream({
+    let buf = '';
+    let inTok = 0, outTok = 0, cacheRead = 0, cacheWrite = 0;
+    const xform = new TransformStream({
       transform(chunk, controller) {
-        controller.enqueue(chunk); // deliver untouched, immediately
-        try { sseBuf += decoder.decode(chunk, { stream: true }); } catch { /* ignore */ }
+        buf += decoder.decode(chunk, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? ''; // keep the trailing partial line
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t.startsWith('data:')) continue; // skip "event:" + blank lines
+          const d = t.slice(5).trim();
+          if (!d) continue;
+          try {
+            const obj = JSON.parse(d);
+            if (obj.type === 'content_block_delta' && obj.delta?.type === 'text_delta') {
+              const text = obj.delta.text ?? '';
+              if (text) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`));
+            } else if (obj.type === 'message_start') {
+              const u = obj.message?.usage ?? {};
+              inTok = Number(u.input_tokens ?? 0);
+              cacheRead = Number(u.cache_read_input_tokens ?? 0);
+              cacheWrite = Number(u.cache_creation_input_tokens ?? 0);
+            } else if (obj.type === 'message_delta') {
+              outTok = Number(obj.usage?.output_tokens ?? outTok);
+            }
+          } catch { /* partial / non-JSON frame */ }
+        }
       },
-      async flush() {
-        try {
-          let iT = 0, oT = 0, cost = 0;
-          for (const line of sseBuf.split('\n')) {
-            const t = line.trim();
-            if (!t.startsWith('data:')) continue;
-            const d = t.slice(5).trim();
-            if (!d || d === '[DONE]') continue;
-            try {
-              const obj = JSON.parse(d);
-              if (obj.usage) {
-                iT = Number(obj.usage.prompt_tokens ?? 0);
-                oT = Number(obj.usage.completion_tokens ?? 0);
-                cost = Number(obj.usage.cost ?? 0) * 100;
-              }
-            } catch { /* partial / non-JSON frame */ }
-          }
-          if (iT || oT || cost) {
-            try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost }); }
-            catch { await supabase!.from('daily_ai_usage').upsert({ user_id: user!.id, usage_date: today, input_tokens: iT, output_tokens: oT, cost_cents: cost, request_count: 1, updated_at: new Date().toISOString() }, { onConflict: 'user_id,usage_date' }); }
-          }
-        } catch { /* usage metering is best-effort */ }
+      async flush(controller) {
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        if (inTok || outTok) {
+          await record({ input_tokens: inTok, output_tokens: outTok, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: cacheWrite }, 'sonnet').catch(() => {});
+        }
       },
     });
 
-    return new Response(upstream.body.pipeThrough(meter), {
+    return new Response(upstream.body.pipeThrough(xform), {
       status: 200,
       headers: { ...cors(), 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' },
     });
   }
 
-  let apiJson: any = null; let lastErr: any = null;
-  for (let i = 0; i < 3; i++) {
+  // Non-streaming: Sonnet, Haiku fallback. Return the raw Anthropic response —
+  // the client's extractContent() already reads content[0].text.
+  let result: { data: any; text: string; usage: any };
+  let usedModel: 'sonnet' | 'haiku' = 'sonnet';
+  try {
+    result = await anthropicMessages({ model: MODELS.sonnet, maxTokens: maxTok, system, messages, apiKey: KEY, retries: 2 });
+  } catch (_) {
     try {
-      const r = await fetch(OPENROUTER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' }, body: JSON.stringify({ models: BRAIN_MODELS, messages, max_tokens: maxTok, usage: { include: true } }) });
-      const j = await r.json();
-      if (r.ok && !j.error && j.choices?.length) { apiJson = j; break; }
-      lastErr = { status: r.status, error: j.error ?? j };
-      if (!(r.status === 429 || r.status === 503 || r.status >= 500)) return json({ error: j.error ?? j }, r.status);
-      if (i < 2) await sleep(2000 * Math.pow(2, i));
-    } catch (e: unknown) { lastErr = { error: { message: e instanceof Error ? e.message : 'Unknown' } }; if (i < 2) await sleep(2000 * Math.pow(2, i)); }
+      result = await anthropicMessages({ model: MODELS.haiku, maxTokens: maxTok, system, messages, apiKey: KEY, retries: 1 });
+      usedModel = 'haiku';
+    } catch (e2: unknown) {
+      return json({ error: { type: 'OVERLOADED', message: 'AI at capacity.', detail: e2 instanceof Error ? e2.message : 'Unknown' } }, 503);
+    }
   }
-  if (!apiJson) return json({ error: { type: 'OVERLOADED', message: 'AI at capacity.', detail: lastErr?.error?.message } }, 503);
-  const u = apiJson.usage ?? {}; const iT = Number(u.prompt_tokens ?? 0); const oT = Number(u.completion_tokens ?? 0); const cost = Number(u.cost ?? 0) * 100;
-  try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost }); } catch { await supabase!.from('daily_ai_usage').upsert({ user_id: user!.id, usage_date: today, input_tokens: iT, output_tokens: oT, cost_cents: cost, request_count: 1, updated_at: new Date().toISOString() }, { onConflict: 'user_id,usage_date' }); }
-  return json(apiJson);
+  await record(result.usage, usedModel);
+  return json(result.data);
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors() });
-  if (req.method === 'GET') return json({ status: 'ok', service: 'ai-proxy', brain: BRAIN_MODELS, rexlens: REXLENS_DEFAULT_MODEL });
+  if (req.method === 'GET') return json({ status: 'ok', service: 'ai-proxy', brain: MODELS.sonnet, rexlens: REXLENS_DEFAULT_MODEL });
   if (req.method !== 'POST') return json({ error: { type: 'invalid_request', message: 'POST required' } }, 405);
   switch (routeOf(req)) {
     case 'rexlens': return handleRexLens(req);
