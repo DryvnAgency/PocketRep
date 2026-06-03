@@ -943,7 +943,10 @@ const STAGE_COLORS: Record<Stage, { color: string; bg: string; border: string }>
 // ── Contact row ───────────────────────────────────────────────────────────────
 function ContactRow({ contact: c, onPress }: { contact: Contact; onPress: () => void }) {
   const vehicle = [c.vehicle_year, c.vehicle_make, c.vehicle_model].filter(Boolean).join(' ');
-  const cfg = c.heat_tier ? heatConfig[c.heat_tier] : null;
+  // Normalize the retired 'watch' tier (legacy DB rows) to 'cold' so the badge
+  // still renders after the Watch → Cold rename.
+  const heatTier = (c.heat_tier as string) === 'watch' ? 'cold' : c.heat_tier;
+  const cfg = heatTier ? heatConfig[heatTier] : null;
   const stage = (c as any).stage as Stage | undefined;
   const stageCfg = stage ? STAGE_COLORS[stage] : null;
 

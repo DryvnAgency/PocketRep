@@ -38,7 +38,7 @@ export function serializeRepContext(input: {
   const active = contacts.filter((c) => !c.doNotContact && !c.isPastCustomer);
 
   const tierCount = (t: string) => active.filter((c) => c.tier === t).length;
-  const heat = `${tierCount('hot')} hot · ${tierCount('warm')} warm · ${tierCount('watch')} watch (${active.length} active)`;
+  const heat = `${tierCount('hot')} hot · ${tierCount('warm')} warm · ${tierCount('cold')} cold (${active.length} active)`;
 
   // Top leads by heat, then by staleness — capped to keep the prompt small.
   const byHeat = [...active].sort((a, b) => b.heatScore - a.heatScore || b.days - a.days);

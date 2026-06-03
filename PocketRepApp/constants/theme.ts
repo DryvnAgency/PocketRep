@@ -58,11 +58,11 @@ export const heatConfig = {
     border: colors.orangeBorder,
     icon: '☀️',
   },
-  watch: {
-    label: 'WATCH',
-    color: colors.gold,
-    bg: colors.goldBg,
-    border: colors.goldBorder,
-    icon: '👁',
+  cold: {
+    label: 'COLD',
+    color: colors.grey2,
+    bg: colors.surface2,
+    border: colors.ink4,
+    icon: '🧊',
   },
 } as const;

@@ -1,5 +1,5 @@
 export type Plan = 'rex_lens' | 'pro' | 'elite';
-export type HeatTier = 'hot' | 'warm' | 'watch';
+export type HeatTier = 'hot' | 'warm' | 'cold';
 
 export type IndustryKey = 'auto' | 'mortgage' | 'realestate' | 'hvac' | 'staffing' | 'd2d' | 'roofing' | 'fence' | 'insurance' | 'solar' | 'b2b' | 'other';
 

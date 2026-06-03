@@ -65,7 +65,7 @@ export type AddContactPayload = {
   budget?: string;
   trade_in?: string;
   notes?: string;
-  heat_tier?: 'hot' | 'warm' | 'watch';
+  heat_tier?: 'hot' | 'warm' | 'cold';
   plan_label?: string;
 };
 
@@ -113,7 +113,7 @@ export type FilterContactsPayload = {
 export type BookSummaryPayload = {
   timeframe?: 'today' | 'this_week' | 'this_month' | 'ytd';
   total: number;
-  by_tier: { hot: number; warm: number; watch: number; cold: number; dead: number };
+  by_tier: { hot: number; warm: number; cold: number; dead: number };
   stalled: number;
   needs_attention_ids?: string[];
 };
@@ -203,7 +203,7 @@ ${bookSection}
 Actions you can take, with required + optional payload fields:
 
 1. add_contact — create a brand new contact
-   payload: { first_name (req), last_name?, phone?, vehicle?, budget?, trade_in?, notes?, heat_tier? ("hot"|"warm"|"watch"), plan_label? ("TODAY"|"THIS WEEK"|"THIS MONTH"|"NEXT QTR") }
+   payload: { first_name (req), last_name?, phone?, vehicle?, budget?, trade_in?, notes?, heat_tier? ("hot"|"warm"|"cold"), plan_label? ("TODAY"|"THIS WEEK"|"THIS MONTH"|"NEXT QTR") }
 
 2. update_notes — append notes to an existing contact
    payload: { contact_id (req), contact_name (req), notes_append (req) }
@@ -224,7 +224,7 @@ Actions you can take, with required + optional payload fields:
    payload: { contact_ids: uuid[], filter_summary: "3 Murano lease customers", matched_count: number }
 
 8. book_summary — pipeline health snapshot. Use when the rep asks "how are things" / "what's my book look like".
-   payload: { total, by_tier: { hot, warm, watch, cold, dead }, stalled, needs_attention_ids?: uuid[] }
+   payload: { total, by_tier: { hot, warm, cold, dead }, stalled, needs_attention_ids?: uuid[] }
 
 9. call_next — pick the single next call. Use when the rep asks "who first" / "who should I call".
    payload: { contact_id, contact_name, reason, suggested_opener }
@@ -372,7 +372,7 @@ export async function rexInterpret(
   return action;
 }
 
-const HEAT_TIER_SCORE = { hot: 90, warm: 65, watch: 35 } as const;
+const HEAT_TIER_SCORE = { hot: 90, warm: 65, cold: 35 } as const;
 
 export async function executeAction(action: RexAction, contacts: V2Contact[] = []): Promise<{ ok: boolean; openContactId?: string; filteredIds?: string[] }> {
   switch (action.type) {

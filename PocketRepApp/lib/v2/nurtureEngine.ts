@@ -201,7 +201,7 @@ export async function scheduleNurtureBlast({
 
   const book = await loadBookContext();
   const all = [
-    ...book.dead, ...book.cold, ...book.watch,
+    ...book.dead, ...book.cold,
     ...book.past_customers,
   ];
   // de-dup
