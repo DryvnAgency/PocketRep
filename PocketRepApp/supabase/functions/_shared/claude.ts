@@ -96,7 +96,10 @@ export function computeCostCents(usage: Usage, model: ModelKey, batch = false): 
 // CRITICAL for cache hit-rate: `staticSystem` must be BYTE-IDENTICAL on every
 // call. Put base instructions + copy rules + canonical few-shots here. Keep
 // per-user/per-contact context and the variation seed in the user message.
+// Returns undefined for an empty system so callers (e.g. the brain's one-shot
+// prompts) omit the `system` field entirely — Anthropic rejects an empty block.
 function systemBlocks(staticSystem: string) {
+  if (!staticSystem || !staticSystem.trim()) return undefined;
   return [{ type: "text", text: staticSystem, cache_control: { type: "ephemeral" } }];
 }
 

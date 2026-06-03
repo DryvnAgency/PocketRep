@@ -171,6 +171,24 @@ async function handleRexLens(req: Request) {
   return json({ content: r.json.content, usage: { input_tokens: iT, output_tokens: oT, cache_creation_input_tokens: cW, cache_read_input_tokens: cR }, model: r.json.model || model });
 }
 
+// Anthropic requires the messages array to START with `user` and to ALTERNATE
+// roles — unlike OpenRouter/OpenAI, which tolerated consecutive same-role turns
+// and a leading assistant. Merge consecutive same-role turns and drop any
+// leading assistant turn so multi-turn callers (Rex Coach, Hey Rex follow-ups)
+// don't 400.
+function normalizeAnthropicMessages(
+  msgs: Array<{ role: 'user' | 'assistant'; content: string }>,
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  const merged: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  for (const m of msgs) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === m.role) last.content += '\n\n' + m.content;
+    else merged.push({ role: m.role, content: m.content });
+  }
+  while (merged.length && merged[0].role === 'assistant') merged.shift();
+  return merged;
+}
+
 async function handleBrain(req: Request) {
   // The brain now runs on Anthropic Claude (Sonnet, with a Haiku fallback) via
   // the shared backend. Key falls back to REXLENS_API_KEY so no new secret is
@@ -192,9 +210,11 @@ async function handleBrain(req: Request) {
     typeof body.system === 'string' ? body.system : '',
     ...rawMsgs.filter(m => m.role === 'system').map(m => String(m.content ?? '')),
   ].filter(Boolean).join('\n\n');
-  const messages = rawMsgs
-    .filter(m => m.role === 'user' || m.role === 'assistant')
-    .map(m => ({ role: m.role as 'user' | 'assistant', content: String(m.content ?? '') }));
+  const messages = normalizeAnthropicMessages(
+    rawMsgs
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role as 'user' | 'assistant', content: String(m.content ?? '') })),
+  );
 
   const record = async (
     usage: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number },
