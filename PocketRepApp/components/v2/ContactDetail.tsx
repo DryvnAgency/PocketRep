@@ -334,7 +334,7 @@ export default function ContactDetail({
           <View style={styles.confirmCard}>
             <Text style={styles.confirmTitle}>Delete {contact.name}?</Text>
             <Text style={styles.confirmBody}>
-              You can undo this from your audit log within 30 days.
+              This permanently removes {contact.name} from your book. It can't be undone.
             </Text>
             <View style={styles.confirmActions}>
               <Pressable

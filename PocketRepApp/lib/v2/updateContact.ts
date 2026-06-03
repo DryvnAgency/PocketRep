@@ -97,10 +97,13 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
   return data!.id as string;
 }
 
+// Hard delete: actually removes the row from the database. Child rows clean up
+// via FK (interactions / nurture_messages / milestones / contact_sequences
+// cascade; deals + rex_messages keep their history with contact_id set null).
 export async function deleteContact(id: string): Promise<void> {
   const { error } = await supabase
     .from('contacts')
-    .update({ is_deleted: true, updated_at: new Date().toISOString() })
+    .delete()
     .eq('id', id);
   if (error) throw error;
 }
