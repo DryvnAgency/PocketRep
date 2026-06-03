@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { colors, radius, spacing } from '@/constants/theme';
 import { Avatar, Label, Pill, SectionHead, rgbaTint } from './atoms';
-import { TIERS } from './tokens';
+import { TIERS, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import { useDeals, type V2Deal } from '@/lib/v2/useDeals';
 import { useTags } from '@/lib/v2/useTags';
@@ -12,6 +12,7 @@ import {
   updateContactNotes,
   updateContactTags,
   deleteContact,
+  updateContactTier,
   updateContactPreferredLanguage,
   updateContactBirthday,
   logContactTouch,
@@ -176,6 +177,20 @@ export default function ContactDetail({
     } catch (e) {
       onLocalUpdate({ ...contact, tags: contact.tags });
       console.warn('toggleTag failed', e);
+    }
+  };
+
+  // Tap the tier pill to cycle Hot → Warm → Cold. Saved as a manual override
+  // that sticks regardless of the auto heat score.
+  const cycleTier = async () => {
+    const order: TierKey[] = ['hot', 'warm', 'cold'];
+    const next = order[(order.indexOf(contact.tier) + 1) % order.length];
+    onLocalUpdate({ ...contact, tier: next });
+    try {
+      await updateContactTier(contact.id, next);
+    } catch (e) {
+      onLocalUpdate({ ...contact, tier: contact.tier });
+      console.warn('tier update failed', e);
     }
   };
 
@@ -377,7 +392,9 @@ export default function ContactDetail({
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.heroName}>{contact.name}</Text>
             <View style={styles.heroPills}>
-              <Pill color={tier.color}>{tier.icon} {tier.label}</Pill>
+              <Pressable onPress={cycleTier} hitSlop={6}>
+                <Pill color={tier.color}>{tier.icon} {tier.label}</Pill>
+              </Pressable>
               {contact.planLabel ? <Pill color={colors.gold}>{contact.planLabel}</Pill> : null}
               <LanguageToggle
                 value={contact.preferredLanguage}

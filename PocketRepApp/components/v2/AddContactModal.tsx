@@ -16,7 +16,7 @@ const PLAN_OPTIONS: Array<{ value: NewContactDraft['planLabel']; label: string }
 const TIER_OPTIONS: Array<{ label: string; score: number; color: string; icon: string }> = [
   { label: 'Hot',   score: 90, color: colors.red,    icon: '🔥' },
   { label: 'Warm',  score: 65, color: colors.orange, icon: '☀️' },
-  { label: 'Watch', score: 35, color: colors.grey2,  icon: '👁' },
+  { label: 'Cold',  score: 35, color: colors.grey2,  icon: '🧊' },
 ];
 
 const blank = (): NewContactDraft => ({

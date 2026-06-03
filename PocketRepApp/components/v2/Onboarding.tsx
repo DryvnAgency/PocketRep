@@ -28,7 +28,7 @@ const STEPS: Step[] = [
     bullets: [
       { icon: '🔥', t: 'HOT', s: 'Buying within 7 days · touch daily' },
       { icon: '☀️', t: 'WARM', s: 'Active interest · touch every 3-4 days' },
-      { icon: '👁', t: 'WATCH', s: 'Future buyers · touch weekly' },
+      { icon: '🧊', t: 'COLD', s: 'Cold leads · keep on the radar' },
     ],
     illo: 'heat',
   },

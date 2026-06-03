@@ -3,7 +3,7 @@ import { colors } from '@/constants/theme';
 export const TIERS = {
   hot: { color: colors.red, label: 'HOT', icon: '🔥' },
   warm: { color: colors.orange, label: 'WARM', icon: '☀️' },
-  watch: { color: colors.grey2, label: 'WATCH', icon: '👁' },
+  cold: { color: colors.grey2, label: 'COLD', icon: '🧊' },
 } as const;
 
 export type TierKey = keyof typeof TIERS;

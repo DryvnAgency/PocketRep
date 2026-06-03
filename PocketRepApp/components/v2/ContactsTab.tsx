@@ -17,7 +17,7 @@ type FilterTag =
 const TIER_CHIPS: Extract<FilterTag, { kind: 'tier' }>[] = [
   { kind: 'tier', tier: 'hot',   name: 'Hot',   color: colors.red,    icon: '🔥' },
   { kind: 'tier', tier: 'warm',  name: 'Warm',  color: colors.orange, icon: '☀️' },
-  { kind: 'tier', tier: 'watch', name: 'Watch', color: colors.grey2,  icon: '👁' },
+  { kind: 'tier', tier: 'cold',  name: 'Cold',  color: colors.grey2,  icon: '🧊' },
 ];
 
 function ContactRow({

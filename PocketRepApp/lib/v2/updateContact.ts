@@ -108,6 +108,15 @@ export async function deleteContact(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// Rep-set heat tier — overrides the heat_score-derived tier in the v2 UI.
+export async function updateContactTier(id: string, tier: 'hot' | 'warm' | 'cold'): Promise<void> {
+  const { error } = await supabase
+    .from('contacts')
+    .update({ tier_override: tier, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 export async function updateContactPreferredLanguage(
   id: string,
   language: 'en' | 'es',
