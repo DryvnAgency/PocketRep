@@ -24,6 +24,7 @@ import PayPlanEditor from './PayPlanEditor';
 import NotificationsCenter from './NotificationsCenter';
 import RexCoach from './RexCoach';
 import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
+import { warmBrain } from '@/lib/v2/aiProxy';
 import { usePayPlan } from '@/lib/v2/payPlan';
 import {
   analyzeStalledLeads,
@@ -110,6 +111,9 @@ export default function AppShell() {
       await syncOnboardingFromProfile().catch(() => undefined);
       setAuthReady(true);
       setAlwaysListen(getAlwaysListenEnabled());
+      // Warm the ai-proxy brain on launch so the rep's first Rex call (coach or
+      // voice) isn't a 30-60s cold start.
+      warmBrain();
       if (!hasSeenDisclosure()) {
         setDisclosureOpen(true);
       } else if (!hasCompletedOnboarding()) {

@@ -198,3 +198,20 @@ export async function callBrainStream(opts: {
     t.cancel();
   }
 }
+
+// Fire-and-forget warm-up ping. The edge function answers GET with a 200 BEFORE
+// auth and BEFORE any LLM call (see ai-proxy/index.ts), but the module-level
+// imports (supabase-js from esm.sh) still boot the Deno isolate — so a plain GET
+// warms the container with no token and no token cost, turning the next /brain
+// POST from a 30-60s cold start into a 3-6s warm one. Best-effort: never throws,
+// never blocks the caller.
+export async function warmBrain(): Promise<void> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => { try { ctrl.abort(); } catch { /* ignore */ } }, 8_000);
+    await fetch(AI_PROXY_URL, { method: 'GET', signal: ctrl.signal }).catch(() => undefined);
+    clearTimeout(timer);
+  } catch {
+    /* warm-up is best-effort */
+  }
+}
