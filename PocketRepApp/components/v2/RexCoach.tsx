@@ -9,13 +9,24 @@ import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet,
 } from 'react-native';
 import RadarLoader from './RadarLoader';
+import ConversationComposer from './ConversationComposer';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
-import { callBrain } from '@/lib/v2/aiProxy';
-import { serializeRepContext, loadMtdSummary, type MtdSummary } from '@/lib/v2/repContext';
+import { callBrain, warmBrain } from '@/lib/v2/aiProxy';
+import { serializeRepContext, loadMtdSummary, loadRecentActivity, type MtdSummary } from '@/lib/v2/repContext';
 import { buildCoachMessages } from '@/lib/v2/coachBrain';
+import {
+  parseCoachReply, executeAction, summarizeAction, type RexAction,
+} from '@/lib/v2/rexActions';
+import { extractFromConversation, type ConversationParse } from '@/lib/v2/conversationParse';
+import { getTodayLog, getCarrySummary, appendCoachEntry } from '@/lib/v2/coachLog';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
+
+// The coach may emit these (write) actions; delete/batch stay voice/UI-only.
+const COACH_ACTIONS = new Set<RexAction['type']>([
+  'add_contact', 'update_notes', 'schedule_followup', 'retier_contact', 'log_deal', 'create_reminder',
+]);
 
 type ChatMessage = { from: 'rex' | 'user'; text: string; time: string };
 
@@ -42,17 +53,33 @@ export default function RexCoach({
   onClose,
   contacts,
   payPlan,
+  onActed,
+  onOpenContact,
 }: {
   open: boolean;
   onClose: () => void;
   contacts: V2Contact[];
   payPlan: PayPlan | null;
+  // Fired after a confirmed action executes so AppShell can refresh the right
+  // surface (contacts / deals / notifications) — mirrors handleRexConfirm.
+  onActed?: (action: RexAction) => void;
+  onOpenContact?: (id: string) => void;
 }) {
   const greeting = useRef(COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
+  // Cold-start UX: after ~5s of waiting we tell the rep the function is warming;
+  // on a transient failure we keep the text so a Retry button can re-send it.
+  const [warming, setWarming] = useState(false);
+  const [retry, setRetry] = useState<{ text: string; history: ChatMessage[] } | null>(null);
   const [mtd, setMtd] = useState<MtdSummary | null>(null);
+  const [activity, setActivity] = useState('');           // recent-activity recall block
+  const [pending, setPending] = useState<RexAction | null>(null); // proposed write action
+  const [acting, setActing] = useState(false);            // executing a confirmed action
+  const [parseOpen, setParseOpen] = useState(false);      // conversation composer (NEW 5)
+  const [parsing, setParsing] = useState(false);          // extraction in flight
+  const [parseResult, setParseResult] = useState<ConversationParse | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   // Seed a fresh greeting each time the sheet opens, and refresh month-to-date
@@ -60,10 +87,32 @@ export default function RexCoach({
   useEffect(() => {
     if (open) {
       greeting.current = COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)];
-      setMessages([{ from: 'rex', text: greeting.current, time: stamp() }]);
+      // NEW 6: restore today's logged thread; carry yesterday's recap on top.
+      // A fresh day (no entries) just shows the recap + greeting.
+      const carry = getCarrySummary();
+      const today = getTodayLog();
+      const seeded: ChatMessage[] = [];
+      if (carry) seeded.push({ from: 'rex', text: `↺ Yesterday — ${carry}`, time: stamp() });
+      if (today.length > 0) {
+        for (const e of today) seeded.push({ from: e.role, text: e.text, time: e.time });
+      } else {
+        seeded.push({ from: 'rex', text: greeting.current, time: stamp() });
+      }
+      setMessages(seeded);
       setInput('');
       setTyping(false);
+      setWarming(false);
+      setRetry(null);
+      setPending(null);
+      setActing(false);
+      setParseOpen(false);
+      setParsing(false);
+      setParseResult(null);
+      // Warm the brain function while the rep reads the greeting + types, so the
+      // first real send lands on a warm container instead of a cold start.
+      warmBrain();
       loadMtdSummary().then(setMtd).catch(() => setMtd(null));
+      loadRecentActivity().then(setActivity).catch(() => setActivity(''));
     }
   }, [open]);
 
@@ -73,32 +122,209 @@ export default function RexCoach({
 
   if (!open) return null;
 
+  // Append to the visible thread AND persist to today's coach log (NEW 6), so
+  // the day's real turns/actions survive a reopen. Transient system bubbles
+  // (errors, warming, cancels) stay setMessages-only and aren't logged.
+  const pushUser = (text: string) => {
+    setMessages(m => [...m, { from: 'user', text, time: stamp() }]);
+    appendCoachEntry({ role: 'user', text, time: stamp() });
+  };
+  const pushRex = (text: string) => {
+    setMessages(m => [...m, { from: 'rex', text, time: stamp() }]);
+    appendCoachEntry({ role: 'rex', text, time: stamp() });
+  };
+
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
     if (!text || typing) return;
+    setRetry(null);
+    setPending(null); // a new message supersedes any un-confirmed proposal
     const history = messages;
-    setMessages(m => [...m, { from: 'user', text, time: stamp() }]);
+    pushUser(text);
     setInput('');
+    await deliver(text, history);
+  };
+
+  // Runs one coach turn with cold-start resilience: flips to a "warming up" hint
+  // after 5s, and on a transient (timeout/network) failure warms the function and
+  // retries once — the retry lands on the now-warm container. On final failure it
+  // stores the turn so the Retry button can re-send it.
+  const deliver = async (text: string, history: ChatMessage[]) => {
     setTyping(true);
+    setWarming(false);
+    const warmTimer = setTimeout(() => setWarming(true), 5_000);
+    const repContext = serializeRepContext({ contacts, payPlan, mtd });
+    let attempt = 0;
     try {
-      const repContext = serializeRepContext({ contacts, payPlan, mtd });
-      const reply = (await callBrain({
-        // 1200 (was 700) so a complete, structured coaching answer never gets cut
-        // off mid-sentence — the system prompt still asks Rex to stay tight (~220 words).
-        maxTokens: 1200,
-        messages: buildCoachMessages({ history, text, repContext }),
-      })).trim();
-      if (!reply) throw new Error('empty');
-      setMessages(m => [...m, { from: 'rex', text: reply, time: stamp() }]);
+      for (;;) {
+        try {
+          const reply = (await callBrain({
+            // 1200 (was 700) so a complete, structured coaching answer never gets
+            // cut off mid-sentence — the prompt still asks Rex to stay tight.
+            maxTokens: 1200,
+            messages: buildCoachMessages({
+              history, text, repContext,
+              contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
+              recentActivity: activity,
+            }),
+          })).trim();
+          if (!reply) throw new Error('empty');
+          // The reply is coaching text, optionally followed by a structured
+          // action when the rep asked Rex to DO something. Show the spoken line;
+          // if an allowed write-action came back, queue the Confirm card.
+          const { spoken, action } = parseCoachReply(reply);
+          const actionable = !!action && COACH_ACTIONS.has(action.type);
+          const line = spoken || (actionable ? summarizeAction(action!) : reply);
+          pushRex(line);
+          if (actionable) setPending(action!);
+          return;
+        } catch (e: any) {
+          const msg = String(e?.message ?? '');
+          const transient = msg.includes('timeout') || msg.includes('network');
+          if (attempt === 0 && transient) {
+            attempt++;
+            setWarming(true);
+            await warmBrain();   // boot the container, then retry once
+            continue;
+          }
+          throw e;
+        }
+      }
     } catch {
       setMessages(m => [...m, {
         from: 'rex',
-        text: "Couldn't reach Rex just now. Tap send to try again.",
+        text: "Couldn't reach Rex just now — the assistant may be waking up. Tap Retry.",
+        time: stamp(),
+      }]);
+      setRetry({ text, history });
+    } finally {
+      clearTimeout(warmTimer);
+      setWarming(false);
+      setTyping(false);
+    }
+  };
+
+  const doRetry = () => {
+    if (!retry || typing) return;
+    const r = retry;
+    setRetry(null);
+    deliver(r.text, r.history);
+  };
+
+  // Confirm-before-write: the proposed action only executes here, on an explicit
+  // tap. Reuses the exact engine the voice path uses (executeAction).
+  const confirmAction = async () => {
+    if (!pending || acting) return;
+    const action = pending;
+    setActing(true);
+    try {
+      const result = await executeAction(action, contacts);
+      pushRex(`✓ Done — ${summarizeAction(action)}`);
+      onActed?.(action);
+      if (result.openContactId) onOpenContact?.(result.openContactId);
+      setPending(null);
+    } catch (e: any) {
+      setMessages(m => [...m, {
+        from: 'rex',
+        text: `Couldn't do that: ${e?.message ?? 'save failed'}. Want to try again?`,
         time: stamp(),
       }]);
     } finally {
+      setActing(false);
+    }
+  };
+
+  const cancelAction = () => {
+    if (acting) return;
+    setPending(null);
+    setMessages(m => [...m, { from: 'rex', text: 'Okay, holding off — nothing saved.', time: stamp() }]);
+  };
+
+  // NEW 5 — parse a whole conversation into a proposed CRM update (extraction is
+  // read-only; the write still waits for Confirm below).
+  const runParse = async (transcript: string) => {
+    setParseOpen(false);
+    setPending(null);
+    setParseResult(null);
+    pushUser(`🎙 Parse this conversation (${transcript.length} chars)`);
+    setParsing(true);
+    setTyping(true);
+    setWarming(false);
+    const warmTimer = setTimeout(() => setWarming(true), 5_000);
+    try {
+      const result = await extractFromConversation(transcript, contacts.map(c => ({ id: c.id, name: c.name })));
+      const who = result.is_new
+        ? (`${result.first_name ?? ''} ${result.last_name ?? ''}`.trim() || 'a new lead')
+        : (contacts.find(c => c.id === result.match_contact_id)?.name ?? 'the contact');
+      setParseResult(result);
+      pushRex(`Got it — here's what I pulled from that conversation with ${who}. Review and confirm to save.`);
+    } catch (e: any) {
+      setMessages(m => [...m, { from: 'rex', text: `Couldn't parse that one: ${e?.message ?? 'failed'}. Try again?`, time: stamp() }]);
+    } finally {
+      clearTimeout(warmTimer);
+      setWarming(false);
+      setParsing(false);
       setTyping(false);
     }
+  };
+
+  // Confirm the parse: add (or update) the contact, then optionally set the
+  // suggested follow-up. Reuses executeAction for each write.
+  const confirmParse = async () => {
+    if (!parseResult || acting) return;
+    const r = parseResult;
+    setActing(true);
+    try {
+      let contactId = r.match_contact_id;
+      const name = `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim() || 'the contact';
+      if (r.is_new || !contactId) {
+        const add: RexAction = {
+          type: 'add_contact', say: '',
+          payload: {
+            first_name: r.first_name ?? 'New lead',
+            last_name: r.last_name ?? undefined,
+            phone: r.phone ?? undefined,
+            vehicle: r.vehicle ?? undefined,
+            budget: r.budget ?? undefined,
+            trade_in: r.trade_in ?? undefined,
+            notes: r.notes || undefined,
+            heat_tier: r.heat_tier ?? undefined,
+          },
+        };
+        const res = await executeAction(add, contacts);
+        contactId = res.openContactId ?? null;
+        onActed?.(add);
+      } else {
+        const upd: RexAction = {
+          type: 'update_notes', say: '',
+          payload: { contact_id: contactId, contact_name: name, notes_append: r.notes },
+        };
+        await executeAction(upd, contacts);
+        onActed?.(upd);
+      }
+      if (contactId && r.followup_days && r.followup_days > 0) {
+        const fu: RexAction = {
+          type: 'schedule_followup', say: '',
+          payload: { contact_id: contactId, contact_name: name, days_from_now: r.followup_days, note: r.plan },
+        };
+        await executeAction(fu, contacts);
+        onActed?.(fu);
+      }
+      pushRex(`✓ Saved. ${r.is_new ? 'Added' : 'Updated'} ${name}${r.followup_days ? ` · follow-up in ${r.followup_days}d` : ''}.`);
+      if (r.plan) pushRex(`Plan: ${r.plan}`);
+      if (contactId) onOpenContact?.(contactId);
+      setParseResult(null);
+    } catch (e: any) {
+      setMessages(m => [...m, { from: 'rex', text: `Couldn't save that: ${e?.message ?? 'failed'}.`, time: stamp() }]);
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const cancelParse = () => {
+    if (acting) return;
+    setParseResult(null);
+    setMessages(m => [...m, { from: 'rex', text: 'Scrapped that parse — nothing saved.', time: stamp() }]);
   };
 
   return (
@@ -135,7 +361,61 @@ export default function RexCoach({
             <View style={styles.bubbleRow}>
               <View style={[styles.bubble, styles.bubbleRex, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
                 <RadarLoader size={16} />
-                <Text style={styles.bubbleText}>Rex is thinking…</Text>
+                <Text style={styles.bubbleText}>
+                  {warming ? 'Warming up — first reply can take a few seconds…' : 'Rex is thinking…'}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+          {retry && !typing ? (
+            <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
+              <Pressable onPress={doRetry} style={styles.retryBtn}>
+                <Text style={styles.retryText}>↻ Retry</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {pending ? (
+            <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
+              <View style={styles.proposeCard}>
+                <Text style={styles.proposeLabel}>PROPOSED · CONFIRM TO SAVE</Text>
+                <Text style={styles.proposeText}>{summarizeAction(pending)}</Text>
+                <View style={styles.proposeActions}>
+                  <Pressable onPress={cancelAction} disabled={acting} style={styles.proposeCancel}>
+                    <Text style={styles.proposeCancelText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={confirmAction} disabled={acting} style={styles.proposeConfirm}>
+                    <Text style={styles.proposeConfirmText}>{acting ? 'Saving…' : 'Confirm'}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          ) : null}
+          {parseResult ? (
+            <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
+              <View style={styles.proposeCard}>
+                <Text style={styles.proposeLabel}>
+                  {parseResult.is_new ? 'NEW CONTACT · CONFIRM TO SAVE' : 'UPDATE CONTACT · CONFIRM TO SAVE'}
+                </Text>
+                <Text style={styles.proposeText}>
+                  {(`${parseResult.first_name ?? ''} ${parseResult.last_name ?? ''}`.trim() || 'Unnamed lead')}
+                  {parseResult.vehicle ? ` · ${parseResult.vehicle}` : ''}
+                  {parseResult.phone ? ` · ${parseResult.phone}` : ''}
+                </Text>
+                {parseResult.notes ? <Text style={styles.parseNotes}>📝 {parseResult.notes}</Text> : null}
+                {parseResult.plan ? <Text style={styles.parsePlan}>▶ {parseResult.plan}</Text> : null}
+                {parseResult.followup_days ? (
+                  <Text style={styles.parseMeta}>
+                    Follow-up in {parseResult.followup_days} day{parseResult.followup_days === 1 ? '' : 's'}
+                  </Text>
+                ) : null}
+                <View style={styles.proposeActions}>
+                  <Pressable onPress={cancelParse} disabled={acting} style={styles.proposeCancel}>
+                    <Text style={styles.proposeCancelText}>Discard</Text>
+                  </Pressable>
+                  <Pressable onPress={confirmParse} disabled={acting} style={styles.proposeConfirm}>
+                    <Text style={styles.proposeConfirmText}>{acting ? 'Saving…' : 'Save it'}</Text>
+                  </Pressable>
+                </View>
               </View>
             </View>
           ) : null}
@@ -155,6 +435,16 @@ export default function RexCoach({
         </ScrollView>
 
         <View style={styles.inputBar}>
+          <Pressable
+            onPress={() => setParseOpen(true)}
+            disabled={typing}
+            style={styles.composeBtn}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Parse a conversation"
+          >
+            <Text style={styles.composeIcon}>🎙</Text>
+          </Pressable>
           <TextInput
             value={input}
             onChangeText={setInput}
@@ -174,6 +464,13 @@ export default function RexCoach({
           </Pressable>
         </View>
       </View>
+
+      <ConversationComposer
+        open={parseOpen}
+        busy={parsing}
+        onClose={() => setParseOpen(false)}
+        onSubmit={runParse}
+      />
     </View>
   );
 }
@@ -225,6 +522,49 @@ const styles = StyleSheet.create({
   bubbleUser: { backgroundColor: colors.goldBg, borderColor: colors.goldBorder, borderBottomRightRadius: 4 },
   bubbleText: { fontSize: 14, color: colors.grey3, lineHeight: 20, letterSpacing: -0.15 },
   time: { fontSize: 10, color: colors.grey, marginTop: 4 },
+
+  retryBtn: {
+    marginTop: 4,
+    paddingHorizontal: 16, paddingVertical: 9,
+    borderRadius: radius.full,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1, borderColor: colors.goldBorder,
+  },
+  retryText: { fontSize: 12, fontWeight: '700', color: colors.gold, letterSpacing: 0.3 },
+
+  proposeCard: {
+    maxWidth: '92%',
+    marginTop: 4,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: radius.lg,
+    paddingHorizontal: 14, paddingVertical: 12,
+    gap: 8,
+  },
+  proposeLabel: { fontSize: 9, fontWeight: '800', color: colors.gold, letterSpacing: 1.0 },
+  proposeText: { fontSize: 14, fontWeight: '600', color: colors.white, lineHeight: 19 },
+  proposeActions: { flexDirection: 'row', gap: 8, marginTop: 2 },
+  proposeCancel: {
+    flex: 1, paddingVertical: 10, borderRadius: radius.md, alignItems: 'center',
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+  },
+  proposeCancelText: { fontSize: 13, fontWeight: '700', color: colors.grey2 },
+  proposeConfirm: {
+    flex: 1.2, paddingVertical: 10, borderRadius: radius.md, alignItems: 'center',
+    backgroundColor: colors.gold,
+  },
+  proposeConfirmText: { fontSize: 13, fontWeight: '800', color: colors.ink, letterSpacing: 0.2 },
+  parseNotes: { fontSize: 12, color: colors.grey3, lineHeight: 17 },
+  parsePlan: { fontSize: 12, color: colors.gold, lineHeight: 17, fontWeight: '600' },
+  parseMeta: { fontSize: 11, color: colors.grey2, fontWeight: '600' },
+
+  composeBtn: {
+    width: 42, height: 42, borderRadius: 21,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.surface2,
+    borderWidth: 1, borderColor: colors.goldBorder,
+  },
+  composeIcon: { fontSize: 18 },
 
   chipsScroll: { flexGrow: 0, flexShrink: 0 },
   chips: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6, gap: 8, alignItems: 'center' },

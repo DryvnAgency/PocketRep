@@ -24,6 +24,8 @@ import PayPlanEditor from './PayPlanEditor';
 import NotificationsCenter from './NotificationsCenter';
 import RexCoach from './RexCoach';
 import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
+import { warmBrain } from '@/lib/v2/aiProxy';
+import { rolloverCoachLog } from '@/lib/v2/coachLog';
 import { usePayPlan } from '@/lib/v2/payPlan';
 import {
   analyzeStalledLeads,
@@ -110,6 +112,12 @@ export default function AppShell() {
       await syncOnboardingFromProfile().catch(() => undefined);
       setAuthReady(true);
       setAlwaysListen(getAlwaysListenEnabled());
+      // Warm the ai-proxy brain on launch so the rep's first Rex call (coach or
+      // voice) isn't a 30-60s cold start.
+      warmBrain();
+      // NEW 6: at the local-day boundary, collapse yesterday's coach log into a
+      // recap summary and start today fresh.
+      rolloverCoachLog().catch(() => undefined);
       if (!hasSeenDisclosure()) {
         setDisclosureOpen(true);
       } else if (!hasCompletedOnboarding()) {
@@ -440,6 +448,7 @@ export default function AppShell() {
         onClose={() => setNotifOpen(false)}
         onOpenContact={(id) => { setSelectedId(id); }}
         onOpenNurture={() => setNurtureReviewerOpen(true)}
+        onChanged={() => setNurtureRefetchKey(k => k + 1)}
       />
 
       <RexCoach
@@ -447,6 +456,16 @@ export default function AppShell() {
         onClose={() => setRexCoachOpen(false)}
         contacts={contacts ?? []}
         payPlan={payPlan}
+        onOpenContact={(id) => setSelectedId(id)}
+        onActed={(action) => {
+          // Mirror handleRexConfirm's refresh, by action type.
+          const t = action.type;
+          if (t === 'log_deal') setDealsRefetchKey(k => k + 1);
+          if (t === 'add_contact' || t === 'update_notes' || t === 'schedule_followup' || t === 'retier_contact') {
+            reloadContacts();
+          }
+          if (t === 'create_reminder') setNurtureRefetchKey(k => k + 1); // refresh the bell
+        }}
       />
 
       <StalledLeadsAnalysis

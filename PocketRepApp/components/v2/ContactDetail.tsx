@@ -394,7 +394,7 @@ export default function ContactDetail({
       ) : null}
 
       {menuOpen ? (
-        <View style={StyleSheet.absoluteFillObject as any}>
+        <View style={styles.menuOverlay}>
           <Pressable
             style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(5,5,8,0.6)' }]}
             onPress={() => setMenuOpen(false)}
@@ -411,9 +411,9 @@ export default function ContactDetail({
       ) : null}
 
       {confirmDelete ? (
-        <View style={StyleSheet.absoluteFillObject as any}>
+        <View style={styles.modalOverlay}>
           <Pressable
-            style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(5,5,8,0.75)' }]}
+            style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(5,5,8,0.8)' }]}
             onPress={() => !deleting && setConfirmDelete(false)}
           />
           <View style={styles.confirmCard}>
@@ -1162,6 +1162,19 @@ const styles = StyleSheet.create({
   },
   photoBadgeText: { color: colors.ink, fontWeight: '800', fontSize: 12, lineHeight: 14 },
 
+  // The menu + confirm overlays render before the ScrollView, so without a
+  // stacking context the card content paints over them (dialog looked
+  // transparent, buttons unreachable, mobile Delete tap dead). A high zIndex
+  // lifts them above the card; modalOverlay also centers the dialog box.
+  menuOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 200, elevation: 200 } as any,
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 210,
+    elevation: 210,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  } as any,
   menuCard: {
     position: 'absolute',
     top: 60,
@@ -1177,13 +1190,18 @@ const styles = StyleSheet.create({
   menuRowText: { fontSize: 14, fontWeight: '600' },
 
   confirmCard: {
-    position: 'absolute',
-    left: 24, right: 24, top: '30%',
+    width: '100%',
+    maxWidth: 360,
     backgroundColor: colors.ink2,
     borderWidth: 1,
     borderColor: colors.redBorder,
     borderRadius: radius.lg,
     padding: 20,
+    zIndex: 1, // above the scrim within the overlay
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
   } as any,
   confirmTitle: { fontSize: 16, fontWeight: '700', color: colors.white, letterSpacing: -0.2 },
   confirmBody: { fontSize: 13, color: colors.grey2, marginTop: 8, lineHeight: 18 },
