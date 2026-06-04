@@ -1,5 +1,9 @@
 {
   "outputDirectory": "Pocketrep",
+  "redirects": [
+    { "source": "/app", "destination": "https://app.pocketrep.pro", "permanent": false },
+    { "source": "/app/(.*)", "destination": "https://app.pocketrep.pro/$1", "permanent": false }
+  ],
   "rewrites": [
     { "source": "/thank-you", "destination": "/thankyou.html" },
     { "source": "/privacy", "destination": "/privacy.html" },
