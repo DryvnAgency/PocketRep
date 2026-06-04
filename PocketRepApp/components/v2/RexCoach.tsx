@@ -9,6 +9,7 @@ import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet,
 } from 'react-native';
 import RadarLoader from './RadarLoader';
+import ConversationComposer from './ConversationComposer';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import { callBrain, warmBrain } from '@/lib/v2/aiProxy';
@@ -17,6 +18,7 @@ import { buildCoachMessages } from '@/lib/v2/coachBrain';
 import {
   parseCoachReply, executeAction, summarizeAction, type RexAction,
 } from '@/lib/v2/rexActions';
+import { extractFromConversation, type ConversationParse } from '@/lib/v2/conversationParse';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
 
@@ -74,6 +76,9 @@ export default function RexCoach({
   const [activity, setActivity] = useState('');           // recent-activity recall block
   const [pending, setPending] = useState<RexAction | null>(null); // proposed write action
   const [acting, setActing] = useState(false);            // executing a confirmed action
+  const [parseOpen, setParseOpen] = useState(false);      // conversation composer (NEW 5)
+  const [parsing, setParsing] = useState(false);          // extraction in flight
+  const [parseResult, setParseResult] = useState<ConversationParse | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   // Seed a fresh greeting each time the sheet opens, and refresh month-to-date
@@ -88,6 +93,9 @@ export default function RexCoach({
       setRetry(null);
       setPending(null);
       setActing(false);
+      setParseOpen(false);
+      setParsing(false);
+      setParseResult(null);
       // Warm the brain function while the rep reads the greeting + types, so the
       // first real send lands on a warm container instead of a cold start.
       warmBrain();
@@ -208,6 +216,99 @@ export default function RexCoach({
     setMessages(m => [...m, { from: 'rex', text: 'Okay, holding off — nothing saved.', time: stamp() }]);
   };
 
+  // NEW 5 — parse a whole conversation into a proposed CRM update (extraction is
+  // read-only; the write still waits for Confirm below).
+  const runParse = async (transcript: string) => {
+    setParseOpen(false);
+    setPending(null);
+    setParseResult(null);
+    setMessages(m => [...m, { from: 'user', text: `🎙 Parse this conversation (${transcript.length} chars)`, time: stamp() }]);
+    setParsing(true);
+    setTyping(true);
+    setWarming(false);
+    const warmTimer = setTimeout(() => setWarming(true), 5_000);
+    try {
+      const result = await extractFromConversation(transcript, contacts.map(c => ({ id: c.id, name: c.name })));
+      const who = result.is_new
+        ? (`${result.first_name ?? ''} ${result.last_name ?? ''}`.trim() || 'a new lead')
+        : (contacts.find(c => c.id === result.match_contact_id)?.name ?? 'the contact');
+      setParseResult(result);
+      setMessages(m => [...m, {
+        from: 'rex',
+        text: `Got it — here's what I pulled from that conversation with ${who}. Review and confirm to save.`,
+        time: stamp(),
+      }]);
+    } catch (e: any) {
+      setMessages(m => [...m, { from: 'rex', text: `Couldn't parse that one: ${e?.message ?? 'failed'}. Try again?`, time: stamp() }]);
+    } finally {
+      clearTimeout(warmTimer);
+      setWarming(false);
+      setParsing(false);
+      setTyping(false);
+    }
+  };
+
+  // Confirm the parse: add (or update) the contact, then optionally set the
+  // suggested follow-up. Reuses executeAction for each write.
+  const confirmParse = async () => {
+    if (!parseResult || acting) return;
+    const r = parseResult;
+    setActing(true);
+    try {
+      let contactId = r.match_contact_id;
+      const name = `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim() || 'the contact';
+      if (r.is_new || !contactId) {
+        const add: RexAction = {
+          type: 'add_contact', say: '',
+          payload: {
+            first_name: r.first_name ?? 'New lead',
+            last_name: r.last_name ?? undefined,
+            phone: r.phone ?? undefined,
+            vehicle: r.vehicle ?? undefined,
+            budget: r.budget ?? undefined,
+            trade_in: r.trade_in ?? undefined,
+            notes: r.notes || undefined,
+            heat_tier: r.heat_tier ?? undefined,
+          },
+        };
+        const res = await executeAction(add, contacts);
+        contactId = res.openContactId ?? null;
+        onActed?.(add);
+      } else {
+        const upd: RexAction = {
+          type: 'update_notes', say: '',
+          payload: { contact_id: contactId, contact_name: name, notes_append: r.notes },
+        };
+        await executeAction(upd, contacts);
+        onActed?.(upd);
+      }
+      if (contactId && r.followup_days && r.followup_days > 0) {
+        const fu: RexAction = {
+          type: 'schedule_followup', say: '',
+          payload: { contact_id: contactId, contact_name: name, days_from_now: r.followup_days, note: r.plan },
+        };
+        await executeAction(fu, contacts);
+        onActed?.(fu);
+      }
+      setMessages(m => [...m,
+        { from: 'rex', text: `✓ Saved. ${r.is_new ? 'Added' : 'Updated'} ${name}${r.followup_days ? ` · follow-up in ${r.followup_days}d` : ''}.`, time: stamp() },
+        ...(r.plan ? [{ from: 'rex' as const, text: `Plan: ${r.plan}`, time: stamp() }] : []),
+      ]);
+      if (contactId) onOpenContact?.(contactId);
+      setParseResult(null);
+    } catch (e: any) {
+      setMessages(m => [...m, { from: 'rex', text: `Couldn't save that: ${e?.message ?? 'failed'}.`, time: stamp() }]);
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const cancelParse = () => {
+    if (acting) return;
+    setParseResult(null);
+    setMessages(m => [...m, { from: 'rex', text: 'Scrapped that parse — nothing saved.', time: stamp() }]);
+  };
+
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
       <Pressable style={styles.scrim} onPress={onClose} />
@@ -271,6 +372,35 @@ export default function RexCoach({
               </View>
             </View>
           ) : null}
+          {parseResult ? (
+            <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
+              <View style={styles.proposeCard}>
+                <Text style={styles.proposeLabel}>
+                  {parseResult.is_new ? 'NEW CONTACT · CONFIRM TO SAVE' : 'UPDATE CONTACT · CONFIRM TO SAVE'}
+                </Text>
+                <Text style={styles.proposeText}>
+                  {(`${parseResult.first_name ?? ''} ${parseResult.last_name ?? ''}`.trim() || 'Unnamed lead')}
+                  {parseResult.vehicle ? ` · ${parseResult.vehicle}` : ''}
+                  {parseResult.phone ? ` · ${parseResult.phone}` : ''}
+                </Text>
+                {parseResult.notes ? <Text style={styles.parseNotes}>📝 {parseResult.notes}</Text> : null}
+                {parseResult.plan ? <Text style={styles.parsePlan}>▶ {parseResult.plan}</Text> : null}
+                {parseResult.followup_days ? (
+                  <Text style={styles.parseMeta}>
+                    Follow-up in {parseResult.followup_days} day{parseResult.followup_days === 1 ? '' : 's'}
+                  </Text>
+                ) : null}
+                <View style={styles.proposeActions}>
+                  <Pressable onPress={cancelParse} disabled={acting} style={styles.proposeCancel}>
+                    <Text style={styles.proposeCancelText}>Discard</Text>
+                  </Pressable>
+                  <Pressable onPress={confirmParse} disabled={acting} style={styles.proposeConfirm}>
+                    <Text style={styles.proposeConfirmText}>{acting ? 'Saving…' : 'Save it'}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          ) : null}
         </ScrollView>
 
         <ScrollView
@@ -287,6 +417,16 @@ export default function RexCoach({
         </ScrollView>
 
         <View style={styles.inputBar}>
+          <Pressable
+            onPress={() => setParseOpen(true)}
+            disabled={typing}
+            style={styles.composeBtn}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Parse a conversation"
+          >
+            <Text style={styles.composeIcon}>🎙</Text>
+          </Pressable>
           <TextInput
             value={input}
             onChangeText={setInput}
@@ -306,6 +446,13 @@ export default function RexCoach({
           </Pressable>
         </View>
       </View>
+
+      <ConversationComposer
+        open={parseOpen}
+        busy={parsing}
+        onClose={() => setParseOpen(false)}
+        onSubmit={runParse}
+      />
     </View>
   );
 }
@@ -389,6 +536,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gold,
   },
   proposeConfirmText: { fontSize: 13, fontWeight: '800', color: colors.ink, letterSpacing: 0.2 },
+  parseNotes: { fontSize: 12, color: colors.grey3, lineHeight: 17 },
+  parsePlan: { fontSize: 12, color: colors.gold, lineHeight: 17, fontWeight: '600' },
+  parseMeta: { fontSize: 11, color: colors.grey2, fontWeight: '600' },
+
+  composeBtn: {
+    width: 42, height: 42, borderRadius: 21,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.surface2,
+    borderWidth: 1, borderColor: colors.goldBorder,
+  },
+  composeIcon: { fontSize: 18 },
 
   chipsScroll: { flexGrow: 0, flexShrink: 0 },
   chips: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6, gap: 8, alignItems: 'center' },
