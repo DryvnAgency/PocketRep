@@ -19,6 +19,7 @@ import {
   parseCoachReply, executeAction, summarizeAction, type RexAction,
 } from '@/lib/v2/rexActions';
 import { extractFromConversation, type ConversationParse } from '@/lib/v2/conversationParse';
+import { getTodayLog, getCarrySummary, appendCoachEntry } from '@/lib/v2/coachLog';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
 
@@ -86,7 +87,18 @@ export default function RexCoach({
   useEffect(() => {
     if (open) {
       greeting.current = COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)];
-      setMessages([{ from: 'rex', text: greeting.current, time: stamp() }]);
+      // NEW 6: restore today's logged thread; carry yesterday's recap on top.
+      // A fresh day (no entries) just shows the recap + greeting.
+      const carry = getCarrySummary();
+      const today = getTodayLog();
+      const seeded: ChatMessage[] = [];
+      if (carry) seeded.push({ from: 'rex', text: `↺ Yesterday — ${carry}`, time: stamp() });
+      if (today.length > 0) {
+        for (const e of today) seeded.push({ from: e.role, text: e.text, time: e.time });
+      } else {
+        seeded.push({ from: 'rex', text: greeting.current, time: stamp() });
+      }
+      setMessages(seeded);
       setInput('');
       setTyping(false);
       setWarming(false);
@@ -110,13 +122,25 @@ export default function RexCoach({
 
   if (!open) return null;
 
+  // Append to the visible thread AND persist to today's coach log (NEW 6), so
+  // the day's real turns/actions survive a reopen. Transient system bubbles
+  // (errors, warming, cancels) stay setMessages-only and aren't logged.
+  const pushUser = (text: string) => {
+    setMessages(m => [...m, { from: 'user', text, time: stamp() }]);
+    appendCoachEntry({ role: 'user', text, time: stamp() });
+  };
+  const pushRex = (text: string) => {
+    setMessages(m => [...m, { from: 'rex', text, time: stamp() }]);
+    appendCoachEntry({ role: 'rex', text, time: stamp() });
+  };
+
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
     if (!text || typing) return;
     setRetry(null);
     setPending(null); // a new message supersedes any un-confirmed proposal
     const history = messages;
-    setMessages(m => [...m, { from: 'user', text, time: stamp() }]);
+    pushUser(text);
     setInput('');
     await deliver(text, history);
   };
@@ -151,7 +175,7 @@ export default function RexCoach({
           const { spoken, action } = parseCoachReply(reply);
           const actionable = !!action && COACH_ACTIONS.has(action.type);
           const line = spoken || (actionable ? summarizeAction(action!) : reply);
-          setMessages(m => [...m, { from: 'rex', text: line, time: stamp() }]);
+          pushRex(line);
           if (actionable) setPending(action!);
           return;
         } catch (e: any) {
@@ -195,7 +219,7 @@ export default function RexCoach({
     setActing(true);
     try {
       const result = await executeAction(action, contacts);
-      setMessages(m => [...m, { from: 'rex', text: `✓ Done — ${summarizeAction(action)}`, time: stamp() }]);
+      pushRex(`✓ Done — ${summarizeAction(action)}`);
       onActed?.(action);
       if (result.openContactId) onOpenContact?.(result.openContactId);
       setPending(null);
@@ -222,7 +246,7 @@ export default function RexCoach({
     setParseOpen(false);
     setPending(null);
     setParseResult(null);
-    setMessages(m => [...m, { from: 'user', text: `🎙 Parse this conversation (${transcript.length} chars)`, time: stamp() }]);
+    pushUser(`🎙 Parse this conversation (${transcript.length} chars)`);
     setParsing(true);
     setTyping(true);
     setWarming(false);
@@ -233,11 +257,7 @@ export default function RexCoach({
         ? (`${result.first_name ?? ''} ${result.last_name ?? ''}`.trim() || 'a new lead')
         : (contacts.find(c => c.id === result.match_contact_id)?.name ?? 'the contact');
       setParseResult(result);
-      setMessages(m => [...m, {
-        from: 'rex',
-        text: `Got it — here's what I pulled from that conversation with ${who}. Review and confirm to save.`,
-        time: stamp(),
-      }]);
+      pushRex(`Got it — here's what I pulled from that conversation with ${who}. Review and confirm to save.`);
     } catch (e: any) {
       setMessages(m => [...m, { from: 'rex', text: `Couldn't parse that one: ${e?.message ?? 'failed'}. Try again?`, time: stamp() }]);
     } finally {
@@ -290,10 +310,8 @@ export default function RexCoach({
         await executeAction(fu, contacts);
         onActed?.(fu);
       }
-      setMessages(m => [...m,
-        { from: 'rex', text: `✓ Saved. ${r.is_new ? 'Added' : 'Updated'} ${name}${r.followup_days ? ` · follow-up in ${r.followup_days}d` : ''}.`, time: stamp() },
-        ...(r.plan ? [{ from: 'rex' as const, text: `Plan: ${r.plan}`, time: stamp() }] : []),
-      ]);
+      pushRex(`✓ Saved. ${r.is_new ? 'Added' : 'Updated'} ${name}${r.followup_days ? ` · follow-up in ${r.followup_days}d` : ''}.`);
+      if (r.plan) pushRex(`Plan: ${r.plan}`);
       if (contactId) onOpenContact?.(contactId);
       setParseResult(null);
     } catch (e: any) {
