@@ -12,10 +12,18 @@ import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import { callBrain, warmBrain } from '@/lib/v2/aiProxy';
-import { serializeRepContext, loadMtdSummary, type MtdSummary } from '@/lib/v2/repContext';
+import { serializeRepContext, loadMtdSummary, loadRecentActivity, type MtdSummary } from '@/lib/v2/repContext';
 import { buildCoachMessages } from '@/lib/v2/coachBrain';
+import {
+  parseCoachReply, executeAction, summarizeAction, type RexAction,
+} from '@/lib/v2/rexActions';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
+
+// The coach may emit these (write) actions; delete/batch stay voice/UI-only.
+const COACH_ACTIONS = new Set<RexAction['type']>([
+  'add_contact', 'update_notes', 'schedule_followup', 'retier_contact', 'log_deal', 'create_reminder',
+]);
 
 type ChatMessage = { from: 'rex' | 'user'; text: string; time: string };
 
@@ -42,11 +50,17 @@ export default function RexCoach({
   onClose,
   contacts,
   payPlan,
+  onActed,
+  onOpenContact,
 }: {
   open: boolean;
   onClose: () => void;
   contacts: V2Contact[];
   payPlan: PayPlan | null;
+  // Fired after a confirmed action executes so AppShell can refresh the right
+  // surface (contacts / deals / notifications) — mirrors handleRexConfirm.
+  onActed?: (action: RexAction) => void;
+  onOpenContact?: (id: string) => void;
 }) {
   const greeting = useRef(COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -57,6 +71,9 @@ export default function RexCoach({
   const [warming, setWarming] = useState(false);
   const [retry, setRetry] = useState<{ text: string; history: ChatMessage[] } | null>(null);
   const [mtd, setMtd] = useState<MtdSummary | null>(null);
+  const [activity, setActivity] = useState('');           // recent-activity recall block
+  const [pending, setPending] = useState<RexAction | null>(null); // proposed write action
+  const [acting, setActing] = useState(false);            // executing a confirmed action
   const scrollRef = useRef<ScrollView>(null);
 
   // Seed a fresh greeting each time the sheet opens, and refresh month-to-date
@@ -69,10 +86,13 @@ export default function RexCoach({
       setTyping(false);
       setWarming(false);
       setRetry(null);
+      setPending(null);
+      setActing(false);
       // Warm the brain function while the rep reads the greeting + types, so the
       // first real send lands on a warm container instead of a cold start.
       warmBrain();
       loadMtdSummary().then(setMtd).catch(() => setMtd(null));
+      loadRecentActivity().then(setActivity).catch(() => setActivity(''));
     }
   }, [open]);
 
@@ -86,6 +106,7 @@ export default function RexCoach({
     const text = (raw ?? input).trim();
     if (!text || typing) return;
     setRetry(null);
+    setPending(null); // a new message supersedes any un-confirmed proposal
     const history = messages;
     setMessages(m => [...m, { from: 'user', text, time: stamp() }]);
     setInput('');
@@ -109,10 +130,21 @@ export default function RexCoach({
             // 1200 (was 700) so a complete, structured coaching answer never gets
             // cut off mid-sentence — the prompt still asks Rex to stay tight.
             maxTokens: 1200,
-            messages: buildCoachMessages({ history, text, repContext }),
+            messages: buildCoachMessages({
+              history, text, repContext,
+              contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
+              recentActivity: activity,
+            }),
           })).trim();
           if (!reply) throw new Error('empty');
-          setMessages(m => [...m, { from: 'rex', text: reply, time: stamp() }]);
+          // The reply is coaching text, optionally followed by a structured
+          // action when the rep asked Rex to DO something. Show the spoken line;
+          // if an allowed write-action came back, queue the Confirm card.
+          const { spoken, action } = parseCoachReply(reply);
+          const actionable = !!action && COACH_ACTIONS.has(action.type);
+          const line = spoken || (actionable ? summarizeAction(action!) : reply);
+          setMessages(m => [...m, { from: 'rex', text: line, time: stamp() }]);
+          if (actionable) setPending(action!);
           return;
         } catch (e: any) {
           const msg = String(e?.message ?? '');
@@ -145,6 +177,35 @@ export default function RexCoach({
     const r = retry;
     setRetry(null);
     deliver(r.text, r.history);
+  };
+
+  // Confirm-before-write: the proposed action only executes here, on an explicit
+  // tap. Reuses the exact engine the voice path uses (executeAction).
+  const confirmAction = async () => {
+    if (!pending || acting) return;
+    const action = pending;
+    setActing(true);
+    try {
+      const result = await executeAction(action, contacts);
+      setMessages(m => [...m, { from: 'rex', text: `✓ Done — ${summarizeAction(action)}`, time: stamp() }]);
+      onActed?.(action);
+      if (result.openContactId) onOpenContact?.(result.openContactId);
+      setPending(null);
+    } catch (e: any) {
+      setMessages(m => [...m, {
+        from: 'rex',
+        text: `Couldn't do that: ${e?.message ?? 'save failed'}. Want to try again?`,
+        time: stamp(),
+      }]);
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const cancelAction = () => {
+    if (acting) return;
+    setPending(null);
+    setMessages(m => [...m, { from: 'rex', text: 'Okay, holding off — nothing saved.', time: stamp() }]);
   };
 
   return (
@@ -192,6 +253,22 @@ export default function RexCoach({
               <Pressable onPress={doRetry} style={styles.retryBtn}>
                 <Text style={styles.retryText}>↻ Retry</Text>
               </Pressable>
+            </View>
+          ) : null}
+          {pending ? (
+            <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
+              <View style={styles.proposeCard}>
+                <Text style={styles.proposeLabel}>PROPOSED · CONFIRM TO SAVE</Text>
+                <Text style={styles.proposeText}>{summarizeAction(pending)}</Text>
+                <View style={styles.proposeActions}>
+                  <Pressable onPress={cancelAction} disabled={acting} style={styles.proposeCancel}>
+                    <Text style={styles.proposeCancelText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={confirmAction} disabled={acting} style={styles.proposeConfirm}>
+                    <Text style={styles.proposeConfirmText}>{acting ? 'Saving…' : 'Confirm'}</Text>
+                  </Pressable>
+                </View>
+              </View>
             </View>
           ) : null}
         </ScrollView>
@@ -289,6 +366,29 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.goldBorder,
   },
   retryText: { fontSize: 12, fontWeight: '700', color: colors.gold, letterSpacing: 0.3 },
+
+  proposeCard: {
+    maxWidth: '92%',
+    marginTop: 4,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: radius.lg,
+    paddingHorizontal: 14, paddingVertical: 12,
+    gap: 8,
+  },
+  proposeLabel: { fontSize: 9, fontWeight: '800', color: colors.gold, letterSpacing: 1.0 },
+  proposeText: { fontSize: 14, fontWeight: '600', color: colors.white, lineHeight: 19 },
+  proposeActions: { flexDirection: 'row', gap: 8, marginTop: 2 },
+  proposeCancel: {
+    flex: 1, paddingVertical: 10, borderRadius: radius.md, alignItems: 'center',
+    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
+  },
+  proposeCancelText: { fontSize: 13, fontWeight: '700', color: colors.grey2 },
+  proposeConfirm: {
+    flex: 1.2, paddingVertical: 10, borderRadius: radius.md, alignItems: 'center',
+    backgroundColor: colors.gold,
+  },
+  proposeConfirmText: { fontSize: 13, fontWeight: '800', color: colors.ink, letterSpacing: 0.2 },
 
   chipsScroll: { flexGrow: 0, flexShrink: 0 },
   chips: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6, gap: 8, alignItems: 'center' },

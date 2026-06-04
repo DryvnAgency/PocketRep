@@ -27,6 +27,39 @@ export async function loadMtdSummary(): Promise<MtdSummary> {
   };
 }
 
+// Cross-contact activity feed for recall questions ("who did I talk to
+// yesterday / this week"). Pulls the rep's logged interactions (call/text/email/
+// note) with the contact name + timestamp, newest first. Best-effort: returns ''
+// on any error so the coach prompt still builds.
+export async function loadRecentActivity(days = 30, limit = 40): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return '';
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  try {
+    const { data, error } = await supabase
+      .from('interactions')
+      .select('type,notes,interaction_date,contacts!inner(first_name,last_name)')
+      .eq('user_id', user.id)
+      .gte('interaction_date', since)
+      .order('interaction_date', { ascending: false })
+      .limit(limit);
+    if (error || !data) return '';
+    return (data as any[])
+      .map((r) => {
+        const name = `${r.contacts?.first_name ?? ''} ${r.contacts?.last_name ?? ''}`.trim() || 'a contact';
+        const d = new Date(r.interaction_date);
+        const when = Number.isNaN(d.getTime())
+          ? ''
+          : d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        const note = r.notes ? ` — ${String(r.notes).slice(0, 80)}` : '';
+        return `- ${when} · ${r.type} · ${name}${note}`;
+      })
+      .join('\n');
+  } catch {
+    return '';
+  }
+}
+
 // Builds a compact context block: heat mix, MTD, pay plan, top active leads, and
 // overdue follow-ups. Kept short so it fits comfortably in the prompt.
 export function serializeRepContext(input: {

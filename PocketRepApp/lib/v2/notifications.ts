@@ -8,6 +8,7 @@
 import { useEffect, useReducer, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { loadPendingNurtures } from './nurtureEngine';
+import { loadDueReminders, rollOverDueReminders } from './reminders';
 import {
   getReadSet,
   getDismissedSet,
@@ -15,7 +16,7 @@ import {
 } from './notificationReads';
 import type { V2Contact } from './useContacts';
 
-export type NotificationKind = 'nurture_draft' | 'awaiting_reply' | 'overdue';
+export type NotificationKind = 'nurture_draft' | 'awaiting_reply' | 'overdue' | 'reminder';
 export type NotificationTarget = 'contact' | 'nurture';
 
 export type NotificationItem = {
@@ -25,10 +26,36 @@ export type NotificationItem = {
   subtitle: string; // what the rep needs to do
   contactId: string | null;
   target: NotificationTarget;
+  reminderId?: string; // set for kind 'reminder' so the panel can mark it done
 };
 
 export async function loadNotifications(contacts: V2Contact[]): Promise<NotificationItem[]> {
   const items: NotificationItem[] = [];
+
+  // 0) Rex reminders — most time-sensitive, so first. Roll any left un-done past
+  // their day forward before reading (carry-over), then surface today's/overdue.
+  try {
+    await rollOverDueReminders();
+    const reminders = await loadDueReminders();
+    const now = Date.now();
+    for (const r of reminders) {
+      const due = new Date(r.due_at);
+      const valid = !Number.isNaN(due.getTime());
+      const time = valid ? due.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+      const overdue = valid && due.getTime() <= now;
+      items.push({
+        key: `reminder:${r.id}`,
+        reminderId: r.id,
+        kind: 'reminder',
+        title: r.title,
+        subtitle: overdue ? `Due now${time ? ` · was ${time}` : ''}` : `Reminder${time ? ` · ${time}` : ''}`,
+        contactId: r.contact_id,
+        target: 'contact',
+      });
+    }
+  } catch (e) {
+    console.warn('notifications: reminders failed', e);
+  }
 
   // 1) Pending nurture drafts (review + send)
   try {

@@ -7,6 +7,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { createContact, updateContactNotes, deleteContact, updateContactTier } from './updateContact';
+import { createReminder } from './reminders';
 import { insertDeal, type DealDraft } from './dealLogger';
 import { getRexMemory, recordRexTurn } from './rexMemory';
 import { loadBookContext, bookContextForPrompt } from './bookContext';
@@ -22,6 +23,7 @@ export type RexAction =
   | { type: 'log_deal'; payload: LogDealPayload; say: string }
   | { type: 'schedule_followup'; payload: ScheduleFollowupPayload; say: string }
   | { type: 'retier_contact'; payload: RetierContactPayload; say: string }
+  | { type: 'create_reminder'; payload: CreateReminderPayload; say: string }
   | { type: 'show_contact'; payload: ShowContactPayload; say: string }
   | { type: 'filter_contacts'; payload: FilterContactsPayload; say: string }
   | { type: 'book_summary'; payload: BookSummaryPayload; say: string }
@@ -105,6 +107,14 @@ export type RetierContactPayload = {
   contact_name: string;
   tier: 'hot' | 'warm' | 'cold';
   reason?: string;
+};
+
+export type CreateReminderPayload = {
+  title: string;
+  due_at: string; // ISO 8601 datetime the model resolved from natural language
+  contact_id?: string | null;
+  contact_name?: string | null;
+  body?: string | null;
 };
 
 export type ShowContactPayload = {
@@ -462,6 +472,16 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
       await updateContactTier(p.contact_id, p.tier);
       return { ok: true, openContactId: p.contact_id };
     }
+    case 'create_reminder': {
+      const p = action.payload;
+      await createReminder({
+        title: p.title,
+        dueAt: p.due_at,
+        contactId: p.contact_id ?? null,
+        body: p.body ?? null,
+      });
+      return { ok: true };
+    }
     case 'show_contact': {
       return { ok: true, openContactId: action.payload.contact_id };
     }
@@ -520,6 +540,13 @@ export function summarizeAction(action: RexAction): string {
       return `Follow up with ${p.contact_name} in ${p.days_from_now} day${p.days_from_now === 1 ? '' : 's'}`;
     case 'retier_contact':
       return `Move ${p.contact_name} to ${String(p.tier ?? '').toUpperCase()}${p.reason ? ` · ${p.reason}` : ''}`;
+    case 'create_reminder': {
+      const due = p.due_at ? new Date(p.due_at) : null;
+      const when = due && !Number.isNaN(due.getTime())
+        ? due.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+        : '';
+      return `Remind you${p.contact_name ? ` about ${p.contact_name}` : ''}: ${p.title}${when ? ` · ${when}` : ''}`;
+    }
     case 'show_contact':
       return `Open ${p.contact_name}`;
     case 'filter_contacts':
@@ -560,6 +587,30 @@ function truncate(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
+// Parser for the Rex Coach chat: the reply is the spoken/coaching text, and —
+// only when the rep clearly asked for a supported action — an optional fenced
+// ```json action block after it. Returns the spoken text plus the parsed action
+// (or null for a pure-coaching reply). The caller decides whether to act
+// (RexCoach gates on actionWritesData + its allow-list, then shows Confirm).
+export function parseCoachReply(raw: string): { spoken: string; action: RexAction | null } {
+  const text = raw ?? '';
+  const fenceIdx = text.indexOf('```');
+  const spoken = (fenceIdx >= 0 ? text.slice(0, fenceIdx) : text).trim();
+  const fence = text.match(/```json\s*([\s\S]*?)```/i) ?? text.match(/```\s*([\s\S]*?)```/);
+  if (!fence) return { spoken, action: null };
+  try {
+    const obj = JSON.parse(fence[1].trim());
+    const type = (obj.action ?? obj.type) as RexAction['type'] | undefined;
+    if (!type || type === 'say') return { spoken, action: null };
+    return {
+      spoken,
+      action: { type, payload: obj.payload ?? {}, say: typeof obj.say === 'string' ? obj.say : '' } as RexAction,
+    };
+  } catch {
+    return { spoken, action: null };
+  }
+}
+
 export function actionWritesData(t: RexAction['type']): boolean {
   return (
     t === 'add_contact' ||
@@ -568,6 +619,7 @@ export function actionWritesData(t: RexAction['type']): boolean {
     t === 'log_deal' ||
     t === 'schedule_followup' ||
     t === 'retier_contact' ||
+    t === 'create_reminder' ||
     t === 'batch_action' ||
     t === 'create_blast_sequence' ||
     t === 'analyze_stalled_leads' ||

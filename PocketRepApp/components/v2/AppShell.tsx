@@ -444,6 +444,7 @@ export default function AppShell() {
         onClose={() => setNotifOpen(false)}
         onOpenContact={(id) => { setSelectedId(id); }}
         onOpenNurture={() => setNurtureReviewerOpen(true)}
+        onChanged={() => setNurtureRefetchKey(k => k + 1)}
       />
 
       <RexCoach
@@ -451,6 +452,16 @@ export default function AppShell() {
         onClose={() => setRexCoachOpen(false)}
         contacts={contacts ?? []}
         payPlan={payPlan}
+        onOpenContact={(id) => setSelectedId(id)}
+        onActed={(action) => {
+          // Mirror handleRexConfirm's refresh, by action type.
+          const t = action.type;
+          if (t === 'log_deal') setDealsRefetchKey(k => k + 1);
+          if (t === 'add_contact' || t === 'update_notes' || t === 'schedule_followup' || t === 'retier_contact') {
+            reloadContacts();
+          }
+          if (t === 'create_reminder') setNurtureRefetchKey(k => k + 1); // refresh the bell
+        }}
       />
 
       <StalledLeadsAnalysis

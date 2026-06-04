@@ -138,6 +138,40 @@ function serializePlaybooks(pbs: Playbook[]): string {
 
 type CoachTurn = { from: 'rex' | 'user'; text: string };
 
+export type CoachContact = { id: string; name: string; days: number };
+
+// Actions the coach may take. The chat path reuses the exact action engine the
+// voice path uses (rexActions executeAction); this block teaches the coach to
+// EMIT one — but only on a clear, explicit request about the rep's own book.
+// Everything else (coaching, questions, off-topic, disallowed) stays plain text,
+// so the existing refusals/guardrails are untouched. delete/batch are
+// intentionally excluded — those stay voice/UI-only.
+function actionsBlock(contacts: CoachContact[], recentActivity: string): string {
+  const now = new Date();
+  const idList = contacts.slice(0, 80)
+    .map(c => `${c.name} | ${c.id} | ${c.days}d since contact`)
+    .join('\n') || '(no contacts yet)';
+  const activity = recentActivity.trim()
+    ? `\nRECENT ACTIVITY (your logged calls/texts/emails/notes, newest first — use to answer recall like "who did I talk to yesterday / this week"; to answer "who haven't I touched in N weeks" use the "since contact" days in CONTACT IDS):\n${recentActivity.trim()}`
+    : '';
+  return `TAKING ACTIONS — only when the rep CLEARLY asks you to DO one of these for their own book:
+Respond with your short natural spoken line FIRST, then ONE \`\`\`json fenced block on the next line: { "action": "<name>", "payload": { ... } }. Nothing after the closing fence. For ANY other message — coaching, "what do I say", role-play, recall questions, small talk, or anything off-topic or disallowed — reply with normal text and NO json block, and keep coaching or declining exactly as you do now. Adding the ability to act NEVER widens what you'll talk about.
+Never invent a contact_id: use one from CONTACT IDS. If no existing contact clearly matches for an update / follow-up / tier change / reminder-about-someone, ask which one in plain text instead of guessing. The app shows the rep a Confirm button before anything is written, so propose — never claim it's already done.
+
+Actions:
+1. add_contact — create a new contact. payload: { first_name (req), last_name?, phone?, vehicle?, budget?, trade_in?, notes?, heat_tier? ("hot"|"warm"|"cold") }
+2. update_notes — append a note to an existing contact. payload: { contact_id (req), contact_name (req), notes_append (req) }
+3. schedule_followup — set a follow-up N days out. payload: { contact_id (req), contact_name (req), days_from_now (req number), note? }
+4. retier_contact — move an existing contact UP a tier when they're heating up/reviving. payload: { contact_id (req), contact_name (req), tier ("hot"|"warm"|"cold"), reason? }
+5. log_deal — record a closed sale. payload: { customer_name (req), contact_id?, stock (req), vehicle (req), front_gross (req number), back_gross (req number), type? ("NEW"|"CPO"|"USED"), funding? ("finance"|"lease"|"cash") }
+6. create_reminder — set a reminder/notification for the rep. payload: { title (req, short), due_at (req, ISO 8601 — resolve "this afternoon at 4" / "tomorrow morning" / "in 2 hours" from CURRENT DATE & TIME below), contact_id? (if about a specific person), contact_name?, body? }
+
+CURRENT DATE & TIME: ${now.toString()} (ISO ${now.toISOString()}).
+
+CONTACT IDS (name | id | days since last contact):
+${idList}${activity}`;
+}
+
 // Assembles the full message list for callBrain: a system message (coaching
 // prompt + copy rules + any matched playbook + the rep's real book), the recent
 // conversation as real turns, and the rep's new message.
@@ -145,8 +179,10 @@ export function buildCoachMessages(input: {
   history: CoachTurn[];
   text: string;
   repContext: string;
+  contacts?: CoachContact[];
+  recentActivity?: string;
 }): BrainMessage[] {
-  const { history, text, repContext } = input;
+  const { history, text, repContext, contacts = [], recentActivity = '' } = input;
   const playbookBlock = serializePlaybooks(matchPlaybooks(text));
 
   const system = [
@@ -154,6 +190,7 @@ export function buildCoachMessages(input: {
     REX_COPY_RULES,
     playbookBlock,
     repContext ? `THE REP'S BOOK (use real names/numbers when relevant):\n${repContext}` : '',
+    actionsBlock(contacts, recentActivity),
   ]
     .filter(Boolean)
     .join('\n\n');

@@ -7,11 +7,13 @@ import type { ResolvedNotification, NotificationKind } from '@/lib/v2/notificati
 import {
   markRead, markUnread, dismissNotification, markManyRead,
 } from '@/lib/v2/notificationReads';
+import { completeReminder } from '@/lib/v2/reminders';
 
 const KIND_META: Record<NotificationKind, { icon: string; color: string; tag: string }> = {
   nurture_draft: { icon: '✍', color: colors.gold, tag: 'DRAFT' },
   awaiting_reply: { icon: '↩', color: colors.green, tag: 'REPLY' },
   overdue: { icon: '🔥', color: colors.orange, tag: 'OVERDUE' },
+  reminder: { icon: '⏰', color: colors.gold2, tag: 'REMINDER' },
 };
 
 export default function NotificationsCenter({
@@ -20,14 +22,26 @@ export default function NotificationsCenter({
   onClose,
   onOpenContact,
   onOpenNurture,
+  onChanged,
 }: {
   open: boolean;
   items: ResolvedNotification[];
   onClose: () => void;
   onOpenContact: (id: string) => void;
   onOpenNurture: () => void;
+  onChanged?: () => void;
 }) {
   if (!open) return null;
+
+  // Reminder "Done" persists status=done so it won't reappear; dismiss locally
+  // for an instant remove, then refetch.
+  const completeReminderItem = async (n: ResolvedNotification) => {
+    if (n.reminderId) {
+      try { await completeReminder(n.reminderId); } catch { /* ignore */ }
+    }
+    dismissNotification(n.key);
+    onChanged?.();
+  };
 
   const unread = items.filter(i => !i.read).length;
 
@@ -42,7 +56,7 @@ export default function NotificationsCenter({
   };
 
   return (
-    <View style={StyleSheet.absoluteFillObject as any}>
+    <View style={styles.overlay}>
       <Pressable style={styles.scrim} onPress={onClose} />
       <View style={styles.sheet}>
         <View style={styles.handle} />
@@ -91,13 +105,19 @@ export default function NotificationsCenter({
                     </View>
                   </Pressable>
                   <View style={styles.actions}>
-                    <Pressable
-                      onPress={() => (n.read ? markUnread(n.key) : markRead(n.key))}
-                      hitSlop={6}
-                      style={styles.actionBtn}
-                    >
-                      <Text style={styles.actionText}>{n.read ? 'Mark unread' : 'Mark read'}</Text>
-                    </Pressable>
+                    {n.kind === 'reminder' ? (
+                      <Pressable onPress={() => completeReminderItem(n)} hitSlop={6} style={styles.doneBtn}>
+                        <Text style={styles.doneText}>✓ Done</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        onPress={() => (n.read ? markUnread(n.key) : markRead(n.key))}
+                        hitSlop={6}
+                        style={styles.actionBtn}
+                      >
+                        <Text style={styles.actionText}>{n.read ? 'Mark unread' : 'Mark read'}</Text>
+                      </Pressable>
+                    )}
                     <Pressable onPress={() => dismissNotification(n.key)} hitSlop={6} style={styles.dismissBtn}>
                       <Text style={styles.dismissText}>✕</Text>
                     </Pressable>
@@ -114,6 +134,9 @@ export default function NotificationsCenter({
 }
 
 const styles = StyleSheet.create({
+  // Stacking context so the bell reliably paints the panel on top (same class of
+  // fix as the Log Deal overlay) — the bell was wired but the overlay had none.
+  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 100, elevation: 100 } as any,
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.72)' },
   sheet: {
     position: 'absolute',
@@ -202,6 +225,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink2,
   },
   actionText: { fontSize: 11, fontWeight: '700', color: colors.grey2 },
+  doneBtn: {
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1, borderColor: colors.goldBorder,
+    backgroundColor: colors.goldBg,
+  },
+  doneText: { fontSize: 11, fontWeight: '800', color: colors.gold, letterSpacing: 0.2 },
   dismissBtn: {
     width: 28, height: 28, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
