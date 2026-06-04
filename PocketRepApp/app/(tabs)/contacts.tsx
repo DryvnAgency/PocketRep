@@ -394,16 +394,32 @@ export default function ContactsScreen() {
   }
 
   async function deleteContact(c: Contact) {
-    Alert.alert('Delete contact', `Remove ${c.first_name} ${c.last_name} from your book?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          await supabase.from('contacts').delete().eq('id', c.id);
-          load();
-        },
-      },
-    ]);
+    const name = `${c.first_name} ${c.last_name}`.trim();
+    const msg = `Remove ${name} from your book? This can't be undone.`;
+
+    const proceed = async () => {
+      const { error } = await supabase.from('contacts').delete().eq('id', c.id);
+      if (error) {
+        if (Platform.OS === 'web') (globalThis as any).alert?.(`Couldn't delete ${name}: ${error.message}`);
+        else Alert.alert('Delete failed', error.message);
+        return;
+      }
+      // Drop it locally right away so the row disappears even before the refetch.
+      setContacts(prev => prev.filter(x => x.id !== c.id));
+      load();
+    };
+
+    // React Native Web's Alert.alert never renders buttons (the destructive
+    // onPress never fires), so on web we use window.confirm — same pattern the
+    // v2 UI uses. Native keeps the standard Alert dialog.
+    if (Platform.OS === 'web') {
+      if (typeof window === 'undefined' || window.confirm(msg)) proceed();
+    } else {
+      Alert.alert('Delete contact', msg, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: proceed },
+      ]);
+    }
   }
 
   async function sendMassText() {
@@ -927,7 +943,10 @@ const STAGE_COLORS: Record<Stage, { color: string; bg: string; border: string }>
 // ── Contact row ───────────────────────────────────────────────────────────────
 function ContactRow({ contact: c, onPress }: { contact: Contact; onPress: () => void }) {
   const vehicle = [c.vehicle_year, c.vehicle_make, c.vehicle_model].filter(Boolean).join(' ');
-  const cfg = c.heat_tier ? heatConfig[c.heat_tier] : null;
+  // Normalize the retired 'watch' tier (legacy DB rows) to 'cold' so the badge
+  // still renders after the Watch → Cold rename.
+  const heatTier = (c.heat_tier as string) === 'watch' ? 'cold' : c.heat_tier;
+  const cfg = heatTier ? heatConfig[heatTier] : null;
   const stage = (c as any).stage as Stage | undefined;
   const stageCfg = stage ? STAGE_COLORS[stage] : null;
 

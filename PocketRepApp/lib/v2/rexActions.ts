@@ -6,7 +6,7 @@
 // 'say' action that just speaks back to the rep without writing anything.
 
 import { supabase } from '@/lib/supabase';
-import { createContact, updateContactNotes, deleteContact } from './updateContact';
+import { createContact, updateContactNotes, deleteContact, updateContactTier } from './updateContact';
 import { insertDeal, type DealDraft } from './dealLogger';
 import { getRexMemory, recordRexTurn } from './rexMemory';
 import { loadBookContext, bookContextForPrompt } from './bookContext';
@@ -21,6 +21,7 @@ export type RexAction =
   | { type: 'delete_contact'; payload: DeleteContactPayload; say: string }
   | { type: 'log_deal'; payload: LogDealPayload; say: string }
   | { type: 'schedule_followup'; payload: ScheduleFollowupPayload; say: string }
+  | { type: 'retier_contact'; payload: RetierContactPayload; say: string }
   | { type: 'show_contact'; payload: ShowContactPayload; say: string }
   | { type: 'filter_contacts'; payload: FilterContactsPayload; say: string }
   | { type: 'book_summary'; payload: BookSummaryPayload; say: string }
@@ -65,7 +66,7 @@ export type AddContactPayload = {
   budget?: string;
   trade_in?: string;
   notes?: string;
-  heat_tier?: 'hot' | 'warm' | 'watch';
+  heat_tier?: 'hot' | 'warm' | 'cold';
   plan_label?: string;
 };
 
@@ -99,6 +100,13 @@ export type ScheduleFollowupPayload = {
   note?: string;
 };
 
+export type RetierContactPayload = {
+  contact_id: string;
+  contact_name: string;
+  tier: 'hot' | 'warm' | 'cold';
+  reason?: string;
+};
+
 export type ShowContactPayload = {
   contact_id: string;
   contact_name: string;
@@ -113,7 +121,7 @@ export type FilterContactsPayload = {
 export type BookSummaryPayload = {
   timeframe?: 'today' | 'this_week' | 'this_month' | 'ytd';
   total: number;
-  by_tier: { hot: number; warm: number; watch: number; cold: number; dead: number };
+  by_tier: { hot: number; warm: number; cold: number; dead: number };
   stalled: number;
   needs_attention_ids?: string[];
 };
@@ -203,7 +211,7 @@ ${bookSection}
 Actions you can take, with required + optional payload fields:
 
 1. add_contact — create a brand new contact
-   payload: { first_name (req), last_name?, phone?, vehicle?, budget?, trade_in?, notes?, heat_tier? ("hot"|"warm"|"watch"), plan_label? ("TODAY"|"THIS WEEK"|"THIS MONTH"|"NEXT QTR") }
+   payload: { first_name (req), last_name?, phone?, vehicle?, budget?, trade_in?, notes?, heat_tier? ("hot"|"warm"|"cold"), plan_label? ("TODAY"|"THIS WEEK"|"THIS MONTH"|"NEXT QTR") }
 
 2. update_notes — append notes to an existing contact
    payload: { contact_id (req), contact_name (req), notes_append (req) }
@@ -224,7 +232,7 @@ Actions you can take, with required + optional payload fields:
    payload: { contact_ids: uuid[], filter_summary: "3 Murano lease customers", matched_count: number }
 
 8. book_summary — pipeline health snapshot. Use when the rep asks "how are things" / "what's my book look like".
-   payload: { total, by_tier: { hot, warm, watch, cold, dead }, stalled, needs_attention_ids?: uuid[] }
+   payload: { total, by_tier: { hot, warm, cold, dead }, stalled, needs_attention_ids?: uuid[] }
 
 9. call_next — pick the single next call. Use when the rep asks "who first" / "who should I call".
    payload: { contact_id, contact_name, reason, suggested_opener }
@@ -256,10 +264,14 @@ Actions you can take, with required + optional payload fields:
     payload: { trigger: "holiday" | "quarterly_check_in" | "custom", audience: "dead" | "dormant" | "past_customers" | "all_inactive", custom_intent?: string }
     Use ONLY when the rep is asking for a batch nurture (not an individual message). "say" confirms the audience ("queueing nurtures for past customers, review momentarily").
 
-14. clarify — the rep's request is ambiguous; ask back
+14. retier_contact — the rep signals a customer is reviving / heating back up: "back live", "wants numbers", "ready to move", "off the fence", "called back in", "they're hot again". PROPOSE bumping that customer UP the tier list (cold→warm, warm→hot, or straight to hot for strong intent). Only move UP here, never down. This just PROPOSES the change — nothing is written until the rep confirms.
+    payload: { contact_id (req, from BOOK STATE), contact_name (req), tier ("hot"|"warm"|"cold"), reason? }
+    The spoken line names the customer and the new tier ("sounds like Maria's back live — want me to move her to hot?").
+
+15. clarify — the rep's request is ambiguous; ask back
     payload: { question, candidates?: [{id, label}] }
 
-15. say — informational reply, no write
+16. say — informational reply, no write
     payload: {}
 
 EXISTING TAGS the rep uses: ${tagList}
@@ -372,7 +384,7 @@ export async function rexInterpret(
   return action;
 }
 
-const HEAT_TIER_SCORE = { hot: 90, warm: 65, watch: 35 } as const;
+const HEAT_TIER_SCORE = { hot: 90, warm: 65, cold: 35 } as const;
 
 export async function executeAction(action: RexAction, contacts: V2Contact[] = []): Promise<{ ok: boolean; openContactId?: string; filteredIds?: string[] }> {
   switch (action.type) {
@@ -445,6 +457,11 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
       if (error) throw error;
       return { ok: true, openContactId: p.contact_id };
     }
+    case 'retier_contact': {
+      const p = action.payload;
+      await updateContactTier(p.contact_id, p.tier);
+      return { ok: true, openContactId: p.contact_id };
+    }
     case 'show_contact': {
       return { ok: true, openContactId: action.payload.contact_id };
     }
@@ -501,6 +518,8 @@ export function summarizeAction(action: RexAction): string {
       return `Log deal — ${p.customer_name} · ${p.stock} · ${p.vehicle} · $${Number(p.front_gross).toLocaleString()} front / $${Number(p.back_gross).toLocaleString()} back`;
     case 'schedule_followup':
       return `Follow up with ${p.contact_name} in ${p.days_from_now} day${p.days_from_now === 1 ? '' : 's'}`;
+    case 'retier_contact':
+      return `Move ${p.contact_name} to ${String(p.tier ?? '').toUpperCase()}${p.reason ? ` · ${p.reason}` : ''}`;
     case 'show_contact':
       return `Open ${p.contact_name}`;
     case 'filter_contacts':
@@ -548,6 +567,7 @@ export function actionWritesData(t: RexAction['type']): boolean {
     t === 'delete_contact' ||
     t === 'log_deal' ||
     t === 'schedule_followup' ||
+    t === 'retier_contact' ||
     t === 'batch_action' ||
     t === 'create_blast_sequence' ||
     t === 'analyze_stalled_leads' ||

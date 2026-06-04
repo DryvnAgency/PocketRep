@@ -266,6 +266,39 @@ export async function markBlastCancelled(sequenceId: string): Promise<void> {
     .eq('id', sequenceId);
 }
 
+// Re-translate a single drafted message when the rep flips its EN/ES toggle in
+// the review UI. ES is real Mexican Spanish (natural slang), not a literal
+// translation — matching how the batch was drafted. Returns the original on any
+// failure so the toggle never destroys the rep's text.
+export async function translateBlastMessage({
+  message, targetLang,
+}: {
+  message: string;
+  targetLang: 'en' | 'es';
+}): Promise<string> {
+  const trimmed = message.trim();
+  if (!trimmed) return message;
+  const target = targetLang === 'es'
+    ? 'natural Mexican Spanish (casual slang the way a real rep texts, NOT a literal word-for-word translation)'
+    : 'natural, casual English the way a real rep texts';
+  const prompt = `Rewrite this sales text message in ${target}.
+Keep the same intent, the same hook/angle, and the same call to action.
+Keep it roughly the same length, lowercase and conversational.
+Preserve any {{first_name}} placeholders and any proper names exactly.
+${REX_COPY_RULES}
+
+Return ONLY the rewritten message — no quotes, no labels, no preamble.
+
+MESSAGE:
+${trimmed}`;
+  const raw = await callBrain({
+    maxTokens: 400,
+    messages: [{ role: 'user', content: prompt }],
+  });
+  const out = (raw ?? '').trim().replace(/^["']+|["']+$/g, '').trim();
+  return out || message;
+}
+
 export async function updateDraftStep(stepId: string, message: string): Promise<void> {
   await supabase
     .from('sequence_steps')

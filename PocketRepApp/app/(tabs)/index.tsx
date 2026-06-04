@@ -17,7 +17,7 @@ const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://fwvrauqdoe
 const NOTIF_CHECK_KEY = 'pocketrep_notif_check_v1';
 
 // ── Heat score engine (runs client-side, no server needed) ──────────────────
-function calcHeatScore(c: Contact): { score: number; tier: 'hot' | 'warm' | 'watch'; reason: string } {
+function calcHeatScore(c: Contact): { score: number; tier: 'hot' | 'warm' | 'cold'; reason: string } {
   let score = 0;
   const reasons: string[] = [];
   const today = new Date();
@@ -56,8 +56,8 @@ function calcHeatScore(c: Contact): { score: number; tier: 'hot' | 'warm' | 'wat
   const events: any[] = (c as any).personal_events ?? [];
   if (events.length > 0) { score += 10; reasons.push('upcoming life event'); }
 
-  const tier: 'hot' | 'warm' | 'watch' =
-    score >= 50 ? 'hot' : score >= 25 ? 'warm' : 'watch';
+  const tier: 'hot' | 'warm' | 'cold' =
+    score >= 50 ? 'hot' : score >= 25 ? 'warm' : 'cold';
 
   return { score, tier, reason: reasons.slice(0, 2).join(' · ') || 'in your book' };
 }
@@ -67,7 +67,7 @@ export default function HeatSheetScreen() {
   const [followUpContacts, setFollowUpContacts] = useState<Contact[]>([]);
   const [hotContacts, setHotContacts] = useState<Contact[]>([]);
   const [warmContacts, setWarmContacts] = useState<Contact[]>([]);
-  const [watchContacts, setWatchContacts] = useState<Contact[]>([]);
+  const [coldContacts, setColdContacts] = useState<Contact[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [briefContact, setBriefContact] = useState<Contact | null>(null);
   const [briefText, setBriefText] = useState('');
@@ -101,7 +101,7 @@ export default function HeatSheetScreen() {
 
       setHotContacts(scored.filter(c => c.heat_tier === 'hot').slice(0, 5));
       setWarmContacts(scored.filter(c => c.heat_tier === 'warm').slice(0, 5));
-      setWatchContacts(scored.filter(c => c.heat_tier === 'watch').slice(0, 5));
+      setColdContacts(scored.filter(c => c.heat_tier === 'cold').slice(0, 5));
     }
   }
 
@@ -179,7 +179,7 @@ export default function HeatSheetScreen() {
     setBriefLoading(false);
   }
 
-  const allEmpty = hotContacts.length === 0 && warmContacts.length === 0 && watchContacts.length === 0;
+  const allEmpty = hotContacts.length === 0 && warmContacts.length === 0 && coldContacts.length === 0;
 
   return (
     <View style={s.root}>
@@ -233,7 +233,7 @@ export default function HeatSheetScreen() {
             )}
             <TierSection title="HOT" tier="hot" contacts={hotContacts} onBrief={openBrief} />
             <TierSection title="WARM" tier="warm" contacts={warmContacts} onBrief={openBrief} />
-            <TierSection title="WATCH" tier="watch" contacts={watchContacts} onBrief={openBrief} />
+            <TierSection title="COLD" tier="cold" contacts={coldContacts} onBrief={openBrief} />
           </>
         )}
       </ScrollView>
@@ -272,7 +272,7 @@ function TierSection({
   title, tier, contacts, onBrief,
 }: {
   title: string;
-  tier: 'hot' | 'warm' | 'watch';
+  tier: 'hot' | 'warm' | 'cold';
   contacts: Contact[];
   onBrief: (c: Contact) => void;
 }) {

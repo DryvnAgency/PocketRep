@@ -32,12 +32,16 @@ export type V2Contact = {
   isPastCustomer: boolean;
   doNotContact: boolean;
   photoUrl: string | null;
+
+  // Referral link (D3)
+  referredByContactId: string | null;
+  referredByName: string | null;
 };
 
 export function tierFromScore(score: number): TierKey {
   if (score >= 80) return 'hot';
   if (score >= 50) return 'warm';
-  return 'watch';
+  return 'cold';
 }
 
 function daysSince(date: string | null): number {
@@ -54,7 +58,7 @@ function rowToContact(r: any): V2Contact {
     name: [r.first_name, r.last_name].filter(Boolean).join(' '),
     vehicle: r.vehicle,
     trim: r.trim,
-    tier: tierFromScore(score),
+    tier: (r.tier_override as TierKey | null) ?? tierFromScore(score),
     days: daysSince(r.last_contact_date),
     heatScore: score,
     planLabel: r.plan_label,
@@ -77,6 +81,8 @@ function rowToContact(r: any): V2Contact {
     isPastCustomer: !!r.is_past_customer,
     doNotContact: !!r.do_not_contact,
     photoUrl: r.photo_url ?? null,
+    referredByContactId: r.referred_by_contact_id ?? null,
+    referredByName: r.referred_by_name ?? null,
   };
 }
 
@@ -88,7 +94,7 @@ export function useContacts() {
     const { data, error } = await supabase
       .from('contacts')
       .select(
-        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,email,budget,trade_in,tags,notes,next_step,birthday,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url'
+        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,email,budget,trade_in,tags,notes,next_step,birthday,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url,tier_override,referred_by_contact_id,referred_by_name'
       )
       .eq('is_deleted', false);
 
@@ -99,7 +105,10 @@ export function useContacts() {
     }
 
     const rows = (data ?? []).map(rowToContact);
-    rows.sort((a, b) => b.heatScore - a.heatScore || a.days - b.days);
+    // Group by tier (override-aware) first, then by heat, so a manually-set
+    // tier sorts with its band rather than by its raw heat score.
+    const rank: Record<TierKey, number> = { hot: 3, warm: 2, cold: 1 };
+    rows.sort((a, b) => rank[b.tier] - rank[a.tier] || b.heatScore - a.heatScore || a.days - b.days);
     setContacts(rows);
   }, []);
 

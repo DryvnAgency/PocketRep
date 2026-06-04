@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
 } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Label, Avatar } from './atoms';
 import LanguageToggle from './LanguageToggle';
@@ -12,6 +13,7 @@ import {
   markBlastApproved,
   markBlastCancelled,
   recordSentBlast,
+  translateBlastMessage,
 } from '@/lib/v2/blastSequences';
 import { launchSms, type SendableDraft } from '@/lib/v2/smsLauncher';
 
@@ -19,6 +21,7 @@ type StepState = DraftedStep & {
   skipped: boolean;
   sent: boolean;
   editing: boolean;
+  translating: boolean;
 };
 
 export default function BlastSequenceDrafter({
@@ -35,7 +38,7 @@ export default function BlastSequenceDrafter({
   onSent: () => void;
 }) {
   const [steps, setSteps] = useState<StepState[]>(() =>
-    (draft?.drafted_steps ?? []).map(s => ({ ...s, skipped: false, sent: false, editing: false }))
+    (draft?.drafted_steps ?? []).map(s => ({ ...s, skipped: false, sent: false, editing: false, translating: false }))
   );
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +52,7 @@ export default function BlastSequenceDrafter({
   // Re-seed steps when the draft prop swaps.
   useMemo(() => {
     if (!draft) return;
-    setSteps(draft.drafted_steps.map(s => ({ ...s, skipped: false, sent: false, editing: false })));
+    setSteps(draft.drafted_steps.map(s => ({ ...s, skipped: false, sent: false, editing: false, translating: false })));
     setError(null);
     setSending(false);
   }, [draft?.sequence_id]);
@@ -57,9 +60,29 @@ export default function BlastSequenceDrafter({
   if (!open || !draft) return null;
 
   const toSend = steps.filter(s => !s.skipped && !s.sent);
+  const anyTranslating = steps.some(s => s.translating);
 
   const updateStep = (id: string, patch: Partial<StepState>) =>
     setSteps(prev => prev.map(s => (s.contact_id === id ? { ...s, ...patch } : s)));
+
+  // Flipping the EN/ES toggle actually rewrites the message in the target
+  // language (ES = real Mexican Spanish, not literal). Optimistically flip the
+  // label, show a spinner on the card, then swap in the rewrite; revert the
+  // label if the brain call fails so the toggle never strands a half-changed row.
+  const retranslateStep = async (step: StepState, next: 'en' | 'es') => {
+    if (next === step.language || step.translating) return;
+    updateStep(step.contact_id, { language: next, translating: true });
+    try {
+      const translated = await translateBlastMessage({ message: step.message, targetLang: next });
+      updateStep(step.contact_id, {
+        message: translated,
+        char_count: translated.length,
+        translating: false,
+      });
+    } catch {
+      updateStep(step.contact_id, { language: step.language, translating: false });
+    }
+  };
 
   const handleSendAll = async () => {
     if (sending) return;
@@ -117,14 +140,14 @@ export default function BlastSequenceDrafter({
           </View>
           <Pressable
             onPress={handleSendAll}
-            disabled={sending || toSend.length === 0}
-            style={[styles.headerBtn, (toSend.length === 0 || sending) ? styles.headerBtnDisabled : styles.headerBtnPrimary]}
+            disabled={sending || anyTranslating || toSend.length === 0}
+            style={[styles.headerBtn, (toSend.length === 0 || sending || anyTranslating) ? styles.headerBtnDisabled : styles.headerBtnPrimary]}
           >
             <Text style={[
               styles.headerBtnText,
-              (toSend.length === 0 || sending) ? { color: colors.grey } : { color: colors.ink },
+              (toSend.length === 0 || sending || anyTranslating) ? { color: colors.grey } : { color: colors.ink },
             ]}>
-              {sending ? 'Sending…' : `Send ${toSend.length}`}
+              {sending ? 'Sending…' : anyTranslating ? 'Translating…' : `Send ${toSend.length}`}
             </Text>
           </Pressable>
         </View>
@@ -132,7 +155,7 @@ export default function BlastSequenceDrafter({
         <ScrollView contentContainerStyle={styles.body}>
           {steps.length === 0 ? (
             <View style={styles.empty}>
-              <ActivityIndicator color={colors.gold} />
+              <RadarLoader size={28} />
               <Text style={styles.emptyText}>Drafting…</Text>
             </View>
           ) : steps.map(step => {
@@ -154,11 +177,18 @@ export default function BlastSequenceDrafter({
                   </View>
                   <LanguageToggle
                     value={step.language}
-                    onChange={(next) => updateStep(step.contact_id, { language: next })}
+                    onChange={(next) => retranslateStep(step, next)}
                   />
                 </View>
 
-                {step.editing ? (
+                {step.translating ? (
+                  <View style={styles.translating}>
+                    <RadarLoader size={16} />
+                    <Text style={styles.translatingText}>
+                      Translating to {step.language === 'es' ? 'Spanish' : 'English'}…
+                    </Text>
+                  </View>
+                ) : step.editing ? (
                   <TextInput
                     value={step.message}
                     onChangeText={(t) => updateStep(step.contact_id, { message: t, char_count: t.length })}
@@ -295,6 +325,8 @@ const styles = StyleSheet.create({
     padding: 10,
   } as any,
   message: { fontSize: 14, color: colors.white, lineHeight: 20 },
+  translating: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  translatingText: { fontSize: 13, color: colors.gold, fontWeight: '600' },
   gamePlan: { fontSize: 11, color: colors.gold, fontStyle: 'italic' },
   warn: { fontSize: 11, color: colors.red, fontWeight: '600' },
 

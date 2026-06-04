@@ -1,4 +1,5 @@
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius, spacing } from '@/constants/theme';
 import { HeatStripe, SectionHead, StatNumber } from './atoms';
 import { TIERS, stalenessColor, type TierKey } from './tokens';
@@ -60,18 +61,22 @@ export default function HeatSheetTab({
   if (!contacts) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.gold} />
+        <RadarLoader size={36} />
       </View>
     );
   }
 
-  const groups: Record<TierKey, V2Contact[]> = { hot: [], warm: [], watch: [] };
+  const groups: Record<TierKey, V2Contact[]> = { hot: [], warm: [], cold: [] };
   for (const c of contacts) groups[c.tier].push(c);
 
   const overdueCount = contacts.filter(c => c.days >= 4).length;
 
   return (
     <View style={styles.root}>
+      {/* Weekly Digest sits at the very top — it's the Monday-morning review the
+          rep opens to. The daily TODAY banner follows underneath. */}
+      <WeeklyDigestCard />
+
       <View style={styles.banner}>
         <View style={{ flex: 1 }}>
           <Text style={styles.bannerLabel}>TODAY · {TODAY_LABEL}</Text>
@@ -83,8 +88,6 @@ export default function HeatSheetTab({
         </View>
         <StatNumber value={String(overdueCount)} size={32} color={colors.gold2} />
       </View>
-
-      <WeeklyDigestCard />
 
       {onOpenNurture ? (
         <NurtureBanner refetchKey={nurtureRefetchKey} onOpenReviewer={onOpenNurture} />
@@ -107,8 +110,8 @@ export default function HeatSheetTab({
       <SectionHead label="WARM" count={groups.warm.length} color={colors.orange} icon="☀️" />
       {groups.warm.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}
 
-      <SectionHead label="WATCH" count={groups.watch.length} color={colors.grey2} icon="👁" />
-      {groups.watch.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}
+      <SectionHead label="COLD" count={groups.cold.length} color={colors.grey2} icon="🧊" />
+      {groups.cold.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}
     </View>
   );
 }

@@ -4,7 +4,7 @@ import { Label } from './atoms';
 import type { BookSummaryPayload } from '@/lib/v2/rexActions';
 
 export default function BookSummaryCard({ payload }: { payload: BookSummaryPayload }) {
-  const t = payload.by_tier ?? { hot: 0, warm: 0, watch: 0, cold: 0, dead: 0 };
+  const t = payload.by_tier ?? { hot: 0, warm: 0, cold: 0, dead: 0 };
   return (
     <View style={styles.card}>
       <Label color={colors.gold}>BOOK SNAPSHOT</Label>
@@ -15,7 +15,7 @@ export default function BookSummaryCard({ payload }: { payload: BookSummaryPaylo
       <View style={styles.grid}>
         <Stat label="HOT" value={t.hot ?? 0} color={colors.red} />
         <Stat label="WARM" value={t.warm ?? 0} color={colors.orange} />
-        <Stat label="WATCH" value={t.watch ?? 0} color={colors.grey3} />
+        <Stat label="COLD" value={t.cold ?? 0} color={colors.grey3} />
         <Stat label="STALLED" value={payload.stalled ?? 0} color={colors.gold} />
       </View>
     </View>

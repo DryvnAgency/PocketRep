@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import {
-  getLatestDigest,
-  generateDigestForCurrentWeek,
+  autoPopulateReviewDigest,
+  generateReviewDigest,
   type WeeklyDigest,
 } from '@/lib/v2/weeklyDigest';
 
@@ -21,10 +22,12 @@ export default function WeeklyDigestCard() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // On open, surface the prior-week review digest — generating it on Sunday's
+  // first look and finalizing it Monday morning (handled in autoPopulate).
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getLatestDigest().then(d => {
+    autoPopulateReviewDigest().then(d => {
       if (cancelled) return;
       setDigest(d);
       setLoading(false);
@@ -35,7 +38,7 @@ export default function WeeklyDigestCard() {
   const refresh = async () => {
     setRefreshing(true);
     try {
-      const next = await generateDigestForCurrentWeek();
+      const next = await generateReviewDigest();
       if (next) setDigest(next);
     } catch (e) {
       console.warn('digest refresh failed', e);
@@ -53,7 +56,7 @@ export default function WeeklyDigestCard() {
         <View style={{ flex: 1 }} />
         <Pressable onPress={refresh} disabled={refreshing} hitSlop={6}>
           {refreshing ? (
-            <ActivityIndicator color={colors.gold} size="small" />
+            <RadarLoader size={18} />
           ) : (
             <Text style={styles.refresh}>{digest ? '↻ Regen' : '＋ Generate'}</Text>
           )}

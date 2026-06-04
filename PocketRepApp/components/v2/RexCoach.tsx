@@ -6,8 +6,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
 } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 import { callBrain } from '@/lib/v2/aiProxy';
@@ -133,7 +134,7 @@ export default function RexCoach({
           {typing ? (
             <View style={styles.bubbleRow}>
               <View style={[styles.bubble, styles.bubbleRex, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-                <ActivityIndicator color={colors.gold} size="small" />
+                <RadarLoader size={16} />
                 <Text style={styles.bubbleText}>Rex is thinking…</Text>
               </View>
             </View>

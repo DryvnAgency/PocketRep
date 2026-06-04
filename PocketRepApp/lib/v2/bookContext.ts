@@ -29,7 +29,6 @@ export type BookContext = {
   total: number;
   hot: BookContact[];
   warm: BookContact[];
-  watch: BookContact[];
   cold: BookContact[];
   dead: BookContact[];
   past_customers: BookContact[];
@@ -75,7 +74,7 @@ export async function loadBookContext(): Promise<BookContext> {
 
   if (error) {
     return {
-      total: 0, hot: [], warm: [], watch: [], cold: [], dead: [],
+      total: 0, hot: [], warm: [], cold: [], dead: [],
       past_customers: [], stalled: [], by_make_count: {}, by_model_count: {},
     };
   }
@@ -83,7 +82,6 @@ export async function loadBookContext(): Promise<BookContext> {
   const rows = (data ?? []).map(rowToBook);
   const hot: BookContact[] = [];
   const warm: BookContact[] = [];
-  const watch: BookContact[] = [];
   const cold: BookContact[] = [];
   const dead: BookContact[] = [];
   const pastCustomers: BookContact[] = [];
@@ -100,7 +98,6 @@ export async function loadBookContext(): Promise<BookContext> {
     if (isDead) dead.push(c);
     else if (c.heat_score >= 80) hot.push(c);
     else if (c.heat_score >= 50) warm.push(c);
-    else if (c.heat_score >= 30) watch.push(c);
     else cold.push(c);
 
     if (!isDead && c.days_silent >= 14) stalled.push(c);
@@ -113,8 +110,7 @@ export async function loadBookContext(): Promise<BookContext> {
     total: rows.length,
     hot: hot.sort((a, b) => b.heat_score - a.heat_score),
     warm: warm.sort((a, b) => b.heat_score - a.heat_score),
-    watch,
-    cold,
+    cold: cold.sort((a, b) => b.heat_score - a.heat_score),
     dead,
     past_customers: pastCustomers,
     stalled: stalled.sort((a, b) => b.days_silent - a.days_silent),
@@ -143,8 +139,7 @@ export function bookContextForPrompt(ctx: BookContext): string {
     `BOOK STATE — ${ctx.total} total contacts`,
     fmt('HOT (>=80)', ctx.hot),
     fmt('WARM (50-79)', ctx.warm),
-    fmt('WATCH (30-49)', ctx.watch),
-    fmt('COLD (20-29)', ctx.cold),
+    fmt('COLD (20-49)', ctx.cold),
     fmt('DEAD (<20 or 90d silent)', ctx.dead, 15),
     fmt('PAST CUSTOMERS', ctx.past_customers, 15),
     fmt('STALLED (>=14d silent, not dead)', ctx.stalled, 20),

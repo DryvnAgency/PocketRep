@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Label, Pill, HeatStripe } from './atoms';
 import { useSequences, type V2Sequence } from '@/lib/v2/useSequences';
@@ -77,7 +78,7 @@ export default function GamePlanSheet({
           <Text style={styles.error}>Couldn't load: {error}</Text>
         ) : !sequences ? (
           <View style={styles.center}>
-            <ActivityIndicator color={colors.gold} />
+            <RadarLoader size={32} />
           </View>
         ) : sequences.length === 0 ? (
           <View style={styles.empty}>

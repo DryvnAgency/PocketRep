@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { colors, radius, spacing } from '@/constants/theme';
 import { Avatar, Label, Pill, SectionHead, rgbaTint } from './atoms';
-import { TIERS } from './tokens';
+import { TIERS, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import { useDeals, type V2Deal } from '@/lib/v2/useDeals';
 import { useTags } from '@/lib/v2/useTags';
@@ -12,8 +12,10 @@ import {
   updateContactNotes,
   updateContactTags,
   deleteContact,
+  updateContactTier,
   updateContactPreferredLanguage,
   updateContactBirthday,
+  updateContactReferredBy,
   logContactTouch,
 } from '@/lib/v2/updateContact';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
@@ -62,6 +64,8 @@ export default function ContactDetail({
   onDeleted,
   dealsRefetchKey = 0,
   onLogDeal,
+  allContacts = [],
+  onOpenContact,
 }: {
   contact: V2Contact;
   onClose: () => void;
@@ -69,6 +73,8 @@ export default function ContactDetail({
   onDeleted?: (id: string) => void;
   dealsRefetchKey?: number;
   onLogDeal?: () => void;
+  allContacts?: V2Contact[];
+  onOpenContact?: (id: string) => void;
 }) {
   const tier = TIERS[contact.tier];
   const allTags = useTags();
@@ -78,8 +84,8 @@ export default function ContactDetail({
   const unmarkedNurtures = nurtures.filter(n => n.sent_at && !n.reply_received);
   const [interactionsKey, setInteractionsKey] = useState(0);
   const interactions = useInteractions(contact.id, interactionsKey);
-  // Web compose modal (Call/Text). Native goes straight to Linking.openURL.
-  const [compose, setCompose] = useState<{ mode: 'call' | 'text'; body: string } | null>(null);
+  // Web compose modal (Call/Text/Email). Native goes straight to Linking.openURL.
+  const [compose, setCompose] = useState<{ mode: 'call' | 'text' | 'email'; body: string } | null>(null);
 
   const [notes, setNotes] = useState(contact.notes ?? '');
   const [editingNotes, setEditingNotes] = useState(false);
@@ -103,16 +109,79 @@ export default function ContactDetail({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [editingReferral, setEditingReferral] = useState(false);
+  const [referralInput, setReferralInput] = useState('');
+  const [savingReferral, setSavingReferral] = useState(false);
+
   useEffect(() => {
     setNotes(contact.notes ?? '');
     setEditingNotes(false);
     setBday(contact.birthday ?? '');
     setEditingBday(false);
+    setEditingReferral(false);
+    setReferralInput('');
     setAiOpen(false);
     setAiScript('');
     setAiError(null);
     setCompose(null);
   }, [contact.id]);
+
+  // Referral link: resolve the referrer (linked contact wins over free-text),
+  // and the reverse list of everyone this contact has referred.
+  const referrer = contact.referredByContactId
+    ? allContacts.find(c => c.id === contact.referredByContactId) ?? null
+    : null;
+  const referrerLabel = referrer?.name ?? contact.referredByName ?? null;
+  const referrals = allContacts.filter(c => c.referredByContactId === contact.id);
+  const referralMatches = editingReferral && referralInput.trim()
+    ? allContacts
+        .filter(c => c.id !== contact.id && c.name.toLowerCase().includes(referralInput.trim().toLowerCase()))
+        .slice(0, 5)
+    : [];
+
+  const startEditReferral = () => {
+    setReferralInput(referrerLabel ?? '');
+    setEditingReferral(true);
+  };
+
+  // Save the referral. A name that exactly matches a contact links the two; an
+  // explicit pick (opts) always links; anything else stores free text.
+  const saveReferral = async (opts?: { contactId: string; name: string }) => {
+    const next = opts ?? (() => {
+      const typed = referralInput.trim();
+      if (!typed) return { contactId: null as string | null, name: null as string | null };
+      const exact = allContacts.find(
+        c => c.id !== contact.id && c.name.toLowerCase() === typed.toLowerCase(),
+      );
+      return exact
+        ? { contactId: exact.id, name: exact.name }
+        : { contactId: null as string | null, name: typed };
+    })();
+    setSavingReferral(true);
+    try {
+      await updateContactReferredBy(contact.id, next);
+      onLocalUpdate({ ...contact, referredByContactId: next.contactId, referredByName: next.name });
+      setEditingReferral(false);
+    } catch (e) {
+      console.warn('saveReferral failed', e);
+    } finally {
+      setSavingReferral(false);
+    }
+  };
+
+  const clearReferral = async () => {
+    setSavingReferral(true);
+    try {
+      await updateContactReferredBy(contact.id, { contactId: null, name: null });
+      onLocalUpdate({ ...contact, referredByContactId: null, referredByName: null });
+      setEditingReferral(false);
+      setReferralInput('');
+    } catch (e) {
+      console.warn('clearReferral failed', e);
+    } finally {
+      setSavingReferral(false);
+    }
+  };
 
   const totalCommission = useMemo(
     () => deals.reduce((s, d) => s + d.amount, 0),
@@ -179,6 +248,20 @@ export default function ContactDetail({
     }
   };
 
+  // Tap the tier pill to cycle Hot → Warm → Cold. Saved as a manual override
+  // that sticks regardless of the auto heat score.
+  const cycleTier = async () => {
+    const order: TierKey[] = ['hot', 'warm', 'cold'];
+    const next = order[(order.indexOf(contact.tier) + 1) % order.length];
+    onLocalUpdate({ ...contact, tier: next });
+    try {
+      await updateContactTier(contact.id, next);
+    } catch (e) {
+      onLocalUpdate({ ...contact, tier: contact.tier });
+      console.warn('tier update failed', e);
+    }
+  };
+
   const flash = (msg: string) => {
     setTouchMsg(msg);
     setTimeout(() => setTouchMsg(null), 1700);
@@ -235,10 +318,12 @@ export default function ContactDetail({
     Linking.openURL(channelUrl('text', body));
     recordTouch('text', body);
   };
-  // mailto opens the mail client on web and native (no blank tab), so it has a
-  // clear result on both — no compose modal needed.
+  // Email mirrors Call/Text: web opens the compose modal (mailto: silently
+  // no-ops when no desktop mail client is registered, which read as a dead
+  // button); native opens the mail client directly.
   const openEmail = (body?: string) => {
     if (!contact.email) { flash('No email on file'); return; }
+    if (Platform.OS === 'web') { setCompose({ mode: 'email', body: body ?? '' }); return; }
     Linking.openURL(channelUrl('email', body));
     recordTouch('email', body);
   };
@@ -334,7 +419,7 @@ export default function ContactDetail({
           <View style={styles.confirmCard}>
             <Text style={styles.confirmTitle}>Delete {contact.name}?</Text>
             <Text style={styles.confirmBody}>
-              You can undo this from your audit log within 30 days.
+              This permanently removes {contact.name} from your book. It can't be undone.
             </Text>
             <View style={styles.confirmActions}>
               <Pressable
@@ -377,7 +462,9 @@ export default function ContactDetail({
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.heroName}>{contact.name}</Text>
             <View style={styles.heroPills}>
-              <Pill color={tier.color}>{tier.icon} {tier.label}</Pill>
+              <Pressable onPress={cycleTier} hitSlop={6}>
+                <Pill color={tier.color}>{tier.icon} {tier.label}</Pill>
+              </Pressable>
               {contact.planLabel ? <Pill color={colors.gold}>{contact.planLabel}</Pill> : null}
               <LanguageToggle
                 value={contact.preferredLanguage}
@@ -485,6 +572,100 @@ export default function ContactDetail({
             </Text>
           )}
         </Pressable>
+
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionLabel}>REFERRED BY</Text>
+          <View style={{ flex: 1 }} />
+          {editingReferral ? (
+            <>
+              <Pressable onPress={() => setEditingReferral(false)} hitSlop={6}>
+                <Text style={styles.linkSecondary}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={() => saveReferral()} hitSlop={6} disabled={savingReferral}>
+                <Text style={styles.linkPrimary}>{savingReferral ? 'SAVING…' : 'SAVE'}</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable onPress={startEditReferral} hitSlop={6}>
+              <Text style={styles.linkPrimary}>{referrerLabel ? 'EDIT ›' : '＋ ADD'}</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {editingReferral ? (
+          <View style={[styles.card, { borderColor: colors.gold, gap: 10 }]}>
+            <TextInput
+              value={referralInput}
+              onChangeText={setReferralInput}
+              autoFocus
+              placeholder="Who referred them? Type a name…"
+              placeholderTextColor={colors.grey}
+              style={styles.bdayInput}
+            />
+            {referralMatches.length > 0 ? (
+              <View style={{ gap: 6 }}>
+                <Text style={styles.referralHint}>Tap to link a contact:</Text>
+                <View style={styles.referralChips}>
+                  {referralMatches.map(m => (
+                    <Pressable
+                      key={m.id}
+                      onPress={() => saveReferral({ contactId: m.id, name: m.name })}
+                      style={styles.referralChip}
+                    >
+                      <Text style={styles.referralChipText}>👥 {m.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+            {referrerLabel ? (
+              <Pressable onPress={clearReferral} hitSlop={6} disabled={savingReferral}>
+                <Text style={styles.linkSecondary}>Remove referral</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <Pressable
+            onPress={() => (referrer ? onOpenContact?.(referrer.id) : startEditReferral())}
+            style={[styles.card, { paddingVertical: 14 }]}
+          >
+            {referrerLabel ? (
+              <Text style={referrer ? styles.referralLinked : styles.bdayText}>
+                👥 {referrerLabel}{referrer ? ' ›' : ''}
+              </Text>
+            ) : (
+              <Text style={[styles.bdayText, styles.bdayPlaceholder]}>
+                Tap to add who referred them…
+              </Text>
+            )}
+          </Pressable>
+        )}
+
+        {referrals.length > 0 ? (
+          <>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionLabel}>REFERRALS</Text>
+              <View style={styles.dealCount}>
+                <Text style={styles.dealCountText}>{referrals.length}</Text>
+              </View>
+              <View style={{ flex: 1 }} />
+            </View>
+            <View style={styles.card}>
+              {referrals.map((r, i) => (
+                <Pressable
+                  key={r.id}
+                  onPress={() => onOpenContact?.(r.id)}
+                  style={[styles.referralRow, i < referrals.length - 1 && styles.divider]}
+                >
+                  <Avatar name={r.name} size={28} photoUrl={r.photoUrl} />
+                  <Text style={styles.referralRowName} numberOfLines={1}>{r.name}</Text>
+                  <View style={{ flex: 1 }} />
+                  <Text style={styles.referralRowChev}>›</Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         <View style={styles.toggleWrap}>
           <View style={styles.toggle}>
@@ -786,16 +967,22 @@ export default function ContactDetail({
           <View style={styles.composeCard}>
             <View style={styles.sheetHandle} />
             <Text style={styles.composeTitle}>
-              {compose.mode === 'call' ? `Call ${contact.name}` : `Text ${contact.name}`}
+              {compose.mode === 'call'
+                ? `Call ${contact.name}`
+                : compose.mode === 'email'
+                ? `Email ${contact.name}`
+                : `Text ${contact.name}`}
             </Text>
-            <Text style={styles.composeTarget}>{contact.phone}</Text>
-            {compose.mode === 'text' ? (
+            <Text style={styles.composeTarget}>
+              {compose.mode === 'email' ? contact.email : contact.phone}
+            </Text>
+            {compose.mode === 'text' || compose.mode === 'email' ? (
               <TextInput
                 value={compose.body}
                 onChangeText={(t) => setCompose(c => (c ? { ...c, body: t } : c))}
                 multiline
                 autoFocus
-                placeholder="Type your message…"
+                placeholder={compose.mode === 'email' ? 'Type your email…' : 'Type your message…'}
                 placeholderTextColor={colors.grey}
                 style={styles.composeInput}
               />
@@ -803,20 +990,24 @@ export default function ContactDetail({
             <View style={styles.composeActions}>
               <Pressable
                 onPress={async () => {
-                  const body = compose.mode === 'text' ? compose.body : undefined;
-                  await webCopy(compose.mode === 'text' && compose.body ? compose.body : (contact.phone ?? ''));
+                  const hasBody = compose.mode === 'text' || compose.mode === 'email';
+                  const body = hasBody ? compose.body : undefined;
+                  const copyText = hasBody && compose.body
+                    ? compose.body
+                    : compose.mode === 'email' ? (contact.email ?? '') : (contact.phone ?? '');
+                  await webCopy(copyText);
                   recordTouch(compose.mode, body);
                   setCompose(null);
                 }}
                 style={styles.aiAction}
               >
                 <Text style={styles.aiActionText}>
-                  {compose.mode === 'text' ? '⧉ COPY MESSAGE' : '⧉ COPY NUMBER'}
+                  {compose.mode === 'call' ? '⧉ COPY NUMBER' : '⧉ COPY MESSAGE'}
                 </Text>
               </Pressable>
               <Pressable
                 onPress={() => {
-                  const body = compose.mode === 'text' ? compose.body : undefined;
+                  const body = (compose.mode === 'text' || compose.mode === 'email') ? compose.body : undefined;
                   try { Linking.openURL(channelUrl(compose.mode, body || undefined)); } catch { /* ignore */ }
                   recordTouch(compose.mode, body);
                   setCompose(null);
@@ -824,7 +1015,7 @@ export default function ContactDetail({
                 style={[styles.aiAction, styles.aiActionPrimary]}
               >
                 <Text style={styles.aiActionPrimaryText}>
-                  {compose.mode === 'call' ? '📞 OPEN DIALER' : '💬 OPEN SMS'}
+                  {compose.mode === 'call' ? '📞 OPEN DIALER' : compose.mode === 'email' ? '✉️ OPEN MAIL' : '💬 OPEN SMS'}
                 </Text>
               </Pressable>
             </View>
@@ -1170,6 +1361,20 @@ const styles = StyleSheet.create({
   bdayInput: { color: colors.white, fontSize: 15, padding: 0 } as any,
   bdayText: { fontSize: 15, color: colors.white, letterSpacing: -0.2 },
   bdayPlaceholder: { color: colors.grey, fontStyle: 'italic' },
+
+  referralLinked: { fontSize: 15, color: colors.gold, fontWeight: '600', letterSpacing: -0.2 },
+  referralHint: { fontSize: 11, color: colors.grey2, fontWeight: '600' },
+  referralChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  referralChip: {
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1, borderColor: colors.goldBorder,
+  },
+  referralChipText: { fontSize: 12, fontWeight: '700', color: colors.gold },
+  referralRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  referralRowName: { fontSize: 14, fontWeight: '600', color: colors.white, maxWidth: '70%' },
+  referralRowChev: { fontSize: 16, color: colors.gold },
 
   gamePlan: {
     paddingVertical: 14,

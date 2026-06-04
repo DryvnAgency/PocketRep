@@ -63,6 +63,8 @@ export type NewContactDraft = {
   notes: string;
   tags: string[];
   birthday?: string | null;
+  referredByContactId?: string | null;
+  referredByName?: string | null;
 };
 
 export async function createContact(draft: NewContactDraft): Promise<string> {
@@ -87,6 +89,8 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
       last_contact_date: today,
       notes: draft.notes.trim() || null,
       birthday: draft.birthday || null,
+      referred_by_contact_id: draft.referredByContactId ?? null,
+      referred_by_name: draft.referredByName ?? null,
       tags: draft.tags,
       stage: 'active',
       milestones: [],
@@ -97,10 +101,39 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
   return data!.id as string;
 }
 
+// Hard delete: actually removes the row from the database. Child rows clean up
+// via FK (interactions / nurture_messages / milestones / contact_sequences
+// cascade; deals + rex_messages keep their history with contact_id set null).
 export async function deleteContact(id: string): Promise<void> {
   const { error } = await supabase
     .from('contacts')
-    .update({ is_deleted: true, updated_at: new Date().toISOString() })
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Rep-set heat tier — overrides the heat_score-derived tier in the v2 UI.
+export async function updateContactTier(id: string, tier: 'hot' | 'warm' | 'cold'): Promise<void> {
+  const { error } = await supabase
+    .from('contacts')
+    .update({ tier_override: tier, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Who referred this contact. Links to a saved contact (contactId) when the
+// referrer is in the book, and/or stores a free-text name. Pass nulls to clear.
+export async function updateContactReferredBy(
+  id: string,
+  referredBy: { contactId: string | null; name: string | null },
+): Promise<void> {
+  const { error } = await supabase
+    .from('contacts')
+    .update({
+      referred_by_contact_id: referredBy.contactId,
+      referred_by_name: referredBy.name,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id);
   if (error) throw error;
 }

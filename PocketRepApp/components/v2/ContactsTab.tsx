@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
   Alert, Platform,
 } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius, spacing } from '@/constants/theme';
 import { Avatar, rgbaTint } from './atoms';
 import { TIERS, type TierKey } from './tokens';
@@ -17,7 +18,7 @@ type FilterTag =
 const TIER_CHIPS: Extract<FilterTag, { kind: 'tier' }>[] = [
   { kind: 'tier', tier: 'hot',   name: 'Hot',   color: colors.red,    icon: '🔥' },
   { kind: 'tier', tier: 'warm',  name: 'Warm',  color: colors.orange, icon: '☀️' },
-  { kind: 'tier', tier: 'watch', name: 'Watch', color: colors.grey2,  icon: '👁' },
+  { kind: 'tier', tier: 'cold',  name: 'Cold',  color: colors.grey2,  icon: '🧊' },
 ];
 
 function ContactRow({
@@ -168,7 +169,7 @@ export default function ContactsTab({
   if (!contacts) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.gold} />
+        <RadarLoader size={36} />
       </View>
     );
   }

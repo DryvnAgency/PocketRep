@@ -5,6 +5,7 @@ import {
 import { colors, radius } from '@/constants/theme';
 import { createContact, type NewContactDraft } from '@/lib/v2/updateContact';
 import { parseBirthdayInput } from '@/lib/v2/birthday';
+import type { V2Contact } from '@/lib/v2/useContacts';
 
 const PLAN_OPTIONS: Array<{ value: NewContactDraft['planLabel']; label: string }> = [
   { value: 'TODAY', label: 'Today' },
@@ -16,7 +17,7 @@ const PLAN_OPTIONS: Array<{ value: NewContactDraft['planLabel']; label: string }
 const TIER_OPTIONS: Array<{ label: string; score: number; color: string; icon: string }> = [
   { label: 'Hot',   score: 90, color: colors.red,    icon: '🔥' },
   { label: 'Warm',  score: 65, color: colors.orange, icon: '☀️' },
-  { label: 'Watch', score: 35, color: colors.grey2,  icon: '👁' },
+  { label: 'Cold',  score: 35, color: colors.grey2,  icon: '🧊' },
 ];
 
 const blank = (): NewContactDraft => ({
@@ -27,14 +28,16 @@ const blank = (): NewContactDraft => ({
   notes: '',
   tags: [],
   birthday: '',
+  referredByName: '',
 });
 
 export default function AddContactModal({
-  open, onClose, onCreated,
+  open, onClose, onCreated, allContacts = [],
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  allContacts?: V2Contact[];
 }) {
   const [d, setD] = useState<NewContactDraft>(blank());
   const [saving, setSaving] = useState(false);
@@ -65,7 +68,19 @@ export default function AddContactModal({
     setSaving(true);
     setError(null);
     try {
-      await createContact({ ...d, birthday: parsedBday });
+      // Auto-link the referrer when the typed name matches a saved contact;
+      // otherwise keep it as free text. Precise linking is also available later
+      // from the contact card.
+      const typedReferrer = (d.referredByName ?? '').trim();
+      const matchedReferrer = typedReferrer
+        ? allContacts.find(c => c.name.toLowerCase() === typedReferrer.toLowerCase())
+        : undefined;
+      await createContact({
+        ...d,
+        birthday: parsedBday,
+        referredByName: typedReferrer || null,
+        referredByContactId: matchedReferrer?.id ?? null,
+      });
       onCreated();
       onClose();
     } catch (e: any) {
@@ -251,6 +266,17 @@ export default function AddContactModal({
                 );
               })}
             </View>
+          </Field>
+
+          <Field label="REFERRED BY">
+            <TextInput
+              value={d.referredByName ?? ''}
+              onChangeText={t => set('referredByName', t)}
+              placeholder="Who sent them your way?"
+              placeholderTextColor={colors.grey}
+              autoCapitalize="words"
+              style={styles.input}
+            />
           </Field>
 
           <Field label="NOTES">

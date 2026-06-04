@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, Pressable, ScrollView, StyleSheet,
 } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, Pill } from './atoms';
 import { batchKill, type StalledReport, type StalledRecommendation } from '@/lib/v2/stalledLeads';
@@ -127,7 +128,7 @@ export default function StalledLeadsAnalysis({
         <ScrollView contentContainerStyle={styles.body}>
           {loading ? (
             <View style={styles.center}>
-              <ActivityIndicator color={colors.gold} />
+              <RadarLoader size={32} />
               <Text style={styles.centerHint}>
                 {slowPhase === 'slow'
                   ? 'Still working — Rex is reading every lead. A few more seconds…'

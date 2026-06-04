@@ -22,12 +22,12 @@ function defaultOpener(c: BookContact): string {
 
 // Pick the single best contact to call right now from a chosen tier.
 // Priority: highest heat_score, then longest silent within the same tier.
-export function chooseNextCall(ctx: BookContext, tier: 'hot' | 'warm' | 'watch' | 'any' = 'hot'): CallNextResult | null {
+export function chooseNextCall(ctx: BookContext, tier: 'hot' | 'warm' | 'cold' | 'any' = 'hot'): CallNextResult | null {
   const pool =
     tier === 'hot' ? ctx.hot :
     tier === 'warm' ? ctx.warm :
-    tier === 'watch' ? ctx.watch :
-    [...ctx.hot, ...ctx.warm, ...ctx.watch];
+    tier === 'cold' ? ctx.cold :
+    [...ctx.hot, ...ctx.warm, ...ctx.cold];
 
   if (pool.length === 0) return null;
   const sorted = [...pool].sort((a, b) => b.heat_score - a.heat_score || b.days_silent - a.days_silent);

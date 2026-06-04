@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, TextInput,
+  View, Text, Pressable, ScrollView, StyleSheet, TextInput,
 } from 'react-native';
+import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, Pill } from './atoms';
 import {
@@ -103,7 +104,7 @@ export default function NurtureReviewer({
             <Text style={styles.error}>{error}</Text>
           ) : !drafts ? (
             <View style={styles.center}>
-              <ActivityIndicator color={colors.gold} />
+              <RadarLoader size={32} />
             </View>
           ) : drafts.length === 0 ? (
             <View style={styles.empty}>
