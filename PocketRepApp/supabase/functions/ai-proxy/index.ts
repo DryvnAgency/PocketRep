@@ -2,11 +2,17 @@
  * PocketRep AI Proxy — Supabase Edge Function
  *
  * Routes:
- *   /ai-proxy/gemini   → Rex Lens (Anthropic Claude via REXLENS_API_KEY)
+ *   /ai-proxy/rexlens  → Rex Lens (Anthropic Claude via REXLENS_API_KEY)
+ *                        DORMANT unless ANTHROPIC_ENABLED=1 (see below).
  *   /ai-proxy/brain    → PocketRep brain (OpenRouter via POCKETREP_API_KEY)
  *   /ai-proxy/stt      → 501 stub
  *   /ai-proxy/tts      → 501 stub
  *   /ai-proxy           → PocketRep brain (back-compat root)
+ *
+ * The legacy `/gemini` route name has been retired — it never used Gemini, it
+ * pointed at Anthropic. The only live AI surface is the OpenRouter brain
+ * (Grok 4.3 → Kimi K2.6). All Anthropic/Claude usage is gated behind
+ * ANTHROPIC_ENABLED and is OFF by default; set the secret to '1' to restore.
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -17,6 +23,12 @@ const BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6'];
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const REXLENS_DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
+
+// ── Anthropic/Claude kill-switch ─────────────────────────────────────────────
+// Rex Lens is the only consumer of the Anthropic path. It is DORMANT by default:
+// the live AI surface is the OpenRouter brain (Grok 4.3 → Kimi K2.6) only.
+// Flip ANTHROPIC_ENABLED=1 (a Supabase function secret) to restore Claude.
+const ANTHROPIC_ENABLED = Deno.env.get('ANTHROPIC_ENABLED') === '1';
 
 const REXLENS_SYSTEM_PROMPT = `You are Rex Lens, the CRM-reading mode of Rex, a 30-year car-sales veteran helping one rep work their daily worklist. You read one contact's CRM record at a time, figure out what the dealership's CRM is asking the rep to do for that person (call, text, or email), and produce a ready-to-use draft plus a priority score. Plain first person, no corporate jargon, blunt is fine.
 
@@ -81,7 +93,7 @@ function json(body: unknown, status = 200) {
 
 function routeOf(req: Request): 'rexlens' | 'brain' | 'stt' | 'tts' | 'root' {
   const path = new URL(req.url).pathname.replace(/\/+$/, '');
-  if (path.endsWith('/gemini') || path.endsWith('/rexlens')) return 'rexlens';
+  if (path.endsWith('/rexlens')) return 'rexlens';
   if (path.endsWith('/brain')) return 'brain';
   if (path.endsWith('/stt')) return 'stt';
   if (path.endsWith('/tts')) return 'tts';
@@ -134,6 +146,10 @@ async function callClaude(key: string, model: string, max: number, sys: string, 
 }
 
 async function handleRexLens(req: Request) {
+  // Dormant by default — the live surface is the OpenRouter brain only.
+  if (!ANTHROPIC_ENABLED) {
+    return json({ error: { type: 'rexlens_disabled', message: 'Rex Lens (Anthropic) is dormant. Set ANTHROPIC_ENABLED=1 to re-enable.' } }, 503);
+  }
   const KEY = Deno.env.get('REXLENS_API_KEY');
   if (!KEY) return json({ error: { type: 'server_error', message: 'REXLENS_API_KEY not configured' } }, 500);
   const auth = await authAndPlan(req.headers.get('Authorization'));
@@ -141,7 +157,11 @@ async function handleRexLens(req: Request) {
   const { user, supabase, today } = auth;
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: { type: 'invalid_request', message: 'Invalid JSON' } }, 400); }
-  const model = (body.model as string) || REXLENS_DEFAULT_MODEL;
+  // Only accept real Claude model ids; coerce anything else (e.g. a stray
+  // 'gemini-*' id from an old client) to the default so we never forward a
+  // bogus model to Anthropic.
+  const requestedModel = typeof body.model === 'string' ? body.model : '';
+  const model = requestedModel.startsWith('claude-') ? requestedModel : REXLENS_DEFAULT_MODEL;
   const maxTok = typeof body.max_tokens === 'number' ? body.max_tokens : 4096;
   const tasks = body.tasks as Array<Record<string, unknown>> | undefined;
 
@@ -270,7 +290,7 @@ async function handleBrain(req: Request) {
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors() });
-  if (req.method === 'GET') return json({ status: 'ok', service: 'ai-proxy', brain: BRAIN_MODELS, rexlens: REXLENS_DEFAULT_MODEL });
+  if (req.method === 'GET') return json({ status: 'ok', service: 'ai-proxy', brain: BRAIN_MODELS, rexlens: ANTHROPIC_ENABLED ? REXLENS_DEFAULT_MODEL : 'dormant' });
   if (req.method !== 'POST') return json({ error: { type: 'invalid_request', message: 'POST required' } }, 405);
   switch (routeOf(req)) {
     case 'rexlens': return handleRexLens(req);

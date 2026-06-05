@@ -188,11 +188,13 @@ function HeyRexOrb({ user, activeTab }) {
     const AI_PROXY = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 
     try {
-      const res = await fetch(`${AI_PROXY}/gemini`, {
+      // Demo only. Hits the live brain (/brain → OpenRouter Grok 4.3 → Kimi K2.6).
+      // NOTE: /brain requires an Authorization: Bearer <user JWT> header; this
+      // standalone Snack has none, so wire one in before expecting a reply.
+      const res = await fetch(`${AI_PROXY}/brain`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          model: 'gemini-2.5-flash',
           max_tokens: 500,
           system:
             'You are Rex, a 30-year-old top sales closer and coach. ' +
@@ -203,7 +205,7 @@ function HeyRexOrb({ user, activeTab }) {
         }),
       });
       const json = await res.json();
-      setResponse(json.content?.[0]?.text ?? '');
+      setResponse(json.choices?.[0]?.message?.content ?? json.content?.[0]?.text ?? '');
     } catch (_) {
       setResponse('Connection error — your note was captured.');
     }

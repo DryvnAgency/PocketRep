@@ -11,9 +11,8 @@ import type { Contact, RexMessage, RexMemory, Profile } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import { callBrain } from '@/lib/v2/aiProxy';
 import { buildCoachMessages } from '@/lib/v2/coachBrain';
+import { ANTHROPIC_ENABLED } from '@/lib/featureFlags';
 
-// ── Model: Gemini 2.5 Flash for speed + cost on every Rex call ──────────────
-const REX_MODEL = 'gemini-2.5-flash';
 const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 
 // Lazy-load expo-image-picker so a missing package never crashes the app
@@ -336,18 +335,26 @@ export default function RexScreen() {
         });
         rawReply = (await callBrain({ maxTokens: 1200, messages: coachMessages })).trim()
           || 'Rex hit an error. Try again.';
+      } else if (!ANTHROPIC_ENABLED) {
+        // Screenshot (vision) + explicit app-actions ran on the Anthropic-backed
+        // route, now dormant (see lib/featureFlags). Text coaching above still
+        // works on the OpenRouter brain; vision/action is gated off until
+        // ANTHROPIC_ENABLED is set.
+        rawReply = imageToSend
+          ? "I can't read screenshots right now. Tell me the key details and I'll coach you through it."
+          : "That in-app action isn't available right now. Tell me what you need and I'll help directly.";
       } else {
-        // Screenshot (needs vision) or an explicit app-action/inventory request →
-        // keep the Gemini path that can read images and emit <action> blocks.
+        // (Dormant unless ANTHROPIC_ENABLED) Vision + app-action path via the
+        // Anthropic-backed /rexlens route. Model omitted → proxy default
+        // (claude-haiku). Reads images and emits <action> blocks.
         const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(`${AI_PROXY_URL}/gemini`, {
+        const res = await fetch(`${AI_PROXY_URL}/rexlens`, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
             'Authorization': `Bearer ${session?.access_token ?? ''}`,
           },
           body: JSON.stringify({
-            model: REX_MODEL,
             max_tokens: 600,
             system: REX_SYSTEM(profile?.full_name ?? '', memory?.summary ?? '', activeContact, profile?.industry ?? 'auto'),
             messages: apiMessages,
@@ -529,47 +536,15 @@ export default function RexScreen() {
       setRexRecording(true);
       return;
     }
-    // Native: use expo-av to record then transcribe via Whisper
-    try {
-      const { Audio } = require('expo-av');
-      const { granted } = await Audio.requestPermissionsAsync();
-      if (!granted) { alert('Microphone permission required.'); return; }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await rec.startAsync();
-      setRexRecording(true);
-      // Auto-stop at 10 seconds
-      setTimeout(async () => {
-        try {
-          await rec.stopAndUnloadAsync();
-          await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: false });
-          const uri = rec.getURI();
-          if (!uri) { setRexRecording(false); return; }
-          const audioBlob = await fetch(uri).then(r => r.blob());
-          const form = new FormData();
-          form.append('file', audioBlob, 'rex_input.m4a');
-          form.append('model', 'whisper-1');
-          const wr = await fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/whisper', {
-            method: 'POST',
-            body: form,
-          });
-          const wj = await wr.json();
-          const text = wj.text ?? '';
-          if (text) {
-            setInput(text);
-            setTimeout(() => send(), 100);
-          }
-        } catch (e) {
-          console.warn('Rex voice error:', e);
-        } finally {
-          setRexRecording(false);
-        }
-      }, 10000);
-    } catch (e) {
-      console.warn('Rex voice start error:', e);
-      setRexRecording(false);
-    }
+    // Native voice input is intentionally unavailable: there is no server-side
+    // speech-to-text provider wired up. The old /ai-proxy/whisper route never
+    // existed (the proxy's /stt route is a stub), so the previous expo-av +
+    // Whisper path could not transcribe. Web uses the on-device Web Speech API
+    // (above). To enable native voice, wire a real STT provider here — e.g.
+    // OpenRouter's POST /api/v1/audio/transcriptions (Whisper-class) behind the
+    // proxy — then feed the transcript into setInput()/send().
+    alert('Voice input on this device is coming soon. Type your message for now.');
+    setRexRecording(false);
   }
 
   async function fetchAiRebuttal(key: string, objection: string, fallback: string, newAngle = false) {

@@ -30,3 +30,16 @@ export function shouldUseNewUi(): boolean {
   }
   return false;
 }
+
+/**
+ * Anthropic / Claude backend — DORMANT (reversible kill-switch).
+ *
+ * All Claude usage — the Rex Lens screenshot scan (Chrome extension) and the
+ * legacy native Heat Sheet brief / weekly digest / Rex screenshot+action paths
+ * — is gated behind this flag and is currently OFF. The live AI surface is the
+ * OpenRouter brain (Grok 4.3 -> Kimi K2.6) via /ai-proxy/brain only.
+ *
+ * To restore Claude: set EXPO_PUBLIC_ANTHROPIC_ENABLED=1 for the app build and
+ * ANTHROPIC_ENABLED=1 on the ai-proxy edge function. No code is deleted.
+ */
+export const ANTHROPIC_ENABLED = process.env.EXPO_PUBLIC_ANTHROPIC_ENABLED === '1';

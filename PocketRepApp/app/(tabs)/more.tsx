@@ -9,6 +9,7 @@ import { colors, radius, spacing } from '@/constants/theme';
 import type { Profile } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import { scheduleWeeklyDigest, cancelWeeklyDigest } from '@/lib/notifications';
+import { ANTHROPIC_ENABLED } from '@/lib/featureFlags';
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
@@ -16,7 +17,6 @@ try { AsyncStorage = require('@react-native-async-storage/async-storage').defaul
 const DIGEST_TIME_KEY = 'pocketrep_digest_time';
 
 const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
-const REX_MODEL = 'gemini-2.5-flash';
 
 export default function MoreScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -110,6 +110,14 @@ export default function MoreScreen() {
 
   async function buildDigest() {
     setDigestLoading(true);
+
+    // Anthropic/Claude backend is dormant (see lib/featureFlags). This digest
+    // ran on the Claude route; gated off until ANTHROPIC_ENABLED is set.
+    if (!ANTHROPIC_ENABLED) {
+      setDigest('Weekly digest is temporarily unavailable.');
+      setDigestLoading(false);
+      return;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setDigestLoading(false); return; }
 
@@ -127,11 +135,10 @@ export default function MoreScreen() {
     const rexConvos = Math.round((msgs?.length ?? 0) / 2);
 
     const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch(`${AI_PROXY_URL}/gemini`, {
+    const res = await fetch(`${AI_PROXY_URL}/rexlens`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${session?.access_token ?? ''}` },
       body: JSON.stringify({
-        model: REX_MODEL,
         max_tokens: 350,
         messages: [{
           role: 'user',

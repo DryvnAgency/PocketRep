@@ -9,6 +9,7 @@ import { colors, radius, spacing, heatConfig } from '@/constants/theme';
 import type { Contact, Profile } from '@/lib/types';
 import Onboarding from '@/components/Onboarding';
 import { requestNotificationPermission, scheduleContactReminders } from '@/lib/notifications';
+import { ANTHROPIC_ENABLED } from '@/lib/featureFlags';
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
@@ -144,6 +145,14 @@ export default function HeatSheetScreen() {
     setBriefText('');
     setBriefLoading(true);
 
+    // Anthropic/Claude backend is dormant (see lib/featureFlags). The pre-call
+    // brief ran on the Claude route; gated off until ANTHROPIC_ENABLED is set.
+    if (!ANTHROPIC_ENABLED) {
+      setBriefText('Pre-call briefs are temporarily unavailable.');
+      setBriefLoading(false);
+      return;
+    }
+
     const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ');
     const prompt =
       `You are Rex, an AI sales assistant for a top automotive sales rep. ` +
@@ -159,14 +168,13 @@ export default function HeatSheetScreen() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${AI_PROXY_URL}/gemini`, {
+      const res = await fetch(`${AI_PROXY_URL}/rexlens`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
           'Authorization': `Bearer ${session?.access_token ?? ''}`,
         },
         body: JSON.stringify({
-          model: 'gemini-2.5-flash',
           max_tokens: 400,
           messages: [{ role: 'user', content: prompt }],
         }),

@@ -2,7 +2,12 @@ import type { PageContent, StructuredTask, CustomerDetail } from './types';
 
 export const REX_MODEL = 'claude-haiku-4-5-20251001';
 export const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
-export const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/gemini';
+export const AI_PROXY_URL = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/rexlens';
+
+// Anthropic/Claude backend kill-switch for Rex Lens — DORMANT by default. The
+// proxy's /rexlens route is also gated server-side (ANTHROPIC_ENABLED). Flip
+// BOTH this and the edge-function secret on to restore Rex Lens AI.
+export const ANTHROPIC_ENABLED = false;
 
 /** Format structured tasks as a compact numbered list for prompts */
 function formatStructuredTasks(page: PageContent): string {

@@ -1,5 +1,5 @@
 import { getSupabase, SUPABASE_ANON_KEY } from '../shared/supabase';
-import { buildPageScanPrompt, buildChatSystemPrompt, buildDeepReviewSummaryPrompt, buildDeepReviewGamePlanPrompt, buildScanBatchPrompt, buildCustomerDetailPrompt, SCAN_BATCH_SYSTEM, REX_MODEL, HAIKU_MODEL, AI_PROXY_URL, stripSensitiveData } from '../shared/prompts';
+import { buildPageScanPrompt, buildChatSystemPrompt, buildDeepReviewSummaryPrompt, buildDeepReviewGamePlanPrompt, buildScanBatchPrompt, buildCustomerDetailPrompt, SCAN_BATCH_SYSTEM, REX_MODEL, HAIKU_MODEL, AI_PROXY_URL, ANTHROPIC_ENABLED, stripSensitiveData } from '../shared/prompts';
 import type { Profile, PageContent, AuthState, DeepReviewLead, DeepReviewResult, StructuredTask } from '../shared/types';
 import type { ExtensionMessage } from '../shared/messages';
 
@@ -138,6 +138,9 @@ function isOverloadError(status: number, errMsg: string): boolean {
 }
 
 async function callAIProxy(body: Record<string, unknown>): Promise<string> {
+  if (!ANTHROPIC_ENABLED) {
+    throw new Error('Rex Lens AI is paused (Anthropic backend dormant). Re-enable ANTHROPIC_ENABLED in shared/prompts and the ai-proxy secret.');
+  }
   const MAX_RETRIES = 3;
   const RETRY_BASE_MS = 3000;
   let lastError: Error | null = null;
