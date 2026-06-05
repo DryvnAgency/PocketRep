@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
 <title>PocketRep Team — You're In. Let's Set Up Your Floor.</title>
+<!-- ════ STRIPE WIRING — Teams plan ════
+     1) Paste your Teams Stripe checkout link into  TEAMS_STRIPE  in Pocketrep/index.html.
+     2) In that Stripe Payment Link's "After payment → Redirect to your website", set:
+            https://pocketrep.pro/thankyou-teams.html?plan=teams
+     (thankyou.html?plan=teams also works — the individual page redirects here.)
+     ═══════════════════════════════════════════════ -->
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -122,12 +128,12 @@ footer .disc{font-size:0.62rem;color:var(--grey);max-width:600px;margin:10px aut
         <label for="notes">Anything else to get your floor set up?</label>
         <textarea id="notes" rows="3" placeholder="CRM you use, preferred start date, questions…"></textarea>
       </div>
-      <div class="note">This is <b>setup intake only</b> — nothing is charged or sent yet. After you submit, our team reviews your roster and sends <b>each rep an invite to set up their own login.</b></div>
+      <div class="note">This is <b>setup intake only</b> — nothing is charged or sent yet. After you submit, our team reviews your roster and sends <b>each rep an invite to set up their own login.</b> <b>Account setup takes 24–48 hours before your team goes live.</b></div>
       <button type="submit" class="submit">Send setup details &rarr;</button>
     </form>
     <div class="success card" id="success" style="margin-top:16px">
       <div class="big">Got it. &#10003;</div>
-      <p class="muted" style="margin-top:8px">Thanks — we'll reach out to <span id="success-admin">your admin</span> to finish provisioning your team. Each rep gets their own invite. Nothing is charged beyond your confirmed plan.</p>
+      <p class="muted" style="margin-top:8px">Thanks — we'll reach out to <span id="success-admin">your admin</span> to finish provisioning your team. Each rep gets their own invite, and <b style="color:var(--white)">your team is live within 24–48 hours.</b> Nothing is charged beyond your confirmed plan.</p>
     </div>
   </div>
 

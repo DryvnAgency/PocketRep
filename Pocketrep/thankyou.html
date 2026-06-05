@@ -13,6 +13,13 @@
   if(p==='teams'){location.replace('thankyou-teams.html'+location.search);}
 }catch(e){}})();
 </script>
+<!-- ════ STRIPE WIRING — individual plan (Elite / Retail) ════
+     1) Paste your individual Stripe checkout link into  ELITE_STRIPE  in Pocketrep/index.html.
+     2) In that Stripe Payment Link's "After payment → Redirect to your website", set:
+            https://pocketrep.pro/thankyou.html?plan=elite
+     The customer's email/name flow from the landing's sessionStorage (pr_signup); this page
+     reads ?plan= and the email and pre-fills the intake. (No account is created here.)
+     ═══════════════════════════════════════════════════════════ -->
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -320,67 +327,34 @@ footer a{color:#444;text-decoration:none}
 
     <div style="display:flex;align-items:center;gap:7px;font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:0.85rem">
       <span style="display:block;width:16px;height:1px;background:var(--gold)"></span>
-      Step 2 — Create Your Account
+      Step 2 — Confirm your details
     </div>
-    <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:1.75rem;font-weight:800;letter-spacing:-0.02em;margin-bottom:0.4rem">Set your login credentials</h2>
-    <p style="font-size:0.88rem;color:var(--grey2);line-height:1.7;margin-bottom:1.75rem">This is what you'll use to sign into the app. Your email is already on file — just set your username and password.</p>
+    <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:1.75rem;font-weight:800;letter-spacing:-0.02em;margin-bottom:0.4rem">Where should we send your login?</h2>
+    <p style="font-size:0.88rem;color:var(--grey2);line-height:1.7;margin-bottom:1.75rem">Confirm your name and email. <b style="color:var(--white)">Your account will be ready right after payment</b> — we'll text and email you a secure login link. Nothing else to set up.</p>
 
     <div id="acct-form-wrap">
       <form id="acct-form" novalidate style="display:flex;flex-direction:column;gap:0.9rem">
 
-        <!-- Pre-filled email display -->
+        <!-- Name -->
         <div>
-          <label style="display:block;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.4rem">Email address</label>
-          <div id="acct-email-display" style="background:var(--ink3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:0.72rem 1rem;font-size:0.88rem;color:var(--grey2);display:flex;align-items:center;gap:8px">
-            <span style="color:var(--green);font-size:0.7rem">✓</span>
-            <span id="acct-email-val">—</span>
-          </div>
-        </div>
-
-        <!-- Username -->
-        <div>
-          <label style="display:block;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.4rem" for="acct-username">Username <span style="color:var(--red)">*</span></label>
-          <input type="text" id="acct-username" autocomplete="username" placeholder="username" spellcheck="false"
+          <label style="display:block;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.4rem" for="acct-name">Your name <span style="color:var(--red)">*</span></label>
+          <input type="text" id="acct-name" autocomplete="name" placeholder="Full name"
             style="width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:0.75rem 1rem;font-family:'Instrument Sans',sans-serif;font-size:0.9rem;color:var(--white);outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none">
-          <div id="acct-err-user" style="font-size:0.68rem;color:var(--red);margin-top:0.3rem;display:none">Enter a username (letters, numbers, underscores only)</div>
+          <div id="acct-err-name" style="font-size:0.68rem;color:var(--red);margin-top:0.3rem;display:none">Enter your name</div>
         </div>
 
-        <!-- Password -->
+        <!-- Email -->
         <div>
-          <label style="display:block;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.4rem" for="acct-password">Password <span style="color:var(--red)">*</span></label>
-          <div style="position:relative">
-            <input type="password" id="acct-password" autocomplete="new-password" placeholder="Min. 8 characters"
-              style="width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:0.75rem 2.75rem 0.75rem 1rem;font-family:'Instrument Sans',sans-serif;font-size:0.9rem;color:var(--white);outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none">
-            <button type="button" onclick="togglePw('acct-password','eye-pw')" style="position:absolute;right:0.85rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--grey2);font-size:0.8rem;padding:0" id="eye-pw">Show</button>
-          </div>
-          <div id="acct-err-pw" style="font-size:0.68rem;color:var(--red);margin-top:0.3rem;display:none">Password must be at least 8 characters</div>
-        </div>
-
-        <!-- Confirm Password -->
-        <div>
-          <label style="display:block;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.4rem" for="acct-confirm">Confirm password <span style="color:var(--red)">*</span></label>
-          <div style="position:relative">
-            <input type="password" id="acct-confirm" autocomplete="new-password" placeholder="Re-enter password"
-              style="width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:0.75rem 2.75rem 0.75rem 1rem;font-family:'Instrument Sans',sans-serif;font-size:0.9rem;color:var(--white);outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none">
-            <button type="button" onclick="togglePw('acct-confirm','eye-cf')" style="position:absolute;right:0.85rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--grey2);font-size:0.8rem;padding:0" id="eye-cf">Show</button>
-          </div>
-          <div id="acct-err-confirm" style="font-size:0.68rem;color:var(--red);margin-top:0.3rem;display:none">Passwords don't match</div>
-        </div>
-
-        <!-- Password strength indicator -->
-        <div id="pw-strength-wrap" style="display:none">
-          <div style="display:flex;gap:4px;margin-bottom:4px">
-            <div class="pw-bar" style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.08)" id="pwb1"></div>
-            <div class="pw-bar" style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.08)" id="pwb2"></div>
-            <div class="pw-bar" style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.08)" id="pwb3"></div>
-            <div class="pw-bar" style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.08)" id="pwb4"></div>
-          </div>
-          <div id="pw-strength-label" style="font-size:0.68rem;color:var(--grey2)"></div>
+          <label style="display:block;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.4rem" for="acct-email">Email address <span style="color:var(--red)">*</span></label>
+          <input type="email" id="acct-email" autocomplete="email" placeholder="you@email.com" spellcheck="false"
+            style="width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:0.75rem 1rem;font-family:'Instrument Sans',sans-serif;font-size:0.9rem;color:var(--white);outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none">
+          <div id="acct-err-email" style="font-size:0.68rem;color:var(--red);margin-top:0.3rem;display:none">Enter a valid email</div>
         </div>
 
         <button type="submit" style="width:100%;padding:0.95rem;background:var(--gold);color:var(--ink);border:none;border-radius:9px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:0.95rem;cursor:pointer;box-shadow:0 4px 20px rgba(212,168,67,0.2);transition:background .15s,transform .12s;margin-top:0.25rem">
-          Create My Account →
+          Confirm my details →
         </button>
+        <p style="font-size:0.66rem;color:var(--grey);text-align:center;margin-top:0.1rem">This just confirms where to send your login — no account is created on this page.</p>
 
       </form>
     </div>
@@ -388,8 +362,8 @@ footer a{color:#444;text-decoration:none}
     <!-- Success state -->
     <div id="acct-success" style="display:none;text-align:center;padding:2rem 1rem">
       <div style="width:52px;height:52px;border-radius:50%;background:rgba(66,184,131,0.12);border:1px solid rgba(66,184,131,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;font-size:1.4rem">✓</div>
-      <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-size:1.2rem;font-weight:800;margin-bottom:0.4rem">Account created</h3>
-      <p style="font-size:0.85rem;color:var(--grey2);line-height:1.7">You're all set. Open the app, sign in with your username and password, and your trial is ready to go.</p>
+      <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-size:1.2rem;font-weight:800;margin-bottom:0.4rem">You're all set.</h3>
+      <p style="font-size:0.85rem;color:var(--grey2);line-height:1.7">Your account will be ready right after payment. <b style="color:var(--white)">Check your texts and email for your login link</b> — then open the app and you're in.</p>
     </div>
 
   </div>
@@ -539,123 +513,46 @@ footer a{color:#444;text-decoration:none}
   var email=params.get('email')||params.get('prefilled_email');
   var plan=params.get('plan')||'elite';
   var firstName=null;
+  var fullName=null;
   var raw;
   try{raw=sessionStorage.getItem('pr_signup')}catch(e){}
   if(raw){
     try{
       var d=JSON.parse(raw);
       if(!email&&d.email)email=d.email;
-      if(d.name)firstName=d.name.split(' ')[0];
+      if(d.name){firstName=d.name.split(' ')[0];fullName=d.name;}
       if(!plan&&d.plan)plan=d.plan;
     }catch(e){}
   }
   if(firstName)document.getElementById('greeting').textContent='Welcome to the book, '+firstName+'.';
-  if(email){var ev=document.getElementById('acct-email-val');if(ev)ev.textContent=email;}
+  if(email){var ev=document.getElementById('acct-email');if(ev)ev.value=email;}
+  if(fullName){var nv=document.getElementById('acct-name');if(nv)nv.value=fullName;}
 })()
 
-function togglePw(inputId,btnId){
-  var inp=document.getElementById(inputId);
-  var btn=document.getElementById(btnId);
-  if(!inp||!btn)return;
-  if(inp.type==='password'){inp.type='text';btn.textContent='Hide';}
-  else{inp.type='password';btn.textContent='Show';}
-}
-
-// Password strength
-document.getElementById('acct-password').addEventListener('input',function(){
-  var v=this.value;
-  var wrap=document.getElementById('pw-strength-wrap');
-  var label=document.getElementById('pw-strength-label');
-  if(!v){wrap.style.display='none';return;}
-  wrap.style.display='block';
-  var score=0;
-  if(v.length>=8)score++;
-  if(v.length>=12)score++;
-  if(/[A-Z]/.test(v)&&/[0-9]/.test(v))score++;
-  if(/[^A-Za-z0-9]/.test(v))score++;
-  var colors=['#e05252','#e07a52','#d4a843','#42b883'];
-  var labels=['Weak','Fair','Good','Strong'];
-  for(var i=1;i<=4;i++){
-    var bar=document.getElementById('pwb'+i);
-    bar.style.background=i<=score?colors[score-1]:'rgba(255,255,255,0.08)';
-  }
-  label.textContent=labels[score-1]||'';
-  label.style.color=colors[score-1]||'var(--grey2)';
-});
-
-// Focus styles
-['acct-username','acct-password','acct-confirm'].forEach(function(id){
+// Rep sign-up intake — LOCAL confirmation only. No account is created here and nothing is
+// sent or stored. The real account + SMS/email magic-link login is provisioned by a separate
+// backend pass (Stripe webhook -> createUser -> login link). Held for that later pass.
+['acct-name','acct-email'].forEach(function(id){
   var el=document.getElementById(id);
   if(!el)return;
   el.addEventListener('focus',function(){this.style.borderColor='rgba(212,168,67,0.45)';this.style.boxShadow='0 0 0 3px rgba(212,168,67,0.07)'});
   el.addEventListener('blur',function(){this.style.borderColor='rgba(255,255,255,0.08)';this.style.boxShadow='none'});
-  el.addEventListener('input',function(){this.style.borderColor='rgba(212,168,67,0.45)'});
+  el.addEventListener('input',function(){this.style.borderColor='rgba(212,168,67,0.45)';var er=document.getElementById('acct-err-'+(id==='acct-name'?'name':'email'));if(er)er.style.display='none';});
 });
 
 document.getElementById('acct-form').addEventListener('submit',function(e){
   e.preventDefault();
-  var user=document.getElementById('acct-username').value.trim();
-  var pw=document.getElementById('acct-password').value;
-  var cf=document.getElementById('acct-confirm').value;
+  var name=document.getElementById('acct-name').value.trim();
+  var em=document.getElementById('acct-email').value.trim();
   var valid=true;
-
-  var errUser=document.getElementById('acct-err-user');
-  var errPw=document.getElementById('acct-err-pw');
-  var errCf=document.getElementById('acct-err-confirm');
-
-  if(!user||!/^[a-zA-Z0-9_]{3,}$/.test(user)){
-    errUser.style.display='block';
-    document.getElementById('acct-username').style.borderColor='rgba(224,82,82,0.5)';
-    valid=false;
-  } else { errUser.style.display='none'; }
-
-  if(!pw||pw.length<8){
-    errPw.style.display='block';
-    document.getElementById('acct-password').style.borderColor='rgba(224,82,82,0.5)';
-    valid=false;
-  } else { errPw.style.display='none'; }
-
-  if(!cf||cf!==pw){
-    errCf.style.display='block';
-    document.getElementById('acct-confirm').style.borderColor='rgba(224,82,82,0.5)';
-    valid=false;
-  } else { errCf.style.display='none'; }
-
+  var errName=document.getElementById('acct-err-name');
+  var errEmail=document.getElementById('acct-err-email');
+  if(name.length<2){errName.style.display='block';document.getElementById('acct-name').style.borderColor='rgba(224,82,82,0.5)';valid=false;}else{errName.style.display='none';}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){errEmail.style.display='block';document.getElementById('acct-email').style.borderColor='rgba(224,82,82,0.5)';valid=false;}else{errEmail.style.display='none';}
   if(!valid)return;
-
-  // ── SUPABASE SIGNUP ──
-    var btn=document.querySelector('#acct-form button[type="submit"]');
-    if(btn){btn.disabled=true;btn.textContent='Creating account...';}
-    var supaEmail=document.getElementById('acct-email-val').textContent.trim();
-    fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/auth/v1/signup',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0'},
-      body:JSON.stringify({email:supaEmail,password:pw,data:{username:user,plan:new URLSearchParams(location.search).get('plan')||'elite'}})
-    }).then(function(r){return r.json();}).then(function(d){
-      if(d.error){
-        if(btn){btn.disabled=false;btn.textContent='Create My Account →';}
-        var errDiv=document.getElementById('acct-err-user');
-        if(errDiv){errDiv.textContent=d.error.message||'Signup failed. Try a different username or check your email.';errDiv.style.display='block';}
-      } else {
-                    // Save username to public.users so app login works
-                    var userId=d.user&&d.user.id;
-                    var planVal=new URLSearchParams(location.search).get('plan')||'elite';
-                    if(userId){
-                                    fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/rest/v1/users',{
-                                                      method:'POST',
-                                                      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Prefer':'return=minimal'},
-                                                      body:JSON.stringify({id:userId,username:user.toLowerCase(),email:supaEmail,plan:planVal})
-                                    });
-                    }
-        // Show success state
-        document.getElementById('acct-form-wrap').style.display='none';
-        document.getElementById('acct-success').style.display='block';
-      }
-    }).catch(function(){
-      if(btn){btn.disabled=false;btn.textContent='Create My Account →';}
-      document.getElementById('acct-form-wrap').style.display='none';
-      document.getElementById('acct-success').style.display='block';
-    })
+  // LOCAL confirmation only — no network, no account creation.
+  document.getElementById('acct-form-wrap').style.display='none';
+  document.getElementById('acct-success').style.display='block';
 });
 </script>
 </body>
