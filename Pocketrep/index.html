@@ -18,6 +18,8 @@
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTYiIGhlaWdodD0iOTYiIHZpZXdCb3g9IjAgMCA5NiA5NiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IlBvY2tldFJlcCI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InByVGlsZSIgeDE9IjEwIiB5MT0iNiIgeDI9Ijg2IiB5Mj0iOTIiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZjNkMjdlIj48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMC41IiBzdG9wLWNvbG9yPSIjZTJiNTUyIj48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2YwYzA2MCI+PC9zdG9wPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0icHJHbG9zcyIgY3g9IjAuMyIgY3k9IjAuMjIiIHI9IjAuOSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIgc3RvcC1vcGFjaXR5PSIwLjQ1Ij48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMC41IiBzdG9wLWNvbG9yPSIjZmZmZmZmIiBzdG9wLW9wYWNpdHk9IjAiPjwvc3RvcD4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHg9IjYiIHk9IjYiIHdpZHRoPSI4NCIgaGVpZ2h0PSI4NCIgcng9IjI0IiBmaWxsPSJ1cmwoI3ByVGlsZSkiPjwvcmVjdD4KICA8cmVjdCB4PSI2IiB5PSI2IiB3aWR0aD0iODQiIGhlaWdodD0iODQiIHJ4PSIyNCIgZmlsbD0idXJsKCNwckdsb3NzKSI+PC9yZWN0PgogIDxyZWN0IHg9IjYuNzUiIHk9IjYuNzUiIHdpZHRoPSI4Mi41IiBoZWlnaHQ9IjgyLjUiIHJ4PSIyMy4yNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utb3BhY2l0eT0iMC4yMiIgc3Ryb2tlLXdpZHRoPSIxLjUiPjwvcmVjdD4KICAKICA8cGF0aCBkPSJNMzkgNzIgVjI3IEg1My41IEExMi41IDEyLjUgMCAwIDEgNTMuNSA1MiBIMzkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzBhMGMxMiIgc3Ryb2tlLW9wYWNpdHk9IjAuMjgiIHN0cm9rZS13aWR0aD0iOS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMS41KSI+PC9wYXRoPgogIDxwYXRoIGQ9Ik0zOSA3MiBWMjcgSDUzLjUgQTEyLjUgMTIuNSAwIDAgMSA1My41IDUyIEgzOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjguNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48L3BhdGg+CiAgCiAgPGNpcmNsZSBjeD0iNjIuNSIgY3k9IjY4IiByPSI1IiBmaWxsPSIjMGEwYzEyIiBmaWxsLW9wYWNpdHk9IjAuMjUiPjwvY2lyY2xlPgogIDxjaXJjbGUgY3g9IjYyIiBjeT0iNjciIHI9IjUiIGZpbGw9IiNmZjdhNDUiPjwvY2lyY2xlPgo8L3N2Zz4=" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<!-- Shared brand design system (tokens + component atoms) — single source for the funnel (landing + both thank-you pages) -->
+<link rel="stylesheet" href="brand.css">
 <style>/* cyrillic-ext */
 @font-face {
   font-family: 'Hanken Grotesk';
@@ -384,161 +386,9 @@
    Modern / techy: obsidian ink + electric violet→cyan signal
    ============================================================ */
 
-:root {
-  /* ink hierarchy (cool near-black) */
-  --bg:        #07080c;
-  --bg-2:      #0a0c12;
-  --surface:   #0f121b;
-  --surface-2: #141826;
-  --surface-3: #1b2030;
-  --line:      rgba(255,255,255,0.08);
-  --line-2:    rgba(255,255,255,0.14);
-
-  /* text */
-  --ink:    #f3f5fb;
-  --muted:  #99a1b7;
-  --faint:  #5c6479;
-
-  /* electric signal */
-  --violet: #d4a843;
-  --indigo: #e2b552;
-  --cyan:   #f0c060;
-  --signal: linear-gradient(115deg, #f3d27e 0%, #e2b552 48%, #f0c060 100%);
-  --signal-soft: linear-gradient(115deg, rgba(243,210,126,0.18), rgba(240,192,96,0.14));
-  --glow-violet: rgba(212,168,67,0.55);
-  --glow-cyan:   rgba(240,192,96,0.45);
-
-  /* money + heat (heat used only inside product visuals) */
-  --green:  #34e0a1;
-  --red:    #ff5d54;
-  --orange: #ff9d45;
-  --gold:   #ffcc4d;
-
-  /* type */
-  --display: "Space Grotesk", system-ui, sans-serif;
-  --body:    "Hanken Grotesk", system-ui, sans-serif;
-  --mono:    "JetBrains Mono", ui-monospace, monospace;
-
-  --maxw: 1200px;
-  --radius: 18px;
-}
-
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
-
-body {
-  font-family: var(--body);
-  background: var(--bg);
-  color: var(--ink);
-  line-height: 1.55;
-  overflow-x: hidden;
-  position: relative;
-}
-
-/* atmospheric background — grid + aurora glows + grain */
-.bg-field {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background:
-    radial-gradient(820px 620px at 18% -4%, rgba(212,168,67,0.16), transparent 60%),
-    radial-gradient(720px 560px at 92% 8%, rgba(240,192,96,0.10), transparent 62%),
-    var(--bg);
-}
-.bg-grid {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background-image:
-    linear-gradient(to right, rgba(255,255,255,0.035) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255,255,255,0.035) 1px, transparent 1px);
-  background-size: 64px 64px;
-  -webkit-mask-image: radial-gradient(ellipse 100% 60% at 50% 0%, #000 35%, transparent 78%);
-          mask-image: radial-gradient(ellipse 100% 60% at 50% 0%, #000 35%, transparent 78%);
-}
-.bg-grain {
-  position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.04;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-main, header, footer { position: relative; z-index: 2; }
-
-.wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 28px; }
-
-a { color: inherit; text-decoration: none; }
-
-/* ---------- type atoms ---------- */
-.eyebrow {
-  font-family: var(--mono);
-  font-size: 12px; letter-spacing: 2.5px; text-transform: uppercase;
-  color: var(--cyan); font-weight: 500;
-  display: inline-flex; align-items: center; gap: 9px;
-}
-.eyebrow::before {
-  content: ""; width: 22px; height: 1px;
-  background: linear-gradient(90deg, var(--cyan), transparent);
-}
-.eyebrow.center::before { display: none; }
-
-h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: -0.02em; line-height: 1.04; }
-
-.display {
-  font-size: clamp(40px, 6.4vw, 84px);
-  letter-spacing: -0.035em;
-  line-height: 0.98;
-}
-.h2 { font-size: clamp(30px, 4.2vw, 54px); letter-spacing: -0.03em; }
-.lead { font-size: clamp(17px, 1.6vw, 21px); color: var(--muted); line-height: 1.6; }
-
-.grad-text {
-  background: var(--signal);
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent; color: transparent;
-}
-
-.section { padding: clamp(90px, 12vh, 160px) 0; }
-.section-sm { padding: clamp(56px, 8vh, 96px) 0; }
-
-/* ---------- buttons ---------- */
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
-  font-family: var(--body); font-weight: 650; font-size: 15.5px;
-  padding: 14px 24px; border-radius: 13px; cursor: pointer;
-  border: 1px solid transparent; transition: transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s, background .25s;
-  white-space: nowrap;
-}
-.btn-primary {
-  color: #06070b; background: var(--signal);
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset, 0 14px 40px -14px var(--glow-violet);
-}
-.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px rgba(255,255,255,0.2) inset, 0 22px 52px -16px var(--glow-violet); }
-.btn-ghost {
-  color: var(--ink); background: rgba(255,255,255,0.04);
-  border-color: var(--line-2); backdrop-filter: blur(8px);
-}
-.btn-ghost:hover { background: rgba(255,255,255,0.08); transform: translateY(-2px); }
-.btn-lg { padding: 17px 30px; font-size: 16.5px; }
-.btn .arrow { transition: transform .25s; }
-.btn:hover .arrow { transform: translateX(3px); }
-
-/* ---------- nav ---------- */
-.nav {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-  transition: background .3s, border-color .3s, backdrop-filter .3s;
-  border-bottom: 1px solid transparent;
-}
-.nav.scrolled {
-  background: rgba(8,9,14,0.72); backdrop-filter: blur(18px) saturate(140%);
-  border-bottom-color: var(--line);
-}
-.nav-inner { display: flex; align-items: center; justify-content: space-between; height: 72px; }
-.brand { display: flex; align-items: center; gap: 11px; }
-.brand-mark { width: 34px; height: 34px; display: block; }
-.brand-name { font-family: var(--display); font-weight: 700; font-size: 19px; letter-spacing: -0.02em; }
-.brand-name .dot { color: var(--cyan); }
-.nav-links { display: flex; align-items: center; gap: 30px; }
-.nav-links a { color: var(--muted); font-size: 14.5px; font-weight: 500; transition: color .2s; }
-.nav-links a:hover { color: var(--ink); }
-.nav-cta { display: flex; align-items: center; gap: 14px; }
-.nav-login { color: var(--muted); font-size: 14.5px; font-weight: 500; }
-.nav-login:hover { color: var(--ink); }
+/* Shared design tokens + component atoms (:root, resets, .bg-*, type atoms,
+   buttons, nav) now live in brand.css (linked in <head>). Only landing-specific
+   styles remain below — keep visual parity with brand.css. */
 @media (max-width: 880px) { .nav-links { display: none; } }
 
 /* ---------- hero ---------- */
@@ -1028,14 +878,9 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: -0.0
 .final .lead { max-width: 560px; margin: 18px auto 0; position: relative; }
 .final .hero-actions { justify-content: center; position: relative; }
 
-/* ---------- footer ---------- */
-.footer { border-top: 1px solid var(--line); margin-top: 40px; }
-.footer-inner { display: flex; align-items: center; justify-content: space-between; padding: 32px 0; flex-wrap: wrap; gap: 16px; }
-.footer .muted { font-size: 13px; color: var(--faint); }
-.footer-links { display: flex; gap: 22px; font-size: 13px; }
-.footer-links a { color: var(--muted); }
-.footer-links a:hover { color: var(--ink); }
-.disclaimer { font-size: 11.5px; color: var(--faint); line-height: 1.6; padding-bottom: 40px; max-width: 880px; }
+/* ---------- footer (base atoms in brand.css; landing-only deltas below) ---------- */
+.footer-links { flex-wrap: nowrap; }   /* landing footer stays one row (brand.css base allows wrap) */
+.disclaimer { padding-bottom: 40px; }  /* landing adds bottom breathing room */
 
 /* ---------- reveal animation ---------- */
 .js .reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s cubic-bezier(.2,.7,.3,1), transform .7s cubic-bezier(.2,.7,.3,1); }
@@ -1523,7 +1368,7 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: -0.0
         <li><span class="tick">✓</span> Captures names, objections, vehicle specs, follow-up timing</li>
         <li><span class="tick">✓</span> Syncs instantly — pull it up before the next call</li>
       </ul>
-      <div class="feat-elite"><span class="tag">Elite</span> Rex remembers context across every deal to spot patterns you missed.</div>
+      <div class="feat-elite"><span class="tag">PocketRep</span> Rex remembers context across every deal to spot patterns you missed.</div>
     </div>
     <div class="feat-visual reveal d1">
       <div class="viz">
@@ -1720,11 +1565,11 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: -0.0
   <div class="price-grid two">
     <div class="price feat reveal">
       <div class="kind">The closer</div>
-      <div class="name">PocketRep Elite</div>
+      <div class="name">PocketRep</div>
       <div class="desc">Voice capture, predictive Heat Sheet, pre-call briefs, and cross-deal memory — your own book of business, yours to keep.</div>
       <div class="cost"><span class="now">$39</span><span class="per">/mo</span></div>
-      <div class="was">Retail after launch: <s>$69/mo</s></div>
-      <div class="lock">◆ Founding rate — locked forever</div>
+      <div class="was">Retail <s>$69/mo</s> after founding</div>
+      <div class="lock">◆ Founding price — first 500 reps · locked for life</div>
       <hr>
       <ul>
         <li><span class="tick">✦</span> Zero-entry logging — just talk</li>
@@ -1740,25 +1585,19 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: -0.0
       <a class="btn btn-primary" href="#signup" onclick="prSelectPlan('elite'); prScrollSignup(event)">Start free trial</a>
     </div>
 
-    <!-- ============================================================
-         TODO(owner review): "Teams" tier — SCAFFOLDED, NOT FINAL.
-         Confirmed by owner: price = $49 per seat / month.
-         Everything else below (description, feature list, the
-         "3-seat minimum" line, and standard-vs-featured styling) is a
-         placeholder chosen to mirror the Elite card — please review/edit.
-         Stripe checkout link is a placeholder (see signup script).
-         ============================================================ -->
+    <!-- Team plan — finalized: $49/seat/mo founding (first 100 dealerships) vs $69/seat retail;
+         $249 founding setup vs $499 retail; 3-seat minimum. Internal plan key stays "teams". -->
     <div class="price reveal">
       <div class="kind">For sales teams</div>
-      <div class="name">PocketRep Teams</div>
-      <div class="desc">Everything in Elite for every rep — plus team-wide outcome reporting for managers. Managers see results, never reps' private contacts.</div>
+      <div class="name">PocketRep Team</div>
+      <div class="desc">Everything in PocketRep for every rep — plus team-wide outcome reporting for managers. Managers see results, never reps' private contacts.</div>
       <div class="cost"><span class="now">$49</span><span class="per">/seat/mo</span></div>
-      <div class="was">Billed per seat · 3-seat minimum <!-- TODO(review): confirm seat minimum --></div>
-      <div class="lock">◆ Founding rate — locked forever</div>
+      <div class="was">Retail <s>$69/seat/mo</s> after founding · 3-seat minimum</div>
+      <div class="was">+ $249 one-time setup · <s>$499</s> at retail</div>
+      <div class="lock">◆ Founding price — first 100 dealerships · locked for life</div>
       <hr>
       <ul>
-        <!-- TODO(review): Teams feature list below is provisional -->
-        <li><span class="tick">✦</span> Everything in Elite — for every seat</li>
+        <li><span class="tick">✦</span> Everything in PocketRep — for every seat</li>
         <li><span class="tick">✦</span> Manager dashboard — <b>team results</b> across the floor</li>
         <li><span class="tick">✦</span> Team leaderboard on activity and deals — <b>each rep's book stays private</b></li>
         <li><span class="tick">✦</span> Centralized billing — add or remove seats anytime</li>
@@ -1839,16 +1678,15 @@ select.sf-input { appearance: none; cursor: pointer; }
     <div class="signup-box reveal d1">
       <div class="box-h">Start your free 7-day trial</div>
       <div class="box-sub">Fill in your details and you're in.</div>
-      <!-- TODO(review): plan toggle is scaffolded — Elite is the default. Swap or
-           remove if you'd prefer a different plan-selection UX (e.g. a separate
-           Teams checkout or a "contact sales" path for Teams). -->
+      <!-- Plan toggle: PocketRep (individual) is the default; Team switches checkout to the
+           per-seat plan. Internal plan keys stay elite/teams for Stripe + ?plan= routing. -->
       <div class="sf-plan-toggle" role="group" aria-label="Choose your plan">
-        <button type="button" class="sf-pt-btn active" id="sfpt-elite" onclick="prSelectPlan('elite')">Elite · $39/mo</button>
-        <button type="button" class="sf-pt-btn" id="sfpt-teams" onclick="prSelectPlan('teams')">Teams · $49/seat</button>
+        <button type="button" class="sf-pt-btn active" id="sfpt-elite" onclick="prSelectPlan('elite')">PocketRep · $39/mo</button>
+        <button type="button" class="sf-pt-btn" id="sfpt-teams" onclick="prSelectPlan('teams')">Team · $49/seat</button>
       </div>
       <div class="sf-plan-pill">
         <div>
-          <div class="pp-name" id="pp-name">PocketRep Elite</div>
+          <div class="pp-name" id="pp-name">PocketRep</div>
           <div class="pp-tag" id="pp-tag">Founding rate · locked forever</div>
         </div>
         <div class="pp-price" id="pp-price">$39<span>/mo</span></div>
@@ -2351,8 +2189,8 @@ select.sf-input { appearance: none; cursor: pointer; }
   /* ---------- TAB: You ---------- */
   function renderYou() {
     var b = '';
-    b += '<div class="dp-profile"><div class="pic">JC</div><div><div class="pn">Jordan Cole</div><div class="pr">BMW of West County · Elite</div></div></div>';
-    b += '<div class="dp-card plan"><div class="ctitle">Your plan</div><div class="planname">PocketRep Elite</div><div class="planmeta">Founding rate · $39/mo locked forever</div></div>';
+    b += '<div class="dp-profile"><div class="pic">JC</div><div><div class="pn">Jordan Cole</div><div class="pr">BMW of West County · PocketRep</div></div></div>';
+    b += '<div class="dp-card plan"><div class="ctitle">Your plan</div><div class="planname">PocketRep</div><div class="planmeta">Founding rate · $39/mo locked forever</div></div>';
     b += '<div class="dp-card"><div class="ctitle">Settings</div>' +
       toggleRow("Auto-extract from voice notes", "Rex pulls contacts + follow-ups when you dictate", true) +
       toggleRow("Morning Heat Sheet push", "7:30am, before your coffee", true) +
@@ -2540,7 +2378,7 @@ select.sf-input { appearance: none; cursor: pointer; }
 
 <script>
 /* ============================================================
-   PocketRep — signup form → Stripe checkout (Elite / Teams plans)
+   PocketRep — signup form → Stripe checkout (PocketRep / PocketRep Team plans)
    ============================================================ */
 (function () {
   "use strict";
@@ -2555,8 +2393,8 @@ select.sf-input { appearance: none; cursor: pointer; }
   // Selected plan ("elite" | "teams"); pricing-card CTAs + the toggle set this.
   var selectedPlan = "elite";
   var PLAN_META = {
-    elite: { name: "PocketRep Elite", tag: "Founding rate · locked forever", price: '$39<span>/mo</span>' },
-    teams: { name: "PocketRep Teams", tag: "Per seat · billed monthly",      price: '$49<span>/seat/mo</span>' }
+    elite: { name: "PocketRep",       tag: "Founding rate · locked forever", price: '$39<span>/mo</span>' },
+    teams: { name: "PocketRep Team",  tag: "Per seat · billed monthly",      price: '$49<span>/seat/mo</span>' }
   };
 
   // Reflect the chosen plan in the toggle + the plan pill above the form.
