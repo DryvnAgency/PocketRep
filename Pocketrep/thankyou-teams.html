@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>PocketRep Team — You're In. Let's Set Up Your Floor.</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--ink:#0c0c0e;--ink2:#141418;--gold:#d4a843;--gold2:#f0c060;--white:#fff;--grey:#5a6070;--grey2:#8a90a0;--surface:#111116;--surface2:#18181f;--line:rgba(255,255,255,0.08);--green:#37d39b}
+html{scroll-behavior:smooth}
+body{background:var(--ink);color:var(--white);font-family:'Instrument Sans',sans-serif;font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--gold2);text-decoration:none}
+.wrap{max-width:720px;margin:0 auto;padding:0 22px}
+nav{display:flex;align-items:center;justify-content:space-between;padding:20px 22px;max-width:760px;margin:0 auto}
+.logo-text{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.05rem}
+.logo-text span{color:var(--gold)}
+.chip{font-family:'Bricolage Grotesque',sans-serif;font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(212,168,67,0.35);border-radius:100px;padding:5px 12px;font-weight:700}
+.hero{text-align:center;padding:48px 22px 14px}
+.badge{display:inline-flex;align-items:center;gap:7px;font-family:'Bricolage Grotesque',sans-serif;font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--green);font-weight:700;margin-bottom:16px}
+.hero h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(1.9rem,4.6vw,2.9rem);letter-spacing:-0.025em;line-height:1.08}
+.hero h1 span{color:var(--gold)}
+.hero .sub{color:var(--grey2);font-size:1rem;max-width:540px;margin:14px auto 0}
+.hero .sub b{color:var(--white)}
+.plan-line{font-family:'Bricolage Grotesque',sans-serif;margin:18px auto 0;display:inline-block;font-size:0.85rem;color:var(--grey2);border:1px solid var(--line);border-radius:12px;padding:9px 16px}
+.plan-line b{color:var(--gold2)}
+.section{padding:30px 0}
+.promise{max-width:640px;margin:26px auto 0;padding:18px 20px;border:1px solid var(--line);border-radius:16px}
+.promise h3{font-family:'Bricolage Grotesque',sans-serif;font-size:1.05rem;margin-bottom:6px}
+.promise p{color:var(--grey2);font-size:0.92rem}
+.promise p b{color:var(--white)}
+.eyebrow{font-family:'Bricolage Grotesque',sans-serif;font-size:0.7rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:8px}
+h2.h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1.5rem;letter-spacing:-0.02em;margin-bottom:6px}
+.muted{color:var(--grey2);font-size:0.92rem}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:24px}
+.field{margin-top:16px}
+label{display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px}
+label .req{color:var(--gold)}
+input,textarea{width:100%;background:rgba(255,255,255,0.03);border:1px solid var(--line);border-radius:11px;padding:11px 13px;color:var(--white);font-family:'Instrument Sans',sans-serif;font-size:0.95rem}
+input:focus,textarea:focus{outline:none;border-color:var(--gold)}
+.hint{font-size:0.75rem;color:var(--grey);margin-top:5px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+@media(max-width:520px){.row2{grid-template-columns:1fr}}
+.row2 .field{margin-top:0}
+.rep-row{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;margin-top:10px;align-items:center}
+@media(max-width:520px){.rep-row{grid-template-columns:1fr 1fr auto}}
+.rep-row .rm{background:none;border:1px solid var(--line);color:var(--grey2);border-radius:9px;width:38px;height:38px;cursor:pointer;font-size:1rem;flex-shrink:0}
+.btn-add{margin-top:12px;background:none;border:1px dashed var(--line);color:var(--gold2);border-radius:11px;padding:9px 14px;cursor:pointer;font-size:0.85rem;font-weight:600}
+.note{margin-top:18px;font-size:0.8rem;color:var(--grey2);background:rgba(212,168,67,0.06);border:1px solid rgba(212,168,67,0.2);border-radius:12px;padding:12px 14px}
+.note b{color:var(--white)}
+.submit{margin-top:20px;width:100%;border:none;border-radius:14px;padding:14px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;color:#1a1405;background:linear-gradient(180deg,var(--gold2),var(--gold));cursor:pointer}
+.steps{display:grid;gap:12px;margin-top:6px}
+.step{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 17px}
+.step .n{flex-shrink:0;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;color:var(--gold);width:24px}
+.step h4{font-size:0.96rem;margin-bottom:2px}
+.step p{color:var(--grey2);font-size:0.86rem}
+.success{display:none;text-align:center;padding:30px 20px}
+.success .big{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.5rem;color:var(--gold)}
+footer{text-align:center;padding:34px 22px;color:var(--grey2);font-size:0.82rem;border-top:1px solid #1c1c22;margin-top:30px}
+footer .disc{font-size:0.62rem;color:var(--grey);max-width:600px;margin:10px auto 0;line-height:1.6}
+</style>
+</head>
+<body>
+<nav>
+  <span class="logo-text">Pocket<span>Rep</span>.pro</span>
+  <span class="chip">● Team Plan</span>
+</nav>
+
+<div class="hero">
+  <div class="badge"><span>✓</span> Payment confirmed — your seats are reserved</div>
+  <h1 id="greeting">You're in. <span>Let's set up your floor.</span></h1>
+  <p class="sub">Welcome to <b>PocketRep Team</b>. Tell us who's on the team and we'll get every rep provisioned. <b>Reps send from their own phones</b> — no per-message cost, no bulk blasts.</p>
+  <div class="plan-line">PocketRep Team · <b>$49/seat/mo</b> · 3-seat minimum · <b>$249</b> one-time setup</div>
+</div>
+
+<div class="wrap">
+  <div class="promise" style="background:linear-gradient(180deg,var(--surface2),var(--surface))">
+    <h3>Your reps own their books. The store sees outcomes.</h3>
+    <p><b>Each rep's book is theirs — contacts, notes, history — not the store's, and they're never locked in.</b> Your manager dashboard shows <b>results and activity</b> (units, gross, coaching adoption), <b>never a rep's private contacts.</b></p>
+    <!-- LAWYER ITEM: the binding results-only manager-visibility policy is NOT written here.
+         Lock it with counsel before building the Team dashboard (carried-forward open call). -->
+  </div>
+
+  <!-- SETUP INTAKE FORM — informational only. No real send / store / payment / provisioning. -->
+  <div class="section">
+    <div class="eyebrow">Step 1 · Setup intake</div>
+    <h2 class="h2">Who's on your floor?</h2>
+    <p class="muted">Give us your admin, your seat count, and your reps. We'll take it from there.</p>
+    <form id="team-form" class="card" style="margin-top:16px" novalidate>
+      <div class="field" style="margin-top:0">
+        <label for="store">Dealership / store name <span class="req">*</span></label>
+        <input type="text" id="store" placeholder="e.g. BMW of West County" autocomplete="organization">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="admin-name">Admin / manager name <span class="req">*</span></label>
+          <input type="text" id="admin-name" placeholder="Full name" autocomplete="name">
+        </div>
+        <div class="field">
+          <label for="admin-email">Admin / manager email <span class="req">*</span></label>
+          <input type="email" id="admin-email" placeholder="manager@dealership.com" autocomplete="email">
+        </div>
+      </div>
+      <div class="field">
+        <label for="seats">Number of seats <span class="req">*</span></label>
+        <input type="number" id="seats" min="3" value="3" inputmode="numeric">
+        <div class="hint">3-seat minimum. Add or remove seats anytime; billing is per seat to the dealership.</div>
+      </div>
+      <div class="field">
+        <label>Your reps (the seats to provision)</label>
+        <!-- LAWYER / PRIVACY ITEM: this intake is non-functional (no send / store). Real rep-email
+             collection needs rep consent + a privacy review before it is wired to anything. -->
+        <div id="reps">
+          <div class="rep-row"><input type="text" placeholder="Rep name"><input type="email" placeholder="Rep email"><button type="button" class="rm" aria-label="Remove rep">&times;</button></div>
+          <div class="rep-row"><input type="text" placeholder="Rep name"><input type="email" placeholder="Rep email"><button type="button" class="rm" aria-label="Remove rep">&times;</button></div>
+          <div class="rep-row"><input type="text" placeholder="Rep name"><input type="email" placeholder="Rep email"><button type="button" class="rm" aria-label="Remove rep">&times;</button></div>
+        </div>
+        <button type="button" class="btn-add" id="add-rep">+ Add another rep</button>
+      </div>
+      <div class="field">
+        <label for="notes">Anything else to get your floor set up?</label>
+        <textarea id="notes" rows="3" placeholder="CRM you use, preferred start date, questions…"></textarea>
+      </div>
+      <div class="note">This is <b>setup intake only</b> — nothing is charged or sent yet. After you submit, our team reviews your roster and sends <b>each rep an invite to set up their own login.</b></div>
+      <button type="submit" class="submit">Send setup details &rarr;</button>
+    </form>
+    <div class="success card" id="success" style="margin-top:16px">
+      <div class="big">Got it. &#10003;</div>
+      <p class="muted" style="margin-top:8px">Thanks — we'll reach out to <span id="success-admin">your admin</span> to finish provisioning your team. Each rep gets their own invite. Nothing is charged beyond your confirmed plan.</p>
+    </div>
+  </div>
+
+  <!-- WHAT HAPPENS NEXT — informational, dealership POV. -->
+  <div class="section">
+    <div class="eyebrow">What happens next</div>
+    <h2 class="h2">From here to a working floor</h2>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div><h4>We review your roster</h4><p>We confirm your seats and reps from the details above.</p></div></div>
+      <div class="step"><div class="n">2</div><div><h4>Each rep gets an invite</h4><p>Every rep sets up their own login and their own book. Their contacts are theirs.</p></div></div>
+      <div class="step"><div class="n">3</div><div><h4>Your manager dashboard goes live</h4><p>Results-only: units, gross, activity, coaching adoption — never a rep's private contacts.</p></div></div>
+      <div class="step"><div class="n">4</div><div><h4>Billing is centralized</h4><p>One per-seat invoice to the dealership. Add or remove seats anytime (3-seat minimum).</p></div></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <p>&copy; 2026 PocketRep.pro — Built for closers &nbsp;·&nbsp; <a href="/privacy.html">Privacy</a> &nbsp;·&nbsp; <a href="/terms.html">Terms</a> &nbsp;·&nbsp; <a href="/cancel.html">Cancel Policy</a></p>
+  <p class="disc">PocketRep is an independent tool and is not affiliated with, endorsed by, or sponsored by any third-party CRM, DMS, or dealership group. You are responsible for how your team uses PocketRep, including your dealership's policies and applicable laws (such as the TCPA) when reps contact customers. Reps send every message themselves — PocketRep never sends on their behalf.</p>
+</footer>
+
+<script>
+(function(){
+  // Personalize the greeting from the existing ?store=/name flow (best-effort, no network).
+  try{
+    var p=new URLSearchParams(location.search);
+    var who=p.get('store');
+    if(!who){var r=sessionStorage.getItem('pr_signup'); if(r){try{var d=JSON.parse(r); who=d.store||d.name;}catch(e){}}}
+    if(who){var g=document.getElementById('greeting'); if(g)g.innerHTML='You\'re in, '+who+'. <span>Let\'s set up your floor.</span>';}
+  }catch(e){}
+
+  // Repeatable rep roster rows.
+  var reps=document.getElementById('reps');
+  document.getElementById('add-rep').addEventListener('click',function(){
+    var row=document.createElement('div');
+    row.className='rep-row';
+    row.innerHTML='<input type="text" placeholder="Rep name"><input type="email" placeholder="Rep email"><button type="button" class="rm" aria-label="Remove rep">&times;</button>';
+    reps.appendChild(row);
+  });
+  reps.addEventListener('click',function(e){
+    if(e.target.classList.contains('rm')){
+      if(reps.querySelectorAll('.rep-row').length>1){ e.target.closest('.rep-row').remove(); }
+    }
+  });
+
+  // Submit = local confirmation only. NO real send / payment / provisioning.
+  document.getElementById('team-form').addEventListener('submit',function(e){
+    e.preventDefault();
+    var adminName=(document.getElementById('admin-name').value||'').trim();
+    var adminEl=document.getElementById('success-admin');
+    if(adminEl&&adminName){adminEl.textContent=adminName;}
+    document.getElementById('team-form').style.display='none';
+    document.getElementById('success').style.display='block';
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+})();
+</script>
+</body>
+</html>

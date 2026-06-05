@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PocketRep.pro — You're In. Welcome to the Book.</title>
+<script>
+/* PocketRep Team signups get the dedicated dealership thank-you. Redirect before
+   render to avoid a flash of the individual page. Driven by the existing ?plan= flow. */
+(function(){try{
+  var p=new URLSearchParams(location.search).get('plan');
+  if(!p){var r=sessionStorage.getItem('pr_signup');if(r){try{p=JSON.parse(r).plan}catch(e){}}}
+  if(p==='teams'){location.replace('thankyou-teams.html'+location.search);}
+}catch(e){}})();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -271,7 +280,7 @@ footer a{color:#444;text-decoration:none}
     <div class="name-greeting" id="greeting">Welcome to the book.</div>
     <h1 id="hero-headline">7 days free.<br><span>Make them count.</span></h1>
     <p class="sub" id="hero-sub">
-      Your trial is live. <b>Download the app, run your first Heat Sheet, and find the deal that pays for your next two years of Pro.</b> Cancel before day 7 and you won't be charged — ever.
+      Your trial is live. <b>Download the app, run your first Heat Sheet, and find the deal that pays for your next two years of PocketRep.</b> Cancel before day 7 and you won't be charged — ever.
     </p>
   </div>
 </div>
@@ -445,7 +454,7 @@ footer a{color:#444;text-decoration:none}
       <p>
         Because you have — but now the AI remembers every detail you've ever logged about that customer. When they push back on payment, the rebuttal engine pulls their mileage, their trade situation, their history with you, and gives you a real response. <b>Not a script. A conversation.</b> The kind that closes deals because it sounds like you actually know them. Because you do.
       </p>
-      <span class="m-tag">AI Rebuttals — Pro + Elite</span>
+      <span class="m-tag">AI Rebuttals</span>
     </div>
 
     <div class="m-block">
@@ -515,17 +524,20 @@ footer a{color:#444;text-decoration:none}
 
 <footer>
   <p>© 2026 PocketRep.pro — Built for closers &nbsp;·&nbsp; <a href="/privacy.html">Privacy</a> &nbsp;·&nbsp; <a href="/terms.html">Terms</a> &nbsp;·&nbsp; <a href="/cancel.html">Cancel Policy</a></p>
-  <p style="margin-top:0.5rem;font-size:0.58rem;color:var(--grey);max-width:600px;margin-left:auto;margin-right:auto">PocketRep and Rex Lens are independent tools and are not affiliated with, endorsed by, or sponsored by any third-party CRM, DMS, or software provider. All product names and trademarks are the property of their respective owners.</p>
+  <p style="margin-top:0.5rem;font-size:0.58rem;color:var(--grey);max-width:600px;margin-left:auto;margin-right:auto">PocketRep is an independent tool and is not affiliated with, endorsed by, or sponsored by any third-party CRM, DMS, or software provider. All product names and trademarks are the property of their respective owners.</p>
 </footer>
 
 <script>
 // ── ACCOUNT FORM ──
 // Pre-fill email from sessionStorage
 (function(){
-  // Read from URL params first (Stripe redirect), then fall back to sessionStorage
+  // Read from URL params first (Stripe redirect), then fall back to sessionStorage.
+  // plan==='teams' is redirected to thankyou-teams.html by the head script, so this
+  // page only renders the individual (PocketRep) thank-you. The old rex_lens/pro/elite
+  // branching is retired (single SKU, app only, no Rex Lens at launch).
   var params=new URLSearchParams(location.search);
   var email=params.get('email')||params.get('prefilled_email');
-  var plan=params.get('plan')||'pro';
+  var plan=params.get('plan')||'elite';
   var firstName=null;
   var raw;
   try{raw=sessionStorage.getItem('pr_signup')}catch(e){}
@@ -538,58 +550,7 @@ footer a{color:#444;text-decoration:none}
     }catch(e){}
   }
   if(firstName)document.getElementById('greeting').textContent='Welcome to the book, '+firstName+'.';
-  var planLabels={rex_lens:'Rex Lens Member',pro:'Pro Member',elite:'Elite Member'};
-  var chip=document.getElementById('nav-plan-label');
-  if(chip&&planLabels[plan])chip.textContent=planLabels[plan];
   if(email){var ev=document.getElementById('acct-email-val');if(ev)ev.textContent=email;}
-
-  // ── REX LENS / ELITE PLAN OVERRIDES ──
-  var hasLens = (plan === 'rex_lens' || plan === 'elite');
-
-  if(hasLens){
-    var isElite = plan === 'elite';
-    // Hero
-    document.getElementById('hero-badge-text').textContent = 'Payment confirmed — you\'re in';
-    document.getElementById('hero-headline').innerHTML = isElite
-      ? 'PocketRep Elite.<br><span>You got the full stack.</span>'
-      : 'Rex Lens is yours.<br><span>It\'s being finalized.</span>';
-    document.getElementById('hero-sub').innerHTML = isElite
-      ? '<b>Download the PocketRep app below to get started.</b> Your Elite account is live. Rex Lens, the Chrome screen-reader, is being finalized — we\'ll email you the moment it\'s ready to install.'
-      : '<b>Your Rex Lens account is set.</b> The Chrome extension is being finalized — we\'ll email you the moment it\'s ready to install, then it reads your CRM screen and drafts your follow-ups.';
-
-    // Download section
-    document.getElementById('dl-eyebrow').textContent = isElite ? 'Get The App' : 'Rex Lens — Coming Soon';
-    document.getElementById('dl-heading').innerHTML = isElite
-      ? 'Get the app now.<br>Rex Lens is coming soon.'
-      : 'Rex Lens is coming soon.<br>We\'ll email you.';
-    document.getElementById('dl-desc').textContent = isElite
-      ? 'Download PocketRep on your phone and sign in with your registration email. Rex Lens, the Chrome extension, is being finalized — we\'ll email you the install link the moment it\'s ready.'
-      : 'Rex Lens, the Chrome extension, is being finalized. We\'ll email you the install link the moment it\'s ready; sign in with your registration email and open any CRM or email tab, and Rex takes it from there.';
-
-    var btnsHtml = '<a href="#" class="dl-btn" id="chrome-store-btn" style="border-color:rgba(99,102,241,0.3)">'
-      + '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="color:#4F46E5"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 7.5A4.5 4.5 0 0 0 8.1 10H2.6" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M14.25 16.4A4.5 4.5 0 0 0 16.5 12h5.4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M9.75 16.4A4.5 4.5 0 0 1 8.1 14l-2.7 4.7" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>'
-      + '<div class="dl-btn-text"><div class="dl-small">Rex Lens</div><div class="dl-big">Coming Soon</div></div></a>';
-
-    if(isElite){
-      btnsHtml += document.getElementById('app-store-btn').outerHTML + document.getElementById('google-play-btn').outerHTML;
-    }
-    document.getElementById('dl-buttons').innerHTML = btnsHtml;
-
-    // What's Next steps
-    document.getElementById('next-eyebrow').textContent = isElite ? 'Your Setup Checklist' : 'What Happens Next';
-    document.getElementById('next-heading').textContent = isElite ? 'Set up the app in 5 minutes' : 'We\'ll email you when Rex Lens is ready';
-
-    var lensSteps = isElite
-      ? '<div class="step"><div class="step-num">Step 1</div><h4>Download the app</h4><p>Grab PocketRep from the App Store or Google Play. Sign in with your registration email.</p></div>'
-        + '<div class="step"><div class="step-num">Step 2</div><h4>Add your contacts</h4><p>Add the people you\'ve sold recently. Name, number, and purchase date is all it takes to activate the Heat Sheet.</p></div>'
-        + '<div class="step"><div class="step-num">Step 3</div><h4>Run your first Heat Sheet</h4><p>See the 5 people most likely to move right now. Make one call. That one call is the whole rep.</p></div>'
-        + '<div class="step"><div class="step-num">Soon</div><h4>Rex Lens (coming soon)</h4><p>The Chrome screen-reader is being finalized. We\'ll email you the install link the moment it\'s ready.</p></div>'
-      : '<div class="step"><div class="step-num">Now</div><h4>Your account is set</h4><p>You\'re signed up and ready. Nothing else to do yet.</p></div>'
-        + '<div class="step"><div class="step-num">Soon</div><h4>Rex Lens (coming soon)</h4><p>The Chrome extension is being finalized. We\'ll email you the install link the moment it\'s ready.</p></div>'
-        + '<div class="step"><div class="step-num">Then</div><h4>Scan your screen</h4><p>Once installed, sign in and open any CRM or email tab. Rex reads your screen and drafts ready-to-send texts, emails, and call scripts.</p></div>';
-
-    document.getElementById('steps-grid').innerHTML = lensSteps;
-  }
 })()
 
 function togglePw(inputId,btnId){
@@ -669,7 +630,7 @@ document.getElementById('acct-form').addEventListener('submit',function(e){
     fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/auth/v1/signup',{
       method:'POST',
       headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0'},
-      body:JSON.stringify({email:supaEmail,password:pw,data:{username:user,plan:new URLSearchParams(location.search).get('plan')||'pro'}})
+      body:JSON.stringify({email:supaEmail,password:pw,data:{username:user,plan:new URLSearchParams(location.search).get('plan')||'elite'}})
     }).then(function(r){return r.json();}).then(function(d){
       if(d.error){
         if(btn){btn.disabled=false;btn.textContent='Create My Account →';}
@@ -678,7 +639,7 @@ document.getElementById('acct-form').addEventListener('submit',function(e){
       } else {
                     // Save username to public.users so app login works
                     var userId=d.user&&d.user.id;
-                    var planVal=new URLSearchParams(location.search).get('plan')||'pro';
+                    var planVal=new URLSearchParams(location.search).get('plan')||'elite';
                     if(userId){
                                     fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/rest/v1/users',{
                                                       method:'POST',
