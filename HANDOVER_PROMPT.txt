@@ -31,7 +31,7 @@ PocketRep gives them a portable CRM they own. Rex Lens gives them instant script
 - Landing page at pocketrep.pro (Vercel) — 3-tier pricing with countdown timer
 - Rex Lens Chrome extension V21 — auth, chat, scan, batch scripts, deep review
 - Mobile app — contacts, deals, sequences, Rex chat, HeyRex voice, notifications
-- AI proxy edge function (Supabase) — Gemini 2.5 Flash with daily cost caps
+- AI proxy edge function (Supabase) — live "brain" on OpenRouter (Grok 4.3 -> Kimi K2.6) with daily cost caps; Rex Lens/Anthropic dormant behind ANTHROPIC_ENABLED
 - Database schema — 9 tables with RLS, atomic usage tracking
 
 **What needs deployment (code done, infrastructure pending):**
@@ -67,10 +67,11 @@ All plans: 7-day free trial, card required via Stripe, founding rate locked perm
 - **Chrome extension:** Manifest V3 / TypeScript / esbuild / Shadow DOM
 - **Backend:** Supabase (PostgreSQL + Auth + Edge Functions + RLS)
   - Project: fwvrauqdoevwmwwqlfav.supabase.co
-- **AI:** Google Gemini 2.5 Flash via Supabase edge function proxy
-  - Proxy URL: .../functions/v1/ai-proxy/gemini
-  - Extension sends Anthropic-format bodies; proxy translates to Gemini format
-  - Returns Anthropic-shaped envelope so extension code stays clean
+- **AI:** OpenRouter "brain" via Supabase edge function proxy (live)
+  - Live route: .../functions/v1/ai-proxy/brain — models x-ai/grok-4.3 -> moonshotai/kimi-k2.6 (fallback)
+  - Dormant (reversible): Anthropic Claude (claude-haiku-4-5) on .../ai-proxy/rexlens,
+    gated behind ANTHROPIC_ENABLED (default OFF). Powers Rex Lens when enabled.
+  - Gemini removed; the old /ai-proxy/gemini route name is retired
 - **Payments:** Stripe Checkout (payment links, not embedded)
 - **Voice:** Porcupine wake word + expo-av for recording
 - **Notifications:** expo-notifications (local push)
@@ -131,7 +132,7 @@ Platform adapters:
 
 Communication flow:
 ```
-Panel → sendToSW() → service-worker.ts → callAIProxy() → Supabase Edge Function → Gemini API
+Panel → sendToSW() → service-worker.ts → callAIProxy() → Supabase Edge Function → Anthropic via /ai-proxy/rexlens (Rex Lens; DORMANT unless ANTHROPIC_ENABLED)
                                          ↕
                    content-script.ts ← message handlers (EXTRACT_PAGE, SCAN_PAGE, etc.)
 ```
@@ -168,13 +169,13 @@ If you're working on:
 
 1. Supabase anon key is hardcoded in multiple files (expected for Supabase, RLS enforces security)
 2. eas.json has placeholder Apple/Google credentials — must fill before app store submission
-3. .env.example still references Anthropic/OpenAI keys — should reference Gemini
+3. .env.example still references Anthropic/OpenAI keys — but the client now needs no AI key (proxy holds POCKETREP_API_KEY for OpenRouter + REXLENS_API_KEY for the dormant Anthropic route); no Gemini
 4. messageQueue.ts doesn't handle rex_lens plan (extension-only, no mobile app access)
 5. Countdown timer deadline hardcoded to May 1, 2026 UTC — update if founding period extends
 
 ## WHAT TO BUILD NEXT (priority order)
 
-1. Deploy Gemini proxy + run DB migrations (blocks Rex Lens)
+1. Deploy ai-proxy (brain on OpenRouter is live; Rex Lens/Anthropic stays dormant behind ANTHROPIC_ENABLED) + run DB migrations
 2. Update Stripe prices to match new 3-tier structure (blocks billing)
 3. Submit to Chrome Web Store (blocks user acquisition)
 4. Set up App Store / Google Play credentials and first EAS build
@@ -185,9 +186,9 @@ If you're working on:
 
 ## IMPORTANT DECISIONS ALREADY MADE
 
-- Gemini 2.5 Flash over Anthropic Claude (10x cheaper, fast enough)
+- Live AI is the OpenRouter brain (Grok 4.3 -> Kimi K2.6). Anthropic Claude (Rex Lens) is kept but DORMANT behind a reversible flag. Gemini was removed.
 - Daily dollar caps over per-session response limits (server-enforced, plan-tiered)
-- Proxy translates at boundary (extension code stays Anthropic-format, proxy converts)
+- Proxy holds provider keys server-side: the brain speaks OpenRouter (OpenAI-shape); the dormant rexlens route speaks Anthropic
 - Shadow DOM for panel injection (isolates from host page CSS)
 - VinSolutions is the primary CRM target (deep adapter), others get generic fallback
 - "Founding rate" pricing model — early users locked at lower price permanently

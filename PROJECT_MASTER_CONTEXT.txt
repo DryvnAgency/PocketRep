@@ -69,12 +69,17 @@ Chrome Extension (RexLens/):
 Backend:
   - Supabase (PostgreSQL + Auth + Edge Functions + RLS)
   - Project: fwvrauqdoevwmwwqlfav.supabase.co
-  - AI Proxy edge function (Gemini 2.5 Flash, translates Anthropic-format requests)
+  - AI Proxy edge function: live "brain" on OpenRouter (Grok 4.3 -> Kimi K2.6 fallback);
+    Anthropic/Rex Lens route kept but dormant behind ANTHROPIC_ENABLED (Gemini removed)
   - Support reply edge function (Twilio webhook auto-reply)
 
 AI:
-  - Gemini 2.5 Flash via Supabase edge function proxy
-  - Model constants in RexLens/src/shared/prompts.ts
+  - LIVE: OpenRouter "brain" via Supabase edge function proxy (/ai-proxy/brain)
+    — x-ai/grok-4.3 primary, moonshotai/kimi-k2.6 fallback
+  - DORMANT (reversible): Anthropic Claude (claude-haiku-4-5) on /ai-proxy/rexlens,
+    gated behind ANTHROPIC_ENABLED (default OFF). Powers Rex Lens when enabled.
+  - Gemini: REMOVED. The old /ai-proxy/gemini route name is retired.
+  - Model constants in RexLens/src/shared/prompts.ts and supabase/functions/ai-proxy/index.ts
   - Usage tracked in daily_ai_usage table (per-user, per-day)
 
 Payments:
@@ -163,7 +168,7 @@ PocketRep/
 │   ├── sql/
 │   │   └── schema.sql                 # 267 lines — full Supabase schema
 │   ├── supabase/functions/
-│   │   ├── ai-proxy/index.ts          # 227 lines — Gemini proxy + usage caps
+│   │   ├── ai-proxy/index.ts          # 227 lines — brain (OpenRouter Grok->Kimi) + dormant Anthropic/rexlens + usage caps
 │   │   └── support-reply/index.ts     # 35 lines — Twilio auto-reply
 │   ├── scripts/
 │   │   └── generate-assets.js         # 161 lines — asset builder
@@ -190,7 +195,7 @@ DONE (shipped and working in code):
   [x] Deep Scan agent mode (clicks into 30 contacts, generates game plan)
   [x] AI prompt system (phone/email/text scripts, time-of-month awareness)
   [x] Daily AI cost cap (server-side, per-plan, resets at midnight)
-  [x] Gemini 2.5 Flash proxy (translates Anthropic-format at boundary)
+  [x] AI proxy: live brain (OpenRouter Grok 4.3 -> Kimi K2.6); Anthropic/Rex Lens dormant behind ANTHROPIC_ENABLED
   [x] Extension icon click → toggle panel (no more old sidePanel)
   [x] Auth screen in panel (username/password, login/logout)
   [x] Session persistence (chat history saved per tab)
@@ -217,7 +222,7 @@ NEEDS DEPLOYMENT (code done, infrastructure pending):
   [ ] Run plan migration SQL (5 plans → 3)
   [ ] Run daily_ai_usage + increment_daily_usage SQL
   [ ] Update Stripe Payment Link prices
-  [ ] Remove old ANTHROPIC_API_KEY and GEMINI_API_KEY secrets (replaced by POCKETREP_API_KEY)
+  [ ] Remove any old GEMINI_API_KEY secret (Gemini removed). Live brain uses POCKETREP_API_KEY (OpenRouter); dormant Rex Lens uses REXLENS_API_KEY (Anthropic)
 
 NOT YET STARTED / PLANNED:
   [ ] Chrome Web Store listing and submission
@@ -260,15 +265,19 @@ Trigger: handle_new_user() creates profile on signup with plan + 7-day trial
 7. AI SYSTEM
 ================================================================================
 
-Model: Gemini 2.5 Flash (via Supabase edge function proxy)
-Proxy URL: https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/gemini
+LIVE model: OpenRouter "brain" — x-ai/grok-4.3 primary, moonshotai/kimi-k2.6 fallback
+Live route: https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/brain
 Auth: JWT from Supabase Auth (user must be logged in)
+
+DORMANT model (reversible): Anthropic Claude claude-haiku-4-5-20251001 on
+.../ai-proxy/rexlens — gated behind ANTHROPIC_ENABLED (default OFF; returns 503
+until the secret is set to 1). Powers Rex Lens. (Gemini removed; /gemini retired.)
 
 Request flow:
   Extension → callAIProxy() [Anthropic-format body]
     → Supabase Edge Function (ai-proxy)
-      → Translates to Gemini format
-      → Calls Google Gemini API (x-goog-api-key header)
+      → /brain: calls OpenRouter chat-completions (models: [grok-4.3, kimi-k2.6])
+      → /rexlens: calls Anthropic Messages (claude-haiku) — only if ANTHROPIC_ENABLED, else 503
       → Checks daily_ai_usage before calling
       → Logs tokens + cost after response
       → Returns Anthropic-shaped envelope to client
@@ -280,9 +289,9 @@ Prompt types:
   - DEEP_REVIEW_SUMMARY: per-lead detail extraction
   - DEEP_REVIEW_GAME_PLAN: prioritized action plan for 30 leads
 
-Pricing (Gemini 2.5 Flash):
-  Input: $0.30/M tokens | Output: $2.50/M tokens
-  ~$0.07 per 30-task scan batch | ~$0.01 per chat message
+Cost control: per-user daily cap enforced in ai-proxy via daily_ai_usage
+(DAILY_CAP_CENTS). Token/cost figures come from each provider's usage response;
+the old Gemini per-token pricing no longer applies.
 
 --------------------------------------------------------------------------------
 
@@ -321,17 +330,19 @@ Tone: Confident, direct, no fluff. "Built for closers."
    public by design, RLS enforces security), but should use build-time env
    vars instead of hardcoding.
 
-2. AI_PROXY_URL PATH: Updated to end in "/gemini" (was "/anthropic"). Fixed.
+2. AI_PROXY_URL: live route is /ai-proxy/brain (OpenRouter). The /gemini route name is
+   retired; Rex Lens uses /ai-proxy/rexlens (Anthropic, dormant behind ANTHROPIC_ENABLED).
 
-3. PRIVACY POLICY: Updated to reference Google Gemini (was Anthropic/OpenAI).
-   Fixed.
+3. PRIVACY POLICY: references Google Gemini — now INACCURATE (Gemini removed; live AI is
+   OpenRouter Grok/Kimi, Anthropic is dormant). Needs updating to match. [LAWYER ITEM]
 
 4. eas.json PLACEHOLDERS: Apple Team ID, App Store Connect ID, and Google
    service account key are all placeholder values. Must be filled before
    submitting to app stores.
 
-5. .env.example REFERENCES ANTHROPIC/OPENAI: Lists EXPO_PUBLIC_ANTHROPIC_KEY
-   and EXPO_PUBLIC_OPENAI_KEY. Should be updated for Gemini.
+5. .env.example AI KEYS: the client needs no AI provider key — the proxy holds them
+   server-side (POCKETREP_API_KEY for OpenRouter; REXLENS_API_KEY for the dormant
+   Anthropic route). Drop any stale EXPO_PUBLIC_ANTHROPIC_KEY / EXPO_PUBLIC_OPENAI_KEY.
 
 6. PLAN LIMIT IN messageQueue.ts: References 50 (Pro) vs 100 (Elite) items
    but doesn't account for rex_lens plan (should probably be 0 since Rex Lens
@@ -373,8 +384,9 @@ Stripe:                    ⚠️  Links exist, prices need updating to match ne
    - Write listing copy, screenshots, privacy policy URL
    - Update thankyou.html Chrome Store button href
 
-4. FIX PRIVACY POLICY (legal compliance)
-   - Update AI provider references from Anthropic/OpenAI to Google Gemini
+4. FIX PRIVACY POLICY (legal compliance) [LAWYER ITEM]
+   - AI provider references must match reality: OpenRouter (Grok 4.3 / Kimi K2.6) for the
+     live brain; Anthropic only if Rex Lens is re-enabled. No Google Gemini.
 
 5. SET UP APP STORE CREDENTIALS (blocks mobile distribution)
    - Fill eas.json with real Apple/Google credentials
