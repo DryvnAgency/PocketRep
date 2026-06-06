@@ -1,0 +1,33 @@
+# PocketRep
+
+> PocketRep is the follow-up app for car salespeople. It is an AI-powered follow-up app and personal CRM that ranks the customers you have sold by who is ready to buy next, drafts your follow-ups in your voice, reminds you to ask for referrals, and keeps you top of mind with your whole book. Your customers stay yours and follow you between dealerships. Available on iPhone, Android, and the web, starting at $39 a month.
+
+## Features
+- Heat Sheet: customers ranked HOT, WARM, and WATCH by who is most likely to buy next, with a days-since-contact counter and an overdue banner.
+- Hey Rex (voice): plain-talk voice commands that draft texts and log deals; nothing sends until you review and tap send.
+- Your Book (Contacts): your whole book of customers in one place, searchable and tagged, and it follows you between dealerships.
+- Rex Reads Your Notes: jot a note and Rex works the details into personalized follow-ups.
+- Game Plan: tap a customer and Rex gives the next move (what to send, when, and why).
+- Deal Logger and Metrics: log a deal in seconds with a live commission payout off your real pay plan; track units, gross, and commission year to date.
+- Mass Text (Smart Blast): Rex writes a personalized message for every past customer; you review and send it yourself.
+- Nurture Engine: a steady follow-up cadence for anniversaries, lease-ends, and service reminders.
+- Referral Asks: after delivery, Rex reminds you to ask for the referral and drafts the ask.
+- Stalled Lead Triage: sorts cold pipeline into KILL, PUSH, and FENCE.
+- Objection Prep (Rebuttals): real closer responses to common objections.
+- Weekly Digest: a two-minute summary of your week.
+- Bilingual: follow-ups in English and natural Mexican Spanish.
+
+## Who it is for
+- Individual reps: car salespeople who want to keep their book and never let a sold customer go cold.
+- Teams (dealerships and GMs): PocketRep Team puts the whole floor on one system, keeps every rep as the face, and gives managers response-time and follow-up visibility. Each rep gets a local number the store owns.
+
+## Pricing
+- Individual: $39 per month founding price, locked for life for the first 500 reps, then $69 per month. Every feature included. 7-day free trial.
+- Team: $49 per seat per month, plus a one-time setup fee of $249 founding (first 100 stores) or $499. Three-seat minimum.
+
+## Important
+- Nothing sends automatically. PocketRep drafts messages; the rep reviews and sends every message.
+
+## Links
+- Home: https://pocketrep.pro
+- App: https://app.pocketrep.pro
