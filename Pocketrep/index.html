@@ -1288,6 +1288,14 @@
 .fcard .fname { font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--cyan); }
 .fcard h3 { font-size: 18px; letter-spacing: -0.01em; line-height: 1.25; }
 .fcard p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+.more-features { margin-top: 22px; text-align: center; }
+.more-features > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--cyan); border: 1px solid var(--line-2); border-radius: 100px; padding: 11px 20px; transition: border-color .2s, color .2s; -webkit-user-select: none; user-select: none; }
+.more-features > summary::-webkit-details-marker { display: none; }
+.more-features > summary::after { content: "+"; font-size: 15px; }
+.more-features[open] > summary::after { content: "–"; }
+.more-features > summary:hover { color: var(--ink); border-color: rgba(212,168,67,0.5); }
+.more-features[open] > summary { margin-bottom: 18px; }
+.more-features .fgrid { margin-top: 0; text-align: left; }
 .teams-band { border-radius: 26px; padding: clamp(34px, 5vw, 64px); background: linear-gradient(135deg, rgba(212,168,67,0.13), rgba(240,192,96,0.06)); border: 1px solid var(--line-2); position: relative; overflow: hidden; }
 .teams-band .eyebrow { margin-bottom: 14px; }
 .teams-band h2 { font-size: clamp(26px, 3.6vw, 44px); max-width: 760px; }
@@ -1380,19 +1388,51 @@
   </div>
 </section>
 
-<!-- ============ SUBHERO STRIP (AEO quotable) ============ -->
-<section class="aeo-strip" id="what">
-  <div class="wrap">
-    <p class="reveal">PocketRep is the AI follow-up app and personal CRM built for car salespeople. It ranks the customers you've sold by who's ready to buy next, drafts your follow-ups in your voice, reminds you to ask for referrals, and keeps you top of mind with your whole book. Your customers stay yours and follow you between dealerships. On iPhone, Android, and the web, starting at $39 a month.</p>
-  </div>
-</section>
-
 <!-- ============ PROBLEM ============ -->
 <section class="section-sm wrap" id="why">
   <div class="head center">
     <span class="eyebrow center reveal">The problem</span>
     <h2 class="h2 reveal d1">The deals you already earned <br><span class="grad-text">are slipping away.</span></h2>
     <p class="lead reveal d2">Every salesperson has a graveyard of deals they meant to follow up on. Customers you sold who bought their next car somewhere else, because nobody stayed in touch. Those weren't cold leads. They were your easiest deals sitting right there in your phone. You just forgot to call. PocketRep makes sure you never forget again.</p>
+  </div>
+</section>
+
+<!-- ============ TRY THE APP (interactive) ============ -->
+<section class="section wrap" id="try">
+  <div class="head center">
+    <span class="eyebrow center reveal">Take it for a drive</span>
+    <h2 class="h2 reveal d1">Don't take our word for it.<br><span class="grad-text">Play with the real thing.</span></h2>
+    <p class="lead reveal d2">PocketRep on real demo data, a rep's actual Tuesday. Open a hot lead, ask Rex for a line, log a deal and watch the commission land.</p>
+  </div>
+
+  <div class="demo-stage reveal d1">
+    <div class="demo-side left">
+      <div class="demo-note"><div class="n">Heat Sheet</div><h4>Who's peaking today</h4><p>Ranked by lease windows, mileage, and timing, not a random reminder list.</p></div>
+      <div class="demo-note"><div class="n">Rex · AI</div><h4>A line for every objection</h4><p>Tap the orb, or open a lead and let Rex draft the exact follow-up.</p></div>
+    </div>
+
+    <div class="demo-phone" id="demoApp"></div>
+
+    <div class="demo-side right">
+      <div class="demo-note"><div class="n">Metrics</div><h4>Your own pay ledger</h4><p>Log a deal in seconds and see the payout preview before you hit save.</p></div>
+      <div class="demo-note"><div class="n">Your book</div><h4>Tags, notes, history</h4><p>Every customer's story in one place: contacts, notes, and history.</p></div>
+    </div>
+  </div>
+
+  <div class="demo-guide reveal">
+    <button class="guide-chip" onclick="PRDemo.openContact('marcus')"><span class="gi">→</span> Open a hot lead</button>
+    <button class="guide-chip" onclick="PRDemo.askRex('Who should I call first?')"><span class="gi">→</span> Ask Rex who to call</button>
+    <button class="guide-chip" onclick="PRDemo.go('metrics')"><span class="gi">→</span> See the metrics</button>
+    <button class="guide-chip" onclick="PRDemo.logDeal('marcus')"><span class="gi">→</span> Log a deal</button>
+  </div>
+
+  <div class="demo-cta reveal">
+    <div class="kicker">Felt good, didn't it? <span class="grad-text">Now make it yours.</span></div>
+    <p>7 days free. One repeat or referral deal pays for the whole year.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary btn-lg" href="#signup" onclick="prScrollSignup(event)">Start your free trial <span class="arrow">→</span></a>
+      <a class="btn btn-ghost btn-lg" href="https://app.pocketrep.pro">Log in</a>
+    </div>
   </div>
 </section>
 
@@ -1435,16 +1475,6 @@
       <h3>Your customers follow you. Not the dealership.</h3>
       <p>Your whole book in one place: searchable, tagged, alphabetical, with notes, language preference, milestones, and past deals on one card. Switch stores and your customers come with you.</p>
     </div>
-    <div class="fcard reveal" role="group" aria-label="PocketRep note field where Rex reads a rep's freeform notes and works the details into personalized follow-ups">
-      <div class="ficon" aria-hidden="true">✍️</div><div class="fname">Rex Reads Your Notes</div>
-      <h3>Jot a note. Rex remembers everything.</h3>
-      <p>Scribble the details, like "wife's name is Maria, lease is up in spring, wants something safe for his daughter." Rex works them into your follow-ups so every message lands personal.</p>
-    </div>
-    <div class="fcard reveal d1" role="group" aria-label="Game Plan screen in PocketRep showing the next move for a customer: what to send, when, and why">
-      <div class="ficon" aria-hidden="true">🎯</div><div class="fname">Game Plan</div>
-      <h3>Never stare at a contact wondering what to say.</h3>
-      <p>Tap any customer and Rex gives you the next move: what to send, when, and why, written in your voice and ready to go.</p>
-    </div>
     <div class="fcard reveal d2" role="group" aria-label="Deal Logger and Metrics in PocketRep showing fast deal logging with a live commission payout and year-to-date charts">
       <div class="ficon" aria-hidden="true">📊</div><div class="fname">Deal Logger and Metrics</div>
       <h3>Log the sale in seconds. Watch your commission add up.</h3>
@@ -1455,15 +1485,29 @@
       <h3>Reach your entire list in a couple taps.</h3>
       <p>Rex writes a personalized message for every past customer. You skim and send it yourself, so it stays your relationship, not a robot blasting strangers.</p>
     </div>
-    <div class="fcard reveal d1" role="group" aria-label="Nurture Engine in PocketRep queuing steady follow-up touches for anniversaries, lease-ends, and service reminders">
-      <div class="ficon" aria-hidden="true">🌱</div><div class="fname">Nurture Engine</div>
-      <h3>Stay top of mind without lifting a finger.</h3>
-      <p>A steady, natural cadence for anniversaries, lease-ends, and service reminders. Rex drafts each touch and queues it for you to review, edit, send, or skip.</p>
-    </div>
     <div class="fcard reveal d2" role="group" aria-label="Referral Asks in PocketRep reminding the rep to ask for a referral right after delivery and drafting the ask">
       <div class="ficon" aria-hidden="true">🤝</div><div class="fname">Referral Asks</div>
       <h3>Turn one sale into three.</h3>
       <p>Right after delivery, Rex reminds you to ask for the referral and writes the ask for you. Referrals close higher than any paid lead.</p>
+    </div>
+  </div>
+  <details class="more-features">
+    <summary>See all 13 features</summary>
+    <div class="fgrid">
+    <div class="fcard reveal" role="group" aria-label="PocketRep note field where Rex reads a rep's freeform notes and works the details into personalized follow-ups">
+      <div class="ficon" aria-hidden="true">✍️</div><div class="fname">Rex Reads Your Notes</div>
+      <h3>Jot a note. Rex remembers everything.</h3>
+      <p>Scribble the details, like "wife's name is Maria, lease is up in spring, wants something safe for his daughter." Rex works them into your follow-ups so every message lands personal.</p>
+    </div>
+    <div class="fcard reveal d1" role="group" aria-label="Game Plan screen in PocketRep showing the next move for a customer: what to send, when, and why">
+      <div class="ficon" aria-hidden="true">🎯</div><div class="fname">Game Plan</div>
+      <h3>Never stare at a contact wondering what to say.</h3>
+      <p>Tap any customer and Rex gives you the next move: what to send, when, and why, written in your voice and ready to go.</p>
+    </div>
+    <div class="fcard reveal d1" role="group" aria-label="Nurture Engine in PocketRep queuing steady follow-up touches for anniversaries, lease-ends, and service reminders">
+      <div class="ficon" aria-hidden="true">🌱</div><div class="fname">Nurture Engine</div>
+      <h3>Stay top of mind without lifting a finger.</h3>
+      <p>A steady, natural cadence for anniversaries, lease-ends, and service reminders. Rex drafts each touch and queues it for you to review, edit, send, or skip.</p>
     </div>
     <div class="fcard reveal" role="group" aria-label="Stalled Lead Triage in PocketRep sorting cold pipeline into KILL, PUSH, and FENCE">
       <div class="ficon" aria-hidden="true">🚦</div><div class="fname">Stalled Lead Triage</div>
@@ -1485,71 +1529,16 @@
       <h3>Sell in English and Spanish.</h3>
       <p>Rex writes follow-ups in English and real Mexican slang, not stiff textbook translation.</p>
     </div>
-  </div>
+    </div>
+  </details>
 </section>
-
-<!-- ============ TRY THE APP (interactive) ============ -->
-<section class="section wrap" id="try">
-  <div class="head center">
-    <span class="eyebrow center reveal">Take it for a drive</span>
-    <h2 class="h2 reveal d1">Don't take our word for it.<br><span class="grad-text">Play with the real thing.</span></h2>
-    <p class="lead reveal d2">PocketRep on real demo data, a rep's actual Tuesday. Open a hot lead, ask Rex for a line, log a deal and watch the commission land.</p>
-  </div>
-
-  <div class="demo-stage reveal d1">
-    <div class="demo-side left">
-      <div class="demo-note"><div class="n">Heat Sheet</div><h4>Who's peaking today</h4><p>Ranked by lease windows, mileage, and timing, not a random reminder list.</p></div>
-      <div class="demo-note"><div class="n">Rex · AI</div><h4>A line for every objection</h4><p>Tap the orb, or open a lead and let Rex draft the exact follow-up.</p></div>
-    </div>
-
-    <div class="demo-phone" id="demoApp"></div>
-
-    <div class="demo-side right">
-      <div class="demo-note"><div class="n">Metrics</div><h4>Your own pay ledger</h4><p>Log a deal in seconds and see the payout preview before you hit save.</p></div>
-      <div class="demo-note"><div class="n">Your book</div><h4>Tags, notes, history</h4><p>Every customer's story in one place: contacts, notes, and history.</p></div>
-    </div>
-  </div>
-
-  <div class="demo-guide reveal">
-    <button class="guide-chip" onclick="PRDemo.openContact('marcus')"><span class="gi">→</span> Open a hot lead</button>
-    <button class="guide-chip" onclick="PRDemo.askRex('Who should I call first?')"><span class="gi">→</span> Ask Rex who to call</button>
-    <button class="guide-chip" onclick="PRDemo.go('metrics')"><span class="gi">→</span> See the metrics</button>
-    <button class="guide-chip" onclick="PRDemo.logDeal('marcus')"><span class="gi">→</span> Log a deal</button>
-  </div>
-
-  <div class="demo-cta reveal">
-    <div class="kicker">Felt good, didn't it? <span class="grad-text">Now make it yours.</span></div>
-    <p>7 days free. Find one deal from the Heat Sheet and it's paid for two years.</p>
-    <div class="hero-actions">
-      <a class="btn btn-primary btn-lg" href="#signup" onclick="prScrollSignup(event)">Start your free trial <span class="arrow">→</span></a>
-      <a class="btn btn-ghost btn-lg" href="https://app.pocketrep.pro">Log in</a>
-    </div>
-  </div>
-</section>
-
-<!-- ============ FOR SALES MANAGERS AND GMs (TEAMS) ============ -->
-<section class="section wrap" id="teams">
-  <div class="teams-band reveal">
-    <span class="soon"><span class="pip"></span> Coming soon</span>
-    <span class="eyebrow center" style="margin-top:14px">Run the whole floor.</span>
-    <h2 class="h2">See every deal in your store. <span class="grad-text">Recover the gross that's slipping away.</span></h2>
-    <p class="tbody">PocketRep Team puts the whole floor on one system, keeps every rep as the face, and gives managers the cockpit: response time per rep, who's following up and who isn't, and deals saved that would have died. Each rep gets a local number the store owns, so when someone leaves, the number and book stay with the store.</p>
-    <p class="tbody"><b>We're launching the individual app first.</b> Teams needs its own setup flow for seat counts and number provisioning, so it isn't for sale yet. Join the waitlist and we'll let you know the moment it opens.</p>
-    <div class="hero-actions">
-      <button type="button" class="btn btn-primary btn-lg" onclick="prOpenWaitlist(event)">Join the Teams waitlist <span class="arrow">→</span></button>
-    </div>
-    <p class="cta-sub">No charge and no commitment. We'll email you when PocketRep Team is ready, with early-access founding pricing.</p>
-  </div>
-</section>
-
-<!-- Testimonials intentionally omitted: no invented quotes (FTC). Add a real-quotes section when verified quotes exist. -->
 
 <!-- ============ PRICING ============ -->
 <section class="section wrap" id="pricing">
   <div class="head center">
     <span class="eyebrow center reveal">Pricing</span>
     <h2 class="h2 reveal d1">One plan. Everything included. <span class="grad-text">No tiers.</span></h2>
-    <p class="lead reveal d2">The full app, every feature, no upsells. Start with a 7-day free trial and lock the founding price for life.</p>
+    <p class="lead reveal d2">The full app, every feature, no upsells. Start with a 7-day free trial.</p>
   </div>
 
   <div class="price-grid two">
@@ -1559,8 +1548,8 @@
       <div class="desc">The full app and every feature, for one rep. Your book, your customers, yours to keep between dealerships.</div>
       <div class="cost"><span class="now">$39</span><span class="per">/mo</span></div>
       <div class="was">Standard <s>$69/mo</s> after founding</div>
-      <div class="lock">◆ Founding price · first 500 reps · locked for life</div>
-      <div class="spots"><span class="pip"></span> [X] founding spots left</div>
+      <div class="lock">◆ Your founding rate, locked for life</div>
+      <div class="spots"><span class="pip"></span> Founding spots are limited · first 500 reps</div>
       <hr>
       <ul>
         <li><span class="tick">✦</span> Every feature included · no tiers, no upsells</li>
@@ -1650,9 +1639,9 @@ select.sf-input { appearance: none; cursor: pointer; }
 <section class="signup wrap" id="signup">
   <div class="signup-grid">
     <div class="signup-pitch">
-      <span class="eyebrow reveal">Founding rate ends soon</span>
+      <span class="eyebrow reveal">Start your free trial</span>
       <h2 class="reveal d1">7 days free.<br><span class="grad-text">Then yours forever.</span></h2>
-      <p class="sub reveal d2">Start the trial today. Find one deal from the Heat Sheet and your subscription is paid for <b>two years.</b> Cancel before day 7, zero charge, no questions.</p>
+      <p class="sub reveal d2">Start the trial today. One repeat or referral deal pays for the <b>whole year.</b> Cancel before day 7, zero charge, no questions.</p>
       <div class="tline reveal d2">
         <div class="tline-step"><div class="tline-dot now">✓</div><div><div class="tline-label">Today: Trial starts</div><div class="tline-desc">Full access from minute one</div></div></div>
         <div class="tline-step"><div class="tline-dot future">6</div><div><div class="tline-label">Day 6: Reminder email</div><div class="tline-desc">We remind you 24 hours before the trial ends</div></div></div>
@@ -1662,7 +1651,7 @@ select.sf-input { appearance: none; cursor: pointer; }
       <div class="trustrow reveal d3">
         <span>✓ Cancel anytime before day 7</span>
         <span>✓ Secured by Stripe</span>
-        <span>✓ Founding rate locked forever</span>
+        <span>✓ Your book is yours</span>
       </div>
     </div>
     <div class="signup-box reveal d1">
@@ -1750,6 +1739,23 @@ select.sf-input { appearance: none; cursor: pointer; }
     </div>
   </div>
 </section>
+
+<!-- ============ FOR SALES MANAGERS AND GMs (TEAMS) ============ -->
+<section class="section wrap" id="teams">
+  <div class="teams-band reveal">
+    <span class="soon"><span class="pip"></span> Coming soon</span>
+    <span class="eyebrow center" style="margin-top:14px">Run the whole floor.</span>
+    <h2 class="h2">See every deal in your store. <span class="grad-text">Recover the gross that's slipping away.</span></h2>
+    <p class="tbody">PocketRep Team puts the whole floor on one system, keeps every rep as the face, and gives managers the cockpit: response time per rep, who's following up and who isn't, and deals saved that would have died. Each rep gets a local number the store owns, so when someone leaves, the number and book stay with the store.</p>
+    <p class="tbody"><b>We're launching the individual app first.</b> Teams needs its own setup flow for seat counts and number provisioning, so it isn't for sale yet. Join the waitlist and we'll let you know the moment it opens.</p>
+    <div class="hero-actions">
+      <button type="button" class="btn btn-primary btn-lg" onclick="prOpenWaitlist(event)">Join the Teams waitlist <span class="arrow">→</span></button>
+    </div>
+    <p class="cta-sub">No charge and no commitment. We'll email you when PocketRep Team is ready, with early-access founding pricing.</p>
+  </div>
+</section>
+
+<!-- Testimonials intentionally omitted: no invented quotes (FTC). Add a real-quotes section when verified quotes exist. -->
 
 <!-- ============ FINAL CTA ============ -->
 <section class="section wrap">
