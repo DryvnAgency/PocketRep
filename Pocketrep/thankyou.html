@@ -3,699 +3,251 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTYiIGhlaWdodD0iOTYiIHZpZXdCb3g9IjAgMCA5NiA5NiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IlBvY2tldFJlcCI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InByVGlsZSIgeDE9IjEwIiB5MT0iNiIgeDI9Ijg2IiB5Mj0iOTIiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZjNkMjdlIj48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMC41IiBzdG9wLWNvbG9yPSIjZTJiNTUyIj48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2YwYzA2MCI+PC9zdG9wPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0icHJHbG9zcyIgY3g9IjAuMyIgY3k9IjAuMjIiIHI9IjAuOSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIgc3RvcC1vcGFjaXR5PSIwLjQ1Ij48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMC41IiBzdG9wLWNvbG9yPSIjZmZmZmZmIiBzdG9wLW9wYWNpdHk9IjAiPjwvc3RvcD4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHg9IjYiIHk9IjYiIHdpZHRoPSI4NCIgaGVpZ2h0PSI4NCIgcng9IjI0IiBmaWxsPSJ1cmwoI3ByVGlsZSkiPjwvcmVjdD4KICA8cmVjdCB4PSI2IiB5PSI2IiB3aWR0aD0iODQiIGhlaWdodD0iODQiIHJ4PSIyNCIgZmlsbD0idXJsKCNwckdsb3NzKSI+PC9yZWN0PgogIDxyZWN0IHg9IjYuNzUiIHk9IjYuNzUiIHdpZHRoPSI4Mi41IiBoZWlnaHQ9IjgyLjUiIHJ4PSIyMy4yNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utb3BhY2l0eT0iMC4yMiIgc3Ryb2tlLXdpZHRoPSIxLjUiPjwvcmVjdD4KICAKICA8cGF0aCBkPSJNMzkgNzIgVjI3IEg1My41IEExMi41IDEyLjUgMCAwIDEgNTMuNSA1MiBIMzkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzBhMGMxMiIgc3Ryb2tlLW9wYWNpdHk9IjAuMjgiIHN0cm9rZS13aWR0aD0iOS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMS41KSI+PC9wYXRoPgogIDxwYXRoIGQ9Ik0zOSA3MiBWMjcgSDUzLjUgQTEyLjUgMTIuNSAwIDAgMSA1My41IDUyIEgzOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjguNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48L3BhdGg+CiAgCiAgPGNpcmNsZSBjeD0iNjIuNSIgY3k9IjY4IiByPSI1IiBmaWxsPSIjMGEwYzEyIiBmaWxsLW9wYWNpdHk9IjAuMjUiPjwvY2lyY2xlPgogIDxjaXJjbGUgY3g9IjYyIiBjeT0iNjciIHI9IjUiIGZpbGw9IiNmZjdhNDUiPjwvY2lyY2xlPgo8L3N2Zz4=" type="image/svg+xml">
 <title>PocketRep.pro — You're In. Welcome to the Book.</title>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+/* PocketRep Team signups get the dedicated dealership thank-you. Redirect before
+   render to avoid a flash of the individual page. Driven by the existing ?plan= flow. */
+(function(){try{
+  var p=new URLSearchParams(location.search).get('plan');
+  if(!p){var r=sessionStorage.getItem('pr_signup');if(r){try{p=JSON.parse(r).plan}catch(e){}}}
+  if(p==='teams'){location.replace('thankyou-teams.html'+location.search);}
+}catch(e){}})();
+</script>
+<!-- ════ STRIPE WIRING — individual plan (Elite / Retail) ════
+     1) Paste your individual Stripe checkout link into  ELITE_STRIPE  in Pocketrep/index.html.
+     2) In that Stripe Payment Link's "After payment → Redirect to your website", set:
+            https://pocketrep.pro/thankyou.html?plan=elite
+     The customer's email/name flow from the landing's sessionStorage (pr_signup); this page
+     reads ?plan= and the email and pre-fills the intake. (No account is created here.)
+     ═══════════════════════════════════════════════════════════ -->
+<link rel="stylesheet" href="brand.css">
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --ink:#0c0c0e;
-  --ink2:#141418;
-  --ink3:#1e1e26;
-  --gold:#d4a843;
-  --gold2:#f0c060;
-  --gold-bg:rgba(212,168,67,0.1);
-  --gold-border:rgba(212,168,67,0.2);
-  --white:#fff;
-  --grey:#5e6472;
-  --grey2:#8e94a4;
-  --grey3:#b8beca;
-  --surface:#13131a;
-  --surface2:#1a1a22;
-  --red:#e05252;
-  --green:#42b883;
-}
-html{scroll-behavior:smooth}
-body{
-  background:var(--ink);color:var(--white);
-  font-family:'Instrument Sans',sans-serif;
-  font-size:16px;line-height:1.65;
-  overflow-x:hidden;
-  -webkit-font-smoothing:antialiased;
-}
-h1,h2,h3,h4{font-family:'Bricolage Grotesque',sans-serif;line-height:1.1;letter-spacing:-0.025em}
-
-/* NAV */
-nav{
-  position:fixed;top:0;left:0;right:0;z-index:200;
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 2.5rem;height:64px;
-  background:rgba(12,12,14,0.92);
-  backdrop-filter:blur(20px);
-  border-bottom:1px solid rgba(255,255,255,0.045);
-}
-.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
-.logo-mark{
-  width:34px;height:34px;border-radius:8px;background:var(--gold);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-}
-.logo-mark svg{width:18px;height:18px}
-.logo-text{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1.05rem;color:var(--white);letter-spacing:-0.02em}
-.logo-text span{color:var(--gold)}
-.nav-plan-chip{
-  display:flex;align-items:center;gap:7px;
-  background:var(--gold-bg);border:1px solid var(--gold-border);
-  padding:0.3rem 0.9rem;border-radius:100px;
-  font-size:0.7rem;font-weight:600;letter-spacing:0.06em;
-  text-transform:uppercase;color:var(--gold2);
-}
-.blink{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s ease-in-out infinite;display:inline-block}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
-
-/* HERO CONFIRMATION */
-.confirm-hero{
-  padding:9rem 1.5rem 5rem;
-  text-align:center;
-  position:relative;overflow:hidden;
-  max-width:760px;margin:0 auto;
-}
-.top-glow{
-  position:absolute;top:-5%;left:50%;transform:translateX(-50%);
-  width:900px;height:600px;pointer-events:none;
-  background:radial-gradient(ellipse at center,rgba(212,168,67,0.1) 0%,transparent 65%);
-}
-.confirm-badge{
-  display:inline-flex;align-items:center;gap:8px;
-  background:rgba(66,184,131,0.1);border:1px solid rgba(66,184,131,0.25);
-  padding:0.38rem 1.1rem;border-radius:100px;
-  font-size:0.7rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
-  color:#6ee4a8;margin-bottom:2rem;
-}
-.confirm-badge .check{font-size:0.75rem}
-.confirm-hero h1{
-  font-size:clamp(2.8rem,5.5vw,5rem);
-  font-weight:800;margin-bottom:1.25rem;
-  color:var(--white);
-}
-.confirm-hero h1 span{color:var(--gold)}
-.confirm-hero .sub{
-  font-size:1.05rem;color:var(--grey2);
-  max-width:480px;margin:0 auto 1rem;line-height:1.8;
-}
-.confirm-hero .sub b{color:var(--white);font-weight:600}
-.name-greeting{
-  font-size:1.15rem;color:var(--gold2);font-weight:600;
-  margin-bottom:2.5rem;
-}
-
-/* DOWNLOAD SECTION */
-.download-section{
-  background:var(--surface);
-  border-top:1px solid rgba(255,255,255,0.04);
-  border-bottom:1px solid rgba(255,255,255,0.04);
-  padding:4rem 1.5rem;
-  text-align:center;
-}
-.dl-inner{max-width:640px;margin:0 auto}
-.dl-eyebrow{
-  font-size:0.68rem;letter-spacing:0.12em;text-transform:uppercase;
-  color:var(--gold);font-weight:600;margin-bottom:0.75rem;
-  display:flex;align-items:center;justify-content:center;gap:8px;
-}
-.dl-eyebrow::before,.dl-eyebrow::after{content:'';display:block;width:18px;height:1px;background:var(--gold)}
-.download-section h2{font-size:1.8rem;font-weight:800;margin-bottom:0.75rem}
-.download-section p{font-size:0.92rem;color:var(--grey2);line-height:1.8;margin-bottom:2.25rem}
-.dl-buttons{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;margin-bottom:1.25rem}
-.dl-btn{
-  display:flex;align-items:center;gap:12px;
-  background:var(--ink2);border:1px solid rgba(255,255,255,0.1);
-  padding:0.85rem 1.75rem;border-radius:12px;
-  text-decoration:none;color:var(--white);
-  transition:all .18s;min-width:180px;
-}
-.dl-btn:hover{border-color:var(--gold-border);background:var(--ink3);transform:translateY(-1px)}
-.dl-btn svg{width:26px;height:26px;flex-shrink:0}
-.dl-btn-text{text-align:left}
-.dl-btn-text .dl-small{font-size:0.65rem;color:var(--grey2);letter-spacing:0.04em;text-transform:uppercase;font-weight:600}
-.dl-btn-text .dl-big{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;color:var(--white);margin-top:1px}
-.dl-note{font-size:0.75rem;color:var(--grey);margin-top:0.5rem}
-
-/* MANIFESTO */
-.manifesto-wrap{
-  max-width:820px;margin:0 auto;
-  padding:5rem 1.5rem;
-}
-.manifesto-eyebrow{
-  display:flex;align-items:center;gap:8px;
-  font-size:0.68rem;letter-spacing:0.12em;text-transform:uppercase;
-  color:var(--gold);font-weight:600;margin-bottom:2.5rem;
-}
-.manifesto-eyebrow::before{content:'';display:block;width:18px;height:1px;background:var(--gold)}
-.manifesto-title{
-  font-size:clamp(2rem,3.5vw,2.8rem);
-  font-weight:800;margin-bottom:2.5rem;
-  line-height:1.12;
-}
-.manifesto-title span{color:var(--gold)}
-
-/* MANIFESTO BODY */
-.manifesto-body{
-  display:flex;flex-direction:column;gap:0;
-  border-left:1px solid rgba(212,168,67,0.2);
-  padding-left:2.5rem;margin-bottom:3.5rem;
-}
-.m-block{
-  padding-bottom:2.25rem;
-  position:relative;
-}
-.m-block::before{
-  content:'';
-  position:absolute;left:-2.5rem;top:5px;
-  width:8px;height:8px;border-radius:50%;
-  background:var(--gold);margin-left:-4px;
-  border:2px solid var(--ink);
-}
-.m-block:last-child{padding-bottom:0}
-.m-block h3{
-  font-size:1.05rem;font-weight:700;
-  color:var(--white);margin-bottom:0.5rem;
-}
-.m-block p{
-  font-size:0.92rem;color:var(--grey2);line-height:1.82;
-}
-.m-block p b{color:var(--white);font-weight:600}
-.m-block .m-tag{
-  display:inline-block;margin-top:0.65rem;
-  font-size:0.65rem;letter-spacing:0.07em;text-transform:uppercase;font-weight:600;
-  color:var(--gold);background:var(--gold-bg);
-  padding:3px 10px;border-radius:100px;border:1px solid var(--gold-border);
-}
-
-/* WHAT'S NEXT */
-.next-section{
-  background:var(--surface);
-  border-top:1px solid rgba(255,255,255,0.04);
-  padding:4.5rem 1.5rem;
-}
-.next-inner{max-width:820px;margin:0 auto}
-.next-eyebrow{
-  display:flex;align-items:center;gap:8px;
-  font-size:0.68rem;letter-spacing:0.12em;text-transform:uppercase;
-  color:var(--gold);font-weight:600;margin-bottom:1.25rem;
-}
-.next-eyebrow::before{content:'';display:block;width:18px;height:1px;background:var(--gold)}
-.next-inner h2{font-size:1.8rem;font-weight:800;margin-bottom:2rem}
-.steps-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1px;background:rgba(255,255,255,0.04);border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.04)}
-.step{
-  background:var(--ink2);padding:1.75rem;
-  display:flex;flex-direction:column;gap:0.75rem;
-}
-.step-num{
-  font-family:'Bricolage Grotesque',sans-serif;
-  font-size:0.7rem;font-weight:700;letter-spacing:0.08em;
-  color:var(--gold);text-transform:uppercase;
-}
-.step h4{font-size:0.95rem;font-weight:700;color:var(--white);line-height:1.3}
-.step p{font-size:0.825rem;color:var(--grey2);line-height:1.65}
-
-/* FINAL CTA STRIP */
-.final-strip{
-  text-align:center;padding:5rem 1.5rem;
-  position:relative;overflow:hidden;
-}
-.final-glow{
-  position:absolute;bottom:-15%;left:50%;transform:translateX(-50%);
-  width:700px;height:450px;pointer-events:none;
-  background:radial-gradient(ellipse at center,rgba(212,168,67,0.09) 0%,transparent 65%);
-}
-.final-strip h2{font-size:clamp(1.8rem,3.5vw,2.8rem);font-weight:800;margin-bottom:0.75rem}
-.final-strip p{color:var(--grey2);max-width:420px;margin:0 auto 2rem;font-size:0.92rem;line-height:1.8}
-.btn-gold{
-  display:inline-block;
-  background:var(--gold);color:var(--ink);
-  border:none;padding:1rem 2.5rem;border-radius:9px;
-  font-family:'Bricolage Grotesque',sans-serif;
-  font-weight:700;font-size:0.95rem;cursor:pointer;
-  text-decoration:none;letter-spacing:0.01em;
-  box-shadow:0 4px 28px rgba(212,168,67,0.22);
-  transition:background .15s,transform .12s,box-shadow .15s;
-}
-.btn-gold:hover{background:var(--gold2);transform:translateY(-2px)}
-
-/* FOOTER */
-footer{text-align:center;padding:1.75rem;font-size:0.73rem;color:#2e2e3a;border-top:1px solid rgba(255,255,255,0.04)}
-footer a{color:#444;text-decoration:none}
-
-@media(max-width:640px){
-  nav{padding:0 1rem}
-  .nav-plan-chip{display:none}
-  .manifesto-body{padding-left:1.5rem}
-  .dl-buttons{flex-direction:column;align-items:center}
-}
+  /* page-specific layout only — design tokens/components come from brand.css */
+  .hero-pad { padding-top: 122px; }
+  .center { text-align: center; }
+  .center .eyebrow { justify-content: center; }
+  .ty-greet { font-family: var(--mono); font-size: 12.5px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
+  .plan-line { display: inline-block; margin-top: 20px; font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.4px; color: var(--muted); border: 1px solid var(--line-2); border-radius: 12px; padding: 9px 16px; }
+  .plan-line b { color: var(--cyan); }
+  .dl-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+  .dl-btn { display: inline-flex; align-items: center; gap: 11px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; padding: 12px 20px; color: var(--ink); transition: border-color .15s, transform .15s; }
+  .dl-btn:hover { border-color: rgba(240,192,96,0.5); transform: translateY(-2px); }
+  .dl-btn svg { width: 24px; height: 24px; fill: currentColor; }
+  .dl-btn .s { font-size: 10.5px; color: var(--muted); }
+  .dl-btn .b { font-family: var(--display); font-weight: 700; font-size: 16px; line-height: 1; margin-top: 2px; }
+  .promise { max-width: 640px; margin: 0 auto; }
+  .promise p { color: var(--muted); margin-top: 8px; }
+  .promise p b { color: var(--ink); }
+  .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; max-width: 640px; margin: 0 auto; }
+  @media (max-width: 560px) { .stats { grid-template-columns: 1fr; } }
+  .stat { background: var(--surface); padding: 22px 16px; text-align: center; }
+  .stat .v { font-family: var(--display); font-weight: 700; font-size: 2.1rem; color: var(--cyan); letter-spacing: -0.03em; }
+  .stat .k { font-size: 12.5px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  .stat .k b { color: var(--ink); }
+  .steps { display: grid; gap: 12px; max-width: 620px; margin: 0 auto; }
+  .step { display: flex; gap: 15px; align-items: flex-start; }
+  .step .n { flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px; background: var(--signal-soft); border: 1px solid rgba(240,192,96,0.25); color: var(--cyan); font-family: var(--mono); font-size: 12px; display: flex; align-items: center; justify-content: center; }
+  .step h4 { font-family: var(--display); font-size: 1rem; margin-bottom: 2px; }
+  .step p { color: var(--muted); font-size: 14px; }
+  .head-c { text-align: center; max-width: 640px; margin: 0 auto 26px; }
+  .head-c .eyebrow { justify-content: center; }
+  .success { display: none; text-align: center; }
+  .success .big { font-family: var(--display); font-weight: 700; font-size: 1.5rem; color: var(--cyan); }
+  .final { text-align: center; max-width: 720px; margin: 0 auto; }
 </style>
 </head>
-<body>
+<body class="js">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="mTile" x1="10" y1="6" x2="86" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f3d27e"></stop><stop offset="0.5" stop-color="#e2b552"></stop><stop offset="1" stop-color="#f0c060"></stop>
+    </linearGradient>
+    <radialGradient id="mGloss" cx="0.3" cy="0.22" r="0.9">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.45"></stop><stop offset="0.5" stop-color="#ffffff" stop-opacity="0"></stop>
+    </radialGradient>
+    <symbol id="prmark" viewBox="0 0 96 96">
+      <rect x="6" y="6" width="84" height="84" rx="24" fill="url(#mTile)"></rect>
+      <rect x="6" y="6" width="84" height="84" rx="24" fill="url(#mGloss)"></rect>
+      <rect x="6.75" y="6.75" width="82.5" height="82.5" rx="23.25" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.5"></rect>
+      <path d="M39 72 V27 H53.5 A12.5 12.5 0 0 1 53.5 52 H39" fill="none" stroke="#0a0c12" stroke-opacity="0.28" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,1.5)"></path>
+      <path d="M39 72 V27 H53.5 A12.5 12.5 0 0 1 53.5 52 H39" fill="none" stroke="#ffffff" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      <circle cx="62" cy="67" r="5" fill="#ff7a45"></circle>
+    </symbol>
+  </defs>
+</svg>
+<div class="bg-field"></div><div class="bg-grid"></div><div class="bg-grain"></div>
 
-<nav>
-  <a class="nav-logo" href="index.html">
-    <div class="logo-mark">
-      <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="2" width="14" height="10" rx="2.5" fill="#0c0c0e"/>
-        <circle cx="6" cy="7" r="1.3" fill="#d4a843"/>
-        <circle cx="9" cy="7" r="1.3" fill="#d4a843"/>
-        <circle cx="12" cy="7" r="1.3" fill="#d4a843"/>
-        <rect x="5" y="10.5" width="8" height="1" rx="0.5" fill="#d4a843" opacity="0.4"/>
-        <rect x="7" y="13" width="4" height="2.5" rx="1" fill="#0c0c0e"/>
-        <rect x="5.5" y="15" width="7" height="1.2" rx="0.6" fill="#0c0c0e"/>
-      </svg>
+<header class="nav scrolled" id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">
+      <svg class="brand-mark" aria-hidden="true"><use href="#prmark"></use></svg>
+      <span class="brand-name">PocketRep<span class="dot">.</span></span>
+    </a>
+    <div class="nav-cta">
+      <span class="nav-chip"><span class="pip"></span> <span id="nav-plan-label">Founding Member</span></span>
+      <a class="nav-login" href="https://app.pocketrep.pro">Log in</a>
     </div>
-    <span class="logo-text">Pocket<span>Rep</span>.pro</span>
-  </a>
-  <div class="nav-plan-chip"><span class="blink"></span> <span id="nav-plan-label">Founding Member</span></div>
-</nav>
-
-<!-- HERO CONFIRMATION -->
-<div style="position:relative">
-  <div class="confirm-hero">
-    <div class="top-glow"></div>
-    <div class="confirm-badge"><span class="check">✓</span> <span id="hero-badge-text">Trial activated — you're in</span></div>
-    <div class="name-greeting" id="greeting">Welcome to the book.</div>
-    <h1 id="hero-headline">7 days free.<br><span>Make them count.</span></h1>
-    <p class="sub" id="hero-sub">
-      Your trial is live. <b>Download the app, run your first Heat Sheet, and find the deal that pays for your next two years of Pro.</b> Cancel before day 7 and you won't be charged — ever.
-    </p>
   </div>
-</div>
+</header>
+
+<main>
+<section class="wrap hero-pad center">
+  <span class="eyebrow center"><span class="pip" style="width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)"></span> <span id="hero-badge-text">Trial activated — you're in</span></span>
+  <div class="ty-greet" id="greeting" style="margin-top:18px">Welcome to the book.</div>
+  <h1 class="display" style="margin-top:8px">7 days free.<br><span class="grad-text">Make them count.</span></h1>
+  <p class="lead" style="max-width:560px;margin:16px auto 0">Your trial is live. Download the app, run your first Heat Sheet, and find the deal that pays for your next two years of PocketRep. Cancel before day 7 and you won't be charged — ever.</p>
+  <div class="plan-line">PocketRep · <b>$39/mo</b> founding rate · locked forever</div>
+</section>
 
 <!-- DOWNLOAD -->
-<div class="download-section" id="download-section">
-  <div class="dl-inner">
-    <div class="dl-eyebrow" id="dl-eyebrow">Get The App</div>
-    <h2 id="dl-heading">Get the app.<br>Your trial clock is running.</h2>
-    <p id="dl-desc">Download now, sign in with your registration email, and your 7-day trial is live. You have until day 7 to cancel — no charge. After that, your founding rate locks in permanently.</p>
-    <div class="dl-buttons" id="dl-buttons">
-      <a href="#" class="dl-btn" id="app-store-btn">
-        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-        </svg>
-        <div class="dl-btn-text">
-          <div class="dl-small">Download on the</div>
-          <div class="dl-big">App Store</div>
-        </div>
-      </a>
-      <a href="#" class="dl-btn" id="google-play-btn">
-        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-          <path d="M3.18 23.76c.3.16.64.21.99.14l13.2-7.62-2.9-2.9-11.29 10.38zm-1.05-20.1C2.05 3.9 2 4.17 2 4.47v15.06c0 .3.05.57.13.82l.06.06 8.44-8.44v-.2L2.19 3.6l-.06.06zM20.49 10.7l-2.78-1.61-3.19 3.19 3.19 3.2 2.81-1.62c.8-.46.8-1.7-.03-2.16zM4.17.24L17.37 7.9 14.47 10.8 3.18.42C3.54.3 3.93.21 4.17.24z"/>
-        </svg>
-        <div class="dl-btn-text">
-          <div class="dl-small">Get it on</div>
-          <div class="dl-big">Google Play</div>
-        </div>
-      </a>
-    </div>
+<section class="wrap section-sm center" style="padding-top:14px">
+  <div class="dl-btns">
+    <a href="#" class="dl-btn" id="app-store-btn">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+      <div><div class="s">Download on the</div><div class="b">App Store</div></div>
+    </a>
+    <a href="#" class="dl-btn" id="google-play-btn">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3.18 23.76c.3.16.64.21.99.14l13.2-7.62-2.9-2.9-11.29 10.38zm-1.05-20.1C2.05 3.9 2 4.17 2 4.47v15.06c0 .3.05.57.13.82l.06.06 8.44-8.44v-.2L2.19 3.6l-.06.06zM20.49 10.7l-2.78-1.61-3.19 3.19 3.19 3.2 2.81-1.62c.8-.46.8-1.7-.03-2.16zM4.17.24L17.37 7.9 14.47 10.8 3.18.42C3.54.3 3.93.21 4.17.24z"/></svg>
+      <div><div class="s">Get it on</div><div class="b">Google Play</div></div>
+    </a>
   </div>
-</div>
+</section>
 
-<!-- ACCOUNT CREATION -->
-<div style="background:var(--surface);border-top:1px solid rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.04);padding:3.5rem 1.5rem">
+<!-- REP SIGN-UP INTAKE — local confirmation only. No account is created here; the real
+     account + SMS/email magic-link is provisioned by a separate backend pass. -->
+<section class="wrap section-sm" style="padding-top:0">
   <div style="max-width:480px;margin:0 auto">
-
-    <div style="display:flex;align-items:center;gap:7px;font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:0.85rem">
-      <span style="display:block;width:16px;height:1px;background:var(--gold)"></span>
-      Step 2 — Create Your Account
+    <div class="head-c" style="margin-bottom:18px">
+      <span class="eyebrow center">Step 2 · Confirm your details</span>
+      <h2 class="h3" style="margin-top:12px;font-family:var(--display)">Where should we send your login?</h2>
+      <p class="muted" style="color:var(--muted);font-size:14.5px;margin-top:8px">Confirm your name and email. <b style="color:var(--ink)">Your account will be ready right after payment</b> — we'll text and email you a secure login link. Nothing else to set up.</p>
     </div>
-    <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:1.75rem;font-weight:800;letter-spacing:-0.02em;margin-bottom:0.4rem">Set your login credentials</h2>
-    <p style="font-size:0.88rem;color:var(--grey2);line-height:1.7;margin-bottom:1.75rem">This is what you'll use to sign into the app. Your email is already on file — just set your username and password.</p>
-
     <div id="acct-form-wrap">
-      <form id="acct-form" novalidate style="display:flex;flex-direction:column;gap:0.9rem">
-
-        <!-- Pre-filled email display -->
-        <div>
-          <label style="display:block;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.4rem">Email address</label>
-          <div id="acct-email-display" style="background:var(--ink3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:0.72rem 1rem;font-size:0.88rem;color:var(--grey2);display:flex;align-items:center;gap:8px">
-            <span style="color:var(--green);font-size:0.7rem">✓</span>
-            <span id="acct-email-val">—</span>
-          </div>
+      <form id="acct-form" class="card" novalidate>
+        <div class="field">
+          <label class="label" for="acct-name">Your name <span class="req">*</span></label>
+          <input class="input" type="text" id="acct-name" autocomplete="name" placeholder="Full name">
+          <div class="field-err" id="acct-err-name">Enter your name</div>
         </div>
-
-        <!-- Username -->
-        <div>
-          <label style="display:block;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.4rem" for="acct-username">Username <span style="color:var(--red)">*</span></label>
-          <input type="text" id="acct-username" autocomplete="username" placeholder="username" spellcheck="false"
-            style="width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:0.75rem 1rem;font-family:'Instrument Sans',sans-serif;font-size:0.9rem;color:var(--white);outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none">
-          <div id="acct-err-user" style="font-size:0.68rem;color:var(--red);margin-top:0.3rem;display:none">Enter a username (letters, numbers, underscores only)</div>
+        <div class="field">
+          <label class="label" for="acct-email">Email address <span class="req">*</span></label>
+          <input class="input" type="email" id="acct-email" autocomplete="email" placeholder="you@email.com" spellcheck="false">
+          <div class="field-err" id="acct-err-email">Enter a valid email</div>
         </div>
-
-        <!-- Password -->
-        <div>
-          <label style="display:block;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.4rem" for="acct-password">Password <span style="color:var(--red)">*</span></label>
-          <div style="position:relative">
-            <input type="password" id="acct-password" autocomplete="new-password" placeholder="Min. 8 characters"
-              style="width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:0.75rem 2.75rem 0.75rem 1rem;font-family:'Instrument Sans',sans-serif;font-size:0.9rem;color:var(--white);outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none">
-            <button type="button" onclick="togglePw('acct-password','eye-pw')" style="position:absolute;right:0.85rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--grey2);font-size:0.8rem;padding:0" id="eye-pw">Show</button>
-          </div>
-          <div id="acct-err-pw" style="font-size:0.68rem;color:var(--red);margin-top:0.3rem;display:none">Password must be at least 8 characters</div>
-        </div>
-
-        <!-- Confirm Password -->
-        <div>
-          <label style="display:block;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--grey2);margin-bottom:0.4rem" for="acct-confirm">Confirm password <span style="color:var(--red)">*</span></label>
-          <div style="position:relative">
-            <input type="password" id="acct-confirm" autocomplete="new-password" placeholder="Re-enter password"
-              style="width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:0.75rem 2.75rem 0.75rem 1rem;font-family:'Instrument Sans',sans-serif;font-size:0.9rem;color:var(--white);outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none">
-            <button type="button" onclick="togglePw('acct-confirm','eye-cf')" style="position:absolute;right:0.85rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--grey2);font-size:0.8rem;padding:0" id="eye-cf">Show</button>
-          </div>
-          <div id="acct-err-confirm" style="font-size:0.68rem;color:var(--red);margin-top:0.3rem;display:none">Passwords don't match</div>
-        </div>
-
-        <!-- Password strength indicator -->
-        <div id="pw-strength-wrap" style="display:none">
-          <div style="display:flex;gap:4px;margin-bottom:4px">
-            <div class="pw-bar" style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.08)" id="pwb1"></div>
-            <div class="pw-bar" style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.08)" id="pwb2"></div>
-            <div class="pw-bar" style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.08)" id="pwb3"></div>
-            <div class="pw-bar" style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.08)" id="pwb4"></div>
-          </div>
-          <div id="pw-strength-label" style="font-size:0.68rem;color:var(--grey2)"></div>
-        </div>
-
-        <button type="submit" style="width:100%;padding:0.95rem;background:var(--gold);color:var(--ink);border:none;border-radius:9px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:0.95rem;cursor:pointer;box-shadow:0 4px 20px rgba(212,168,67,0.2);transition:background .15s,transform .12s;margin-top:0.25rem">
-          Create My Account →
-        </button>
-
+        <button type="submit" class="btn btn-primary btn-full" style="margin-top:18px">Confirm my details <span class="arrow">→</span></button>
+        <p style="font-size:11.5px;color:var(--faint);text-align:center;margin-top:10px">This just confirms where to send your login — no account is created on this page.</p>
       </form>
     </div>
-
-    <!-- Success state -->
-    <div id="acct-success" style="display:none;text-align:center;padding:2rem 1rem">
-      <div style="width:52px;height:52px;border-radius:50%;background:rgba(66,184,131,0.12);border:1px solid rgba(66,184,131,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;font-size:1.4rem">✓</div>
-      <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-size:1.2rem;font-weight:800;margin-bottom:0.4rem">Account created</h3>
-      <p style="font-size:0.85rem;color:var(--grey2);line-height:1.7">You're all set. Open the app, sign in with your username and password, and your trial is ready to go.</p>
-    </div>
-
-  </div>
-</div>
-
-<!-- FOCAL POINT -->
-<div style="background:var(--ink);border-top:1px solid rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.04);padding:3.5rem 1.5rem;text-align:center">
-  <div style="max-width:760px;margin:0 auto">
-    <div style="display:inline-flex;align-items:center;gap:7px;font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:0.85rem">
-      <span style="display:block;width:16px;height:1px;background:var(--gold)"></span>
-      Remember This
-      <span style="display:block;width:16px;height:1px;background:var(--gold)"></span>
-    </div>
-    <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(1.9rem,3.8vw,3rem);font-weight:800;letter-spacing:-0.025em;margin-bottom:1.1rem;line-height:1.1">
-      The money has always been<br><span style="color:var(--gold)">in the follow-up.</span>
-    </h2>
-    <p style="color:var(--grey2);font-size:0.97rem;line-height:1.85;max-width:560px;margin:0 auto 2.25rem">
-      You just gave yourself the tool to actually do it. <strong style="color:var(--white)">The Heat Sheet tells you who. The AI Rebuttals tell you what to say.</strong> The mass text gets you in front of 50–100 people at once — personally. You've been sitting on more money than you know. It's been in your old customers this whole time.
-    </p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:rgba(255,255,255,0.05);border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.05);max-width:640px;margin:0 auto">
-      <div style="background:var(--surface2);padding:1.35rem 1rem;text-align:center">
-        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:2.2rem;font-weight:800;color:var(--gold);letter-spacing:-0.03em;line-height:1">80%</div>
-        <div style="font-size:0.75rem;color:var(--grey2);margin-top:0.35rem;line-height:1.5">of sales close<br><strong style="color:var(--white)">after follow-up #5</strong></div>
-      </div>
-      <div style="background:var(--surface2);padding:1.35rem 1rem;text-align:center">
-        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:2.2rem;font-weight:800;color:var(--gold);letter-spacing:-0.03em;line-height:1">44%</div>
-        <div style="font-size:0.75rem;color:var(--grey2);margin-top:0.35rem;line-height:1.5">of reps quit after<br><strong style="color:var(--white)">just one attempt</strong></div>
-      </div>
-      <div style="background:var(--surface2);padding:1.35rem 1rem;text-align:center">
-        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:2.2rem;font-weight:800;color:var(--gold);letter-spacing:-0.03em;line-height:1">Day 1</div>
-        <div style="font-size:0.75rem;color:var(--grey2);margin-top:0.35rem;line-height:1.5">your Heat Sheet is<br><strong style="color:var(--white)">already working for you</strong></div>
-      </div>
+    <div class="success card" id="acct-success" style="margin-top:16px">
+      <div class="big">You're all set.</div>
+      <p class="muted" style="color:var(--muted);font-size:14px;margin-top:8px">Your account will be ready right after payment. <b style="color:var(--ink)">Check your texts and email for your login link</b> — then open the app and you're in.</p>
     </div>
   </div>
-</div>
+</section>
 
-<!-- MANIFESTO -->
-<div class="manifesto-wrap">
-  <div class="manifesto-eyebrow">Your Founding Member Manifesto</div>
-  <h2 class="manifesto-title">Here's what your<br>7 days are <span>for</span></h2>
-
-  <div class="manifesto-body">
-
-    <div class="m-block">
-      <h3>You are not a floor rep. You are a business.</h3>
-      <p>
-        Most salespeople work for the store. They build on the store's CRM, generate leads through the store's website, and when they leave — they leave with nothing. <b>You're done with that model.</b> From today, every customer you log, every note you take, every follow-up you send is an asset that belongs to you. Your book is your business. PocketRep is the infrastructure.
-      </p>
-      <span class="m-tag">Data ownership</span>
-    </div>
-
-    <div class="m-block">
-      <h3>You will know who to call before your feet hit the floor.</h3>
-      <p>
-        The Heat Sheet runs every morning before you even open the app. By the time you're in your car, you already know the five people in your book who are most likely to move this month. <b>No guessing. No staring at a CRM wondering where to start.</b> You open the app, you see the list, you make the call. That's the whole move.
-      </p>
-      <span class="m-tag">Heat Sheet</span>
-    </div>
-
-    <div class="m-block">
-      <h3>You will handle objections like you've heard them a thousand times.</h3>
-      <p>
-        Because you have — but now the AI remembers every detail you've ever logged about that customer. When they push back on payment, the rebuttal engine pulls their mileage, their trade situation, their history with you, and gives you a real response. <b>Not a script. A conversation.</b> The kind that closes deals because it sounds like you actually know them. Because you do.
-      </p>
-      <span class="m-tag">AI Rebuttals — Pro + Elite</span>
-    </div>
-
-    <div class="m-block">
-      <h3>You will stay in front of 50 to 100 people — and it'll look personal.</h3>
-      <p>
-        Every month you can touch your entire book without it looking like a blast. Each text goes out individually from your number, with their name, referencing something real. <b>No opt-out language. No group threads. No burned trust.</b> Just a rep who stays in touch better than anyone else they've ever bought from.
-      </p>
-      <span class="m-tag">Mass Text — Pro &amp; Elite</span>
-    </div>
-
-    <div class="m-block">
-      <h3>You will never start over again.</h3>
-      <p>
-        Every time you've changed stores, you've left money behind. Relationships you built over years, customers who trusted you, referrals that should've been yours — all of it gone because it lived on someone else's server. <b>That ends today.</b> From this point forward, every person you sell becomes part of a book that follows you wherever you go. Auto, mortgages, real estate — it doesn't matter. Your history compounds.
-      </p>
-      <span class="m-tag">Portability</span>
-    </div>
-
-    <div class="m-block">
-      <h3>Your founding rate is yours. Permanently.</h3>
-      <p>
-        You locked in early. That rate doesn't change — not when we raise prices, not when we launch new features, not ever. You made a decision before most people even knew this existed. <b>That's not luck. That's how closers think.</b> First in, best positioned. Welcome to the founding class.
-      </p>
-      <span class="m-tag">Founding Member</span>
-    </div>
-
+<!-- OWNERSHIP PROMISE -->
+<section class="wrap section-sm" style="padding-top:0">
+  <div class="promise card card-feat center">
+    <h3 class="h3">Your book is yours.</h3>
+    <p><b>Your account is yours, and you're never locked in.</b> Your contacts, notes, and deal history stay with your account, under your control. Add your own — referrals, repeat customers, people you've earned — and Rex enriches each one as you talk.</p>
   </div>
-</div>
+</section>
 
-<!-- WHAT'S NEXT -->
-<div class="next-section">
-  <div class="next-inner">
-    <div class="next-eyebrow" id="next-eyebrow">Your 7-Day Trial Roadmap</div>
-    <h2 id="next-heading">Make the most of your week</h2>
-    <div class="steps-grid" id="steps-grid">
-      <div class="step">
-        <div class="step-num">Day 1</div>
-        <h4>Download &amp; log in</h4>
-        <p>Hit App Store or Google Play above. Sign in with your registration email — your trial account is live immediately.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">Day 1–2</div>
-        <h4>Import your contacts</h4>
-        <p>Add the people you've sold in the last 90 days. Name, number, and purchase date is all it takes to activate the Heat Sheet.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">Day 3</div>
-        <h4>Run your first Heat Sheet</h4>
-        <p>Open the app. See the 5 people most likely to move right now. Make one call. That one call is the whole rep.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">Day 6</div>
-        <h4>You'll get a reminder</h4>
-        <p>We'll email you 24 hours before your trial ends. Cancel in one tap — no charge, no questions. Or do nothing and your founding rate locks in forever.</p>
-      </div>
-    </div>
+<!-- THE MONEY IS IN THE FOLLOW-UP -->
+<section class="wrap section-sm">
+  <div class="head-c">
+    <span class="eyebrow center">Remember this</span>
+    <h2 class="h2" style="margin-top:12px">The money has always been<br><span class="grad-text">in the follow-up.</span></h2>
+    <p class="lead" style="margin-top:12px">You just gave yourself the tool to actually do it. The Heat Sheet tells you who, the AI rebuttals tell you what to say, and <b style="color:var(--ink)">Rex writes every follow-up — you review and send each one yourself.</b></p>
   </div>
-</div>
+  <div class="stats">
+    <div class="stat"><div class="v">80%</div><div class="k">of sales close <b>after follow-up #5</b></div></div>
+    <div class="stat"><div class="v">44%</div><div class="k">of reps quit after <b>just one attempt</b></div></div>
+    <div class="stat"><div class="v">Day 1</div><div class="k">your Heat Sheet is <b>already working for you</b></div></div>
+  </div>
+</section>
 
-<!-- FINAL STRIP -->
-<div class="final-strip">
-  <div class="final-glow"></div>
-  <h2>Your trial is live.<br>The clock is ticking.</h2>
-  <p>Download the app, import your first contact, and let the Heat Sheet find your first deal. You have 7 days — use them.</p>
-  <a href="#" class="btn-gold" onclick="document.querySelector('.download-section').scrollIntoView({behavior:'smooth'});return false;">Download PocketRep Now →</a>
-</div>
+<!-- 7-DAY ROADMAP -->
+<section class="wrap section-sm" style="padding-top:0">
+  <div class="head-c">
+    <span class="eyebrow center">Your 7-day trial roadmap</span>
+    <h2 class="h2" style="margin-top:12px">Make the most of your week</h2>
+  </div>
+  <div class="steps">
+    <div class="step"><div class="n">1</div><div><h4>Download &amp; log in</h4><p>Hit App Store or Google Play above. Sign in with your registration email — your trial account is live immediately.</p></div></div>
+    <div class="step"><div class="n">2</div><div><h4>Add your contacts</h4><p>Add the people you've sold in the last 90 days. Name, number, and purchase date is all it takes to activate the Heat Sheet.</p></div></div>
+    <div class="step"><div class="n">3</div><div><h4>Run your first Heat Sheet</h4><p>See the 5 people most likely to move right now. Make one call. That one call is the whole rep.</p></div></div>
+    <div class="step"><div class="n">7</div><div><h4>You'll get a reminder</h4><p>We'll email you 24 hours before your trial ends. Cancel in one tap — no charge, no questions. Or do nothing and your founding rate locks in forever.</p></div></div>
+  </div>
+</section>
 
-<footer>
-  <p>© 2026 PocketRep.pro — Built for closers &nbsp;·&nbsp; <a href="/privacy.html">Privacy</a> &nbsp;·&nbsp; <a href="/terms.html">Terms</a> &nbsp;·&nbsp; <a href="/cancel.html">Cancel Policy</a></p>
-  <p style="margin-top:0.5rem;font-size:0.58rem;color:var(--grey);max-width:600px;margin-left:auto;margin-right:auto">PocketRep and Rex Lens are independent tools and are not affiliated with, endorsed by, or sponsored by any third-party CRM, DMS, or software provider. All product names and trademarks are the property of their respective owners.</p>
+<!-- FINAL -->
+<section class="wrap section-sm">
+  <div class="final">
+    <h2 class="h2">Your trial is live.<br><span class="grad-text">The clock is ticking.</span></h2>
+    <p class="lead" style="margin:14px auto 24px">Download the app, add your first contact, and let the Heat Sheet find your first deal. You have 7 days — use them.</p>
+    <a href="#app-store-btn" class="btn btn-primary btn-lg" onclick="document.getElementById('app-store-btn').scrollIntoView({behavior:'smooth'});return false;">Download PocketRep <span class="arrow">→</span></a>
+  </div>
+</section>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-inner">
+      <a class="brand" href="/">
+        <svg class="brand-mark" aria-hidden="true"><use href="#prmark"></use></svg>
+        <span class="brand-name">PocketRep<span class="dot">.</span></span>
+      </a>
+      <div class="footer-links">
+        <a href="/privacy.html">Privacy</a>
+        <a href="/terms.html">Terms</a>
+        <a href="/cancel.html">Cancel</a>
+        <a href="https://app.pocketrep.pro">Log in</a>
+      </div>
+      <div class="muted">© 2026 PocketRep — Built for closers</div>
+    </div>
+    <p class="disclaimer">PocketRep is an independent tool and is not affiliated with, endorsed by, or sponsored by any third-party CRM, DMS, or software provider. You are responsible for how you use PocketRep, including following your employer's policies and all applicable laws (such as the TCPA) when contacting customers. You send every message yourself — PocketRep never sends on your behalf.</p>
+  </div>
 </footer>
 
 <script>
-// ── ACCOUNT FORM ──
-// Pre-fill email from sessionStorage
 (function(){
-  // Read from URL params first (Stripe redirect), then fall back to sessionStorage
+  var nav=document.getElementById('nav');
+  function onScroll(){ if(window.scrollY>24) nav.classList.add('scrolled'); }
+  window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+
+  // Read from URL params first (Stripe redirect), then fall back to sessionStorage.
+  // plan==='teams' is redirected to thankyou-teams.html by the head script, so this page
+  // only renders the individual (PocketRep) thank-you. rex_lens/pro/elite branching is retired.
   var params=new URLSearchParams(location.search);
   var email=params.get('email')||params.get('prefilled_email');
-  var plan=params.get('plan')||'pro';
-  var firstName=null;
-  var raw;
-  try{raw=sessionStorage.getItem('pr_signup')}catch(e){}
-  if(raw){
-    try{
-      var d=JSON.parse(raw);
-      if(!email&&d.email)email=d.email;
-      if(d.name)firstName=d.name.split(' ')[0];
-      if(!plan&&d.plan)plan=d.plan;
-    }catch(e){}
-  }
-  if(firstName)document.getElementById('greeting').textContent='Welcome to the book, '+firstName+'.';
-  var planLabels={rex_lens:'Rex Lens Member',pro:'Pro Member',elite:'Elite Member'};
-  var chip=document.getElementById('nav-plan-label');
-  if(chip&&planLabels[plan])chip.textContent=planLabels[plan];
-  if(email){var ev=document.getElementById('acct-email-val');if(ev)ev.textContent=email;}
+  var firstName=null, fullName=null;
+  var raw; try{raw=sessionStorage.getItem('pr_signup')}catch(e){}
+  if(raw){ try{ var d=JSON.parse(raw);
+    if(!email&&d.email)email=d.email;
+    if(d.name){firstName=d.name.split(' ')[0];fullName=d.name;}
+  }catch(e){} }
+  if(firstName){var g=document.getElementById('greeting'); if(g)g.textContent='Welcome to the book, '+firstName+'.';}
+  if(email){var ev=document.getElementById('acct-email'); if(ev)ev.value=email;}
+  if(fullName){var nv=document.getElementById('acct-name'); if(nv)nv.value=fullName;}
 
-  // ── REX LENS / ELITE PLAN OVERRIDES ──
-  var hasLens = (plan === 'rex_lens' || plan === 'elite');
-
-  if(hasLens){
-    var isElite = plan === 'elite';
-    // Hero
-    document.getElementById('hero-badge-text').textContent = 'Payment confirmed — you\'re in';
-    document.getElementById('hero-headline').innerHTML = isElite
-      ? 'PocketRep Elite.<br><span>You got the full stack.</span>'
-      : 'Rex Lens is yours.<br><span>Let\'s get it installed.</span>';
-    document.getElementById('hero-sub').innerHTML = isElite
-      ? '<b>Install the Chrome extension below, then download the PocketRep app.</b> Your Elite account and Rex Lens are both live. Open your CRM and let Rex read the screen.'
-      : '<b>Install the Chrome extension below, sign in, and open your CRM.</b> Rex will start reading your screen and coaching you in real-time. Deep Scan your first 30 contacts in under 2 minutes.';
-
-    // Download section
-    document.getElementById('dl-eyebrow').textContent = isElite ? 'Install Extension + Get The App' : 'Install The Extension';
-    document.getElementById('dl-heading').innerHTML = isElite
-      ? 'Install Rex Lens.<br>Then grab the app.'
-      : 'Add Rex Lens to Chrome.<br>Takes 10 seconds.';
-    document.getElementById('dl-desc').textContent = isElite
-      ? 'Install the Rex Lens Chrome extension first, then download PocketRep on your phone. Sign into both with your registration email — everything is already linked.'
-      : 'Click below to add Rex Lens to Chrome. Once installed, click the extension icon, sign in with your registration email, and open any CRM or email tab. Rex takes it from there.';
-
-    var btnsHtml = '<a href="#" class="dl-btn" id="chrome-store-btn" style="border-color:rgba(99,102,241,0.3)">'
-      + '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="color:#4F46E5"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 7.5A4.5 4.5 0 0 0 8.1 10H2.6" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M14.25 16.4A4.5 4.5 0 0 0 16.5 12h5.4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M9.75 16.4A4.5 4.5 0 0 1 8.1 14l-2.7 4.7" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>'
-      + '<div class="dl-btn-text"><div class="dl-small">Add to</div><div class="dl-big">Chrome</div></div></a>';
-
-    if(isElite){
-      btnsHtml += document.getElementById('app-store-btn').outerHTML + document.getElementById('google-play-btn').outerHTML;
-    }
-    document.getElementById('dl-buttons').innerHTML = btnsHtml;
-
-    // What's Next steps
-    document.getElementById('next-eyebrow').textContent = isElite ? 'Your Setup Checklist' : 'Get Started in 3 Steps';
-    document.getElementById('next-heading').textContent = isElite ? 'Set up everything in 5 minutes' : 'You\'ll be scanning in 2 minutes';
-
-    var lensSteps = isElite
-      ? '<div class="step"><div class="step-num">Step 1</div><h4>Install Rex Lens</h4><p>Click "Add to Chrome" above. Pin the extension so it\'s always one click away.</p></div>'
-        + '<div class="step"><div class="step-num">Step 2</div><h4>Download the app</h4><p>Grab PocketRep from the App Store or Google Play. Sign in with your registration email.</p></div>'
-        + '<div class="step"><div class="step-num">Step 3</div><h4>Open your CRM</h4><p>Navigate to whatever web CRM you use. Click the Rex Lens icon and hit Scan Page.</p></div>'
-        + '<div class="step"><div class="step-num">Step 4</div><h4>Run a Deep Scan</h4><p>Click Deep Scan to process 30 contacts at once. Rex generates texts, emails, and call scripts for each one — ready to send.</p></div>'
-      : '<div class="step"><div class="step-num">Step 1</div><h4>Install the extension</h4><p>Click "Add to Chrome" above. Pin Rex Lens to your toolbar so it\'s always one click away.</p></div>'
-        + '<div class="step"><div class="step-num">Step 2</div><h4>Sign in &amp; open your CRM</h4><p>Click the Rex Lens icon, sign in with your email, then navigate to your CRM queue, email inbox, or LinkedIn.</p></div>'
-        + '<div class="step"><div class="step-num">Step 3</div><h4>Run your first Deep Scan</h4><p>Hit Deep Scan. Rex reads 30 contacts from your screen and generates ready-to-send texts, emails, and call scripts for each one. Under 2 minutes.</p></div>';
-
-    document.getElementById('steps-grid').innerHTML = lensSteps;
-  }
-})()
-
-function togglePw(inputId,btnId){
-  var inp=document.getElementById(inputId);
-  var btn=document.getElementById(btnId);
-  if(!inp||!btn)return;
-  if(inp.type==='password'){inp.type='text';btn.textContent='Hide';}
-  else{inp.type='password';btn.textContent='Show';}
-}
-
-// Password strength
-document.getElementById('acct-password').addEventListener('input',function(){
-  var v=this.value;
-  var wrap=document.getElementById('pw-strength-wrap');
-  var label=document.getElementById('pw-strength-label');
-  if(!v){wrap.style.display='none';return;}
-  wrap.style.display='block';
-  var score=0;
-  if(v.length>=8)score++;
-  if(v.length>=12)score++;
-  if(/[A-Z]/.test(v)&&/[0-9]/.test(v))score++;
-  if(/[^A-Za-z0-9]/.test(v))score++;
-  var colors=['#e05252','#e07a52','#d4a843','#42b883'];
-  var labels=['Weak','Fair','Good','Strong'];
-  for(var i=1;i<=4;i++){
-    var bar=document.getElementById('pwb'+i);
-    bar.style.background=i<=score?colors[score-1]:'rgba(255,255,255,0.08)';
-  }
-  label.textContent=labels[score-1]||'';
-  label.style.color=colors[score-1]||'var(--grey2)';
-});
-
-// Focus styles
-['acct-username','acct-password','acct-confirm'].forEach(function(id){
-  var el=document.getElementById(id);
-  if(!el)return;
-  el.addEventListener('focus',function(){this.style.borderColor='rgba(212,168,67,0.45)';this.style.boxShadow='0 0 0 3px rgba(212,168,67,0.07)'});
-  el.addEventListener('blur',function(){this.style.borderColor='rgba(255,255,255,0.08)';this.style.boxShadow='none'});
-  el.addEventListener('input',function(){this.style.borderColor='rgba(212,168,67,0.45)'});
-});
-
-document.getElementById('acct-form').addEventListener('submit',function(e){
-  e.preventDefault();
-  var user=document.getElementById('acct-username').value.trim();
-  var pw=document.getElementById('acct-password').value;
-  var cf=document.getElementById('acct-confirm').value;
-  var valid=true;
-
-  var errUser=document.getElementById('acct-err-user');
-  var errPw=document.getElementById('acct-err-pw');
-  var errCf=document.getElementById('acct-err-confirm');
-
-  if(!user||!/^[a-zA-Z0-9_]{3,}$/.test(user)){
-    errUser.style.display='block';
-    document.getElementById('acct-username').style.borderColor='rgba(224,82,82,0.5)';
-    valid=false;
-  } else { errUser.style.display='none'; }
-
-  if(!pw||pw.length<8){
-    errPw.style.display='block';
-    document.getElementById('acct-password').style.borderColor='rgba(224,82,82,0.5)';
-    valid=false;
-  } else { errPw.style.display='none'; }
-
-  if(!cf||cf!==pw){
-    errCf.style.display='block';
-    document.getElementById('acct-confirm').style.borderColor='rgba(224,82,82,0.5)';
-    valid=false;
-  } else { errCf.style.display='none'; }
-
-  if(!valid)return;
-
-  // ── SUPABASE SIGNUP ──
-    var btn=document.querySelector('#acct-form button[type="submit"]');
-    if(btn){btn.disabled=true;btn.textContent='Creating account...';}
-    var supaEmail=document.getElementById('acct-email-val').textContent.trim();
-    fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/auth/v1/signup',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0'},
-      body:JSON.stringify({email:supaEmail,password:pw,data:{username:user,plan:new URLSearchParams(location.search).get('plan')||'pro'}})
-    }).then(function(r){return r.json();}).then(function(d){
-      if(d.error){
-        if(btn){btn.disabled=false;btn.textContent='Create My Account →';}
-        var errDiv=document.getElementById('acct-err-user');
-        if(errDiv){errDiv.textContent=d.error.message||'Signup failed. Try a different username or check your email.';errDiv.style.display='block';}
-      } else {
-                    // Save username to public.users so app login works
-                    var userId=d.user&&d.user.id;
-                    var planVal=new URLSearchParams(location.search).get('plan')||'pro';
-                    if(userId){
-                                    fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/rest/v1/users',{
-                                                      method:'POST',
-                                                      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0','Prefer':'return=minimal'},
-                                                      body:JSON.stringify({id:userId,username:user.toLowerCase(),email:supaEmail,plan:planVal})
-                                    });
-                    }
-        // Show success state
-        document.getElementById('acct-form-wrap').style.display='none';
-        document.getElementById('acct-success').style.display='block';
-      }
-    }).catch(function(){
-      if(btn){btn.disabled=false;btn.textContent='Create My Account →';}
-      document.getElementById('acct-form-wrap').style.display='none';
-      document.getElementById('acct-success').style.display='block';
-    })
-});
+  // Rep sign-up intake — LOCAL confirmation only. No account is created here and nothing is
+  // sent or stored. The real account + SMS/email magic-link login is a separate backend pass.
+  document.getElementById('acct-form').addEventListener('submit',function(e){
+    e.preventDefault();
+    var name=document.getElementById('acct-name').value.trim();
+    var em=document.getElementById('acct-email').value.trim();
+    var ok=true;
+    var en=document.getElementById('acct-err-name'), ee=document.getElementById('acct-err-email');
+    if(name.length<2){en.classList.add('show');ok=false;}else{en.classList.remove('show');}
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){ee.classList.add('show');ok=false;}else{ee.classList.remove('show');}
+    if(!ok)return;
+    document.getElementById('acct-form-wrap').style.display='none';
+    document.getElementById('acct-success').style.display='block';
+  });
+})();
 </script>
 </body>
 </html>

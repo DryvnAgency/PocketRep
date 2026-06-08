@@ -1,4 +1,21 @@
+# robots.txt for pocketrep.pro
 User-agent: *
 Allow: /
 
-Sitemap: https://www.pocketrep.pro/sitemap.xml
+# AI / answer-engine crawlers, explicitly welcomed
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://pocketrep.pro/sitemap.xml
