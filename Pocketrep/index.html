@@ -1293,6 +1293,20 @@
 .teams-band h2 { font-size: clamp(26px, 3.6vw, 44px); max-width: 760px; }
 .teams-band .tbody { font-size: 16.5px; color: var(--muted); line-height: 1.7; margin-top: 18px; max-width: 780px; }
 .teams-band .hero-actions { margin-top: 26px; }
+.soon { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--gold); border: 1px solid rgba(255,204,77,0.38); background: rgba(255,204,77,0.08); border-radius: 100px; padding: 6px 13px; }
+.soon .pip { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px var(--gold); }
+.price .soon { align-self: flex-start; margin-bottom: 8px; }
+/* Teams waitlist modal */
+.wl-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(4,5,9,0.74); backdrop-filter: blur(6px); }
+.wl-overlay[hidden] { display: none; }
+.wl-card { position: relative; width: 100%; max-width: 460px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: var(--radius); padding: 28px; box-shadow: 0 40px 100px -30px rgba(0,0,0,0.85); max-height: 92vh; overflow-y: auto; }
+.wl-close { position: absolute; top: 14px; right: 14px; width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--line-2); background: rgba(255,255,255,0.04); color: var(--muted); cursor: pointer; font-size: 13px; }
+.wl-close:hover { color: var(--ink); background: rgba(255,255,255,0.08); }
+.wl-title { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: -0.02em; }
+.wl-sub { color: var(--muted); font-size: 14px; line-height: 1.6; margin-top: 8px; margin-bottom: 4px; }
+.wl-done { text-align: center; padding: 14px 4px 4px; }
+.wl-check { width: 52px; height: 52px; border-radius: 50%; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #06231a; background: var(--green); box-shadow: 0 0 24px rgba(52,224,161,0.5); }
+.wl-done .btn { margin-top: 18px; }
 .spots { display: inline-flex; align-items: center; gap: 9px; margin-top: 18px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.5px; color: var(--gold); border: 1px solid rgba(255,204,77,0.32); background: rgba(255,204,77,0.06); border-radius: 100px; padding: 8px 14px; }
 .spots .pip { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px var(--gold); }
 </style>
@@ -1516,13 +1530,15 @@
 <!-- ============ FOR SALES MANAGERS AND GMs (TEAMS) ============ -->
 <section class="section wrap" id="teams">
   <div class="teams-band reveal">
-    <span class="eyebrow center">Run the whole floor.</span>
+    <span class="soon"><span class="pip"></span> Coming soon</span>
+    <span class="eyebrow center" style="margin-top:14px">Run the whole floor.</span>
     <h2 class="h2">See every deal in your store. <span class="grad-text">Recover the gross that's slipping away.</span></h2>
     <p class="tbody">PocketRep Team puts the whole floor on one system, keeps every rep as the face, and gives managers the cockpit: response time per rep, who's following up and who isn't, and deals saved that would have died. Each rep gets a local number the store owns, so when someone leaves, the number and book stay with the store.</p>
+    <p class="tbody"><b>We're launching the individual app first.</b> Teams needs its own setup flow for seat counts and number provisioning, so it isn't for sale yet. Join the waitlist and we'll let you know the moment it opens.</p>
     <div class="hero-actions">
-      <a class="btn btn-primary btn-lg" href="mailto:teams@pocketrep.pro?subject=Free%20leak%20audit">Book a free leak audit <span class="arrow">→</span></a>
+      <button type="button" class="btn btn-primary btn-lg" onclick="prOpenWaitlist(event)">Join the Teams waitlist <span class="arrow">→</span></button>
     </div>
-    <p class="cta-sub">We'll show you your store's real response time and how many opportunities are going untouched, before you pay a dollar.</p>
+    <p class="cta-sub">No charge and no commitment. We'll email you when PocketRep Team is ready, with early-access founding pricing.</p>
   </div>
 </section>
 
@@ -1558,8 +1574,9 @@
       <a class="btn btn-primary" href="#signup" onclick="prSelectPlan('elite'); prScrollSignup(event)">Lock the founding price → Start free trial</a>
     </div>
 
-    <!-- Team plan: internal plan key stays "teams" for Stripe + ?plan= routing. -->
+    <!-- Team plan: COMING SOON, not purchasable. Button links to the waitlist (no checkout, no ?plan=teams). Internal key "teams" stays defined but dormant. -->
     <div class="price reveal">
+      <div class="soon"><span class="pip"></span> Coming soon</div>
       <div class="kind">For dealerships and teams</div>
       <div class="name">PocketRep Team</div>
       <div class="desc">The whole floor on one system. Every rep stays the face; managers get the cockpit and the numbers.</div>
@@ -1575,7 +1592,7 @@
         <li><span class="tick">✦</span> The number and book stay with the store when a rep leaves</li>
         <li><span class="tick">✦</span> Centralized billing · add or remove seats anytime</li>
       </ul>
-      <a class="btn btn-ghost" href="#signup" onclick="prSelectPlan('teams'); prScrollSignup(event)">Start free trial</a>
+      <button type="button" class="btn btn-ghost" onclick="prOpenWaitlist(event)">Join the waitlist</button>
     </div>
   </div>
   <p class="cta-sub" style="text-align:center">Setup provisions each rep a local number and the manager dashboard.</p>
@@ -1651,11 +1668,12 @@ select.sf-input { appearance: none; cursor: pointer; }
     <div class="signup-box reveal d1">
       <div class="box-h">Start your free 7-day trial</div>
       <div class="box-sub">Fill in your details and you're in.</div>
-      <!-- Plan toggle: PocketRep (individual) is the default; Team switches checkout to the
-           per-seat plan. Internal plan keys stay elite/teams for Stripe + ?plan= routing. -->
+      <!-- Plan toggle: PocketRep (individual) is the only purchasable plan at launch. Team is
+           "coming soon" and links to a waitlist (no checkout, no ?plan=teams routing). The internal
+           "teams" key stays defined but dormant for when Team launches. -->
       <div class="sf-plan-toggle" role="group" aria-label="Choose your plan">
         <button type="button" class="sf-pt-btn active" id="sfpt-elite" onclick="prSelectPlan('elite')">PocketRep · $39/mo</button>
-        <button type="button" class="sf-pt-btn" id="sfpt-teams" onclick="prSelectPlan('teams')">Team · $49/seat</button>
+        <button type="button" class="sf-pt-btn" id="sfpt-teams" onclick="prOpenWaitlist(event)">Team · Join waitlist</button>
       </div>
       <div class="sf-plan-pill">
         <div>
@@ -1747,6 +1765,57 @@ select.sf-input { appearance: none; cursor: pointer; }
 </section>
 
 </main>
+
+<!-- ============ TEAMS WAITLIST MODAL ============ -->
+<div class="wl-overlay" id="wl-overlay" role="dialog" aria-modal="true" aria-labelledby="wl-title" hidden>
+  <div class="wl-card">
+    <button type="button" class="wl-close" id="wl-close" aria-label="Close">✕</button>
+    <div id="wl-form-wrap">
+      <span class="soon" style="margin-bottom:14px"><span class="pip"></span> Coming soon</span>
+      <h3 class="wl-title" id="wl-title">Join the PocketRep Team waitlist</h3>
+      <p class="wl-sub">Tell us about your store and we'll let you know the moment Team opens, with early-access founding pricing.</p>
+      <form class="sf-form" id="wl-form" novalidate>
+        <div class="sf-row">
+          <div class="sf-group">
+            <label class="sf-label" for="wl-name">Name <span>*</span></label>
+            <input class="sf-input" type="text" id="wl-name" autocomplete="name" placeholder="Your name">
+            <div class="sf-err" id="wle-name">Enter your name</div>
+          </div>
+          <div class="sf-group">
+            <label class="sf-label" for="wl-phone">Phone number <span>*</span></label>
+            <input class="sf-input" type="tel" id="wl-phone" autocomplete="tel" placeholder="Phone number">
+            <div class="sf-err" id="wle-phone">Enter your phone</div>
+          </div>
+        </div>
+        <div class="sf-group">
+          <label class="sf-label" for="wl-dealership">Dealership <span>*</span></label>
+          <input class="sf-input" type="text" id="wl-dealership" autocomplete="organization" placeholder="Dealership name">
+          <div class="sf-err" id="wle-dealership">Enter your dealership</div>
+        </div>
+        <div class="sf-row">
+          <div class="sf-group">
+            <label class="sf-label" for="wl-seats">Number of seats <span>*</span></label>
+            <input class="sf-input" type="number" id="wl-seats" min="1" inputmode="numeric" placeholder="e.g. 8">
+            <div class="sf-err" id="wle-seats">Enter the number of seats</div>
+          </div>
+          <div class="sf-group">
+            <label class="sf-label" for="wl-email">Email <span>*</span></label>
+            <input class="sf-input" type="email" id="wl-email" autocomplete="email" placeholder="Email address">
+            <div class="sf-err" id="wle-email">Enter a valid email</div>
+          </div>
+        </div>
+        <button type="submit" class="sf-submit" id="wl-submit">Join the waitlist</button>
+        <div class="sf-err" id="wl-form-err" style="text-align:center; margin-top:10px">Something went wrong. Please try again.</div>
+      </form>
+    </div>
+    <div id="wl-done" class="wl-done" hidden>
+      <div class="wl-check" aria-hidden="true">✓</div>
+      <h3 class="wl-title">Thank you for joining the waitlist.</h3>
+      <p class="wl-sub">We'll email you the moment PocketRep Team is ready.</p>
+      <button type="button" class="btn btn-ghost" id="wl-done-close">Close</button>
+    </div>
+  </div>
+</div>
 
 <!-- ============ FOOTER ============ -->
 <footer class="footer">
@@ -2350,10 +2419,11 @@ select.sf-input { appearance: none; cursor: pointer; }
   "use strict";
 
   // ── Stripe checkout links ────────────────────────────────────────────────
-  // TODO(owner): replace these placeholders with the real Stripe checkout links
-  // before this goes to prod. While a value still contains "PLACEHOLDER" the
-  // form refuses to redirect (see the submit handler), so nothing ships broken.
-  var ELITE_STRIPE = "STRIPE_CHECKOUT_LINK_PLACEHOLDER_ELITE";
+  // ELITE is the live individual $39 founding checkout. TEAMS stays a placeholder
+  // on purpose: the Team plan is "coming soon" and non-purchasing (waitlist only),
+  // so no UI path uses TEAMS_STRIPE. While a value contains "PLACEHOLDER" the form
+  // refuses to redirect (see the submit handler).
+  var ELITE_STRIPE = "https://buy.stripe.com/cNi4gAbMn4kg9Ax5AucbC06";
   var TEAMS_STRIPE = "STRIPE_CHECKOUT_LINK_PLACEHOLDER_TEAMS";
 
   // Selected plan ("elite" | "teams"); pricing-card CTAs + the toggle set this.
@@ -2442,4 +2512,101 @@ select.sf-input { appearance: none; cursor: pointer; }
 })();
 </script>
 
+<script>
+/* ============================================================
+   PocketRep, Teams waitlist modal (Team plan is "coming soon").
+   ============================================================ */
+(function () {
+  "use strict";
+  // TODO(owner): set WAITLIST_ENDPOINT to your form provider's POST URL to
+  // capture entries (e.g. Formspree "https://formspree.io/f/XXXXXXX", Getform,
+  // Basin, or your own handler). While it contains "PLACEHOLDER" the form still
+  // validates and confirms, but entries are NOT transmitted. It posts
+  // multipart/form-data fields: name, phone, dealership, seats, email, _source.
+  var WAITLIST_ENDPOINT = "WAITLIST_FORM_ENDPOINT_PLACEHOLDER";
+
+  var overlay = document.getElementById("wl-overlay");
+  if (!overlay) return;
+  var formWrap = document.getElementById("wl-form-wrap");
+  var done = document.getElementById("wl-done");
+  var form = document.getElementById("wl-form");
+  var submitBtn = document.getElementById("wl-submit");
+  var lastFocus = null;
+
+  window.prOpenWaitlist = function (e) {
+    if (e) e.preventDefault();
+    lastFocus = document.activeElement;
+    overlay.hidden = false;
+    if (formWrap) formWrap.hidden = false;
+    if (done) done.hidden = true;
+    document.body.style.overflow = "hidden";
+    var n = document.getElementById("wl-name");
+    if (n) setTimeout(function () { n.focus(); }, 30);
+  };
+  function closeModal() {
+    overlay.hidden = true;
+    document.body.style.overflow = "";
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  window.prCloseWaitlist = closeModal;
+  document.getElementById("wl-close").addEventListener("click", closeModal);
+  var dc = document.getElementById("wl-done-close");
+  if (dc) dc.addEventListener("click", closeModal);
+  overlay.addEventListener("click", function (e) { if (e.target === overlay) closeModal(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !overlay.hidden) closeModal(); });
+
+  ["name", "phone", "dealership", "seats", "email"].forEach(function (k) {
+    var el = document.getElementById("wl-" + k);
+    if (!el) return;
+    el.addEventListener("input", function () {
+      el.classList.remove("err");
+      var er = document.getElementById("wle-" + k);
+      if (er) er.classList.remove("show");
+    });
+  });
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var ferr = document.getElementById("wl-form-err");
+    if (ferr) ferr.classList.remove("show");
+    var valid = true;
+    function chk(k, testFn) {
+      var el = document.getElementById("wl-" + k), er = document.getElementById("wle-" + k);
+      if (!testFn((el.value || "").trim())) { el.classList.add("err"); if (er) er.classList.add("show"); valid = false; }
+      else { el.classList.remove("err"); if (er) er.classList.remove("show"); }
+    }
+    chk("name", function (v) { return v.length > 1; });
+    chk("phone", function (v) { return v.replace(/\D/g, "").length >= 10; });
+    chk("dealership", function (v) { return v.length > 1; });
+    chk("seats", function (v) { return /^\d+$/.test(v) && parseInt(v, 10) >= 1; });
+    chk("email", function (v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); });
+    if (!valid) return;
+
+    var fd = new FormData();
+    fd.append("name", document.getElementById("wl-name").value.trim());
+    fd.append("phone", document.getElementById("wl-phone").value.trim());
+    fd.append("dealership", document.getElementById("wl-dealership").value.trim());
+    fd.append("seats", document.getElementById("wl-seats").value.trim());
+    fd.append("email", document.getElementById("wl-email").value.trim());
+    fd.append("_source", "pocketrep-teams-waitlist");
+
+    function showDone() { if (formWrap) formWrap.hidden = true; if (done) done.hidden = false; }
+
+    if (WAITLIST_ENDPOINT.indexOf("PLACEHOLDER") !== -1) {
+      console.warn("[PocketRep] Teams waitlist endpoint not configured. Set WAITLIST_ENDPOINT to your form provider URL to capture entries.");
+      showDone();
+      return;
+    }
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Joining\u2026"; }
+    fetch(WAITLIST_ENDPOINT, { method: "POST", body: fd, headers: { "Accept": "application/json" } })
+      .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res; })
+      .then(function () { showDone(); })
+      .catch(function (err) {
+        console.warn("[PocketRep] waitlist submit failed:", err);
+        if (ferr) { ferr.textContent = "Something went wrong. Please try again or email teams@pocketrep.pro."; ferr.classList.add("show"); }
+      })
+      .then(function () { if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Join the waitlist"; } });
+  });
+})();
+</script>
 </body></html>
