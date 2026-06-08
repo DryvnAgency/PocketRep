@@ -1293,6 +1293,9 @@
 .teams-band h2 { font-size: clamp(26px, 3.6vw, 44px); max-width: 760px; }
 .teams-band .tbody { font-size: 16.5px; color: var(--muted); line-height: 1.7; margin-top: 18px; max-width: 780px; }
 .teams-band .hero-actions { margin-top: 26px; }
+.soon { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--gold); border: 1px solid rgba(255,204,77,0.38); background: rgba(255,204,77,0.08); border-radius: 100px; padding: 6px 13px; }
+.soon .pip { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px var(--gold); }
+.price .soon { align-self: flex-start; margin-bottom: 8px; }
 .spots { display: inline-flex; align-items: center; gap: 9px; margin-top: 18px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.5px; color: var(--gold); border: 1px solid rgba(255,204,77,0.32); background: rgba(255,204,77,0.06); border-radius: 100px; padding: 8px 14px; }
 .spots .pip { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px var(--gold); }
 </style>
@@ -1516,13 +1519,15 @@
 <!-- ============ FOR SALES MANAGERS AND GMs (TEAMS) ============ -->
 <section class="section wrap" id="teams">
   <div class="teams-band reveal">
-    <span class="eyebrow center">Run the whole floor.</span>
+    <span class="soon"><span class="pip"></span> Coming soon</span>
+    <span class="eyebrow center" style="margin-top:14px">Run the whole floor.</span>
     <h2 class="h2">See every deal in your store. <span class="grad-text">Recover the gross that's slipping away.</span></h2>
     <p class="tbody">PocketRep Team puts the whole floor on one system, keeps every rep as the face, and gives managers the cockpit: response time per rep, who's following up and who isn't, and deals saved that would have died. Each rep gets a local number the store owns, so when someone leaves, the number and book stay with the store.</p>
+    <p class="tbody"><b>We're launching the individual app first.</b> Teams needs its own setup flow for seat counts and number provisioning, so it isn't for sale yet. Join the waitlist and we'll let you know the moment it opens.</p>
     <div class="hero-actions">
-      <a class="btn btn-primary btn-lg" href="mailto:teams@pocketrep.pro?subject=Free%20leak%20audit">Book a free leak audit <span class="arrow">→</span></a>
+      <a class="btn btn-primary btn-lg" href="mailto:teams@pocketrep.pro?subject=Teams%20waitlist">Join the Teams waitlist <span class="arrow">→</span></a>
     </div>
-    <p class="cta-sub">We'll show you your store's real response time and how many opportunities are going untouched, before you pay a dollar.</p>
+    <p class="cta-sub">No charge and no commitment. We'll email you when PocketRep Team is ready, with early-access founding pricing.</p>
   </div>
 </section>
 
@@ -1558,8 +1563,9 @@
       <a class="btn btn-primary" href="#signup" onclick="prSelectPlan('elite'); prScrollSignup(event)">Lock the founding price → Start free trial</a>
     </div>
 
-    <!-- Team plan: internal plan key stays "teams" for Stripe + ?plan= routing. -->
+    <!-- Team plan: COMING SOON, not purchasable. Button links to the waitlist (no checkout, no ?plan=teams). Internal key "teams" stays defined but dormant. -->
     <div class="price reveal">
+      <div class="soon"><span class="pip"></span> Coming soon</div>
       <div class="kind">For dealerships and teams</div>
       <div class="name">PocketRep Team</div>
       <div class="desc">The whole floor on one system. Every rep stays the face; managers get the cockpit and the numbers.</div>
@@ -1575,7 +1581,7 @@
         <li><span class="tick">✦</span> The number and book stay with the store when a rep leaves</li>
         <li><span class="tick">✦</span> Centralized billing · add or remove seats anytime</li>
       </ul>
-      <a class="btn btn-ghost" href="#signup" onclick="prSelectPlan('teams'); prScrollSignup(event)">Start free trial</a>
+      <a class="btn btn-ghost" href="mailto:teams@pocketrep.pro?subject=Teams%20waitlist">Join the waitlist</a>
     </div>
   </div>
   <p class="cta-sub" style="text-align:center">Setup provisions each rep a local number and the manager dashboard.</p>
@@ -1651,11 +1657,12 @@ select.sf-input { appearance: none; cursor: pointer; }
     <div class="signup-box reveal d1">
       <div class="box-h">Start your free 7-day trial</div>
       <div class="box-sub">Fill in your details and you're in.</div>
-      <!-- Plan toggle: PocketRep (individual) is the default; Team switches checkout to the
-           per-seat plan. Internal plan keys stay elite/teams for Stripe + ?plan= routing. -->
+      <!-- Plan toggle: PocketRep (individual) is the only purchasable plan at launch. Team is
+           "coming soon" and links to a waitlist (no checkout, no ?plan=teams routing). The internal
+           "teams" key stays defined but dormant for when Team launches. -->
       <div class="sf-plan-toggle" role="group" aria-label="Choose your plan">
         <button type="button" class="sf-pt-btn active" id="sfpt-elite" onclick="prSelectPlan('elite')">PocketRep · $39/mo</button>
-        <button type="button" class="sf-pt-btn" id="sfpt-teams" onclick="prSelectPlan('teams')">Team · $49/seat</button>
+        <button type="button" class="sf-pt-btn" id="sfpt-teams" onclick="window.location.href='mailto:teams@pocketrep.pro?subject=Teams%20waitlist'">Team · Join waitlist</button>
       </div>
       <div class="sf-plan-pill">
         <div>
