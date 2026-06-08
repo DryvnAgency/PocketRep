@@ -2518,12 +2518,14 @@ select.sf-input { appearance: none; cursor: pointer; }
    ============================================================ */
 (function () {
   "use strict";
-  // TODO(owner): set WAITLIST_ENDPOINT to your form provider's POST URL to
-  // capture entries (e.g. Formspree "https://formspree.io/f/XXXXXXX", Getform,
-  // Basin, or your own handler). While it contains "PLACEHOLDER" the form still
-  // validates and confirms, but entries are NOT transmitted. It posts
-  // multipart/form-data fields: name, phone, dealership, seats, email, _source.
-  var WAITLIST_ENDPOINT = "WAITLIST_FORM_ENDPOINT_PLACEHOLDER";
+  // Waitlist submissions insert straight into the PocketRep Supabase "waitlist"
+  // table via PostgREST, using the PUBLIC publishable/anon key (safe to expose).
+  // RLS on that table allows INSERT only for the anon role, so this key can add
+  // rows but cannot read, update, or delete them. A DB trigger then emails the
+  // owner via the waitlist-notify Edge Function (see WAITLIST_SETUP.md). No
+  // secret or admin key is ever placed in the front-end.
+  var SUPABASE_URL = "https://fwvrauqdoevwmwwqlfav.supabase.co";
+  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0";
 
   var overlay = document.getElementById("wl-overlay");
   if (!overlay) return;
@@ -2582,28 +2584,40 @@ select.sf-input { appearance: none; cursor: pointer; }
     chk("email", function (v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); });
     if (!valid) return;
 
-    var fd = new FormData();
-    fd.append("name", document.getElementById("wl-name").value.trim());
-    fd.append("phone", document.getElementById("wl-phone").value.trim());
-    fd.append("dealership", document.getElementById("wl-dealership").value.trim());
-    fd.append("seats", document.getElementById("wl-seats").value.trim());
-    fd.append("email", document.getElementById("wl-email").value.trim());
-    fd.append("_source", "pocketrep-teams-waitlist");
+    var row = {
+      name: document.getElementById("wl-name").value.trim(),
+      phone: document.getElementById("wl-phone").value.trim(),
+      dealership: document.getElementById("wl-dealership").value.trim(),
+      seats: parseInt(document.getElementById("wl-seats").value.trim(), 10),
+      email: document.getElementById("wl-email").value.trim(),
+      source: "pocketrep-teams-waitlist"
+    };
 
     function showDone() { if (formWrap) formWrap.hidden = true; if (done) done.hidden = false; }
-
-    if (WAITLIST_ENDPOINT.indexOf("PLACEHOLDER") !== -1) {
-      console.warn("[PocketRep] Teams waitlist endpoint not configured. Set WAITLIST_ENDPOINT to your form provider URL to capture entries.");
-      showDone();
-      return;
+    function showError() {
+      if (ferr) { ferr.textContent = "Something went wrong. Please try again in a moment."; ferr.classList.add("show"); }
     }
+
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Joining\u2026"; }
-    fetch(WAITLIST_ENDPOINT, { method: "POST", body: fd, headers: { "Accept": "application/json" } })
-      .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res; })
-      .then(function () { showDone(); })
+    // Insert the row via PostgREST. Prefer: return=minimal so no row is read back
+    // (the anon role has INSERT only, not SELECT). Confirmation shows only on success.
+    fetch(SUPABASE_URL + "/rest/v1/waitlist", {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify(row)
+    })
+      .then(function (res) {
+        if (res.ok) { showDone(); }
+        else { console.warn("[PocketRep] waitlist insert failed:", res.status); showError(); }
+      })
       .catch(function (err) {
-        console.warn("[PocketRep] waitlist submit failed:", err);
-        if (ferr) { ferr.textContent = "Something went wrong. Please try again or email teams@pocketrep.pro."; ferr.classList.add("show"); }
+        console.warn("[PocketRep] waitlist insert error:", err);
+        showError();
       })
       .then(function () { if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Join the waitlist"; } });
   });
