@@ -9,6 +9,7 @@ import { colors, radius, spacing } from '@/constants/theme';
 import type { Profile } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import { scheduleWeeklyDigest, cancelWeeklyDigest } from '@/lib/notifications';
+import { exportBook as runBookExport } from '@/lib/v2/exportBook';
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
@@ -79,33 +80,20 @@ export default function MoreScreen() {
   }
 
   async function exportBook() {
+    if (exportLoading) return;
     setExportLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setExportLoading(false); return; }
-
-    const { data: contacts } = await supabase
-      .from('contacts')
-      .select('first_name,last_name,phone,email,vehicle_year,vehicle_make,vehicle_model,mileage,notes,last_contact_date')
-      .eq('user_id', user.id);
-
-    if (!contacts?.length) {
-      Alert.alert('No contacts', 'Add contacts to your book first.');
-      setExportLoading(false);
-      return;
-    }
-
-    const csv = [
-      'First,Last,Phone,Email,Year,Make,Model,Mileage,Last Contact,Notes',
-      ...contacts.map(c =>
-        [c.first_name, c.last_name, c.phone, c.email, c.vehicle_year, c.vehicle_make,
-          c.vehicle_model, c.mileage, c.last_contact_date, `"${(c.notes ?? '').replace(/"/g, '""')}"`
-        ].join(',')
-      ),
-    ].join('\n');
-
-    // Show preview (in a real build, use expo-sharing to export the file)
-    Alert.alert('Book export ready', `${contacts.length} contacts\n\nIn a production build this saves to Files. CSV preview:\n\n${csv.slice(0, 200)}…`);
+    const r = await runBookExport();
     setExportLoading(false);
+    if (r.ok) {
+      Alert.alert(
+        'Book exported',
+        Platform.OS === 'web'
+          ? `Downloaded ${r.contactCount} contacts as ${r.filename}.`
+          : `${r.contactCount} contacts ready — choose where to save ${r.filename}.`
+      );
+    } else {
+      Alert.alert('Export', r.reason);
+    }
   }
 
   async function buildDigest() {

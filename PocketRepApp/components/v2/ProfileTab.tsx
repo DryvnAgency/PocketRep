@@ -14,6 +14,7 @@ import {
   type RepSettingKey,
 } from '@/lib/v2/repSettings';
 import { sendTestPush } from '@/lib/v2/pushNotifications';
+import { exportBook } from '@/lib/v2/exportBook';
 import { usePayPlan } from '@/lib/v2/payPlan';
 import PayPlanSummary from './PayPlanSummary';
 import SettingEditSheet, { type SettingEditConfig } from './SettingEditSheet';
@@ -77,6 +78,7 @@ export default function ProfileTab({
   const [alwaysListen, setAlwaysListen] = useState<boolean>(false);
   const [editTarget, setEditTarget] = useState<{ key: EditKey; config: SettingEditConfig } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   const payPlan = usePayPlan(payPlanRefetchKey);
 
@@ -139,6 +141,20 @@ export default function ProfileTab({
       }
     } catch { /* ignore */ }
     flash(`✓ ${label}`);
+  };
+
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    flash('Building your CSV…');
+    const r = await exportBook();
+    setExporting(false);
+    if (r.ok) {
+      const n = r.contactCount;
+      flash(`✓ Exported ${n} contact${n === 1 ? '' : 's'}`);
+    } else {
+      flash(`Couldn't export: ${r.reason}`);
+    }
   };
 
   const displayName = profile?.full_name?.trim() || 'Jake Morales';
@@ -245,6 +261,16 @@ export default function ProfileTab({
           onPress={() => editSetting('security', 'Security', 'SIGN-IN METHOD')} />
         <Row icon="↗" label="Refer a rep" detail="$50 each"
           onPress={() => copy(referLink, 'Referral link copied')} />
+      </View>
+
+      <SectionHead label="YOUR DATA" color={colors.grey2} />
+      <View style={styles.group}>
+        <Row
+          icon="📤"
+          label="Export my book"
+          detail={exporting ? 'Exporting…' : 'CSV'}
+          onPress={handleExport}
+        />
       </View>
 
       <Pressable
