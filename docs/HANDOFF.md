@@ -37,6 +37,7 @@ This document is the single source of truth. If anything in the codebase contrad
 23. [Anti-patterns & traps](#23-anti-patterns--traps)
 24. [Known gaps / explicitly deferred](#24-known-gaps--explicitly-deferred)
 25. [Where to look next](#25-where-to-look-next)
+26. [Build checkpoint (2026-06-09): build the app up to match the marketing](#26-build-checkpoint-2026-06-09-build-the-app-up-to-match-the-marketing)
 
 ---
 
@@ -743,6 +744,137 @@ If a new session needs to pick up:
 
 **Production URL**: https://app.pocketrep.pro — auto-signs in as the demo user on first visit.
 **Preview URL** (current branch): https://project-t90u1-git-claude-exci-dc8df9-dryvnagency-1422s-projects.vercel.app — append `?v=2` if v2 doesn't auto-load.
+
+---
+
+## 26. Build checkpoint (2026-06-09): build the app up to match the marketing
+
+> **New direction (supersedes the copy work).** Instead of softening the landing copy to match the
+> app, we are BUILDING the app up so it actually does what pocketrep.pro already markets. **PR #66
+> (the copy-accuracy pass) is closed / abandoned on purpose; the production landing copy is
+> untouched.** This checkpoint closes the gaps from §24 in priority order, **one DRAFT PR per item,
+> owner review between each**. PLAN ONLY at time of writing, no feature code started; owner says
+> "go" per item (next session).
+
+### Main vision
+Build the **v2** app (`components/v2/`, `lib/v2/`) up to the marketing, by building real features,
+not editing claims. Target v2 since that is what the marketing maps to.
+
+### Current state (delta from the 2026-05-27 snapshot in §1-25)
+- `origin/main` = `bcdad9c` (PR #65). Sync to `origin/main` and branch off it before **each** item
+  (local repo goes stale).
+- The marketing site (`Pocketrep/`) since the snapshot gained: AEO/SEO pack, a two-page thank-you
+  flow, Teams "coming soon" (non-purchasing), a live individual `$39` Stripe Payment Link, and a
+  Teams waitlist → Supabase + Resend flow (`public.waitlist` table, insert-only RLS,
+  `supabase/functions/waitlist-notify`). **None of that is touched by this phase.**
+- Schema confirmed for this build: `public.deals.closed_at` (no "delivered"/"sold" status column),
+  `public.contacts` (`purchase_date`, `lease_end_date`, `mileage`, `annual_mileage`,
+  `current_mileage`, `stage`, `last_contact_date`, `heat_score`, `tier_override`,
+  `referred_by_contact_id`, `preferred_language`), `public.reminders` (`due_at`, `status`,
+  `source`, `contact_id`), milestone types `lease_end / mileage_threshold / purchase_anniversary`
+  already exist (§6). Live crons: `nurture-scheduler-daily` (`0 14 * * *`), `warm-ai-proxy`
+  (`*/5 * * * *`).
+
+### The six items (verbatim file/table refs)
+
+**1) Referral asks** (NOT built). Post-delivery ask flow, no auto-send.
+- Trigger on **deal logged**: `lib/v2/dealLogger.ts` (`insertDeal`) inserts a `public.reminders`
+  row `source='referral_ask'`, `due_at = today + referral_ask_delay_days`, `contact_id`.
+- New `lib/v2/referralAsks.ts` (schedule + draft via `lib/v2/aiProxy.ts` / `lib/v2/rexActions.ts`).
+- Extend `supabase/functions/nurture-scheduler/index.ts` (already on `nurture-scheduler-daily`):
+  pick due `referral_ask` reminders, draft, enqueue `public.nurture_messages` (`kind='referral_ask'`),
+  set reminder `status='done'`, push via `supabase/functions/send-push`. Surfaces in
+  `components/v2/NurtureReviewer.tsx`, sent via `lib/v2/smsLauncher.ts`. No auto-send.
+- Migrations: `public.nurture_messages.kind text`; `referral_ask_delay_days int default 3` in the
+  rep-settings store (`lib/v2/rexSettings.ts` / `public.profiles`); control in
+  `components/v2/ProfileTab.tsx`. Attribution uses `public.contacts.referred_by_contact_id`.
+
+**2) Smart Blast / Mass Text** (per-contact, one-at-a-time today).
+- New `components/v2/BlastComposer.tsx` (segment by tag/tier/`stage`, reuse `lib/v2/useContacts.ts`)
+  + `components/v2/BlastReviewer.tsx` (per-contact draft list, edit, send).
+- New `lib/v2/blast.ts` (draft per contact via brain path; persist). Change `lib/v2/smsLauncher.ts`
+  (guided "send next" step-through), `components/v2/AppShell.tsx` (mount), reuse
+  `create_blast_sequence` in `lib/v2/rexActions.ts`.
+- **LOCKED #1: guided one-tap-per-contact send, NOT silent bulk.**
+- Migration: `public.blasts` + `public.blast_recipients` (`blast_id`, `contact_id`, `message`,
+  `status` pending|sent|skipped), or extend the empty legacy `public.mass_texts` (confirm columns).
+
+**3) Weekly digest scheduled Monday** (on-demand only today; see §24 "Email delivery for the weekly
+digest").
+- New `supabase/functions/weekly-digest-scheduler/index.ts`: per rep in `public.profiles`, compute
+  last week's digest (port `lib/v2/weeklyDigest.ts` + brain highlights), upsert
+  `public.weekly_digests`, deliver via email (reuse `supabase/functions/waitlist-notify` Resend
+  pattern) + push (`supabase/functions/send-push`).
+- Cron `cron.schedule('weekly-digest-monday', '0 14 * * 1', ...)`. Migration
+  `public.weekly_digests.delivered_at timestamptz`.
+- **LOCKED #4: email + push; email armed pending Resend secrets; push works now.**
+
+**4) Nurture milestone firing** (holidays + quarterly only today, §18).
+- Extend `supabase/functions/nurture-scheduler/index.ts` to also compute per-contact milestones each
+  run: purchase_anniversary (`purchase_date`), lease_end window (`lease_end_date`, ~60-90d),
+  service_due (`purchase_date` + `annual_mileage`/`current_mileage`). Each: draft, enqueue
+  `public.nurture_messages` (`hook_used='purchase_anniversary'|'lease_end'|'service_due'`),
+  respecting cadence guards in `lib/v2/nurtureEngine.ts`. No auto-send.
+- Migration: dedup guard (query `public.nurture_messages`, else small `public.milestone_log`).
+
+**5) CSV export** (stubbed at `app/(tabs)/more.tsx:81`). **BUILD FIRST.**
+- New `lib/v2/exportBook.ts` (query `public.contacts` + notes/tags/deal history, build CSV).
+- Change `components/v2/ProfileTab.tsx` (Export my book CSV) + replace the `app/(tabs)/more.tsx:81`
+  Alert stub. Web = `Blob` + anchor download; native = `expo-file-system` + `expo-sharing`.
+- Deps: add `expo-sharing` + `expo-file-system` if absent. No migration.
+
+**6) Heat score recompute** (no refresh job; v2 reads stored `public.contacts.heat_score`).
+- New migration: SQL function `public.recompute_heat_scores()` = faithful port of `calcHeatScore`
+  (`app/(tabs)/index.tsx:20-63`) doing a bulk `UPDATE public.contacts SET heat_score=...`,
+  respecting `public.contacts.tier_override`, + `cron.schedule('heat-score-recompute', '0 13 * * *', ...)`.
+  No app change.
+- **LOCKED #2: SQL function port; note TS + SQL dual-maintenance, keep byte-faithful to calcHeatScore.**
+
+### Cross-cutting
+- **3 new/extended crons** (project `fwvrauqdoevwmwwqlfav`, via MCP): extend `nurture-scheduler-daily`
+  (items 1 + 4); new `weekly-digest-monday` (item 3); new `heat-score-recompute` (item 6).
+- **Reused infra:** `lib/v2/aiProxy.ts` + `lib/v2/rexActions.ts`; `public.nurture_messages` +
+  `components/v2/NurtureReviewer.tsx`; `public.reminders`; `lib/v2/smsLauncher.ts`;
+  `supabase/functions/send-push` + `lib/v2/pushNotifications.ts`; `supabase/functions/waitlist-notify`
+  (Resend); `lib/v2/weeklyDigest.ts`; `calcHeatScore`.
+
+### Sequence (one DRAFT PR per item, owner review between each)
+1. **CSV export** (self-contained, no cron) — START HERE.  2. Referral asks.  3. Smart Blast.
+4. Nurture milestone firing.  5. Weekly digest scheduled Monday.  6. Heat score recompute.
+
+### Decisions (LOCKED)
+1. Smart Blast = guided one-tap-per-contact send, NOT silent bulk (silent bulk needs Twilio, breaks
+   "nothing sends until you tap send").
+2. Heat recompute = SQL function port (byte-faithful to `calcHeatScore`; note TS + SQL dual-maintenance).
+3. Referral trigger = on deal logged (no "delivered" status exists).
+4. Weekly digest = email + push; email armed pending Resend secrets; push works now.
+
+### Hard constraints (never violate)
+Do NOT modify: Stripe/billing wiring, the `$39` checkout link, `prSelectPlan('elite')`,
+`?plan=`/`selectedPlan` routing, the waitlist form, `/rest/v1/waitlist`, `prOpenWaitlist`, the
+`waitlist-notify` function, or the landing-page copy. Teams stays non-purchasing
+(`prSelectPlan('teams')` = 0). Do NOT touch the shared demo-login (`lib/v2/demoAuth.ts`, §9) or the
+v1/v2 feature flag (`lib/featureFlags.ts`, §5) this phase. NO auto-send anywhere, the rep always
+taps send. All Supabase work scoped to `fwvrauqdoevwmwwqlfav`. Every item is a DRAFT PR; never merge
+without owner approval. Sync to `origin/main` before each item.
+
+### Out of scope this phase (heavy "must-fix before billing", tracked for later)
+- Real Stripe billing / trial / paywall wiring (the `upgrade-sheet.jsx` upsell from §24; needs the
+  `stripe-webhook` function from §10 + plan-limit enforcement).
+- Fixing the shared web demo-login (`lib/v2/demoAuth.ts`, §9) which contradicts "your customers stay
+  yours."
+- Flipping the v1 → v2 default (`lib/featureFlags.ts`, §5).
+These need owner involvement (money + accounts).
+
+### Pending owner TODOs (carried over)
+- Resend secrets for email: `RESEND_API_KEY`, `WAITLIST_NOTIFY_TO`, `WAITLIST_NOTIFY_FROM` (enables
+  waitlist email AND weekly-digest email).
+- Confirm the Stripe Payment Link thank-you redirect (`success_url`).
+- Re-authorize the expired GitHub MCP token so PR polling resumes.
+
+### Next step
+Begin item 1 (CSV export) as a draft PR off `bcdad9c` only after the owner says go. No feature work
+has started.
 
 ---
 
