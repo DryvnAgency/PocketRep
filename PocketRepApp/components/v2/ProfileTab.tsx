@@ -11,6 +11,11 @@ import {
   getRepSetting,
   setRepSetting,
   subscribeRepSettings,
+  getReferralAsksEnabled,
+  setReferralAsksEnabled,
+  getReferralAskDelayDays,
+  setReferralAskDelayDays,
+  clampReferralAskDelay,
   type RepSettingKey,
 } from '@/lib/v2/repSettings';
 import { sendTestPush } from '@/lib/v2/pushNotifications';
@@ -21,8 +26,9 @@ import type { TabId } from './CustomNavBar';
 
 type ProfileRow = { email: string; full_name: string | null; plan: string };
 
-// `name` is a pseudo-key that maps to profiles.full_name; the rest map to repSettings.
-type EditKey = RepSettingKey | 'name';
+// `name` maps to profiles.full_name and `referralDelay` to a clamped int; the
+// rest map to repSettings string values.
+type EditKey = RepSettingKey | 'name' | 'referralDelay';
 
 function Row({
   icon, label, detail, danger, chevron = true, onPress,
@@ -75,6 +81,8 @@ export default function ProfileTab({
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [alwaysListen, setAlwaysListen] = useState<boolean>(false);
+  const [referralOn, setReferralOn] = useState<boolean>(true);
+  const [referralDelay, setReferralDelay] = useState<number>(3);
   const [editTarget, setEditTarget] = useState<{ key: EditKey; config: SettingEditConfig } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
@@ -83,6 +91,8 @@ export default function ProfileTab({
   useEffect(() => {
     let cancelled = false;
     setAlwaysListen(getAlwaysListenEnabled());
+    setReferralOn(getReferralAsksEnabled());
+    setReferralDelay(getReferralAskDelayDays());
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || cancelled) return;
@@ -93,6 +103,22 @@ export default function ProfileTab({
         .eq('id', user.id)
         .maybeSingle();
       if (data && !cancelled) setProfile(data as ProfileRow);
+      // Hydrate the referral delay from the server (authoritative across devices)
+      // and keep the client cache in sync so dealLogger reads the same value.
+      // Best-effort: a missing column (older env) just leaves the cache/default.
+      try {
+        const { data: pref } = await supabase
+          .from('profiles')
+          .select('referral_ask_delay_days')
+          .eq('id', user.id)
+          .maybeSingle();
+        const days = (pref as { referral_ask_delay_days?: number } | null)?.referral_ask_delay_days;
+        if (typeof days === 'number' && !cancelled) {
+          const clamped = clampReferralAskDelay(days);
+          setReferralDelay(clamped);
+          setReferralAskDelayDays(clamped);
+        }
+      } catch { /* column may be absent — cache/default is fine */ }
     })();
     const unsub = subscribeRepSettings(forceTick);
     return () => { cancelled = true; unsub(); };
@@ -101,6 +127,24 @@ export default function ProfileTab({
   const toggleListen = (next: boolean) => {
     setAlwaysListen(next);
     setAlwaysListenEnabled(next);
+  };
+
+  const toggleReferral = (next: boolean) => {
+    setReferralOn(next);
+    setReferralAsksEnabled(next);
+  };
+
+  const editReferralDelay = () => {
+    setEditTarget({
+      key: 'referralDelay',
+      config: {
+        title: 'Referral ask delay',
+        label: 'DAYS AFTER A SALE (1-14)',
+        value: String(referralDelay),
+        keyboardType: 'number-pad',
+        placeholder: '3',
+      },
+    });
   };
 
   const editSetting = (key: RepSettingKey, title: string, label: string, extra?: Partial<SettingEditConfig>) => {
@@ -121,6 +165,14 @@ export default function ProfileTab({
       if (userId) {
         supabase.from('profiles').update({ full_name: value }).eq('id', userId)
           .then(undefined, (e: any) => console.warn('save name failed', e));
+      }
+    } else if (editTarget.key === 'referralDelay') {
+      const n = clampReferralAskDelay(parseInt(value, 10));
+      setReferralDelay(n);
+      setReferralAskDelayDays(n); // client cache read by dealLogger
+      if (userId) {
+        supabase.from('profiles').update({ referral_ask_delay_days: n }).eq('id', userId)
+          .then(undefined, (e: any) => console.warn('save referral delay failed', e));
       }
     } else {
       setRepSetting(editTarget.key, value);
@@ -221,6 +273,31 @@ export default function ProfileTab({
         >
           <Row icon="🔔" label="Send a test push" detail="ping →" chevron={false} />
         </Pressable>
+      </View>
+
+      <SectionHead label="REFERRALS" color={colors.gold} />
+      <View style={styles.group}>
+        <View style={styles.row}>
+          <View style={[styles.rowIcon, { backgroundColor: colors.goldBg, borderColor: colors.goldBorder }]}>
+            <Text style={{ color: colors.gold, fontSize: 14 }}>🤝</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.rowLabel}>Ask customers for referrals</Text>
+            <Text style={styles.rowSub}>Rex drafts a referral ask after each sale</Text>
+          </View>
+          <Switch
+            value={referralOn}
+            onValueChange={toggleReferral}
+            trackColor={{ false: colors.ink4, true: colors.gold }}
+            thumbColor={referralOn ? colors.ink : colors.grey2}
+          />
+        </View>
+        <Row
+          icon="⏱"
+          label="Delay after a sale"
+          detail={`${referralDelay} day${referralDelay === 1 ? '' : 's'}`}
+          onPress={editReferralDelay}
+        />
       </View>
 
       <SectionHead label="LEARN" color={colors.gold} />

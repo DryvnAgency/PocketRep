@@ -8,7 +8,11 @@
 //   2. If a holiday is today — for each rep in public.profiles, queue holiday
 //      nurture drafts for eligible contacts (cadence + variety enforced).
 //   3. On Mondays, also run a quarterly check-in (max 10 contacts/rep).
-//   4. Fire a push notification to each rep whose queue grew.
+//   4. EVERY day, process due referral-ask reminders (public.reminders,
+//      source='referral_ask', status='pending', due_at<=now): draft a post-sale
+//      referral ask and queue it (nurture_messages, kind='referral_ask',
+//      sent_at=null — review only, never auto-sent), then mark the reminder done.
+//   5. Fire a push notification to each rep whose queue grew.
 //
 // Brain calls go DIRECTLY to OpenRouter (same model list as ai-proxy) rather
 // than back through ai-proxy/brain — server-side fan-out has no user JWT to
@@ -46,8 +50,10 @@ Deno.serve(async (req: Request) => {
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
-  const today = new Date().toISOString().slice(0, 10);
-  const dayOfWeek = new Date().getUTCDay();
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const dayOfWeek = now.getUTCDay();
+  const nowIso = now.toISOString();
 
   const { data: holidayRow } = await admin
     .from('holiday_calendar')
@@ -56,36 +62,68 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
 
   const runQuarterly = dayOfWeek === 1;
-  if (!holidayRow && !runQuarterly) {
+
+  // Referral asks run EVERY day (not gated on holiday/Monday). Pre-fetch all due
+  // referral-ask reminders in a single query (service role bypasses RLS) and
+  // group by rep, so per-rep work only happens for reps that actually have one
+  // due. due_at was baked in at deal-log time (now + referral_ask_delay_days).
+  const referralsByRep = new Map<string, Array<{ id: string; contact_id: string | null }>>();
+  {
+    const { data: dueReminders } = await admin
+      .from('reminders')
+      .select('id,user_id,contact_id')
+      .eq('source', 'referral_ask')
+      .eq('status', 'pending')
+      .lte('due_at', nowIso)
+      .order('due_at', { ascending: true });
+    for (const r of (dueReminders ?? []) as Array<{ id: string; user_id: string; contact_id: string | null }>) {
+      const arr = referralsByRep.get(r.user_id) ?? [];
+      arr.push({ id: r.id, contact_id: r.contact_id });
+      referralsByRep.set(r.user_id, arr);
+    }
+  }
+
+  const runNurtures = !!holidayRow || runQuarterly;
+  if (!runNurtures && referralsByRep.size === 0) {
     return json({ ok: true, ran: 'nothing', today });
   }
 
   // Reps live in public.profiles (id = auth user id, same as contacts.user_id).
   // There is no public.users table — querying it returned an error and an empty
   // rep list, which silently no-op'd the entire scheduler on every run.
-  const { data: reps } = await admin.from('profiles').select('id,email');
+  // On a referral-only day we only need the reps that have due reminders.
+  let repQuery = admin.from('profiles').select('id,email');
+  if (!runNurtures) repQuery = repQuery.in('id', [...referralsByRep.keys()]);
+  const { data: reps } = await repQuery;
   const repList = (reps ?? []) as Array<{ id: string; email: string | null }>;
 
   const results: any[] = [];
   for (const rep of repList) {
-    const queued: number[] = [];
-    if (holidayRow) {
-      const count = await runBlast(admin, rep.id, 'holiday', holidayRow, 30);
-      queued.push(count);
-    }
-    if (runQuarterly) {
-      const count = await runBlast(admin, rep.id, 'quarterly_check_in', null, 10);
-      queued.push(count);
-    }
-    const total = queued.reduce((s, n) => s + n, 0);
-    if (total > 0) {
+    let nurtureCount = 0;
+    if (holidayRow) nurtureCount += await runBlast(admin, rep.id, 'holiday', holidayRow, 30);
+    if (runQuarterly) nurtureCount += await runBlast(admin, rep.id, 'quarterly_check_in', null, 10);
+    if (nurtureCount > 0) {
       await firePush(admin, rep.id, {
         title: holidayRow ? `${holidayRow.holiday_name} nurtures ready` : 'Quarterly check-ins ready',
-        body: `${total} draft${total === 1 ? '' : 's'} waiting in your queue.`,
+        body: `${nurtureCount} draft${nurtureCount === 1 ? '' : 's'} waiting in your queue.`,
         data: { route: 'nurture' },
       });
     }
-    results.push({ user_id: rep.id, queued: total });
+
+    let referralCount = 0;
+    const dueReferrals = referralsByRep.get(rep.id);
+    if (dueReferrals && dueReferrals.length > 0) {
+      referralCount = await runReferralAsks(admin, rep.id, dueReferrals);
+      if (referralCount > 0) {
+        await firePush(admin, rep.id, {
+          title: 'Referral asks ready',
+          body: `${referralCount} referral ask${referralCount === 1 ? '' : 's'} drafted and waiting for review.`,
+          data: { route: 'nurture' },
+        });
+      }
+    }
+
+    results.push({ user_id: rep.id, nurtures: nurtureCount, referrals: referralCount });
   }
 
   return json({ ok: true, today, holiday: holidayRow?.holiday_name ?? null, quarterly: runQuarterly, results });
@@ -201,7 +239,8 @@ Return ONLY a single JSON object inside a \`\`\`json fenced block:
   return error ? 0 : inserts.length;
 }
 
-async function callBrain(prompt: string): Promise<any[]> {
+// Low-level OpenRouter call — returns the raw model content (or '' on failure).
+async function callBrainRaw(prompt: string, maxTokens = 2500): Promise<string> {
   try {
     const res = await fetch(OPENROUTER_URL, {
       method: 'POST',
@@ -214,15 +253,26 @@ async function callBrain(prompt: string): Promise<any[]> {
       body: JSON.stringify({
         models: BRAIN_MODELS,
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 2500,
+        max_tokens: maxTokens,
       }),
     });
     if (!res.ok) {
       console.warn('openrouter failed', res.status, await res.text().catch(() => ''));
-      return [];
+      return '';
     }
     const data = await res.json();
-    const raw = data.choices?.[0]?.message?.content ?? '';
+    return data.choices?.[0]?.message?.content ?? '';
+  } catch (e) {
+    console.warn('openrouter call failed', e);
+    return '';
+  }
+}
+
+// Nurture blast path: expects a {"messages": [...]} payload, one per contact.
+async function callBrain(prompt: string): Promise<any[]> {
+  const raw = await callBrainRaw(prompt, 2500);
+  if (!raw) return [];
+  try {
     const fence = raw.match(/```json\s*([\s\S]*?)```/i) ?? raw.match(/```\s*([\s\S]*?)```/);
     const obj = JSON.parse((fence ? fence[1] : raw).trim());
     return Array.isArray(obj.messages) ? obj.messages : [];
@@ -230,6 +280,97 @@ async function callBrain(prompt: string): Promise<any[]> {
     console.warn('brain parse failed', e);
     return [];
   }
+}
+
+function buildReferralPrompt(c: any): string {
+  const name = `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim() || 'there';
+  const vehicle = [c.vehicle, c.vehicle_make, c.vehicle_model].filter(Boolean).join(' ').trim() || 'their new ride';
+  const lang = c.preferred_language === 'es' ? 'es' : 'en';
+  return `You are Rex, drafting a short referral-ask text from a car salesperson to a customer who JUST bought a vehicle.
+
+Customer: ${name}
+What they bought: ${vehicle}
+Preferred language: ${lang}
+
+Goal: thank them warmly for their business, then casually ask if they know anyone (friends, family, coworkers) who might be looking for a car, so you can take care of them too. One warm line, one soft ask. Do NOT offer cash, gift cards, or any incentive. Do NOT be pushy or salesy.
+
+${REX_COPY_RULES}
+
+Return ONLY a single JSON object inside a \`\`\`json fenced block:
+{"message": "the draft text", "language": "en" | "es"}`;
+}
+
+async function setReminderStatus(
+  admin: ReturnType<typeof createClient>,
+  id: string,
+  status: 'pending' | 'done',
+): Promise<void> {
+  await admin.from('reminders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+}
+
+// Referral asks: draft + enqueue one nurture_messages row (kind='referral_ask',
+// sent_at=null — queued for review, never auto-sent) per due reminder, then mark
+// the reminder done. Mirrors lib/v2/referralAsks.ts (a Deno function can't share
+// the client module). Idempotent: a pending->done claim guards against a client
+// in-app pass and this cron double-enqueuing. On a brain/insert failure the claim
+// is released (done->pending) so the reminder retries on the next run.
+async function runReferralAsks(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  reminders: Array<{ id: string; contact_id: string | null }>,
+): Promise<number> {
+  let drafted = 0;
+  for (const rem of reminders) {
+    if (!rem.contact_id) { await setReminderStatus(admin, rem.id, 'done'); continue; }
+
+    const { data: contact } = await admin
+      .from('contacts')
+      .select('id,first_name,last_name,vehicle,vehicle_make,vehicle_model,preferred_language,do_not_contact,is_deleted')
+      .eq('id', rem.contact_id)
+      .maybeSingle();
+    const c = contact as any;
+    if (!c || c.is_deleted || c.do_not_contact) { await setReminderStatus(admin, rem.id, 'done'); continue; }
+
+    // Claim: flip pending -> done atomically; only the winner proceeds.
+    const { data: claimed } = await admin
+      .from('reminders')
+      .update({ status: 'done', updated_at: new Date().toISOString() })
+      .eq('id', rem.id)
+      .eq('status', 'pending')
+      .select('id');
+    if (!claimed || claimed.length === 0) continue;
+
+    const raw = await callBrainRaw(buildReferralPrompt(c), 400);
+    let message = '';
+    let language: 'en' | 'es' = c.preferred_language === 'es' ? 'es' : 'en';
+    if (raw) {
+      try {
+        const fence = raw.match(/```json\s*([\s\S]*?)```/i) ?? raw.match(/```\s*([\s\S]*?)```/);
+        const obj = JSON.parse((fence ? fence[1] : raw).trim());
+        message = String(obj.message ?? '').trim();
+        if (obj.language === 'es' || obj.language === 'en') language = obj.language;
+      } catch (e) {
+        console.warn('referral parse failed', e);
+      }
+    }
+    if (!message) { await setReminderStatus(admin, rem.id, 'pending'); continue; } // release for retry
+
+    const { error } = await admin.from('nurture_messages').insert({
+      user_id: userId,
+      contact_id: c.id,
+      message_text: message,
+      language,
+      hook_used: null,
+      trigger_type: 'referral_ask',
+      kind: 'referral_ask',
+      pitch_intensity: 'low',
+      scheduled_for: new Date().toISOString(),
+      sent_at: null,
+    });
+    if (error) { await setReminderStatus(admin, rem.id, 'pending'); continue; }
+    drafted += 1;
+  }
+  return drafted;
 }
 
 async function firePush(

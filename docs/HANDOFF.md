@@ -1,6 +1,6 @@
 # PocketRep — handoff (A → Z)
 
-**Last updated**: 2026-05-27
+**Last updated**: 2026-06-09 (added §26; the §1-25 body predates several shipped features — reminders, contact `referred_by`, birthday/tier-override, waitlist — so when the body and the code disagree, the code wins)
 **Latest commit on `main`**: `f601d51` (PR #37 — Pay plan editor + Sequences editor + photo upload + reply marker + profile onboarding)
 **Live web**: https://app.pocketrep.pro (Vercel project `project-t90u1`, Expo Web)
 **Supabase project**: `fwvrauqdoevwmwwqlfav` — `https://fwvrauqdoevwmwwqlfav.supabase.co`
@@ -37,6 +37,7 @@ This document is the single source of truth. If anything in the codebase contrad
 23. [Anti-patterns & traps](#23-anti-patterns--traps)
 24. [Known gaps / explicitly deferred](#24-known-gaps--explicitly-deferred)
 25. [Where to look next](#25-where-to-look-next)
+26. [Referral Asks](#26-referral-asks)
 
 ---
 
@@ -743,6 +744,43 @@ If a new session needs to pick up:
 
 **Production URL**: https://app.pocketrep.pro — auto-signs in as the demo user on first visit.
 **Preview URL** (current branch): https://project-t90u1-git-claude-exci-dc8df9-dryvnagency-1422s-projects.vercel.app — append `?v=2` if v2 doesn't auto-load.
+
+---
+
+## 26. Referral Asks
+
+The post-sale "ask for a referral" automation. A logged deal is the sale signal (there is no "delivered" status), so a few days later Rex drafts a short, friendly "know anyone else?" text to the customer and drops it into the rep's review queue. **Nothing is ever auto-sent** — it lands in `nurture_messages` with `sent_at=null`, exactly like every other nurture draft, and the rep reviews + sends it by hand from the NurtureReviewer.
+
+### Flow
+
+1. **Trigger** — `lib/v2/dealLogger.ts → insertDeal()`: after the deal row commits, if referral asks are enabled and the deal has a `contact_id`, it inserts a `public.reminders` row: `source='referral_ask'`, `status='pending'`, `due_at = now + referral_ask_delay_days`, `title = "Ask <name> for a referral"`. Best-effort — a referral-ask hiccup never fails the deal log (the deal is already committed).
+2. **Draft** — the `nurture-scheduler` cron runs **every day** (not just holidays/Mondays). It pre-fetches due referral-ask reminders (`status='pending' AND due_at<=now`), and for each: loads the contact, drafts a referral ask via OpenRouter (same `REX_COPY_RULES`), inserts a `nurture_messages` row (`kind='referral_ask'`, `trigger_type='referral_ask'`, `sent_at=null`), then marks the reminder `done`. Fires an Expo push ("Referral asks ready").
+3. **Review** — the draft shows up in the existing pending-nurture queue automatically (`loadPendingNurtures` reads all `sent_at=null` rows). Rep sends it manually.
+
+### Idempotency
+
+Both the cron and the client helper claim a reminder by flipping `pending → done` *before* the brain call (compare-and-swap), so they can never double-enqueue the same ask. On a brain/insert failure the claim is released (`done → pending`) so it retries next run. A reminder whose contact is missing / `is_deleted` / `do_not_contact` is cleared (`done`) without drafting.
+
+### Settings (Profile → REFERRALS)
+
+- **On/off toggle** — per-device client preference in `lib/v2/repSettings.ts` (`getReferralAsksEnabled`, default **ON**). Gates reminder creation in `insertDeal`. Default ON matches the nurture convention (drafts auto-queue, never auto-send). A logged deal only creates a reminder when ON, so the reminder's existence is the durable opt-in the cron acts on (the cron does not re-check the toggle).
+- **Delay days** (1-14, default 3) — `repSettings` (read by `dealLogger`) **mirrored to** `profiles.referral_ask_delay_days` (server-authoritative, hydrated back into the client on Profile mount, same localStorage-cache + profiles-mirror pattern as `onboarding_complete`).
+
+### Code map
+
+| Where | What |
+|---|---|
+| `lib/v2/referralAsks.ts` (NEW) | `buildReferralAskPrompt`, `draftReferralAskForReminder`, `processDueReferralAsks` — the client-side equivalent of the cron's inline logic and the canonical home of the prompt. Parallels `nurtureEngine.ts ↔ runBlast`. Not yet wired to a UI trigger; the cron is the production driver. |
+| `lib/v2/dealLogger.ts` | inserts the `referral_ask` reminder after a successful deal insert |
+| `lib/v2/repSettings.ts` | `getReferralAsksEnabled` / `setReferralAsksEnabled` / `getReferralAskDelayDays` / `setReferralAskDelayDays` / `clampReferralAskDelay` |
+| `components/v2/ProfileTab.tsx` | REFERRALS section: on/off Switch + "Delay after a sale" editor |
+| `supabase/functions/nurture-scheduler/index.ts` | `runReferralAsks`, `buildReferralPrompt`, `callBrainRaw`; daily referral pass added to the handler |
+
+### Schema
+
+- `nurture_messages.kind text` (nullable) — `'referral_ask'` for these drafts; null for generic nurtures (migration `20260609_v2_nurture_kind.sql`)
+- `profiles.referral_ask_delay_days int not null default 3 check (1..14)` (migration `20260609_v2_referral_ask_settings.sql`)
+- Reuses `public.reminders` (`source='referral_ask'`), already present from `20260604_v2_reminders.sql`
 
 ---
 

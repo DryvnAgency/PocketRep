@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { loadPayPlan, calcCommissionWithPlan, type PayPlan as RealPayPlan } from './payPlan';
+import { getReferralAsksEnabled, getReferralAskDelayDays } from './repSettings';
 
 // Kept for back-compat with existing imports — re-exported from lib/v2/payPlan.ts.
 // Use loadPayPlan() to get the user's actual saved plan.
@@ -80,4 +81,27 @@ export async function insertDeal(draft: DealDraft, payPlan?: PayPlan): Promise<v
     amount,
   });
   if (error) throw error;
+
+  // Referral ask: a logged deal is the sale signal (there's no "delivered"
+  // status). Queue a reminder so the nurture-scheduler / referralAsks helper can
+  // draft a post-sale referral ask later. Best-effort — a referral-ask hiccup
+  // must never fail the deal log, which has already committed above.
+  try {
+    if (draft.contactId && getReferralAsksEnabled()) {
+      const dueAt = new Date();
+      dueAt.setDate(dueAt.getDate() + getReferralAskDelayDays());
+      const who = draft.name?.trim() || 'this customer';
+      await supabase.from('reminders').insert({
+        user_id: user.id,
+        contact_id: draft.contactId,
+        title: `Ask ${who} for a referral`,
+        body: 'They just bought. Rex will draft a friendly referral ask for you to review.',
+        due_at: dueAt.toISOString(),
+        status: 'pending',
+        source: 'referral_ask',
+      });
+    }
+  } catch (e) {
+    console.warn('referral ask reminder skipped', e);
+  }
 }
