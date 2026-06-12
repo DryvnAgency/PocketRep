@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
@@ -128,7 +129,10 @@ export default function DealLogger({
   return (
     <View style={styles.overlay}>
       <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.sheet}>
+      <KeyboardAvoidingView
+        style={styles.sheet}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.handle} />
         <View style={styles.header}>
           <Pressable onPress={onClose} style={styles.headerBtn}>
@@ -306,7 +310,7 @@ export default function DealLogger({
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <View style={{ height: 28 }} />
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { createContact, type NewContactDraft } from '@/lib/v2/updateContact';
@@ -93,7 +94,10 @@ export default function AddContactModal({
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
       <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.sheet}>
+      <KeyboardAvoidingView
+        style={styles.sheet}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.handle} />
         <View style={styles.header}>
           <Pressable onPress={onClose} style={styles.headerBtn}>
@@ -293,7 +297,7 @@ export default function AddContactModal({
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <View style={{ height: 28 }} />
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

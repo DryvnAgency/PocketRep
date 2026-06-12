@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Switch, Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, Pill, SectionHead } from './atoms';
 import { supabase } from '@/lib/supabase';
@@ -77,6 +78,8 @@ export default function ProfileTab({
   const [alwaysListen, setAlwaysListen] = useState<boolean>(false);
   const [editTarget, setEditTarget] = useState<{ key: EditKey; config: SettingEditConfig } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   const payPlan = usePayPlan(payPlanRefetchKey);
 
@@ -141,22 +144,43 @@ export default function ProfileTab({
     flash(`✓ ${label}`);
   };
 
-  const displayName = profile?.full_name?.trim() || 'Jake Morales';
+  const fullName = profile?.full_name?.trim() ?? '';
+  const displayName = fullName || 'Add your name';
   const planLabel = (profile?.plan ?? 'pro').toUpperCase();
   const dealership = getRepSetting('dealership');
   const title = getRepSetting('title');
+  const heroSub = [dealership, title].filter(Boolean).join(' · ') || 'Tap to set up your profile';
   const referLink = `https://app.pocketrep.pro/?ref=${encodeURIComponent(profile?.email ?? 'rep')}`;
+  // Real build identity from the Expo config (app.json) — no hardcoded version.
+  const appVersion = Constants.expoConfig?.version ?? null;
+  const buildNo =
+    Constants.expoConfig?.ios?.buildNumber ??
+    (Constants.expoConfig?.android?.versionCode != null
+      ? String(Constants.expoConfig.android.versionCode)
+      : null);
+  const versionLine =
+    `PocketRep${appVersion ? ` v${appVersion}` : ''}${buildNo ? ` · build ${buildNo}` : ''}`;
+
+  const doSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('sign out failed', e);
+      setSigningOut(false);
+      setConfirmSignOut(false);
+    }
+  };
 
   return (
     <View style={styles.root}>
       <Pressable onPress={editName} style={styles.heroCard}>
-        <Avatar name={displayName} size={56} />
+        <Avatar name={fullName || profile?.email || 'You'} size={56} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.heroName}>{displayName}</Text>
-          <Text style={styles.heroSub}>{dealership} · {title}</Text>
+          <Text style={styles.heroSub}>{heroSub}</Text>
           <View style={styles.heroPills}>
             <Pill color={colors.gold}>{planLabel}</Pill>
-            <Pill color={colors.green}>34 MO STREAK</Pill>
           </View>
         </View>
         <Text style={styles.chevron}>›</Text>
@@ -164,8 +188,8 @@ export default function ProfileTab({
 
       <View style={styles.planCard}>
         <View style={{ flex: 1 }}>
-          <Label color={colors.grey2}>PLAN · {planLabel} ANNUAL</Label>
-          <Text style={styles.planRenews}>Renews Aug 12, 2026</Text>
+          <Label color={colors.grey2}>PLAN · {planLabel}</Label>
+          <Text style={styles.planRenews}>Tap MANAGE to edit your pay plan</Text>
         </View>
         <Pressable onPress={() => onOpenPayPlan?.()} style={styles.manageBtn}>
           <Text style={styles.manageText}>MANAGE</Text>
@@ -182,12 +206,12 @@ export default function ProfileTab({
 
       <SectionHead label="WORKSPACE" color={colors.grey2} />
       <View style={styles.group}>
-        <Row icon="🏢" label="Dealership" detail={dealership}
+        <Row icon="🏢" label="Dealership" detail={dealership || 'Add'}
           onPress={() => editSetting('dealership', 'Dealership', 'DEALERSHIP')} />
-        <Row icon="🚗" label="Inventory feed" detail={getRepSetting('inventoryFeed')}
+        <Row icon="🚗" label="Inventory feed" detail={getRepSetting('inventoryFeed') || 'Not connected'}
           onPress={() => editSetting('inventoryFeed', 'Inventory feed', 'FEED STATUS / SOURCE')} />
         <Row icon="🔔" label="Weekly digest" detail="View →" onPress={() => onNavigate?.('heat')} />
-        <Row icon="📊" label="Goals & quota" detail="22 / 32" onPress={() => onNavigate?.('metrics')} />
+        <Row icon="📊" label="Goals & quota" detail="View →" onPress={() => onNavigate?.('metrics')} />
       </View>
 
       <SectionHead label="REX" color={colors.gold} />
@@ -209,9 +233,9 @@ export default function ProfileTab({
         </View>
         <Row icon="🤖" label="Voice & tone" detail={getRepSetting('voiceTone')}
           onPress={() => editSetting('voiceTone', 'Voice & tone', 'HOW SHOULD REX SOUND?')} />
-        <Row icon="🔐" label="Data sources" detail={getRepSetting('dataSources')}
+        <Row icon="🔐" label="Data sources" detail={getRepSetting('dataSources') || 'None'}
           onPress={() => editSetting('dataSources', 'Data sources', 'CONNECTED SOURCES')} />
-        <Row icon="📝" label="Custom prompts" detail={getRepSetting('customPrompts')}
+        <Row icon="📝" label="Custom prompts" detail={getRepSetting('customPrompts') || 'None saved'}
           onPress={() => editSetting('customPrompts', 'Custom prompts', 'YOUR SAVED PROMPTS', { multiline: true })} />
         <Pressable
           onPress={async () => {
@@ -239,26 +263,61 @@ export default function ProfileTab({
       <View style={styles.group}>
         <Row icon="✉" label="Email" detail={profile?.email ?? '—'}
           onPress={() => profile?.email && copy(profile.email, 'Email copied')} />
-        <Row icon="📱" label="Phone" detail={getRepSetting('phone')}
+        <Row icon="📱" label="Phone" detail={getRepSetting('phone') || 'Add'}
           onPress={() => editSetting('phone', 'Phone', 'PHONE NUMBER', { keyboardType: 'phone-pad' })} />
-        <Row icon="🔒" label="Security" detail={getRepSetting('security')}
+        <Row icon="🔒" label="Security" detail={getRepSetting('security') || 'Not set'}
           onPress={() => editSetting('security', 'Security', 'SIGN-IN METHOD')} />
         <Row icon="↗" label="Refer a rep" detail="$50 each"
           onPress={() => copy(referLink, 'Referral link copied')} />
       </View>
 
       <Pressable
-        onPress={() => supabase.auth.signOut()}
+        onPress={() => setConfirmSignOut(true)}
         style={styles.signOut}
+        accessibilityRole="button"
+        accessibilityLabel="Sign out"
       >
         <Row icon="↩" label="Sign out" danger chevron={false} />
       </Pressable>
 
-      <Text style={styles.footer}>PocketRep v3.2.4 · build 1042</Text>
+      <Text style={styles.footer}>{versionLine}</Text>
 
       {toast ? (
         <View style={styles.toast} pointerEvents="none">
           <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      ) : null}
+
+      {confirmSignOut ? (
+        <View style={styles.confirmRoot}>
+          <Pressable
+            style={styles.confirmScrim}
+            onPress={() => { if (!signingOut) setConfirmSignOut(false); }}
+          />
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Sign out?</Text>
+            <Text style={styles.confirmBody}>You'll need to sign back in to reach your book.</Text>
+            <View style={styles.confirmRow}>
+              <Pressable
+                style={[styles.confirmBtn, styles.confirmCancel]}
+                onPress={() => setConfirmSignOut(false)}
+                disabled={signingOut}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmBtn, styles.confirmDanger]}
+                onPress={doSignOut}
+                disabled={signingOut}
+                accessibilityRole="button"
+                accessibilityLabel="Confirm sign out"
+              >
+                <Text style={styles.confirmDangerText}>{signingOut ? 'Signing out…' : 'Sign out'}</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
       ) : null}
 
@@ -405,4 +464,36 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     overflow: 'hidden',
   },
+
+  confirmRoot: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    zIndex: 200,
+  } as any,
+  confirmScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.72)' },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.ink2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.xl,
+    padding: 20,
+  },
+  confirmTitle: { fontSize: 17, fontWeight: '800', color: colors.white, letterSpacing: -0.3 },
+  confirmBody: { fontSize: 13, color: colors.grey2, marginTop: 8, lineHeight: 18 },
+  confirmRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  confirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  confirmCancel: { backgroundColor: colors.surface2, borderColor: colors.ink4 },
+  confirmCancelText: { fontSize: 14, fontWeight: '700', color: colors.white },
+  confirmDanger: { backgroundColor: colors.redBg, borderColor: colors.redBorder },
+  confirmDangerText: { fontSize: 14, fontWeight: '700', color: colors.red },
 });

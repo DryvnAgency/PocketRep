@@ -99,10 +99,12 @@ export function useContacts() {
       .eq('is_deleted', false);
 
     if (error) {
+      // Keep any previously-loaded list and surface the error so the UI can show
+      // a Retry affordance — don't blank to [] (which looks like "no contacts").
       setError(error.message);
-      setContacts([]);
       return;
     }
+    setError(null);
 
     const rows = (data ?? []).map(rowToContact);
     // Group by tier (override-aware) first, then by heat, so a manually-set

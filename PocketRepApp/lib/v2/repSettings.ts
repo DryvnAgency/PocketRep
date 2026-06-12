@@ -19,16 +19,18 @@ export type RepSettingKey =
 const KEY = 'pocketrep:v2:rep-settings';
 const EVENT = 'pocketrep:rep-settings-changed';
 
-// Defaults match what the screen used to show hard-coded, so nothing looks empty.
+// Empty by default. The Profile screen renders an empty-state CTA ("Add",
+// "Not set", …) when a value isn't set, rather than showing fabricated data.
+// `voiceTone` keeps a real default since it's a genuine preset, not a metric.
 const DEFAULTS: Record<RepSettingKey, string> = {
-  dealership: 'BMW of Pleasanton',
-  title: 'Senior Advisor',
+  dealership: '',
+  title: '',
   voiceTone: 'Direct',
-  dataSources: '3 connected',
-  customPrompts: '7 saved',
-  phone: '(925) ••• 4421',
-  security: 'Face ID',
-  inventoryFeed: 'Synced recently',
+  dataSources: '',
+  customPrompts: '',
+  phone: '',
+  security: '',
+  inventoryFeed: '',
 };
 
 let mem: Partial<Record<RepSettingKey, string>> = {};

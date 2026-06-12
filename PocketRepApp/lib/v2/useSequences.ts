@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
 export type V2SequenceStep = {
@@ -25,6 +25,7 @@ export type V2Sequence = {
 export function useSequences(refetchKey: number = 0) {
   const [sequences, setSequences] = useState<V2Sequence[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,10 +49,11 @@ export function useSequences(refetchKey: number = 0) {
 
       if (cancelled) return;
       if (seqRes.error) {
+        // Keep any prior list and surface the error for a Retry affordance.
         setError(seqRes.error.message);
-        setSequences([]);
         return;
       }
+      setError(null);
       const enrolledByseq: Record<string, number> = {};
       for (const e of enrolRes.data ?? []) {
         enrolledByseq[(e as any).sequence_id] = (enrolledByseq[(e as any).sequence_id] ?? 0) + 1;
@@ -72,9 +74,10 @@ export function useSequences(refetchKey: number = 0) {
       setSequences(rows);
     })();
     return () => { cancelled = true; };
-  }, [refetchKey]);
+  }, [refetchKey, tick]);
 
-  return { sequences, error };
+  const reload = useCallback(() => setTick(t => t + 1), []);
+  return { sequences, error, reload };
 }
 
 // Edit a single step's message template + channel + delay. Returns the

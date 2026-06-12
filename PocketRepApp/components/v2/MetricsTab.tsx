@@ -128,7 +128,7 @@ export default function MetricsTab({
   onLogDeal?: () => void;
   onSelectDeal?: (d: V2DealRich) => void;
 } = {}) {
-  const rawDeals = useUserDeals(refetchKey);
+  const { deals: rawDeals, error: dealsError, reload: reloadDeals } = useUserDeals(refetchKey);
   const plan = usePayPlan() ?? DEFAULT_PAY_PLAN;
   // Harden against deals saved with a null/0 `amount` (older or Rex-logged
   // rows): fall back to computing commission from gross via the pay plan, so
@@ -189,6 +189,21 @@ export default function MetricsTab({
   }, [deals, curMo, curYr]);
 
   if (deals === null) {
+    if (dealsError) {
+      return (
+        <View style={styles.center}>
+          <Text style={styles.error}>Couldn't load your deals.</Text>
+          <Pressable
+            onPress={reloadDeals}
+            style={styles.retryBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading deals"
+          >
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
+      );
+    }
     return (
       <View style={styles.center}>
         <RadarLoader size={36} />
@@ -311,6 +326,16 @@ export default function MetricsTab({
 const styles = StyleSheet.create({
   root: { paddingBottom: spacing.xl },
   center: { padding: spacing.xl, alignItems: 'center' },
+  error: { color: colors.red, fontSize: 13, marginBottom: 12, textAlign: 'center' },
+  retryBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: radius.full,
+  },
+  retryText: { color: colors.gold, fontWeight: '700', fontSize: 13 },
 
   ytdCard: {
     marginHorizontal: 14,

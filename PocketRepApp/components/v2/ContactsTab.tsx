@@ -101,6 +101,7 @@ export default function ContactsTab({
   error,
   tags,
   onSelect,
+  onRetry,
   onBulkTag,
   onAddContact,
   onDeleteTag,
@@ -109,6 +110,7 @@ export default function ContactsTab({
   error: string | null;
   tags: V2Tag[];
   onSelect: (c: V2Contact) => void;
+  onRetry?: () => void;
   onBulkTag?: () => void;
   onAddContact?: () => void;
   onDeleteTag?: (name: string) => void;
@@ -159,10 +161,20 @@ export default function ContactsTab({
 
   const letters = useMemo(() => Object.keys(groups).sort(), [groups]);
 
-  if (error) {
+  if (error && !contacts) {
     return (
       <View style={styles.center}>
-        <Text style={styles.error}>Couldn't load contacts: {error}</Text>
+        <Text style={styles.error}>Couldn't load contacts.</Text>
+        {onRetry ? (
+          <Pressable
+            onPress={onRetry}
+            style={styles.retryBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading contacts"
+          >
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        ) : null}
       </View>
     );
   }
@@ -283,7 +295,16 @@ export default function ContactsTab({
 const styles = StyleSheet.create({
   root: { paddingBottom: spacing.xl },
   center: { padding: spacing.xl, alignItems: 'center' },
-  error: { color: colors.red, fontSize: 13 },
+  error: { color: colors.red, fontSize: 13, marginBottom: 12, textAlign: 'center' },
+  retryBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: radius.full,
+  },
+  retryText: { color: colors.gold, fontWeight: '700', fontSize: 13 },
 
   searchWrap: {
     paddingTop: 12,

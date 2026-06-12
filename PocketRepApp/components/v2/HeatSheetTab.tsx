@@ -40,6 +40,7 @@ export default function HeatSheetTab({
   contacts,
   error,
   onSelect,
+  onRetry,
   nurtureRefetchKey = 0,
   onOpenNurture,
   onAnalyzeStalled,
@@ -47,14 +48,27 @@ export default function HeatSheetTab({
   contacts: V2Contact[] | null;
   error: string | null;
   onSelect: (c: V2Contact) => void;
+  onRetry?: () => void;
   nurtureRefetchKey?: number;
   onOpenNurture?: () => void;
   onAnalyzeStalled?: () => void;
 }) {
-  if (error) {
+  // Full error screen only on a failed first load (no data yet). If a refresh
+  // fails while we already have a list, keep showing the list.
+  if (error && !contacts) {
     return (
       <View style={styles.center}>
-        <Text style={styles.error}>Couldn't load contacts: {error}</Text>
+        <Text style={styles.error}>Couldn't load contacts.</Text>
+        {onRetry ? (
+          <Pressable
+            onPress={onRetry}
+            style={styles.retryBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading contacts"
+          >
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        ) : null}
       </View>
     );
   }
@@ -82,8 +96,8 @@ export default function HeatSheetTab({
           <Text style={styles.bannerLabel}>TODAY · {TODAY_LABEL}</Text>
           <Text style={styles.bannerBody}>
             {overdueCount > 0
-              ? `${overdueCount} follow-up${overdueCount === 1 ? '' : 's'} overdue · 1 appt at 2:30`
-              : 'You\'re caught up · 1 appt at 2:30'}
+              ? `${overdueCount} follow-up${overdueCount === 1 ? '' : 's'} overdue`
+              : "You're caught up"}
           </Text>
         </View>
         <StatNumber value={String(overdueCount)} size={32} color={colors.gold2} />
@@ -119,7 +133,16 @@ export default function HeatSheetTab({
 const styles = StyleSheet.create({
   root: { paddingBottom: spacing.xl },
   center: { padding: spacing.xl, alignItems: 'center' },
-  error: { color: colors.red, fontSize: 13 },
+  error: { color: colors.red, fontSize: 13, marginBottom: 12, textAlign: 'center' },
+  retryBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: radius.full,
+  },
+  retryText: { color: colors.gold, fontWeight: '700', fontSize: 13 },
 
   banner: {
     marginHorizontal: 14,

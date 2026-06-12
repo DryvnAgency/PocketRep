@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, Platform } from 'react-native';
 import { colors } from '@/constants/theme';
 import CustomNavBar, { TabId } from './CustomNavBar';
 import TabBar from './TabBar';
@@ -81,6 +81,7 @@ export default function AppShell() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [rexCoachOpen, setRexCoachOpen] = useState(false);
   const [rexActionError, setRexActionError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const payPlan = usePayPlan(payPlanRefetchKey);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
@@ -263,6 +264,65 @@ export default function AppShell() {
     }
   };
 
+  // Pull-to-refresh on the main scroll — reloads the active tab's data.
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (active === 'metrics') {
+        setDealsRefetchKey(k => k + 1);
+      } else if (active === 'profile') {
+        setPayPlanRefetchKey(k => k + 1);
+      } else {
+        await reloadContacts();
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [active, reloadContacts]);
+
+  // Web back button → peel the topmost overlay instead of leaving the app.
+  const closeTopOverlay = () => {
+    if (rexCoachOpen) { setRexCoachOpen(false); return; }
+    if (notifOpen) { setNotifOpen(false); return; }
+    if (stalledOpen) { setStalledOpen(false); setStalledReport(null); return; }
+    if (nurtureReviewerOpen) { setNurtureReviewerOpen(false); return; }
+    if (payPlanOpen) { setPayPlanOpen(false); return; }
+    if (blastDraft) { setBlastDraft(null); return; }
+    if (gamePlanOpen) { setGamePlanOpen(false); return; }
+    if (addContactOpen) { setAddContactOpen(false); return; }
+    if (bulkTagOpen) { setBulkTagOpen(false); return; }
+    if (selectedDeal) { setSelectedDeal(null); return; }
+    if (dealLoggerOpen) { setDealLoggerOpen(false); return; }
+    if (selectedId) { setSelectedId(null); return; }
+  };
+  const anyOverlayOpen =
+    rexCoachOpen || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
+    !!blastDraft || gamePlanOpen || addContactOpen || bulkTagOpen || !!selectedDeal ||
+    dealLoggerOpen || !!selectedId;
+  const closeTopRef = useRef(closeTopOverlay);
+  closeTopRef.current = closeTopOverlay;
+  const anyOverlayOpenRef = useRef(anyOverlayOpen);
+  anyOverlayOpenRef.current = anyOverlayOpen;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onPop = () => {
+      if (anyOverlayOpenRef.current) {
+        closeTopRef.current();
+        // keep a trap state so the next Back peels the next overlay layer
+        window.history.pushState({ pocketrepOverlay: true }, '');
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    // One trap when the first overlay opens; onPop re-pushes for deeper layers.
+    if (anyOverlayOpen) window.history.pushState({ pocketrepOverlay: true }, '');
+  }, [anyOverlayOpen]);
+
   return (
     <View style={styles.root}>
       <CustomNavBar
@@ -279,6 +339,14 @@ export default function AppShell() {
         style={styles.content}
         contentContainerStyle={styles.contentInner}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.gold}
+            colors={[colors.gold]}
+          />
+        }
       >
         {!authReady ? (
           <Text style={styles.placeholder}>Signing in…</Text>
@@ -286,6 +354,7 @@ export default function AppShell() {
           <HeatSheetTab
             contacts={contacts}
             error={error}
+            onRetry={reloadContacts}
             onSelect={c => setSelectedId(c.id)}
             nurtureRefetchKey={nurtureRefetchKey}
             onOpenNurture={() => setNurtureReviewerOpen(true)}
@@ -295,6 +364,7 @@ export default function AppShell() {
           <ContactsTab
             contacts={contacts}
             error={error}
+            onRetry={reloadContacts}
             tags={tags}
             onSelect={c => setSelectedId(c.id)}
             onBulkTag={() => setBulkTagOpen(true)}
