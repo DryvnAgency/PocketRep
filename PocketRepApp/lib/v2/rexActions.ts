@@ -302,6 +302,16 @@ The rep said:
 Respond now: your spoken line first, then the \`\`\`json block.`;
 }
 
+// Every action type the executor knows how to handle. A brain reply with any
+// other "action" value is coerced to a safe no-op `say` rather than letting an
+// unknown type flow into executeAction.
+const KNOWN_ACTION_TYPES: ReadonlySet<RexAction['type']> = new Set([
+  'add_contact', 'update_notes', 'delete_contact', 'log_deal', 'schedule_followup',
+  'retier_contact', 'create_reminder', 'show_contact', 'filter_contacts', 'book_summary',
+  'call_next', 'batch_action', 'create_blast_sequence', 'analyze_stalled_leads',
+  'schedule_nurture_blast', 'clarify', 'say',
+]);
+
 function parseAction(raw: string): RexAction {
   if (!raw) return { type: 'say', payload: {} as any, say: "Sorry, I didn't catch that." };
   const fence = raw.match(/```json\s*([\s\S]*?)```/i) ?? raw.match(/```\s*([\s\S]*?)```/);
@@ -309,9 +319,10 @@ function parseAction(raw: string): RexAction {
   try {
     const obj = JSON.parse(jsonText.trim());
     if (typeof obj !== 'object' || !obj) throw new Error('not object');
-    const type = (obj.action ?? obj.type ?? 'say') as RexAction['type'];
+    const rawType = String(obj.action ?? obj.type ?? 'say');
+    const type = (KNOWN_ACTION_TYPES.has(rawType as RexAction['type']) ? rawType : 'say') as RexAction['type'];
     const say = typeof obj.say === 'string' ? obj.say : '';
-    const payload = obj.payload ?? {};
+    const payload = type === 'say' ? {} : (obj.payload ?? {});
     return { type, payload, say } as RexAction;
   } catch {
     return {
@@ -369,6 +380,14 @@ export async function rexInterpret(
   // JSON say.)
   const spoken = spokenPortion(raw);
   if (spoken && (raw.includes('```') || action.type === 'say')) action.say = spoken;
+
+  // Validate brain-supplied contact ids against the real book before any write:
+  // filter blast targets down to ids that actually exist, so the sequence_steps
+  // writer never sees a hallucinated/stale contact id.
+  if (action.type === 'create_blast_sequence' && Array.isArray(action.payload.contact_ids)) {
+    const known = new Set(contacts.map(c => c.id));
+    action.payload.contact_ids = action.payload.contact_ids.filter(id => known.has(id));
+  }
 
   // call_next is a "Rex picked" action, but the brain can drift on the
   // suggested_opener (copy rules are easy to break on auto-generated text).
@@ -436,6 +455,13 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
     case 'log_deal': {
       const p = action.payload;
       const today = new Date().toISOString().slice(0, 10);
+      // Drop a hallucinated contact_id (not in the rep's book) so we never write
+      // a bad FK — the deal still logs, just unlinked. Only enforced when a book
+      // was passed in to validate against.
+      const validContactId =
+        p.contact_id && contacts.length > 0 && !contacts.some(c => c.id === p.contact_id)
+          ? null
+          : (p.contact_id ?? null);
       const draft: DealDraft = {
         name: p.customer_name,
         stock: p.stock,
@@ -447,7 +473,7 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
         backGross: Number(p.back_gross) || 0,
         split: false,
         splitWith: '',
-        contactId: p.contact_id ?? null,
+        contactId: validContactId,
       };
       await insertDeal(draft);
       return { ok: true };
