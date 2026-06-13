@@ -149,7 +149,7 @@ As of 2026-06-09: 7 users (6 testers + demo), 18 contacts, 30 deals (all demo), 
 
 ## Gated P0 — Eduardo only (exact specs)
 
-Eduardo's three P0 decisions (2026-06-13): **(1)** STT = on-device native (iOS Speech / Android SpeechRecognizer), no cloud vendor; **(2)** billing = **HARD LOCKOUT** (a cancelled sub or expired trial cannot use the app — re-pay to regain access, no free tier); **(3)** auth = real per-user sign-in/up replacing the shared demo, with the lockout gate for non-payers.
+Eduardo's three P0 decisions (2026-06-13): **(1)** STT = on-device native (iOS Speech / Android SpeechRecognizer), no cloud vendor; **(2)** billing = **HARD LOCKOUT** (a cancelled sub or expired trial cannot use the app — re-pay to regain access, no free tier); **(3)** auth = real per-user sign-in/up replacing the shared demo, with the lockout gate for non-payers. **Auth method (confirmed 2026-06-13): email + password** (password-based, like v1; **no OAuth, no magic-link**) — `AuthScreen` already implements exactly this, so G1/G3 must keep email+password.
 
 **Already shipped** in the STT/auth-scaffolding PR (touches no gated files): on-device STT (`lib/v2/sttDictation.ts` + `.native.ts`, wired into `app/(tabs)/rex.tsx`, `@react-native-voice/voice` + plugin); the `AuthScreen` + `LockoutScreen` UI; the `accessGate` hook + `decideAccess()` policy; an **inert** lockout gate in `AppShell` (returns `allowed`). The three items below are what remains and **only Eduardo** should land (they touch `demoAuth.ts` / billing).
 
