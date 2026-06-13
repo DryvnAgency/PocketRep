@@ -11,6 +11,7 @@ import type { Contact, RexMessage, RexMemory, Profile } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import { callBrain } from '@/lib/v2/aiProxy';
 import { buildCoachMessages } from '@/lib/v2/coachBrain';
+import { startDictation, isDictationAvailable, type Dictation } from '@/lib/v2/sttDictation';
 
 // ── Model: Gemini 2.5 Flash for speed + cost on every Rex call ──────────────
 const REX_MODEL = 'gemini-2.5-flash';
@@ -224,6 +225,7 @@ export default function RexScreen() {
   const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null);
   const [rexRecording, setRexRecording] = useState(false);
   const listRef = useRef<FlatList>(null);
+  const dictationRef = useRef<Dictation | null>(null);
 
   useFocusEffect(useCallback(() => {
     loadAll();
@@ -511,64 +513,41 @@ export default function RexScreen() {
   }
 
   async function startRexVoice() {
-    if (Platform.OS === 'web') {
-      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SR) { alert('Voice input is not supported in this browser. Try Chrome.'); return; }
-      const r = new SR();
-      r.lang = 'en-US';
-      r.continuous = false;
-      r.interimResults = false;
-      r.onresult = (e: any) => {
-        const t = e.results[0][0].transcript;
-        setInput(t);
-        setTimeout(() => send(), 100);
-      };
-      r.onerror = () => setRexRecording(false);
-      r.onend = () => setRexRecording(false);
-      r.start();
-      setRexRecording(true);
+    // Tap again while recording → stop and submit what was heard.
+    if (rexRecording) {
+      try { dictationRef.current?.stop(); } catch { /* ignore */ }
       return;
     }
-    // Native: use expo-av to record then transcribe via Whisper
+    // On-device speech recognition: Web Speech API on web; iOS Speech framework /
+    // Android SpeechRecognizer on native (see lib/v2/sttDictation). Replaces the
+    // old expo-av -> /ai-proxy/whisper path (that route is a 501 stub) — speech
+    // is transcribed on-device, no audio leaves the phone.
+    if (!isDictationAvailable()) {
+      alert('Voice input is not available on this device.');
+      return;
+    }
     try {
-      const { Audio } = require('expo-av');
-      const { granted } = await Audio.requestPermissionsAsync();
-      if (!granted) { alert('Microphone permission required.'); return; }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await rec.startAsync();
-      setRexRecording(true);
-      // Auto-stop at 10 seconds
-      setTimeout(async () => {
-        try {
-          await rec.stopAndUnloadAsync();
-          await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: false });
-          const uri = rec.getURI();
-          if (!uri) { setRexRecording(false); return; }
-          const audioBlob = await fetch(uri).then(r => r.blob());
-          const form = new FormData();
-          form.append('file', audioBlob, 'rex_input.m4a');
-          form.append('model', 'whisper-1');
-          const wr = await fetch('https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy/whisper', {
-            method: 'POST',
-            body: form,
-          });
-          const wj = await wr.json();
-          const text = wj.text ?? '';
-          if (text) {
-            setInput(text);
-            setTimeout(() => send(), 100);
-          }
-        } catch (e) {
-          console.warn('Rex voice error:', e);
-        } finally {
+      const handle = await startDictation({
+        onPartial: (t) => setInput(t),
+        onFinal: (t) => {
+          if (t) { setInput(t); setTimeout(() => send(), 100); }
+        },
+        onError: (msg) => {
+          if (msg === 'unsupported') alert('Voice input is not available on this device.');
           setRexRecording(false);
-        }
-      }, 10000);
+          dictationRef.current = null;
+        },
+        onEnd: () => {
+          setRexRecording(false);
+          dictationRef.current = null;
+        },
+      });
+      dictationRef.current = handle;
+      setRexRecording(true);
     } catch (e) {
       console.warn('Rex voice start error:', e);
       setRexRecording(false);
+      dictationRef.current = null;
     }
   }
 

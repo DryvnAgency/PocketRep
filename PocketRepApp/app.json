@@ -56,6 +56,13 @@
           "color": "#D4A017",
           "sounds": []
         }
+      ],
+      [
+        "@react-native-voice/voice",
+        {
+          "speechRecognitionPermission": "PocketRep uses speech recognition so Rex can take voice notes and commands.",
+          "microphonePermission": "PocketRep uses your mic so Rex can hear your voice notes and commands."
+        }
       ]
     ],
     "web": {
