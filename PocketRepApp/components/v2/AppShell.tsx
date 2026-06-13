@@ -23,6 +23,7 @@ import NurtureReviewer from './NurtureReviewer';
 import PayPlanEditor from './PayPlanEditor';
 import NotificationsCenter from './NotificationsCenter';
 import RexCoach from './RexCoach';
+import LockoutScreen from './LockoutScreen';
 import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
 import { warmBrain } from '@/lib/v2/aiProxy';
 import { rolloverCoachLog } from '@/lib/v2/coachLog';
@@ -51,6 +52,8 @@ import {
   syncOnboardingFromProfile,
 } from '@/lib/v2/rexSettings';
 import { useHeyRex } from '@/lib/v2/useHeyRex';
+import { useAccessGate } from '@/lib/v2/accessGate';
+import { supabase } from '@/lib/supabase';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
@@ -83,6 +86,10 @@ export default function AppShell() {
   const [rexActionError, setRexActionError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const payPlan = usePayPlan(payPlanRefetchKey);
+  // HARD LOCKOUT gate — inert until Eduardo wires the real subscription read in
+  // accessGate.ts (it returns 'allowed' today, so no behavior change). See the
+  // early return below + docs/MASTER_PLAN.md §"Gated P0 — Eduardo only".
+  const access = useAccessGate();
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
   const tags = useTags(tagsRefetchKey);
@@ -322,6 +329,21 @@ export default function AppShell() {
     // One trap when the first overlay opens; onPop re-pushes for deeper layers.
     if (anyOverlayOpen) window.history.pushState({ pocketrepOverlay: true }, '');
   }, [anyOverlayOpen]);
+
+  // HARD LOCKOUT: when the access gate reports a lapsed account, block the whole
+  // app behind the re-subscribe wall. Inert today (gate returns 'allowed').
+  // TODO(Eduardo): (1) make useAccessGate read the real subscription state;
+  // (2) also gate the UNAUTHENTICATED case by rendering <AuthScreen/> when there's
+  // no session — that requires replacing the demoAuth auto-sign-in (see MASTER_PLAN).
+  if (access.status === 'locked') {
+    return (
+      <LockoutScreen
+        reason={access.reason}
+        onResubscribe={() => { /* TODO(Eduardo): open Stripe checkout / billing portal */ }}
+        onSignOut={() => { supabase.auth.signOut(); }}
+      />
+    );
+  }
 
   return (
     <View style={styles.root}>
