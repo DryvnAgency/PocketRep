@@ -147,6 +147,31 @@ As of 2026-06-09: 7 users (6 testers + demo), 18 contacts, 30 deals (all demo), 
 
 ---
 
+## Gated P0 — Eduardo only (exact specs)
+
+Eduardo's three P0 decisions (2026-06-13): **(1)** STT = on-device native (iOS Speech / Android SpeechRecognizer), no cloud vendor; **(2)** billing = **HARD LOCKOUT** (a cancelled sub or expired trial cannot use the app — re-pay to regain access, no free tier); **(3)** auth = real per-user sign-in/up replacing the shared demo, with the lockout gate for non-payers.
+
+**Already shipped** in the STT/auth-scaffolding PR (touches no gated files): on-device STT (`lib/v2/sttDictation.ts` + `.native.ts`, wired into `app/(tabs)/rex.tsx`, `@react-native-voice/voice` + plugin); the `AuthScreen` + `LockoutScreen` UI; the `accessGate` hook + `decideAccess()` policy; an **inert** lockout gate in `AppShell` (returns `allowed`). The three items below are what remains and **only Eduardo** should land (they touch `demoAuth.ts` / billing).
+
+### G1 — Demote the shared demo to explicit opt-in
+- **Files**: `lib/v2/demoAuth.ts`, `components/v2/AppShell.tsx` (boot), optionally `lib/featureFlags.ts`.
+- **Change**: `ensureDemoSession()` must NOT auto-sign-in on every mount. Gate it behind an explicit signal only (e.g. `?demo=1` / a "Try the demo" button), so the default boot has **no session** → `AppShell` renders `<AuthScreen/>`.
+- **Acceptance**: fresh load of `app.pocketrep.pro` with no session shows `AuthScreen` (not the demo book); `?demo=1` still loads the seeded demo; real sign-in/up creates/uses a per-user session; the demo account can no longer be reached without the explicit opt-in.
+
+### G2 — Hard-lockout billing state (webhook + schema)
+- **Files**: `supabase/functions/stripe-webhook/index.ts` (source not yet in git — commit it), a migration adding the gating field.
+- **Status model (source of truth)**: add `profiles.subscription_status text` (mirror of the Stripe subscription status: `active | trialing | past_due | canceled | unpaid | incomplete_expired`). `trial_ends_at` stays the trial fallback. **`subscription_status` is the field that gates access.**
+- **Webhook must set**: on `checkout.session.completed` → `subscription_status='active'` (+ existing plan/`stripe_customer_id`, clear `trial_ends_at`); on `customer.subscription.updated` → mirror `sub.status`; on `customer.subscription.deleted` → `subscription_status='canceled'` (do **not** silently reset `plan='pro'` — that's what makes paid/cancelled indistinguishable today); on `invoice.payment_failed` → `subscription_status='past_due'`. Match by `stripe_customer_id`/`client_reference_id`, not email.
+- **Acceptance**: cancelling a sub in Stripe flips `profiles.subscription_status='canceled'` within the webhook; an expired trial (no active sub, `trial_ends_at` in the past) is distinguishable from an active payer; no code path resets a cancelled user to a usable state.
+
+### G3 — Wire the lockout gate to real state
+- **Files**: `lib/v2/accessGate.ts` (the single `TODO(Eduardo)` in `useAccessGate`), `components/v2/AppShell.tsx` (the unauthenticated branch + `onResubscribe`).
+- **Change**: in `useAccessGate`, read `supabase.auth.getUser()` then `profiles.subscription_status` + `trial_ends_at` and return `decideAccess({...})` (the policy is already written + the lockout reasons mapped). In `AppShell`, render `<AuthScreen/>` when there's no session, and set `LockoutScreen`'s `onResubscribe` to open Stripe checkout/billing portal.
+- **Acceptance**: `decideAccess` already maps `active|trialing→allowed`, `canceled→subscription_canceled`, `past_due|unpaid→payment_failed`, expired/none→`trial_expired|no_subscription`; once wired, a cancelled/expired user sees `LockoutScreen` and cannot reach any tab until `subscription_status` returns to `active`; a paying user is never locked out; unauthenticated users see `AuthScreen`.
+
+---
+
 ## Change log
 
 - **2026-06-12** — created; merges Rex 2.0 roadmap + 2026-06 production-readiness audit. Safe-bucket items (P0-4, P0-6, P1-1..5, P1-7) shipping in the accompanying draft PR; the rest sequenced above.
+- **2026-06-13** — added §"Gated P0 — Eduardo only" with exact specs (G1 demote demo, G2 hard-lockout billing state, G3 wire the gate) after Eduardo's 3 decisions. On-device STT + auth/lockout UI scaffolding shipped in a separate stacked draft PR.
