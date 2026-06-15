@@ -70,7 +70,7 @@ Underneath everything: **zero tests, zero lint, no CI gate beyond Vercel builds*
 | P1-7 | **DB hygiene** — drop duplicate `contacts` policy + duplicate index; index hot FKs; `(select auth.uid())` RLS rewrite | audit | migration | `Agent` | 🟢 |
 | P1-8 | **Enable leaked-password protection**; rate-limit/captcha waitlist insert; verify Resend funnel | audit | Supabase Auth config, `waitlist` policy, `waitlist-notify` | `Eduardo: ACTION` (Auth toggle + Resend) + `Agent` (rate-limit) | 🔒 (waitlist form) 🔑 |
 | P1-9 | **Legal/account basics** — ToS + privacy pages, account-deletion path (App Store requires), support email | audit | marketing site + app | `Eduardo: ACTION` + `Agent` | 🔒 (landing copy) |
-| **P1-R1** | **Heat Sheet reason codes** — why each contact is hot/at-risk today | roadmap | `HeatSheetTab.tsx`, scoring in `lib/v2` | `Agent` | 🟢 |
+| **P1-R1** | **Heat Sheet reason codes** — why each contact is hot/at-risk today | roadmap | `HeatSheetTab.tsx`, scoring in `lib/v2` | `Agent` | ✅ done |
 | **P1-R2** | **Fix `unit_bonus_tiers` in commission math** + surface in Metrics | roadmap | `lib/v2/payPlan.ts`, `MetricsTab.tsx` | `Agent` | ✅ done |
 | **P1-R3** | **Wire the morning Heat Sheet push** (daily 8am-local summary) | roadmap | `nurture-scheduler` (or new fn), `pushNotifications.ts` | `Agent` (cron secret is P0-3) | 🔑 (shares cron) |
 | **P1-R4** | **One-tap reply sentiment** — collapse the 4-way panel into one tap | roadmap | `MarkReplyButton.tsx`, `manualReplyTracker.ts` | `Agent` | 🟢 |
@@ -176,3 +176,4 @@ Eduardo's three P0 decisions (2026-06-13): **(1)** STT = on-device native (iOS S
 - **2026-06-12** — created; merges Rex 2.0 roadmap + 2026-06 production-readiness audit. Safe-bucket items (P0-4, P0-6, P1-1..5, P1-7) shipping in the accompanying draft PR; the rest sequenced above.
 - **2026-06-13** — added §"Gated P0 — Eduardo only" with exact specs (G1 demote demo, G2 hard-lockout billing state, G3 wire the gate) after Eduardo's 3 decisions. On-device STT + auth/lockout UI scaffolding shipped in a separate stacked draft PR. Auth method confirmed: email + password (no OAuth/magic-link).
 - **2026-06-15** — P1-R2 shipped: `unit_bonus_tiers` now actually applied (`unitBonusFor`/`nextUnitBonusTier` in `payPlan.ts`) and surfaced in Metrics (this-month bonus + next-tier nudge + YTD addendum). Per-deal commission math unchanged (tiers are a monthly aggregate). Stacked draft PR.
+- **2026-06-15** — P1-R1 shipped: Heat Sheet reason codes (`lib/v2/heatReasons.ts`) — each row shows the top 1-2 reasons it's hot/at-risk (lease end, silence, timeline, birthday, rep decision, past customer, trade-in, referral), derived strictly from saved contact fields. Stacked draft PR. Next intended: P1-R5 then P1-R4 (hold for pick).

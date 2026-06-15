@@ -6,12 +6,15 @@ import { TIERS, stalenessColor, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import WeeklyDigestCard from './WeeklyDigestCard';
 import NurtureBanner from './NurtureBanner';
+import { heatReasons } from '@/lib/v2/heatReasons';
 
 const TODAY_LABEL = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
 
 function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
   const tier = TIERS[c.tier];
   const staleC = stalenessColor(c.days);
+  // Top reasons this contact is hot/at-risk today (derived from saved fields).
+  const reasons = heatReasons(c).slice(0, 2);
   return (
     <Pressable
       onPress={onTap}
@@ -23,6 +26,9 @@ function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
         <Text style={styles.vehicle} numberOfLines={1}>
           {c.vehicle ?? '—'}{c.trim ? ` · ${c.trim}` : ''}
         </Text>
+        {reasons.length > 0 ? (
+          <Text style={styles.reasons} numberOfLines={1}>{reasons.join(' · ')}</Text>
+        ) : null}
       </View>
       <View style={styles.daysWrap}>
         <Text style={[styles.daysNum, { color: staleC }]}>
@@ -203,6 +209,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.grey2,
     marginTop: 2,
+  },
+  reasons: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.gold,
+    marginTop: 3,
+    letterSpacing: 0.1,
   },
 
   daysWrap: { alignItems: 'flex-end' },
