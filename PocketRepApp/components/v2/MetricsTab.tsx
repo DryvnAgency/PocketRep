@@ -6,7 +6,7 @@ import RadarLoader from './RadarLoader';
 import { colors, radius, spacing } from '@/constants/theme';
 import { Label, Pill, SectionHead } from './atoms';
 import { useUserDeals, type V2DealRich } from '@/lib/v2/useUserDeals';
-import { usePayPlan, calcCommissionWithPlan, DEFAULT_PAY_PLAN } from '@/lib/v2/payPlan';
+import { usePayPlan, calcCommissionWithPlan, DEFAULT_PAY_PLAN, unitBonusFor, nextUnitBonusTier } from '@/lib/v2/payPlan';
 import { formatMoney, formatMoneyCompact } from '@/lib/v2/format';
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -185,8 +185,16 @@ export default function MetricsTab({
     }));
     const maxC = Math.max(1, ...moTotals.map(m => m.commission));
 
-    return { ytdCommission, ytdUnits, ytdGross, avgPerUnit, curCommission, curUnits, projected, months, moTotals, maxC };
-  }, [deals, curMo, curYr]);
+    // Unit-bonus tiers are a per-MONTH volume bonus, so apply them per month:
+    // this month's earned bonus, the next tier to chase, and the YTD sum of each
+    // month's tier bonus.
+    const curUnitBonus = unitBonusFor(curUnits, plan.unitBonuses);
+    const nextTier = nextUnitBonusTier(curUnits, plan.unitBonuses);
+    const unitsToNext = nextTier ? Math.max(0, Math.ceil(nextTier.units - curUnits)) : 0;
+    const ytdUnitBonus = months.reduce((s, m) => s + unitBonusFor(unitsOf(m.deals), plan.unitBonuses), 0);
+
+    return { ytdCommission, ytdUnits, ytdGross, avgPerUnit, curCommission, curUnits, projected, months, moTotals, maxC, curUnitBonus, nextTier, unitsToNext, ytdUnitBonus };
+  }, [deals, curMo, curYr, plan]);
 
   if (deals === null) {
     if (dealsError) {
@@ -228,6 +236,9 @@ export default function MetricsTab({
           <Text style={styles.ytdAmount}>{stats.ytdCommission.toLocaleString()}</Text>
         </View>
         <Text style={styles.ytdSubLabel}>TOTAL YTD COMMISSION</Text>
+        {stats.ytdUnitBonus > 0 ? (
+          <Text style={styles.ytdBonusLine}>+ ${stats.ytdUnitBonus.toLocaleString()} in unit bonuses</Text>
+        ) : null}
 
         <View style={styles.ytdStats}>
           <View style={styles.ytdStat}>
@@ -293,6 +304,25 @@ export default function MetricsTab({
         />
       </View>
 
+      {plan.unitBonuses.length > 0 ? (
+        <View style={styles.bonusCard}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.bonusLabel}>UNIT BONUS · {MONTHS_SHORT[curMo].toUpperCase()}</Text>
+            <Text style={styles.bonusHint}>
+              {stats.nextTier
+                ? `${stats.unitsToNext} more unit${stats.unitsToNext === 1 ? '' : 's'} → $${stats.nextTier.bonus.toLocaleString()}`
+                : stats.curUnitBonus > 0
+                ? 'Top tier locked in'
+                : 'No bonus tier hit yet'}
+            </Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={styles.bonusValue}>${stats.curUnitBonus.toLocaleString()}</Text>
+            <Text style={styles.bonusSub}>THIS MONTH</Text>
+          </View>
+        </View>
+      ) : null}
+
       <View style={{ paddingHorizontal: 14, paddingTop: 12 }}>
         <Pressable onPress={onLogDeal} style={styles.logDeal}>
           <Text style={styles.logDealText}>＋ LOG A DEAL</Text>
@@ -356,6 +386,7 @@ const styles = StyleSheet.create({
   ytdSubLabel: {
     fontSize: 11, fontWeight: '600', color: colors.grey2, marginTop: 4, letterSpacing: 0.3,
   },
+  ytdBonusLine: { fontSize: 12, fontWeight: '700', color: colors.green, marginTop: 6 },
   ytdStats: {
     flexDirection: 'row',
     marginTop: 14,
@@ -411,6 +442,24 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 22, fontWeight: '800', letterSpacing: -0.8 },
   statSuffix: { fontSize: 11, opacity: 0.6, fontWeight: '800', marginLeft: 2 },
   statHint: { fontSize: 10, fontWeight: '600', color: colors.grey2, marginTop: 6 },
+
+  bonusCard: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    borderRadius: radius.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  bonusLabel: { fontSize: 9, fontWeight: '700', color: colors.gold, letterSpacing: 1.0 },
+  bonusHint: { fontSize: 13, fontWeight: '600', color: colors.white, marginTop: 4, letterSpacing: -0.2 },
+  bonusValue: { fontSize: 22, fontWeight: '800', color: colors.gold2, letterSpacing: -0.6 },
+  bonusSub: { fontSize: 9, fontWeight: '700', color: colors.grey2, letterSpacing: 0.6, marginTop: 2 },
 
   logDeal: {
     height: 50,
