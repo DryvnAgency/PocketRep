@@ -111,3 +111,26 @@ export async function archiveSequence(sequenceId: string): Promise<void> {
     .eq('id', sequenceId);
   if (error) throw error;
 }
+
+// Enroll a contact in a sequence (P1-R5). Writes a contact_sequences row using
+// the existing table — no schema change. Idempotent via the
+// (contact_id, sequence_id) unique key: re-enrolling a contact that was
+// previously cancelled/completed resets it to active at step 1.
+export async function enrollContactInSequence(contactId: string, sequenceId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('contact_sequences')
+    .upsert({
+      user_id: user.id,
+      contact_id: contactId,
+      sequence_id: sequenceId,
+      current_step: 1,
+      status: 'active',
+      started_at: now,
+      next_step_at: now,
+      completed_at: null,
+    }, { onConflict: 'contact_id,sequence_id' });
+  if (error) throw error;
+}

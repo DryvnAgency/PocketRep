@@ -8,6 +8,7 @@ import { TIERS, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import { useDeals, type V2Deal } from '@/lib/v2/useDeals';
 import { useTags } from '@/lib/v2/useTags';
+import { useSequences, enrollContactInSequence, type V2Sequence } from '@/lib/v2/useSequences';
 import {
   updateContactNotes,
   updateContactTags,
@@ -78,6 +79,7 @@ export default function ContactDetail({
 }) {
   const tier = TIERS[contact.tier];
   const allTags = useTags();
+  const { sequences, reload: reloadSequences } = useSequences();
   const deals = useDeals(contact.id, dealsRefetchKey);
   const [nurtureRefetchKey, setNurtureRefetchKey] = useState(0);
   const nurtures = useContactNurtures(contact.id, nurtureRefetchKey);
@@ -95,6 +97,8 @@ export default function ContactDetail({
   const [savingBday, setSavingBday] = useState(false);
   const [stepView, setStepView] = useState<'latest' | 'next'>('latest');
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const [seqPickerOpen, setSeqPickerOpen] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
 
   const [aiOpen, setAiOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -265,6 +269,21 @@ export default function ContactDetail({
   const flash = (msg: string) => {
     setTouchMsg(msg);
     setTimeout(() => setTouchMsg(null), 1700);
+  };
+
+  const handleEnroll = async (seq: V2Sequence) => {
+    if (enrolling) return;
+    setEnrolling(true);
+    try {
+      await enrollContactInSequence(contact.id, seq.id);
+      flash(`✓ Enrolled in ${seq.name}`);
+      setSeqPickerOpen(false);
+      reloadSequences();
+    } catch (e: any) {
+      flash(`Couldn't enroll: ${e?.message ?? 'try again'}`);
+    } finally {
+      setEnrolling(false);
+    }
   };
 
   // Record a touch: stamp last_contact_date + reset the follow-up clock, append
@@ -818,6 +837,17 @@ export default function ContactDetail({
           </Pressable>
         </View>
 
+        <View style={{ paddingHorizontal: 14, paddingTop: 10 }}>
+          <Pressable
+            onPress={() => setSeqPickerOpen(true)}
+            style={styles.enrollBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Enroll in a sequence"
+          >
+            <Text style={styles.enrollBtnText}>＋ Enroll in sequence</Text>
+          </Pressable>
+        </View>
+
         {aiOpen ? (
           <View style={styles.aiBox}>
             <View style={styles.aiHead}>
@@ -961,6 +991,16 @@ export default function ContactDetail({
         />
       ) : null}
 
+      {seqPickerOpen ? (
+        <SequencePicker
+          sequences={sequences}
+          contactName={contact.name}
+          busy={enrolling}
+          onEnroll={handleEnroll}
+          onClose={() => setSeqPickerOpen(false)}
+        />
+      ) : null}
+
       {compose ? (
         <View style={StyleSheet.absoluteFillObject}>
           <Pressable style={styles.scrim} onPress={() => setCompose(null)} />
@@ -1101,6 +1141,57 @@ function TagPicker({
             );
           })}
         </ScrollView>
+      </View>
+    </View>
+  );
+}
+
+function SequencePicker({
+  sequences, contactName, busy, onEnroll, onClose,
+}: {
+  sequences: V2Sequence[] | null;
+  contactName: string;
+  busy: boolean;
+  onEnroll: (s: V2Sequence) => void;
+  onClose: () => void;
+}) {
+  const active = (sequences ?? []).filter(s => !s.is_archived);
+  return (
+    <View style={StyleSheet.absoluteFillObject}>
+      <Pressable style={styles.scrim} onPress={onClose} />
+      <View style={styles.sheet}>
+        <View style={styles.sheetHandle} />
+        <View style={styles.sheetHead}>
+          <Label color={colors.gold}>ENROLL {contactName.toUpperCase()}</Label>
+          <Text style={styles.sheetSub}>Pick a sequence to start.</Text>
+        </View>
+        {sequences === null ? (
+          <Text style={styles.seqEmpty}>Loading sequences…</Text>
+        ) : active.length === 0 ? (
+          <Text style={styles.seqEmpty}>No sequences yet. Build one in Game Plan.</Text>
+        ) : (
+          <ScrollView contentContainerStyle={styles.sheetTags}>
+            {active.map(s => (
+              <Pressable
+                key={s.id}
+                onPress={() => onEnroll(s)}
+                disabled={busy}
+                style={[styles.seqRow, busy && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel={`Enroll in ${s.name}`}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.seqName} numberOfLines={1}>{s.name}</Text>
+                  <Text style={styles.seqMeta} numberOfLines={1}>
+                    {s.steps.length} step{s.steps.length === 1 ? '' : 's'}
+                    {s.sequence_type ? ` · ${s.sequence_type}` : ''}
+                  </Text>
+                </View>
+                <Text style={styles.seqAdd}>＋</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
       </View>
     </View>
   );
@@ -1406,6 +1497,34 @@ const styles = StyleSheet.create({
   },
   gamePlanText: { fontSize: 14, fontWeight: '800', color: colors.ink, letterSpacing: 0.2 },
   gamePlanHint: { fontSize: 10, fontWeight: '700', color: colors.ink, opacity: 0.6, letterSpacing: 0.3 },
+
+  enrollBtn: {
+    height: 44,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  enrollBtnText: { fontSize: 13, fontWeight: '700', color: colors.gold, letterSpacing: 0.2 },
+  seqEmpty: { color: colors.grey2, fontSize: 13, textAlign: 'center', paddingVertical: 24, paddingHorizontal: 16 },
+  seqRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.md,
+    marginBottom: 8,
+  },
+  seqName: { fontSize: 14, fontWeight: '700', color: colors.white, letterSpacing: -0.2 },
+  seqMeta: { fontSize: 11, color: colors.grey2, marginTop: 2 },
+  seqAdd: { fontSize: 18, fontWeight: '800', color: colors.gold },
 
   aiBox: {
     marginHorizontal: 14,
