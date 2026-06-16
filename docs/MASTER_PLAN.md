@@ -73,7 +73,7 @@ Underneath everything: **zero tests, zero lint, no CI gate beyond Vercel builds*
 | **P1-R1** | **Heat Sheet reason codes** — why each contact is hot/at-risk today | roadmap | `HeatSheetTab.tsx`, scoring in `lib/v2` | `Agent` | ✅ done |
 | **P1-R2** | **Fix `unit_bonus_tiers` in commission math** + surface in Metrics | roadmap | `lib/v2/payPlan.ts`, `MetricsTab.tsx` | `Agent` | ✅ done |
 | **P1-R3** | **Wire the morning Heat Sheet push** (daily 8am-local summary) | roadmap | `nurture-scheduler` (or new fn), `pushNotifications.ts` | `Agent` (cron secret is P0-3) | 🔑 (shares cron) |
-| **P1-R4** | **One-tap reply sentiment** — collapse the 4-way panel into one tap | roadmap | `MarkReplyButton.tsx`, `manualReplyTracker.ts` | `Agent` | 🟢 |
+| **P1-R4** | **One-tap reply sentiment** — collapse the 4-way panel into one tap | roadmap | `MarkReplyButton.tsx`, `manualReplyTracker.ts` | `Agent` | ✅ done |
 | **P1-R5** | **Sequence enrollment button on ContactDetail** (closes "0 enrollments ever") | roadmap | `ContactDetail.tsx`, `useSequences.ts`, `contact_sequences` | `Agent` | ✅ done |
 
 ### P2 — post-launch / Rex 2.0 architecture + native
@@ -178,3 +178,4 @@ Eduardo's three P0 decisions (2026-06-13): **(1)** STT = on-device native (iOS S
 - **2026-06-15** — P1-R2 shipped: `unit_bonus_tiers` now actually applied (`unitBonusFor`/`nextUnitBonusTier` in `payPlan.ts`) and surfaced in Metrics (this-month bonus + next-tier nudge + YTD addendum). Per-deal commission math unchanged (tiers are a monthly aggregate). Stacked draft PR.
 - **2026-06-15** — P1-R1 shipped: Heat Sheet reason codes (`lib/v2/heatReasons.ts`) — each row shows the top 1-2 reasons it's hot/at-risk (lease end, silence, timeline, birthday, rep decision, past customer, trade-in, referral), derived strictly from saved contact fields. Stacked draft PR. Next intended: P1-R5 then P1-R4 (hold for pick).
 - **2026-06-15** — P1-R5 shipped: "Enroll in sequence" on ContactDetail (`enrollContactInSequence` in `useSequences.ts` + a SequencePicker overlay) — idempotent upsert into the existing `contact_sequences` table (no schema change), verified live on the demo account + cleaned up. Closes "0 enrollments ever". Stacked draft PR. Next intended: P1-R4 (hold for pick).
+- **2026-06-16** — P1-R4 shipped: one-tap reply sentiment — `MarkReplyButton` collapsed state is now a single "👍 Positive" tap (the common case) plus a ⋯ that opens the existing full neutral/negative/later panel. The `manualReplyTracker` cascade side-effects are untouched. Stacked draft PR. **Agent-ownable P1 roadmap backlog is now empty** — remaining items are gated (G1–G3, Eduardo) or need a decision/action (P1-3 cron secret, P1-6 error-tracking vendor) or are P2.
