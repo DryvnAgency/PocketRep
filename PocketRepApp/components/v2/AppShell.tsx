@@ -54,6 +54,7 @@ import {
 import { useHeyRex } from '@/lib/v2/useHeyRex';
 import { useAccessGate } from '@/lib/v2/accessGate';
 import { supabase } from '@/lib/supabase';
+import { captureTimezone } from '@/lib/v2/sendTime';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
@@ -133,6 +134,9 @@ export default function AppShell() {
       }
       // Fire-and-forget — push registration is silent on web/unsupported devices.
       registerForPush().catch(() => undefined);
+      // Best-effort: record the rep's device timezone on their profile (P2-A3) so
+      // the nurture scheduler can later deliver at their local send hour.
+      captureTimezone().catch(() => undefined);
     });
     return subscribeAlwaysListen(setAlwaysListen);
   }, []);

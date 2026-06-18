@@ -15,12 +15,16 @@ import {
   type RepSettingKey,
 } from '@/lib/v2/repSettings';
 import { sendTestPush } from '@/lib/v2/pushNotifications';
+import { loadSendTime, setSendHour as persistSendHour, formatHour, DEFAULT_SEND_HOUR } from '@/lib/v2/sendTime';
 import { usePayPlan } from '@/lib/v2/payPlan';
 import PayPlanSummary from './PayPlanSummary';
 import SettingEditSheet, { type SettingEditConfig } from './SettingEditSheet';
 import type { TabId } from './CustomNavBar';
 
 type ProfileRow = { email: string; full_name: string | null; plan: string };
+
+// Selectable daily send hours (6 AM - 9 PM), shown in the rep's local timezone.
+const SEND_HOURS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
 
 // `name` is a pseudo-key that maps to profiles.full_name; the rest map to repSettings.
 type EditKey = RepSettingKey | 'name';
@@ -79,6 +83,9 @@ export default function ProfileTab({
   const [editTarget, setEditTarget] = useState<{ key: EditKey; config: SettingEditConfig } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [sendHour, setSendHourState] = useState(DEFAULT_SEND_HOUR);
+  const [timezone, setTimezone] = useState<string | null>(null);
+  const [showSendPicker, setShowSendPicker] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   const payPlan = usePayPlan(payPlanRefetchKey);
@@ -96,6 +103,8 @@ export default function ProfileTab({
         .eq('id', user.id)
         .maybeSingle();
       if (data && !cancelled) setProfile(data as ProfileRow);
+      const st = await loadSendTime();
+      if (!cancelled) { setSendHourState(st.send_hour); setTimezone(st.timezone); }
     })();
     const unsub = subscribeRepSettings(forceTick);
     return () => { cancelled = true; unsub(); };
@@ -211,6 +220,7 @@ export default function ProfileTab({
         <Row icon="🚗" label="Inventory feed" detail={getRepSetting('inventoryFeed') || 'Not connected'}
           onPress={() => editSetting('inventoryFeed', 'Inventory feed', 'FEED STATUS / SOURCE')} />
         <Row icon="🔔" label="Weekly digest" detail="View →" onPress={() => onNavigate?.('heat')} />
+        <Row icon="⏰" label="Daily send time" detail={formatHour(sendHour)} onPress={() => setShowSendPicker(true)} />
         <Row icon="📊" label="Goals & quota" detail="View →" onPress={() => onNavigate?.('metrics')} />
       </View>
 
@@ -317,6 +327,47 @@ export default function ProfileTab({
                 <Text style={styles.confirmDangerText}>{signingOut ? 'Signing out…' : 'Sign out'}</Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      ) : null}
+
+      {showSendPicker ? (
+        <View style={styles.confirmRoot}>
+          <Pressable style={styles.confirmScrim} onPress={() => setShowSendPicker(false)} />
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Daily send time</Text>
+            <Text style={styles.confirmBody}>
+              When Rex queues your daily outreach. Shown in your timezone{timezone ? ` (${timezone})` : ''}.
+            </Text>
+            <View style={styles.sendGrid}>
+              {SEND_HOURS.map(h => {
+                const isActive = h === sendHour;
+                return (
+                  <Pressable
+                    key={h}
+                    style={[styles.sendChip, isActive && styles.sendChipActive]}
+                    onPress={async () => {
+                      setSendHourState(h);
+                      setShowSendPicker(false);
+                      try { await persistSendHour(h); flash('✓ Send time updated'); }
+                      catch { flash("Couldn't save send time"); }
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Set daily send time to ${formatHour(h)}`}
+                  >
+                    <Text style={[styles.sendChipText, isActive && styles.sendChipTextActive]}>
+                      {formatHour(h)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable
+              style={[styles.confirmBtn, styles.confirmCancel, { marginTop: 16 }]}
+              onPress={() => setShowSendPicker(false)}
+            >
+              <Text style={styles.confirmCancelText}>Close</Text>
+            </Pressable>
           </View>
         </View>
       ) : null}
@@ -496,4 +547,17 @@ const styles = StyleSheet.create({
   confirmCancelText: { fontSize: 14, fontWeight: '700', color: colors.white },
   confirmDanger: { backgroundColor: colors.redBg, borderColor: colors.redBorder },
   confirmDangerText: { fontSize: 14, fontWeight: '700', color: colors.red },
+
+  sendGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 },
+  sendChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    backgroundColor: colors.surface2,
+  },
+  sendChipActive: { borderColor: colors.gold, backgroundColor: colors.goldBg },
+  sendChipText: { fontSize: 12, fontWeight: '600', color: colors.grey2 },
+  sendChipTextActive: { color: colors.gold },
 });
