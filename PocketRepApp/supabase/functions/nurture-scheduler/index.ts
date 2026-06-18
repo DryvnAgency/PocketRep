@@ -28,6 +28,16 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6'];
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
+// P2-A7: timezone-aware delivery. OFF by default → exact current daily behavior.
+// When SCHEDULER_HOURLY is truthy AND pg_cron is moved to hourly, each rep is
+// processed once, in the hour their LOCAL time matches profiles.send_hour, using
+// their LOCAL date/Monday for holiday + quarterly. Activation (env flag + cron
+// flip) is owner-gated; with the flag off this code path is never entered.
+const SCHEDULER_HOURLY = ['1', 'true', 'yes', 'on'].includes(
+  (Deno.env.get('SCHEDULER_HOURLY') ?? '').trim().toLowerCase(),
+);
+const DEFAULT_TZ = Deno.env.get('SCHEDULER_DEFAULT_TZ') ?? 'America/New_York';
+
 const REX_COPY_RULES = `COPY RULES (apply to every draft):
 Tone: casual, lowercase opener ("hey" / "hola" / "qué onda"), no jargon, no emojis.
 Punctuation: NEVER use dashes of any kind (—, –, or - between phrases). No bullets, no semicolons. Short sentences.
@@ -50,6 +60,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
+  if (SCHEDULER_HOURLY) return await runHourlyMode(admin);
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
   const dayOfWeek = now.getUTCDay();
@@ -411,4 +422,114 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+// ── P2-A7: timezone-aware (hourly) mode ──────────────────────────────────────
+// Called once per hour (only when SCHEDULER_HOURLY is set and the cron is hourly).
+// For every rep we compute their LOCAL time from profiles.timezone (falling back
+// to DEFAULT_TZ) and act only when their local hour equals profiles.send_hour, so
+// each rep is processed once per day at their chosen local hour. Holiday +
+// quarterly use the rep's LOCAL date / weekday. Idempotency rests on the cron
+// firing once per hour, exactly as daily mode rests on it firing once per day
+// (referral asks additionally self-claim pending→done).
+async function runHourlyMode(admin: ReturnType<typeof createClient>) {
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  const { data: reps } = await admin
+    .from('profiles')
+    .select('id,email,timezone,send_hour');
+  const repList = (reps ?? []) as Array<{ id: string; email: string | null; timezone: string | null; send_hour: number | null }>;
+
+  // Pre-fetch all due referral-ask reminders once, grouped by rep (same as daily).
+  const referralsByRep = new Map<string, Array<{ id: string; contact_id: string | null }>>();
+  {
+    const { data: dueReminders } = await admin
+      .from('reminders')
+      .select('id,user_id,contact_id')
+      .eq('source', 'referral_ask')
+      .eq('status', 'pending')
+      .lte('due_at', nowIso)
+      .order('due_at', { ascending: true });
+    for (const r of (dueReminders ?? []) as Array<{ id: string; user_id: string; contact_id: string | null }>) {
+      const arr = referralsByRep.get(r.user_id) ?? [];
+      arr.push({ id: r.id, contact_id: r.contact_id });
+      referralsByRep.set(r.user_id, arr);
+    }
+  }
+
+  const holidayByDate = new Map<string, any>();
+  const results: any[] = [];
+
+  for (const rep of repList) {
+    const local = localParts(now, rep.timezone || DEFAULT_TZ);
+    if (!local) continue; // unusable timezone — skip rather than misfire
+    if (local.hour !== clampHour(rep.send_hour)) continue; // not this rep's send hour
+
+    // Holiday + quarterly are computed against the rep's LOCAL date / weekday.
+    if (!holidayByDate.has(local.date)) {
+      const { data } = await admin
+        .from('holiday_calendar')
+        .select('holiday_name,tone_guidance,pitch_intensity,applies_to_dead_leads,applies_to_past_customers')
+        .eq('holiday_date', local.date)
+        .maybeSingle();
+      holidayByDate.set(local.date, data ?? null);
+    }
+    const holidayRow = holidayByDate.get(local.date);
+    const runQuarterly = local.dow === 1; // local Monday
+
+    let nurtureCount = 0;
+    if (holidayRow) nurtureCount += await runBlast(admin, rep.id, 'holiday', holidayRow, 30);
+    if (runQuarterly) nurtureCount += await runBlast(admin, rep.id, 'quarterly_check_in', null, 10);
+    if (nurtureCount > 0) {
+      await firePush(admin, rep.id, {
+        title: holidayRow ? `${holidayRow.holiday_name} nurtures ready` : 'Quarterly check-ins ready',
+        body: `${nurtureCount} draft${nurtureCount === 1 ? '' : 's'} waiting in your queue.`,
+        data: { route: 'nurture' },
+      });
+    }
+
+    let referralCount = 0;
+    const dueReferrals = referralsByRep.get(rep.id);
+    if (dueReferrals && dueReferrals.length > 0) {
+      referralCount = await runReferralAsks(admin, rep.id, dueReferrals);
+      if (referralCount > 0) {
+        await firePush(admin, rep.id, {
+          title: 'Referral asks ready',
+          body: `${referralCount} referral ask${referralCount === 1 ? '' : 's'} drafted and waiting for review.`,
+          data: { route: 'nurture' },
+        });
+      }
+    }
+
+    results.push({ user_id: rep.id, local_date: local.date, local_hour: local.hour, nurtures: nurtureCount, referrals: referralCount });
+  }
+
+  return json({ ok: true, mode: 'hourly', processed: results.length, results });
+}
+
+// Clamp a stored send_hour to a valid 0-23 hour (mirrors the DB check + the client
+// helper in lib/v2/sendTime.ts).
+function clampHour(h: number | null | undefined): number {
+  const n = Number(h);
+  if (!Number.isFinite(n)) return 8;
+  return Math.min(23, Math.max(0, Math.round(n)));
+}
+
+// Resolve a rep's local hour (0-23), date (YYYY-MM-DD) and weekday (0=Sun..6=Sat)
+// for an instant, in their IANA timezone. Returns null on an unusable timezone.
+function localParts(now: Date, tz: string): { hour: number; date: string; dow: number } | null {
+  try {
+    const hour = parseInt(
+      new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', hourCycle: 'h23' }).format(now),
+      10,
+    );
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    const wd = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(now);
+    const dow = ({ Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 } as Record<string, number>)[wd];
+    if (!Number.isFinite(hour) || dow === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+    return { hour, date, dow };
+  } catch {
+    return null;
+  }
 }
