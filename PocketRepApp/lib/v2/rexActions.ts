@@ -371,6 +371,27 @@ function spokenPortion(raw: string): string {
   return (idx >= 0 ? raw.slice(0, idx) : raw).trim();
 }
 
+// P2-R4: actions that act on a single named contact. If the name the brain
+// returned matches 2+ people in the book, we ask which one instead of guessing.
+const CONTACT_REF_ACTIONS: ReadonlySet<RexAction['type']> = new Set([
+  'update_notes', 'delete_contact', 'schedule_followup', 'show_contact', 'retier_contact',
+]);
+
+// Contacts plausibly referred to by `name`. An exact full-name match wins (so a
+// precise "Maria Lopez" never trips the disambiguator); otherwise match on a
+// name prefix or a shared first-name token (so a bare "Maria" surfaces every one).
+function matchContactsByName(name: string, contacts: V2Contact[]): V2Contact[] {
+  const q = name.trim().toLowerCase();
+  if (!q) return [];
+  const exact = contacts.filter(c => (c.name ?? '').trim().toLowerCase() === q);
+  if (exact.length > 0) return exact;
+  const firstTok = q.split(/\s+/)[0];
+  return contacts.filter(c => {
+    const full = (c.name ?? '').trim().toLowerCase();
+    return full.startsWith(q) || full.split(/\s+/)[0] === firstTok;
+  });
+}
+
 export async function rexInterpret(
   transcript: string,
   contacts: V2Contact[],
@@ -429,6 +450,29 @@ export async function rexInterpret(
         },
         say: action.say || `Call ${pick.contact.name.split(' ')[0]} — ${pick.reason}`,
       };
+    }
+  }
+
+  // P2-R4 never-guess: if a contact-referencing action names someone who matches
+  // 2+ people in the book, ask which one instead of trusting the brain's single
+  // pick. The brain is already told to clarify on collisions (see buildPrompt);
+  // this is the client-side safety net for when it returns a short/ambiguous name
+  // anyway. The single-match (and no-name) happy path is untouched.
+  if (CONTACT_REF_ACTIONS.has(action.type)) {
+    const nm = String((action.payload as any)?.contact_name ?? '').trim();
+    if (nm) {
+      const matches = matchContactsByName(nm, contacts);
+      if (matches.length > 1) {
+        const first = nm.split(/\s+/)[0];
+        return {
+          type: 'clarify',
+          payload: {
+            question: `I've got ${matches.length} matches for ${nm}. Which one?`,
+            candidates: matches.slice(0, 6).map(c => ({ id: c.id, label: c.name })),
+          },
+          say: `I've got a few people named ${first}. Which one do you mean?`,
+        };
+      }
     }
   }
 
