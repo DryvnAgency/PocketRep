@@ -213,6 +213,9 @@ export default function AppShell() {
     const blastPayload = rex.action?.type === 'create_blast_sequence' ? rex.action.payload : null;
     const stalledPayload = rex.action?.type === 'analyze_stalled_leads' ? rex.action.payload : null;
     const nurturePayload = rex.action?.type === 'schedule_nurture_blast' ? rex.action.payload : null;
+    // P2-R3: a chain bundles several writes — capture its steps before confirm()
+    // clears the action so we can refresh exactly the surfaces those steps touched.
+    const chainSteps = rex.action?.type === 'chain' ? (rex.action.payload.steps ?? []) : [];
     const result = await rex.confirm();
     // Refresh writers' downstream state
     if (actionType === 'log_deal') {
@@ -226,6 +229,18 @@ export default function AppShell() {
       || actionType === 'batch_action'
     ) {
       reloadContacts();
+    }
+    // P2-R3: a chain can mix deal + contact writes — refresh each surface any
+    // of its steps actually touched.
+    if (actionType === 'chain') {
+      const stepTypes = new Set(chainSteps.map(s => s.type));
+      if (stepTypes.has('log_deal')) setDealsRefetchKey(k => k + 1);
+      if (stepTypes.has('add_contact') || stepTypes.has('update_notes')
+        || stepTypes.has('delete_contact') || stepTypes.has('schedule_followup')
+        || stepTypes.has('retier_contact') || stepTypes.has('batch_action')
+      ) {
+        reloadContacts();
+      }
     }
     if (result?.openContactId) {
       setSelectedId(result.openContactId);

@@ -15,6 +15,7 @@ import { chooseNextCall } from './callNext';
 import { executeBatchAction, type BatchActionKind } from './batchActions';
 import { callBrainStream, type BrainMessage } from './aiProxy';
 import type { V2Contact } from './useContacts';
+import { isRexMultistepEnabled } from './rexFeatureFlags';
 
 export type RexAction =
   | { type: 'add_contact'; payload: AddContactPayload; say: string }
@@ -32,6 +33,7 @@ export type RexAction =
   | { type: 'create_blast_sequence'; payload: CreateBlastSequencePayload; say: string }
   | { type: 'analyze_stalled_leads'; payload: AnalyzeStalledLeadsPayload; say: string }
   | { type: 'schedule_nurture_blast'; payload: ScheduleNurtureBlastPayload; say: string }
+  | { type: 'chain'; payload: ChainPayload; say: string }
   | { type: 'clarify'; payload: ClarifyPayload; say: string }
   | { type: 'say'; payload: Record<string, never>; say: string };
 
@@ -155,6 +157,12 @@ export type ClarifyPayload = {
   candidates?: Array<{ id: string; label: string }>;
 };
 
+// P2-R3: a bundle of distinct write actions from one utterance, confirmed
+// together. Steps are ordinary single actions (never nested chains).
+export type ChainPayload = {
+  steps: RexAction[];
+};
+
 // ---------------------------------------------------------------------------
 // Copy rules — appended to every brain prompt that produces user-facing text.
 // Bake these in so the entire surface obeys Lalo's tone spec without each
@@ -229,10 +237,17 @@ function buildPrompt(
   screenContext: string,
 ): string {
   const tagList = tags.join(', ') || '(none)';
+  // P2-R3 (default-off): only when multi-step is enabled do we tell the brain it
+  // may bundle actions into a chain. Off → this string is empty and the prompt is
+  // byte-identical to before.
+  const multistep = isRexMultistepEnabled();
+  const chainSection = multistep
+    ? `\n17. chain — bundle 2+ DISTINCT write actions the rep asked for in one utterance, confirmed together. Use ONLY when the utterance clearly asks for several different things (e.g. "log the M3 deal for Marcus, set a follow-up next week, and tag him hot"). For a single intent, NEVER use chain — pick the one action. Do NOT nest chains. Only chain these write actions: add_contact, update_notes, delete_contact, log_deal, schedule_followup, retier_contact, create_reminder, batch_action.\n    payload: { steps: [ { "action": "log_deal", "payload": { ... } }, { "action": "schedule_followup", "payload": { ... } } ] }\n`
+    : '';
   const memorySection = memory.trim()
     ? `\nWHAT YOU REMEMBER ABOUT THIS REP (use to disambiguate / recall context — never quote it back verbatim):\n${memory.trim()}\n`
     : '';
-  return `You are Rex, the voice assistant inside PocketRep — a sales rep CRM. The rep just said something to you. Pick the single best action.${memorySection}${screenContext}
+  return `You are Rex, the voice assistant inside PocketRep — a sales rep CRM. The rep just said something to you. Pick the single best action.${multistep ? ' For a clearly multi-intent request you may return a chain (see action 17).' : ''}${memorySection}${screenContext}
 
 ${bookSection}
 
@@ -301,7 +316,7 @@ Actions you can take, with required + optional payload fields:
 
 16. say — informational reply, no write
     payload: {}
-
+${chainSection}
 EXISTING TAGS the rep uses: ${tagList}
 
 RULES:
@@ -327,8 +342,43 @@ const KNOWN_ACTION_TYPES: ReadonlySet<RexAction['type']> = new Set([
   'add_contact', 'update_notes', 'delete_contact', 'log_deal', 'schedule_followup',
   'retier_contact', 'create_reminder', 'show_contact', 'filter_contacts', 'book_summary',
   'call_next', 'batch_action', 'create_blast_sequence', 'analyze_stalled_leads',
-  'schedule_nurture_blast', 'clarify', 'say',
+  'schedule_nurture_blast', 'chain', 'clarify', 'say',
 ]);
+
+// P2-R3: the actions Rex may bundle into a chain. Read-only / heavyweight actions
+// (filter, book_summary, blast, nurture, analyze, clarify, say, and a nested chain)
+// are deliberately excluded — a chain is always a small set of confirmable writes.
+const CHAINABLE_TYPES: ReadonlySet<RexAction['type']> = new Set([
+  'add_contact', 'update_notes', 'delete_contact', 'log_deal',
+  'schedule_followup', 'retier_contact', 'create_reminder', 'batch_action',
+]);
+
+// Coerce one raw brain step ({action|type, payload, say?}) into a real RexAction,
+// or null if it isn't a permitted chainable write. This is what lets executeAction
+// and summarizeAction treat chain steps as ordinary actions — they carry `type`.
+function normalizeStep(raw: any): RexAction | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const t = String(raw.action ?? raw.type ?? '');
+  if (!CHAINABLE_TYPES.has(t as RexAction['type'])) return null;
+  return {
+    type: t as RexAction['type'],
+    payload: raw.payload ?? {},
+    say: typeof raw.say === 'string' ? raw.say : '',
+  } as RexAction;
+}
+
+// Build a chain action from a raw payload, dropping any non-chainable / nested
+// steps. A chain that collapses to 0 real steps becomes a safe `say`; exactly 1
+// real step unwraps to that lone action (no pointless confirm-as-chain).
+function normalizeChain(rawPayload: any, say: string): RexAction {
+  const rawSteps = Array.isArray(rawPayload?.steps) ? rawPayload.steps : [];
+  const steps = rawSteps
+    .map(normalizeStep)
+    .filter((s: RexAction | null): s is RexAction => s !== null);
+  if (steps.length === 0) return { type: 'say', payload: {} as any, say: say || "I didn't catch what to do." };
+  if (steps.length === 1) return { ...steps[0], say: say || steps[0].say };
+  return { type: 'chain', payload: { steps }, say } as RexAction;
+}
 
 function parseAction(raw: string): RexAction {
   if (!raw) return { type: 'say', payload: {} as any, say: "Sorry, I didn't catch that." };
@@ -340,6 +390,7 @@ function parseAction(raw: string): RexAction {
     const rawType = String(obj.action ?? obj.type ?? 'say');
     const type = (KNOWN_ACTION_TYPES.has(rawType as RexAction['type']) ? rawType : 'say') as RexAction['type'];
     const say = typeof obj.say === 'string' ? obj.say : '';
+    if (type === 'chain') return normalizeChain(obj.payload, say);
     const payload = type === 'say' ? {} : (obj.payload ?? {});
     return { type, payload, say } as RexAction;
   } catch {
@@ -610,6 +661,17 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
       // pending nurture_messages rows), and opens NurtureReviewer.
       return { ok: true };
     }
+    case 'chain': {
+      // Run each normalized step in order, stopping at the first failure so we
+      // never silently half-apply past an error. parseAction guarantees steps are
+      // permitted chainable writes (no nested chains), so a plain loop is safe.
+      let last: { ok: boolean; openContactId?: string; filteredIds?: string[] } = { ok: true };
+      for (const step of action.payload.steps ?? []) {
+        last = await executeAction(step, contacts);
+        if (!last.ok) return last;
+      }
+      return last;
+    }
     case 'clarify':
     case 'say':
     default:
@@ -657,6 +719,10 @@ export function summarizeAction(action: RexAction): string {
       return `Analyze stalled leads (≥${p.days_silent_threshold ?? 14}d silent)`;
     case 'schedule_nurture_blast':
       return `Nurture blast · ${p.trigger?.replace('_', ' ')} · ${p.audience?.replace('_', ' ')}`;
+    case 'chain': {
+      const steps = (p.steps ?? []) as RexAction[];
+      return steps.map((s, i) => `${i + 1}. ${summarizeAction(s)}`).join('\n');
+    }
     case 'clarify':
       return p.question ?? 'Need clarification';
     case 'say':
@@ -715,7 +781,8 @@ export function actionWritesData(t: RexAction['type']): boolean {
     t === 'batch_action' ||
     t === 'create_blast_sequence' ||
     t === 'analyze_stalled_leads' ||
-    t === 'schedule_nurture_blast'
+    t === 'schedule_nurture_blast' ||
+    t === 'chain'
   );
 }
 
