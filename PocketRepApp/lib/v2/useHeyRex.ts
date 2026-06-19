@@ -33,6 +33,10 @@ export type UseHeyRexInput = {
   tagNames: string[];
   // Lets auto-run open a contact card directly (show_contact / call_next).
   onOpenContact?: (id: string) => void;
+  // P2-R2: screen/state awareness — the tab the rep is on + the contact they
+  // have open, so Rex can resolve "this one" / "log a deal on her" in context.
+  activeScreen?: string;
+  selectedContactId?: string | null;
 };
 
 export type UseHeyRexOutput = {
@@ -82,9 +86,13 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
   const contactsRef = useRef(input.contacts);
   const tagsRef = useRef(input.tagNames);
   const onOpenRef = useRef(input.onOpenContact);
+  const activeScreenRef = useRef(input.activeScreen);
+  const selectedContactIdRef = useRef(input.selectedContactId);
   useEffect(() => { contactsRef.current = input.contacts; }, [input.contacts]);
   useEffect(() => { tagsRef.current = input.tagNames; }, [input.tagNames]);
   useEffect(() => { onOpenRef.current = input.onOpenContact; }, [input.onOpenContact]);
+  useEffect(() => { activeScreenRef.current = input.activeScreen; }, [input.activeScreen]);
+  useEffect(() => { selectedContactIdRef.current = input.selectedContactId; }, [input.selectedContactId]);
 
   const clearWatchdog = () => {
     if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null; }
@@ -203,6 +211,8 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
       rexInterpret(text, contactsRef.current, tagsRef.current, {
         recentTurns: convoRef.current.slice(-6),
         signal: ctrl.signal,
+        activeScreen: activeScreenRef.current,
+        selectedContactId: selectedContactIdRef.current,
         onSayDelta: (spoken) => {
           if (ctrl.signal.aborted) return; // don't voice a superseded turn
           setStreamingSay(spoken);

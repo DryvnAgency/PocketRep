@@ -113,6 +113,8 @@ export default function AppShell() {
     contacts: contacts ?? [],
     tagNames,
     onOpenContact: setSelectedId,
+    activeScreen: active,
+    selectedContactId: selectedId,
   });
 
   useEffect(() => {

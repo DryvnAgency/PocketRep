@@ -203,18 +203,36 @@ Inference language (when data is incomplete):
 - If mileage or lease end date is INFERRED (not in the row), soften the phrasing: "if you're getting close to your cap" vs the confident "you're at 28k miles".
 - Never fabricate specific numbers.`;
 
+// P2-R2: a compact "where the rep is right now" block for the prompt. Empty when
+// no screen is passed, so callers that don't supply it get a byte-identical prompt.
+function buildScreenContext(opts: RexInterpretOpts, contacts: V2Contact[]): string {
+  const screen = opts.activeScreen;
+  if (!screen) return '';
+  const screenLabel: Record<string, string> = {
+    heat: "Heat Sheet (today's priority calls)",
+    contacts: 'Contacts list',
+    metrics: 'Metrics / deals',
+    profile: 'Profile / settings',
+  };
+  let line = `Screen: ${screenLabel[screen] ?? screen}`;
+  const sel = opts.selectedContactId ? contacts.find(c => c.id === opts.selectedContactId) : null;
+  if (sel) line += `\nOpen contact (most likely "this" / "her" / "him"): ${sel.name} (id ${sel.id})`;
+  return `\nWHERE THE REP IS RIGHT NOW (use to resolve deictic references like "this", "this one", "her", "him" — the open contact is the most likely referent, but defer to the BOOK STATE and to what the rep actually says):\n${line}\n`;
+}
+
 function buildPrompt(
   transcript: string,
   contacts: V2Contact[],
   tags: string[],
   memory: string,
   bookSection: string,
+  screenContext: string,
 ): string {
   const tagList = tags.join(', ') || '(none)';
   const memorySection = memory.trim()
     ? `\nWHAT YOU REMEMBER ABOUT THIS REP (use to disambiguate / recall context — never quote it back verbatim):\n${memory.trim()}\n`
     : '';
-  return `You are Rex, the voice assistant inside PocketRep — a sales rep CRM. The rep just said something to you. Pick the single best action.${memorySection}
+  return `You are Rex, the voice assistant inside PocketRep — a sales rep CRM. The rep just said something to you. Pick the single best action.${memorySection}${screenContext}
 
 ${bookSection}
 
@@ -340,6 +358,10 @@ export type RexInterpretOpts = {
   // Streams Rex's spoken line as it's generated (the text before the ```json).
   onSayDelta?: (spokenSoFar: string) => void;
   signal?: AbortSignal;
+  // P2-R2: which tab the rep is on + the contact they have open, so Rex can
+  // resolve deictic references ("this one", "log a deal on her") in context.
+  activeScreen?: string;
+  selectedContactId?: string | null;
 };
 
 // Everything before the first ```fence is Rex's spoken line (it's prompted to
@@ -361,7 +383,7 @@ export async function rexInterpret(
   ]);
 
   const bookSection = bookContextForPrompt(book);
-  const prompt = buildPrompt(transcript, contacts, tagNames, memory?.summary ?? '', bookSection);
+  const prompt = buildPrompt(transcript, contacts, tagNames, memory?.summary ?? '', bookSection, buildScreenContext(opts, contacts));
   const raw = await callBrainStream({
     maxTokens: 800,
     signal: opts.signal,
