@@ -459,6 +459,9 @@ export async function rexInterpret(
   const raw = await callBrainStream({
     maxTokens: 800,
     signal: opts.signal,
+    // P2-R7: Hey Rex voice is the latency-sensitive interactive path — request the
+    // fast model tier. Inert until the edge function's BRAIN_TIERED flag is on.
+    tier: 'fast',
     messages: [
       ...(opts.recentTurns ?? []),
       { role: 'user', content: prompt },

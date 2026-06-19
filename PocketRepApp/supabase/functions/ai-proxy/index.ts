@@ -14,6 +14,24 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6'];
 
+// P2-R7: tiered model routing for the ~2s interactive latency budget. When
+// BRAIN_TIERED is on, a request carrying { tier: 'fast' } (the Hey Rex voice
+// path) routes to BRAIN_MODELS_FAST — a faster/cheaper model list. Double
+// default-to-no-op: BRAIN_TIERED off → tier is ignored and every call uses
+// BRAIN_MODELS (byte-identical to today); and even with the flag on, if
+// BRAIN_MODELS_FAST is unset the fast tier falls back to BRAIN_MODELS — so
+// activation needs BOTH the flag and a configured fast list. No redeploy here.
+const BRAIN_TIERED = ['1', 'true', 'yes', 'on'].includes((Deno.env.get('BRAIN_TIERED') ?? '').trim().toLowerCase());
+const BRAIN_MODELS_FAST = (Deno.env.get('BRAIN_MODELS_FAST') ?? '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+
+// The OpenRouter `models` list for one request. Diverges from default only when
+// tiering is enabled AND the caller asked for the fast tier AND a fast list exists.
+function modelsForTier(tier: unknown): string[] {
+  if (BRAIN_TIERED && tier === 'fast' && BRAIN_MODELS_FAST.length > 0) return BRAIN_MODELS_FAST;
+  return BRAIN_MODELS;
+}
+
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const REXLENS_DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
@@ -224,6 +242,8 @@ async function handleBrain(req: Request) {
   const msgs = (body.messages as Array<{ role: string; content: unknown }>) || [];
   const sys = typeof body.system === 'string' ? body.system : '';
   const messages = sys ? [{ role: 'system', content: sys }, ...msgs] : msgs;
+  // P2-R7: choose the model list for this request's tier (default-off → BRAIN_MODELS).
+  const models = modelsForTier(body.tier);
 
   // Streaming passthrough (opt-in via { stream: true }). Pipe OpenRouter's SSE
   // straight to the client for a Siri-style token-by-token reply, teeing the
@@ -236,7 +256,7 @@ async function handleBrain(req: Request) {
       upstream = await fetch(OPENROUTER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' },
-        body: JSON.stringify({ models: BRAIN_MODELS, messages, max_tokens: maxTok, stream: true, usage: { include: true } }),
+        body: JSON.stringify({ models, messages, max_tokens: maxTok, stream: true, usage: { include: true } }),
       });
     } catch (e: unknown) {
       return json({ error: { type: 'OVERLOADED', message: 'AI at capacity.', detail: e instanceof Error ? e.message : 'Unknown' } }, 503);
@@ -287,7 +307,7 @@ async function handleBrain(req: Request) {
   let apiJson: any = null; let lastErr: any = null;
   for (let i = 0; i < 3; i++) {
     try {
-      const r = await fetch(OPENROUTER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' }, body: JSON.stringify({ models: BRAIN_MODELS, messages, max_tokens: maxTok, usage: { include: true } }) });
+      const r = await fetch(OPENROUTER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' }, body: JSON.stringify({ models, messages, max_tokens: maxTok, usage: { include: true } }) });
       const j = await r.json();
       if (r.ok && !j.error && j.choices?.length) { apiJson = j; break; }
       lastErr = { status: r.status, error: j.error ?? j };
@@ -303,7 +323,7 @@ async function handleBrain(req: Request) {
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors() });
-  if (req.method === 'GET') return json({ status: 'ok', service: 'ai-proxy', brain: BRAIN_MODELS, rexlens: REXLENS_DEFAULT_MODEL });
+  if (req.method === 'GET') return json({ status: 'ok', service: 'ai-proxy', brain: BRAIN_MODELS, brainFast: BRAIN_TIERED && BRAIN_MODELS_FAST.length > 0 ? BRAIN_MODELS_FAST : null, tiered: BRAIN_TIERED, rexlens: REXLENS_DEFAULT_MODEL });
   if (req.method !== 'POST') return json({ error: { type: 'invalid_request', message: 'POST required' } }, 405);
   switch (routeOf(req)) {
     case 'rexlens': return handleRexLens(req);
