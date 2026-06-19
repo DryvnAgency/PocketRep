@@ -9,7 +9,8 @@
     "web": "expo start --web",
     "build:web": "expo export --platform web",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ext .ts,.tsx,.js,.jsx"
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
+    "eval:rex": "npx --yes promptfoo@latest eval -c ../eval/promptfooconfig.yaml"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.1",
