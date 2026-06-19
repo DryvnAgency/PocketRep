@@ -66,12 +66,14 @@ function Row({
 
 export default function ProfileTab({
   onOpenGamePlan,
+  onOpenRexActivity,
   onReplayOnboarding,
   onOpenPayPlan,
   onNavigate,
   payPlanRefetchKey = 0,
 }: {
   onOpenGamePlan?: () => void;
+  onOpenRexActivity?: () => void;
   onReplayOnboarding?: () => void;
   onOpenPayPlan?: () => void;
   onNavigate?: (tab: TabId) => void;
@@ -247,6 +249,7 @@ export default function ProfileTab({
           onPress={() => editSetting('dataSources', 'Data sources', 'CONNECTED SOURCES')} />
         <Row icon="📝" label="Custom prompts" detail={getRepSetting('customPrompts') || 'None saved'}
           onPress={() => editSetting('customPrompts', 'Custom prompts', 'YOUR SAVED PROMPTS', { multiline: true })} />
+        <Row icon="🧾" label="Rex activity" detail="Action log →" onPress={onOpenRexActivity} />
         <Pressable
           onPress={async () => {
             const r = await sendTestPush();

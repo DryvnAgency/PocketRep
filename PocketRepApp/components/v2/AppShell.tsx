@@ -17,6 +17,7 @@ import RexDisclosure from './RexDisclosure';
 import HeyRexSheet from './HeyRexSheet';
 import Onboarding from './Onboarding';
 import GamePlanSheet from './GamePlanSheet';
+import RexActivityViewer from './RexActivityViewer';
 import BlastSequenceDrafter from './BlastSequenceDrafter';
 import StalledLeadsAnalysis from './StalledLeadsAnalysis';
 import NurtureReviewer from './NurtureReviewer';
@@ -72,6 +73,7 @@ export default function AppShell() {
   const [alwaysListen, setAlwaysListen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [gamePlanOpen, setGamePlanOpen] = useState(false);
+  const [rexActivityOpen, setRexActivityOpen] = useState(false);
   const [blastDraft, setBlastDraft] = useState<BlastDraft | null>(null);
   const [blastDrafting, setBlastDrafting] = useState(false);
   const [stalledOpen, setStalledOpen] = useState(false);
@@ -299,6 +301,7 @@ export default function AppShell() {
     if (nurtureReviewerOpen) { setNurtureReviewerOpen(false); return; }
     if (payPlanOpen) { setPayPlanOpen(false); return; }
     if (blastDraft) { setBlastDraft(null); return; }
+    if (rexActivityOpen) { setRexActivityOpen(false); return; }
     if (gamePlanOpen) { setGamePlanOpen(false); return; }
     if (addContactOpen) { setAddContactOpen(false); return; }
     if (bulkTagOpen) { setBulkTagOpen(false); return; }
@@ -308,7 +311,7 @@ export default function AppShell() {
   };
   const anyOverlayOpen =
     rexCoachOpen || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
-    !!blastDraft || gamePlanOpen || addContactOpen || bulkTagOpen || !!selectedDeal ||
+    !!blastDraft || gamePlanOpen || rexActivityOpen || addContactOpen || bulkTagOpen || !!selectedDeal ||
     dealLoggerOpen || !!selectedId;
   const closeTopRef = useRef(closeTopOverlay);
   closeTopRef.current = closeTopOverlay;
@@ -404,6 +407,7 @@ export default function AppShell() {
         ) : active === 'profile' ? (
           <ProfileTab
             onOpenGamePlan={() => setGamePlanOpen(true)}
+            onOpenRexActivity={() => setRexActivityOpen(true)}
             onReplayOnboarding={() => setOnboardingOpen(true)}
             onOpenPayPlan={() => setPayPlanOpen(true)}
             onNavigate={setActive}
@@ -497,6 +501,12 @@ export default function AppShell() {
       <GamePlanSheet
         open={gamePlanOpen}
         onClose={() => setGamePlanOpen(false)}
+      />
+
+      <RexActivityViewer
+        open={rexActivityOpen}
+        contacts={contacts ?? []}
+        onClose={() => setRexActivityOpen(false)}
       />
 
       <HeyRexSheet
