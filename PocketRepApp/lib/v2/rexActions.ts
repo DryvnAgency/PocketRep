@@ -734,6 +734,38 @@ export function summarizeAction(action: RexAction): string {
   }
 }
 
+// P2-R8: an honest, specific recovery line for an action that FAILED to execute.
+// Rex speaks its spoken confirmation optimistically (before the write runs), so on
+// a failure the rep already heard "done" — this names exactly what did NOT happen
+// and offers a retry, so Rex never leaves a fabricated success standing. Used only
+// when the failure-honesty flag is on (it alters spoken output).
+export function failureRecoveryLine(action: RexAction): string {
+  const p = action.payload as any;
+  const who = (n: unknown, fallback: string) => (typeof n === 'string' && n.trim() ? n.trim() : fallback);
+  switch (action.type) {
+    case 'add_contact':
+      return `That didn't save — I couldn't add ${who(p.first_name, 'that contact')}. Want me to try again?`;
+    case 'log_deal':
+      return `That didn't save — the deal for ${who(p.customer_name, 'that customer')} didn't go through. Want me to try again?`;
+    case 'update_notes':
+      return `That didn't save — I couldn't update ${who(p.contact_name, 'that contact')}. Want me to try again?`;
+    case 'delete_contact':
+      return `That didn't go through — ${who(p.contact_name, 'that contact')} is still here. Want me to try again?`;
+    case 'schedule_followup':
+      return `That didn't save — the follow-up for ${who(p.contact_name, 'that contact')} didn't set. Want me to try again?`;
+    case 'retier_contact':
+      return `That didn't save — I couldn't move ${who(p.contact_name, 'that contact')}. Want me to try again?`;
+    case 'create_reminder':
+      return `That didn't save — the reminder didn't set. Want me to try again?`;
+    case 'batch_action':
+      return `That didn't go through — the batch update didn't apply. Want me to try again?`;
+    case 'chain':
+      return `That didn't fully go through — not all of those steps saved. Want me to try again?`;
+    default:
+      return `That didn't go through. Want me to try again?`;
+  }
+}
+
 function labelFor(action: string): string {
   return ({
     add_tag: 'Tag',
@@ -792,8 +824,14 @@ export function actionWritesData(t: RexAction['type']): boolean {
 // Log every executed/cancelled action for the rep behavior tracker.
 export async function logRexAction(
   action: RexAction,
-  result: 'success' | 'cancelled' | 'failed',
-  extra?: { contact_ids?: string[] },
+  // P2-R8: 'partial' (already permitted by the rex_action_log CHECK, previously
+  // unused) marks a chain that didn't fully apply — distinct from an outright 'failed'.
+  result: 'success' | 'cancelled' | 'partial' | 'failed',
+  // P2-R8: failure_reason captures WHY a write failed. The table has no dedicated
+  // column (adding one is an owner-gated migration), so we fold it into the
+  // existing action_payload jsonb under `_rex_failure_reason` (clamped) — additive,
+  // no schema change, queryable. Always recorded; it never alters user-facing output.
+  extra?: { contact_ids?: string[]; failure_reason?: string },
 ): Promise<void> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -802,10 +840,14 @@ export async function logRexAction(
       extra?.contact_ids ??
       ((action.payload as any)?.contact_ids as string[] | undefined) ??
       ((action.payload as any)?.contact_id ? [(action.payload as any).contact_id] : undefined);
+    const reason = extra?.failure_reason ? String(extra.failure_reason).slice(0, 300) : null;
+    const payload = reason
+      ? { ...(action.payload as any), _rex_failure_reason: reason }
+      : action.payload;
     await supabase.from('rex_action_log').insert({
       user_id: user.id,
       action_type: action.type,
-      action_payload: action.payload as any,
+      action_payload: payload as any,
       contact_ids: contactIds ?? null,
       confirmed_at: result === 'success' ? new Date().toISOString() : null,
       executed_at: result === 'success' ? new Date().toISOString() : null,

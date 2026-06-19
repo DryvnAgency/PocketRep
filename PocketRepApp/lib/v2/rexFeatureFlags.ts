@@ -14,3 +14,14 @@ export function isRexMultistepEnabled(): boolean {
   if (typeof process === 'undefined') return false;
   return envOn(process.env.EXPO_PUBLIC_REX_MULTISTEP);
 }
+
+// P2-R8: when on, a failed Rex action gets an honest SPOKEN recovery line — Rex
+// verbally corrects its optimistic pre-execution "done" instead of leaving a
+// fabricated success as the last thing the rep heard, and the on-screen error
+// becomes a specific, plain recovery message. Off by default → the failure UX is
+// byte-identical to before (raw error text, no extra speech). The richer failure
+// logging to rex_action_log is always on (it never alters spoken/visible output).
+export function isRexFailureHonestyEnabled(): boolean {
+  if (typeof process === 'undefined') return false;
+  return envOn(process.env.EXPO_PUBLIC_REX_FAILURE_HONESTY);
+}
