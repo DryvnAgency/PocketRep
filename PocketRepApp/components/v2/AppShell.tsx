@@ -16,6 +16,7 @@ import AddContactModal from './AddContactModal';
 import RexDisclosure from './RexDisclosure';
 import HeyRexSheet from './HeyRexSheet';
 import Onboarding from './Onboarding';
+import RexOnboarding from './RexOnboarding';
 import GamePlanSheet from './GamePlanSheet';
 import RexActivityViewer from './RexActivityViewer';
 import BlastSequenceDrafter from './BlastSequenceDrafter';
@@ -53,6 +54,7 @@ import {
   syncOnboardingFromProfile,
 } from '@/lib/v2/rexSettings';
 import { useHeyRex } from '@/lib/v2/useHeyRex';
+import { isRexOnboardingEnabled } from '@/lib/v2/rexFeatureFlags';
 import { useAccessGate } from '@/lib/v2/accessGate';
 import { supabase } from '@/lib/supabase';
 import { captureTimezone } from '@/lib/v2/sendTime';
@@ -507,13 +509,26 @@ export default function AppShell() {
         }}
       />
 
-      <Onboarding
-        open={onboardingOpen}
-        onClose={() => {
-          markOnboardingComplete();
-          setOnboardingOpen(false);
-        }}
-      />
+      {/* P2-R1: when EXPO_PUBLIC_REX_ONBOARDING is on, first-run is the Rex
+          interview instead of the static carousel (same open + complete contract).
+          Default off → the carousel renders exactly as before. */}
+      {isRexOnboardingEnabled() ? (
+        <RexOnboarding
+          open={onboardingOpen}
+          onClose={() => {
+            markOnboardingComplete();
+            setOnboardingOpen(false);
+          }}
+        />
+      ) : (
+        <Onboarding
+          open={onboardingOpen}
+          onClose={() => {
+            markOnboardingComplete();
+            setOnboardingOpen(false);
+          }}
+        />
+      )}
 
       <GamePlanSheet
         open={gamePlanOpen}

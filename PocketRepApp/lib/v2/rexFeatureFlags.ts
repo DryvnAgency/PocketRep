@@ -25,3 +25,13 @@ export function isRexFailureHonestyEnabled(): boolean {
   if (typeof process === 'undefined') return false;
   return envOn(process.env.EXPO_PUBLIC_REX_FAILURE_HONESTY);
 }
+
+// P2-R1: replace the static first-run carousel with a short Rex interview that
+// captures the rep's real, consumed profile fields (name, dealership, title, Rex
+// tone) conversationally. Off by default → first-run shows the existing 8-slide
+// carousel exactly as before; the interview only appears when this is set, so the
+// owner can review/tune the script before it greets a real rep.
+export function isRexOnboardingEnabled(): boolean {
+  if (typeof process === 'undefined') return false;
+  return envOn(process.env.EXPO_PUBLIC_REX_ONBOARDING);
+}
