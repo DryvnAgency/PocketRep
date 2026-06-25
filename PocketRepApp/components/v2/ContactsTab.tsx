@@ -104,6 +104,7 @@ export default function ContactsTab({
   onRetry,
   onBulkTag,
   onAddContact,
+  onImportContacts,
   onDeleteTag,
 }: {
   contacts: V2Contact[] | null;
@@ -113,6 +114,7 @@ export default function ContactsTab({
   onRetry?: () => void;
   onBulkTag?: () => void;
   onAddContact?: () => void;
+  onImportContacts?: () => void;
   onDeleteTag?: (name: string) => void;
 }) {
   const [query, setQuery] = useState('');
@@ -205,6 +207,11 @@ export default function ContactsTab({
             </Pressable>
           ) : null}
         </View>
+        {onImportContacts ? (
+          <Pressable onPress={onImportContacts} style={styles.importBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Import contacts">
+            <Text style={styles.importBtnText}>⇪</Text>
+          </Pressable>
+        ) : null}
         <Pressable onPress={onAddContact} style={styles.addBtn} hitSlop={6}>
           <Text style={styles.addBtnText}>＋</Text>
         </Pressable>
@@ -334,6 +341,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addBtnText: { fontSize: 22, fontWeight: '800', color: colors.ink, lineHeight: 24 },
+  importBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  importBtnText: { fontSize: 19, fontWeight: '800', color: colors.gold, lineHeight: 22 },
   searchIcon: { color: colors.grey, fontSize: 14 },
   searchInput: {
     flex: 1,

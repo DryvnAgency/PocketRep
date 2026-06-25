@@ -26,6 +26,14 @@ export function isRexFailureHonestyEnabled(): boolean {
   return envOn(process.env.EXPO_PUBLIC_REX_FAILURE_HONESTY);
 }
 
+// "Upload contacts from phone": the Contacts-tab import entry point. The Contacts
+// tab is a core flow, so the entry point is gated — off by default → no import
+// button renders and nothing about the tab changes. Turn on per environment.
+export function isContactImportEnabled(): boolean {
+  if (typeof process === 'undefined') return false;
+  return envOn(process.env.EXPO_PUBLIC_CONTACT_IMPORT);
+}
+
 // P2-R1: replace the static first-run carousel with a short Rex interview that
 // captures the rep's real, consumed profile fields (name, dealership, title, Rex
 // tone) conversationally. Off by default → first-run shows the existing 8-slide

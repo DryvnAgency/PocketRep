@@ -13,6 +13,7 @@ import DealLogger, { type DealLoggerPrefill } from './DealLogger';
 import DealDetail from './DealDetail';
 import BulkTagFlow from './BulkTagFlow';
 import AddContactModal from './AddContactModal';
+import ImportContactsModal from './ImportContactsModal';
 import RexDisclosure from './RexDisclosure';
 import HeyRexSheet from './HeyRexSheet';
 import Onboarding from './Onboarding';
@@ -54,7 +55,7 @@ import {
   syncOnboardingFromProfile,
 } from '@/lib/v2/rexSettings';
 import { useHeyRex } from '@/lib/v2/useHeyRex';
-import { isRexOnboardingEnabled } from '@/lib/v2/rexFeatureFlags';
+import { isRexOnboardingEnabled, isContactImportEnabled } from '@/lib/v2/rexFeatureFlags';
 import { useAccessGate } from '@/lib/v2/accessGate';
 import { supabase } from '@/lib/supabase';
 import { captureTimezone } from '@/lib/v2/sendTime';
@@ -71,6 +72,7 @@ export default function AppShell() {
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [tagsRefetchKey, setTagsRefetchKey] = useState(0);
   const [addContactOpen, setAddContactOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
   const [alwaysListen, setAlwaysListen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -323,6 +325,7 @@ export default function AppShell() {
     if (rexActivityOpen) { setRexActivityOpen(false); return; }
     if (gamePlanOpen) { setGamePlanOpen(false); return; }
     if (addContactOpen) { setAddContactOpen(false); return; }
+    if (importOpen) { setImportOpen(false); return; }
     if (bulkTagOpen) { setBulkTagOpen(false); return; }
     if (selectedDeal) { setSelectedDeal(null); return; }
     if (dealLoggerOpen) { setDealLoggerOpen(false); return; }
@@ -330,7 +333,7 @@ export default function AppShell() {
   };
   const anyOverlayOpen =
     rexCoachOpen || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
-    !!blastDraft || gamePlanOpen || rexActivityOpen || addContactOpen || bulkTagOpen || !!selectedDeal ||
+    !!blastDraft || gamePlanOpen || rexActivityOpen || addContactOpen || importOpen || bulkTagOpen || !!selectedDeal ||
     dealLoggerOpen || !!selectedId;
   const closeTopRef = useRef(closeTopOverlay);
   closeTopRef.current = closeTopOverlay;
@@ -417,6 +420,7 @@ export default function AppShell() {
             onSelect={c => setSelectedId(c.id)}
             onBulkTag={() => setBulkTagOpen(true)}
             onAddContact={() => setAddContactOpen(true)}
+            onImportContacts={isContactImportEnabled() ? () => setImportOpen(true) : undefined}
             onDeleteTag={async (name) => {
               try { await deleteTag(name); } catch (e) { console.warn('deleteTag failed', e); }
               setTagsRefetchKey(k => k + 1);
@@ -489,6 +493,13 @@ export default function AppShell() {
         allContacts={contacts ?? []}
         onClose={() => setAddContactOpen(false)}
         onCreated={() => { reloadContacts(); setActive('contacts'); }}
+      />
+
+      <ImportContactsModal
+        open={importOpen}
+        allContacts={contacts ?? []}
+        onClose={() => setImportOpen(false)}
+        onImported={() => { reloadContacts(); setActive('contacts'); }}
       />
 
       <RexDisclosure

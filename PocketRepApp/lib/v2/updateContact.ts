@@ -101,6 +101,43 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
   return data!.id as string;
 }
 
+export type ImportContactRow = {
+  firstName: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+};
+
+// Bulk-insert imported contacts in a single round-trip. Fresh imports seed as cold
+// leads (heat_score 35) with today's last-contact date — honest defaults, not faked
+// interest. Rows whose first name is blank are skipped. Returns the count inserted.
+export async function bulkCreateContacts(rows: ImportContactRow[]): Promise<number> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const today = new Date().toISOString().slice(0, 10);
+  const payload = rows
+    .map(r => ({ first: titleCase((r.firstName ?? '').trim()), r }))
+    .filter(x => x.first.length > 0)
+    .map(({ first, r }) => ({
+      user_id: user.id,
+      first_name: first,
+      last_name: titleCase((r.lastName ?? '').trim()) || null,
+      phone: (r.phone ?? '').trim() || null,
+      email: (r.email ?? '').trim() || null,
+      notes: (r.notes ?? '').trim() || null,
+      heat_score: 35,
+      last_contact_date: today,
+      tags: [] as string[],
+      stage: 'active',
+      milestones: [],
+    }));
+  if (payload.length === 0) return 0;
+  const { error } = await supabase.from('contacts').insert(payload);
+  if (error) throw error;
+  return payload.length;
+}
+
 // Hard delete: actually removes the row from the database. Child rows clean up
 // via FK (interactions / nurture_messages / milestones / contact_sequences
 // cascade; deals + rex_messages keep their history with contact_id set null).
