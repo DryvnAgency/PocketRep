@@ -26,6 +26,14 @@ export function isRexFailureHonestyEnabled(): boolean {
   return envOn(process.env.EXPO_PUBLIC_REX_FAILURE_HONESTY);
 }
 
+// P2 demo feature: new-contact -> Rex recap draft -> rep-sent 14-day follow-up
+// sequence. Off by default; also inert until the rex_followups migration is applied.
+// When on, ContactDetail shows a follow-up card and AddContact auto-drafts a recap.
+export function isRexFollowupEnabled(): boolean {
+  if (typeof process === 'undefined') return false;
+  return envOn(process.env.EXPO_PUBLIC_REX_FOLLOWUP);
+}
+
 // "Upload contacts from phone": the Contacts-tab import entry point. The Contacts
 // tab is a core flow, so the entry point is gated — off by default → no import
 // button renders and nothing about the tab changes. Turn on per environment.

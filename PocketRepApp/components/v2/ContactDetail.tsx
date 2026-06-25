@@ -29,6 +29,8 @@ import { pickAndUploadContactPhoto } from '@/lib/v2/contactPhoto';
 import { formatBirthday, parseBirthdayInput } from '@/lib/v2/birthday';
 import LanguageToggle from './LanguageToggle';
 import MarkReplyButton from './MarkReplyButton';
+import FollowupCard from './FollowupCard';
+import { isRexFollowupEnabled } from '@/lib/v2/rexFeatureFlags';
 
 const MILESTONE_ICONS: Record<string, { icon: string; color: string }> = {
   'visit':       { icon: '👋', color: colors.gold },
@@ -918,6 +920,13 @@ export default function ContactDetail({
             </Text>
           </View>
         )}
+
+        {isRexFollowupEnabled() && (contact.phone || contact.email) ? (
+          <FollowupCard
+            contact={contact}
+            onSendMessage={(body) => { if (contact.phone) openText(body); else openEmail(body); }}
+          />
+        ) : null}
 
         <View style={styles.sectionHead}>
           <Text style={styles.sectionLabel}>NOTES</Text>

@@ -6,6 +6,8 @@ import {
 import { colors, radius } from '@/constants/theme';
 import { createContact, type NewContactDraft } from '@/lib/v2/updateContact';
 import { parseBirthdayInput } from '@/lib/v2/birthday';
+import { isRexFollowupEnabled } from '@/lib/v2/rexFeatureFlags';
+import { kickoffRecapForContact } from '@/lib/v2/followupSequence';
 import type { V2Contact } from '@/lib/v2/useContacts';
 
 const PLAN_OPTIONS: Array<{ value: NewContactDraft['planLabel']; label: string }> = [
@@ -76,12 +78,21 @@ export default function AddContactModal({
       const matchedReferrer = typedReferrer
         ? allContacts.find(c => c.name.toLowerCase() === typedReferrer.toLowerCase())
         : undefined;
-      await createContact({
+      const newId = await createContact({
         ...d,
         birthday: parsedBday,
         referredByName: typedReferrer || null,
         referredByContactId: matchedReferrer?.id ?? null,
       });
+      // P2 follow-up feature (flag-gated): on save, Rex auto-drafts a recap into the
+      // contact's Next Step. Fire-and-forget so it never blocks or fails the save.
+      if (isRexFollowupEnabled()) {
+        kickoffRecapForContact(newId, {
+          name: [d.firstName, d.lastName].filter(Boolean).join(' ').trim(),
+          vehicle: d.vehicle,
+          note: d.notes,
+        }).catch(() => undefined);
+      }
       onCreated();
       onClose();
     } catch (e: any) {
