@@ -16,6 +16,7 @@ import { executeBatchAction, type BatchActionKind } from './batchActions';
 import { callBrainStream, type BrainMessage } from './aiProxy';
 import type { V2Contact } from './useContacts';
 import { isRexMultistepEnabled } from './rexFeatureFlags';
+import { frameUntrusted } from './promptSafety';
 
 export type RexAction =
   | { type: 'add_contact'; payload: AddContactPayload; say: string }
@@ -249,7 +250,7 @@ function buildPrompt(
     : '';
   return `You are Rex, the voice assistant inside PocketRep — a sales rep CRM. The rep just said something to you. Pick the single best action.${multistep ? ' For a clearly multi-intent request you may return a chain (see action 17).' : ''}${memorySection}${screenContext}
 
-${bookSection}
+${frameUntrusted('BOOK STATE', bookSection)}
 
 Actions you can take, with required + optional payload fields:
 

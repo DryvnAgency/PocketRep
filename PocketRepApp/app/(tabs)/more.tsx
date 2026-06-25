@@ -94,12 +94,20 @@ export default function MoreScreen() {
       return;
     }
 
+    // Escape every CSV cell: neutralize spreadsheet formula-injection (a leading
+    // = + - @ or control char runs as a formula in Excel/Sheets) and quote so a
+    // comma, quote, or newline in any field can't corrupt the row.
+    const csvCell = (v: unknown): string => {
+      let s = v == null ? '' : String(v);
+      if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+      return `"${s.replace(/"/g, '""')}"`;
+    };
     const csv = [
       'First,Last,Phone,Email,Year,Make,Model,Mileage,Last Contact,Notes',
       ...contacts.map(c =>
         [c.first_name, c.last_name, c.phone, c.email, c.vehicle_year, c.vehicle_make,
-          c.vehicle_model, c.mileage, c.last_contact_date, `"${(c.notes ?? '').replace(/"/g, '""')}"`
-        ].join(',')
+          c.vehicle_model, c.mileage, c.last_contact_date, c.notes
+        ].map(csvCell).join(',')
       ),
     ].join('\n');
 

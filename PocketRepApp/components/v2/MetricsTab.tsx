@@ -345,10 +345,6 @@ export default function MetricsTab({
           />
         );
       })}
-
-      <View style={{ paddingHorizontal: 14, paddingVertical: 16, alignItems: 'center' }}>
-        <Text style={styles.closeMonth}>Close {MONTHS_SHORT[curMo]} →</Text>
-      </View>
     </View>
   );
 }
@@ -521,5 +517,4 @@ const styles = StyleSheet.create({
   dealAmount: { fontSize: 16, fontWeight: '800', color: colors.green, letterSpacing: -0.4 },
   dealPills: { flexDirection: 'row', gap: 4, marginTop: 3 },
 
-  closeMonth: { fontSize: 12, color: colors.grey2 },
 });

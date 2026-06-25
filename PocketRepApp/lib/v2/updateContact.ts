@@ -148,3 +148,39 @@ export async function updateContactPreferredLanguage(
     .eq('id', id);
   if (error) throw error;
 }
+
+// Edit the contact's display name. Splits a full-name string into first/last and
+// stores them the same way createContact does (title-cased; empty last → null).
+export async function updateContactName(
+  id: string,
+  firstName: string,
+  lastName: string,
+): Promise<void> {
+  const first = titleCase(firstName.trim());
+  if (!first) throw new Error('Name is required');
+  const { error } = await supabase
+    .from('contacts')
+    .update({
+      first_name: first,
+      last_name: titleCase(lastName.trim()) || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Edit the vehicle-interest card fields. Every key is optional so a single field
+// can be saved on its own; an empty string clears that column to null. vehicle/trim
+// run through normalizeVehicle to match how createContact stores them.
+export async function updateContactVehicleInfo(
+  id: string,
+  patch: { vehicle?: string; trim?: string; budget?: string; tradeIn?: string },
+): Promise<void> {
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.vehicle !== undefined) row.vehicle = normalizeVehicle(patch.vehicle) || null;
+  if (patch.trim !== undefined) row.trim = normalizeVehicle(patch.trim) || null;
+  if (patch.budget !== undefined) row.budget = patch.budget.trim() || null;
+  if (patch.tradeIn !== undefined) row.trade_in = patch.tradeIn.trim() || null;
+  const { error } = await supabase.from('contacts').update(row).eq('id', id);
+  if (error) throw error;
+}

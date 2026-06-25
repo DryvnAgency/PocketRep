@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { REX_COPY_RULES } from './rexActions';
 import { loadBookContext, type BookContact } from './bookContext';
 import { callBrain } from './aiProxy';
+import { frameUntrusted, clampNote } from './promptSafety';
 
 export type StalledRecommendation = {
   contact_id: string;
@@ -53,12 +54,12 @@ function defaultOpener(c: BookContact): string {
 function buildOpenerPrompt(contacts: BookContact[]): string {
   const rows = contacts.map(c => JSON.stringify({
     id: c.id,
-    name: c.name,
+    name: clampNote(c.name, 80),
     heat_score: c.heat_score,
     days_silent: c.days_silent,
     vehicle: c.vehicle,
     lease_end_date: c.lease_end_date,
-    last_contact_summary: c.last_contact_summary,
+    last_contact_summary: clampNote(c.last_contact_summary),
     preferred_language: c.preferred_language,
   })).join(',\n');
 
@@ -73,9 +74,7 @@ Each opener must:
 ${REX_COPY_RULES}
 
 CONTACTS:
-[
-${rows}
-]
+${frameUntrusted('CONTACT LIST', `[\n${rows}\n]`)}
 
 Return ONLY a single JSON object inside a \`\`\`json fenced block:
 {

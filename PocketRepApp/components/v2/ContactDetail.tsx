@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet, Linking, Platform,
 } from 'react-native';
 import { colors, radius, spacing } from '@/constants/theme';
-import { Avatar, Label, Pill, SectionHead, rgbaTint } from './atoms';
+import { Avatar, Label, Pill, rgbaTint } from './atoms';
 import { TIERS, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import { useDeals, type V2Deal } from '@/lib/v2/useDeals';
@@ -17,8 +17,11 @@ import {
   updateContactPreferredLanguage,
   updateContactBirthday,
   updateContactReferredBy,
+  updateContactName,
+  updateContactVehicleInfo,
   logContactTouch,
 } from '@/lib/v2/updateContact';
+import { titleCase, normalizeVehicle } from '@/lib/v2/format';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 import { useContactNurtures } from '@/lib/v2/contactNurtures';
 import { logInteraction, useInteractions, type InteractionType } from '@/lib/v2/interactions';
@@ -117,6 +120,18 @@ export default function ContactDetail({
   const [referralInput, setReferralInput] = useState('');
   const [savingReferral, setSavingReferral] = useState(false);
 
+  // Inline name editor (hero).
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  // Inline vehicle-interest editor (vehicle / trim / budget / trade-in).
+  const [editingVehicle, setEditingVehicle] = useState(false);
+  const [savingVehicle, setSavingVehicle] = useState(false);
+  const [vehInput, setVehInput] = useState('');
+  const [trimInput, setTrimInput] = useState('');
+  const [budgetInput, setBudgetInput] = useState('');
+  const [tradeInput, setTradeInput] = useState('');
+
   useEffect(() => {
     setNotes(contact.notes ?? '');
     setEditingNotes(false);
@@ -124,6 +139,8 @@ export default function ContactDetail({
     setEditingBday(false);
     setEditingReferral(false);
     setReferralInput('');
+    setEditingName(false);
+    setEditingVehicle(false);
     setAiOpen(false);
     setAiScript('');
     setAiError(null);
@@ -237,6 +254,53 @@ export default function ContactDetail({
       console.warn('saveBday failed', e);
     } finally {
       setSavingBday(false);
+    }
+  };
+
+  const startEditName = () => { setNameInput(contact.name); setEditingName(true); };
+  const cancelName = () => { setEditingName(false); setNameInput(''); };
+  const saveName = async () => {
+    const full = nameInput.trim();
+    if (!full) return; // name is required — keep editing so the rep can fix it
+    const [first, ...rest] = full.split(/\s+/);
+    const last = rest.join(' ');
+    setSavingName(true);
+    try {
+      await updateContactName(contact.id, first, last);
+      onLocalUpdate({ ...contact, name: [titleCase(first), titleCase(last)].filter(Boolean).join(' ') });
+      setEditingName(false);
+    } catch (e) {
+      console.warn('saveName failed', e);
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const startEditVehicle = () => {
+    setVehInput(contact.vehicle ?? '');
+    setTrimInput(contact.trim ?? '');
+    setBudgetInput(contact.budget ?? '');
+    setTradeInput(contact.tradeIn ?? '');
+    setEditingVehicle(true);
+  };
+  const saveVehicle = async () => {
+    setSavingVehicle(true);
+    try {
+      await updateContactVehicleInfo(contact.id, {
+        vehicle: vehInput, trim: trimInput, budget: budgetInput, tradeIn: tradeInput,
+      });
+      onLocalUpdate({
+        ...contact,
+        vehicle: normalizeVehicle(vehInput) || null,
+        trim: normalizeVehicle(trimInput) || null,
+        budget: budgetInput.trim() || null,
+        tradeIn: tradeInput.trim() || null,
+      });
+      setEditingVehicle(false);
+    } catch (e) {
+      console.warn('saveVehicle failed', e);
+    } finally {
+      setSavingVehicle(false);
     }
   };
 
@@ -479,7 +543,30 @@ export default function ContactDetail({
             </View>
           </Pressable>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.heroName}>{contact.name}</Text>
+            {editingName ? (
+              <View style={styles.nameEditRow}>
+                <TextInput
+                  value={nameInput}
+                  onChangeText={setNameInput}
+                  autoFocus
+                  placeholder="Full name"
+                  placeholderTextColor={colors.grey}
+                  style={styles.nameInput}
+                  onSubmitEditing={saveName}
+                  returnKeyType="done"
+                />
+                <Pressable onPress={cancelName} hitSlop={6}>
+                  <Text style={styles.linkSecondary}>Cancel</Text>
+                </Pressable>
+                <Pressable onPress={saveName} hitSlop={6} disabled={savingName}>
+                  <Text style={styles.linkPrimary}>{savingName ? '…' : 'SAVE'}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable onPress={startEditName} hitSlop={4}>
+                <Text style={styles.heroName}>{contact.name}</Text>
+              </Pressable>
+            )}
             <View style={styles.heroPills}>
               <Pressable onPress={cycleTier} hitSlop={6}>
                 <Pill color={tier.color}>{tier.icon} {tier.label}</Pill>
@@ -537,21 +624,73 @@ export default function ContactDetail({
           </Pressable>
         </View>
 
-        <SectionHead label="VEHICLE INTEREST" />
-        <View style={styles.card}>
-          <Text style={styles.vehicleName}>{contact.vehicle ?? '—'}</Text>
-          {contact.trim ? <Text style={styles.vehicleTrim}>{contact.trim}</Text> : null}
-          <View style={styles.vehicleStats}>
-            <View style={{ flex: 1 }}>
-              <Label color={colors.grey2}>BUDGET</Label>
-              <Text style={styles.statValue}>{contact.budget ? `$${contact.budget}` : '—'}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Label color={colors.grey2}>TRADE-IN</Label>
-              <Text style={styles.statValueSmall}>{contact.tradeIn ?? 'None'}</Text>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionLabel}>VEHICLE INTEREST</Text>
+          <View style={{ flex: 1 }} />
+          {editingVehicle ? (
+            <>
+              <Pressable onPress={() => setEditingVehicle(false)} hitSlop={6}>
+                <Text style={styles.linkSecondary}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={saveVehicle} hitSlop={6} disabled={savingVehicle}>
+                <Text style={styles.linkPrimary}>{savingVehicle ? 'SAVING…' : 'SAVE'}</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable onPress={startEditVehicle} hitSlop={6}>
+              <Text style={styles.linkPrimary}>EDIT ›</Text>
+            </Pressable>
+          )}
+        </View>
+        {editingVehicle ? (
+          <View style={[styles.card, { borderColor: colors.gold }]}>
+            <Label color={colors.grey2}>VEHICLE</Label>
+            <TextInput
+              value={vehInput} onChangeText={setVehInput} autoFocus
+              placeholder="e.g. 2024 BMW M3" placeholderTextColor={colors.grey}
+              style={styles.vehEditInput}
+            />
+            <Label color={colors.grey2}>TRIM</Label>
+            <TextInput
+              value={trimInput} onChangeText={setTrimInput}
+              placeholder="e.g. Competition" placeholderTextColor={colors.grey}
+              style={styles.vehEditInput}
+            />
+            <View style={styles.vehicleStats}>
+              <View style={{ flex: 1 }}>
+                <Label color={colors.grey2}>BUDGET</Label>
+                <TextInput
+                  value={budgetInput} onChangeText={setBudgetInput}
+                  placeholder="e.g. 82,000" placeholderTextColor={colors.grey}
+                  style={styles.vehEditInput}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Label color={colors.grey2}>TRADE-IN</Label>
+                <TextInput
+                  value={tradeInput} onChangeText={setTradeInput}
+                  placeholder="e.g. 2019 M340i" placeholderTextColor={colors.grey}
+                  style={styles.vehEditInput}
+                />
+              </View>
             </View>
           </View>
-        </View>
+        ) : (
+          <Pressable onPress={startEditVehicle} style={styles.card}>
+            <Text style={styles.vehicleName}>{contact.vehicle ?? '—'}</Text>
+            {contact.trim ? <Text style={styles.vehicleTrim}>{contact.trim}</Text> : null}
+            <View style={styles.vehicleStats}>
+              <View style={{ flex: 1 }}>
+                <Label color={colors.grey2}>BUDGET</Label>
+                <Text style={styles.statValue}>{contact.budget ? `$${contact.budget}` : '—'}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Label color={colors.grey2}>TRADE-IN</Label>
+                <Text style={styles.statValueSmall}>{contact.tradeIn ?? 'None'}</Text>
+              </View>
+            </View>
+          </Pressable>
+        )}
 
         <View style={styles.sectionHead}>
           <Text style={styles.sectionLabel}>BIRTHDAY</Text>
@@ -1325,6 +1464,21 @@ const styles = StyleSheet.create({
   },
   heroName: { fontSize: 22, fontWeight: '700', color: colors.white, letterSpacing: -0.5 },
   heroPills: { flexDirection: 'row', gap: 6, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' },
+  nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  nameInput: {
+    flex: 1, minWidth: 0,
+    fontSize: 20, fontWeight: '700', color: colors.white, letterSpacing: -0.4,
+    borderBottomWidth: 1, borderBottomColor: colors.gold,
+    paddingVertical: 2,
+  } as any,
+  vehEditInput: {
+    color: colors.white, fontSize: 15,
+    backgroundColor: colors.ink2,
+    borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10, paddingVertical: 8,
+    marginTop: 4, marginBottom: 10,
+  } as any,
 
   quickRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingBottom: 12 },
   quickBtn: {
