@@ -15,12 +15,18 @@ import {
   parseContactsText,
   pickFromDevice,
   isDevicePickerSupported,
-  isDuplicate,
+  phoneKey,
+  nameKey,
+  fullNameOf,
   importSelected,
   type ParsedImportContact,
 } from '@/lib/v2/contactImport';
 
-type Review = ParsedImportContact & { dup: boolean };
+// badge: '' = no match · 'IN BOOK' = phone match in the book · 'DUPLICATE' = a
+// repeat within this same import · 'SAME NAME' = name-only match in the book.
+// preUncheck is true for strong duplicates (phone-in-book or in-batch repeat);
+// a name-only book match stays checked (two people can share a name).
+type Review = ParsedImportContact & { preUncheck: boolean; badge: '' | 'IN BOOK' | 'DUPLICATE' | 'SAME NAME' };
 type Phase = 'source' | 'review';
 
 export default function ImportContactsModal({
@@ -55,10 +61,26 @@ export default function ImportContactsModal({
       setError('No contacts found. Check the file is a valid vCard (.vcf) or CSV.');
       return;
     }
-    const flagged: Review[] = parsed.map(p => ({ ...p, dup: isDuplicate(p, allContacts) }));
+    const bookPhones = new Set(allContacts.map(c => phoneKey(c.phone)).filter(Boolean));
+    const bookNames = new Set(allContacts.map(c => nameKey(c.name)).filter(Boolean));
+    const seenPhones = new Set<string>();
+    const seenNames = new Set<string>();
+    const flagged: Review[] = parsed.map(p => {
+      const pk = phoneKey(p.phone);
+      const nk = nameKey(fullNameOf(p));
+      const phoneInBook = !!pk && bookPhones.has(pk);
+      const repeatInBatch = (!!pk && seenPhones.has(pk)) || (!!nk && seenNames.has(nk));
+      const nameInBook = !!nk && bookNames.has(nk);
+      if (pk) seenPhones.add(pk);
+      if (nk) seenNames.add(nk);
+      // Strong duplicates (same number already in the book, or a repeat within this
+      // batch) are pre-unchecked; a name-only book match is informational only.
+      const preUncheck = phoneInBook || repeatInBatch;
+      const badge: Review['badge'] = phoneInBook ? 'IN BOOK' : repeatInBatch ? 'DUPLICATE' : nameInBook ? 'SAME NAME' : '';
+      return { ...p, preUncheck, badge };
+    });
     setRows(flagged);
-    // Pre-select everything that isn't already in the book.
-    setSelected(new Set(flagged.filter(r => !r.dup).map(r => r.id)));
+    setSelected(new Set(flagged.filter(r => !r.preUncheck).map(r => r.id)));
     setError(null);
     setPhase('review');
   };
@@ -128,7 +150,7 @@ export default function ImportContactsModal({
     }
   };
 
-  const dupCount = rows.filter(r => r.dup).length;
+  const dupCount = rows.filter(r => r.badge).length;
 
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
@@ -218,7 +240,7 @@ export default function ImportContactsModal({
                 <Text style={styles.selectAllText}>Select all</Text>
               </Pressable>
               {dupCount > 0 ? (
-                <Text style={styles.dupNote}>{dupCount} already in your book</Text>
+                <Text style={styles.dupNote}>{dupCount} possible duplicate{dupCount === 1 ? '' : 's'}</Text>
               ) : null}
             </View>
             <ScrollView contentContainerStyle={styles.reviewList}>
@@ -236,7 +258,7 @@ export default function ImportContactsModal({
                       </Text>
                       {sub ? <Text style={styles.reviewSub} numberOfLines={1}>{sub}</Text> : null}
                     </View>
-                    {r.dup ? <Text style={styles.dupBadge}>IN BOOK</Text> : null}
+                    {r.badge ? <Text style={styles.dupBadge}>{r.badge}</Text> : null}
                   </Pressable>
                 );
               })}

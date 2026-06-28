@@ -5,7 +5,6 @@
 // new is added to the native bundle and the parsers are unit-testable in Node.
 
 import { bulkCreateContacts, type ImportContactRow } from './updateContact';
-import type { V2Contact } from './useContacts';
 
 // A parsed candidate. `id` is a client-only key for the review list (not a DB id).
 export type ParsedImportContact = ImportContactRow & { id: string };
@@ -70,22 +69,36 @@ export function parseVCard(text: string): ParsedImportContact[] {
 // ---------------------------------------------------------------------------
 // CSV — header-mapped reader (ported from the legacy V1 import screen).
 // ---------------------------------------------------------------------------
-function parseCsvLine(line: string): string[] {
-  const out: string[] = [];
+// Quote-aware scan over the WHOLE text (RFC 4180): a newline inside a quoted
+// field is field content, not a record break — so a multi-line Notes/address
+// column doesn't get torn into phantom rows. Strips a leading UTF-8 BOM.
+function parseCsvRecords(text: string): string[][] {
+  const src = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const records: string[][] = [];
+  let row: string[] = [];
   let cur = '';
   let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
     if (inQuotes) {
       if (ch === '"') {
-        if (line[i + 1] === '"') { cur += '"'; i++; } else inQuotes = false;
+        if (src[i + 1] === '"') { cur += '"'; i++; } else inQuotes = false;
       } else cur += ch;
-    } else if (ch === '"') inQuotes = true;
-    else if (ch === ',') { out.push(cur); cur = ''; }
-    else cur += ch;
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(cur); cur = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && src[i + 1] === '\n') i++; // CRLF = one break
+      row.push(cur); cur = '';
+      records.push(row); row = [];
+    } else {
+      cur += ch;
+    }
   }
-  out.push(cur);
-  return out;
+  if (cur.length > 0 || row.length > 0) { row.push(cur); records.push(row); }
+  // Drop fully-empty records (blank lines between rows).
+  return records.filter(r => !(r.length === 1 && r[0].trim() === ''));
 }
 
 const CSV_HEADER_ALIASES: Record<string, keyof ImportContactRow> = {
@@ -97,16 +110,16 @@ const CSV_HEADER_ALIASES: Record<string, keyof ImportContactRow> = {
 };
 
 export function parseCsv(text: string): ParsedImportContact[] {
-  const lines = text.split(/\r\n|\n|\r/).filter(l => l.trim().length > 0);
-  if (lines.length < 2) return [];
-  const header = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
+  const records = parseCsvRecords(text);
+  if (records.length < 2) return [];
+  const header = records[0].map(h => h.trim().toLowerCase());
   const hasFirst = header.some(h => CSV_HEADER_ALIASES[h] === 'firstName');
   const fullNameIdx = header.findIndex(h => h === 'name' || h === 'full name' || h === 'display name' || h === 'contact');
 
   const out: ParsedImportContact[] = [];
   let idx = 0;
-  for (let r = 1; r < lines.length; r++) {
-    const cells = parseCsvLine(lines[r]);
+  for (let r = 1; r < records.length; r++) {
+    const cells = records[r];
     const row: ImportContactRow = { firstName: '' };
     let fullName = '';
     cells.forEach((cell, i) => {
@@ -162,27 +175,24 @@ export async function pickFromDevice(): Promise<ParsedImportContact[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Dedupe — normalized phone wins; otherwise normalized full name. Name matches
-// are flagged (not blocked) so the rep makes the final call before importing.
+// Dedupe keys. phoneKey uses the LAST 10 digits so different dialing formats of
+// the same number match (+1… / 00 1… / local), instead of only stripping a NANP
+// leading 1; nameKey collapses case + whitespace. The review UI uses these to
+// flag matches: a phone match is a strong duplicate (pre-unchecked), a name-only
+// match against the book is just informational (stays checked — two people can
+// share a name), and any repeat WITHIN the imported batch is pre-unchecked.
 // ---------------------------------------------------------------------------
-export function normalizePhone(p?: string | null): string {
+export function phoneKey(p?: string | null): string {
   const d = (p ?? '').replace(/\D/g, '');
-  return d.length === 11 && d.startsWith('1') ? d.slice(1) : d;
+  return d.length >= 10 ? d.slice(-10) : d;
 }
 
-function normalizeName(n?: string | null): string {
+export function nameKey(n?: string | null): string {
   return (n ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-export function isDuplicate(c: ParsedImportContact, existing: V2Contact[]): boolean {
-  const cPhone = normalizePhone(c.phone);
-  const cName = normalizeName([c.firstName, c.lastName].filter(Boolean).join(' '));
-  return existing.some(e => {
-    const ePhone = normalizePhone(e.phone);
-    if (cPhone && ePhone && cPhone === ePhone) return true;
-    if (cName && normalizeName(e.name) === cName) return true;
-    return false;
-  });
+export function fullNameOf(c: { firstName?: string; lastName?: string }): string {
+  return [c.firstName, c.lastName].filter(Boolean).join(' ');
 }
 
 // Persist the chosen rows. Thin pass-through to the bulk inserter; returns count.
