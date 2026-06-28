@@ -28,15 +28,28 @@ export default function FollowupCard({
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [pendingSend, setPendingSend] = useState(false);
   const genRef = useRef('');
 
   const recapInput = { name: contact.name, vehicle: contact.vehicle, note: contact.notes };
 
   const reload = useCallback(async () => {
-    const next = await loadFollowup(contact.id);
-    setF(next);
-    setLoading(false);
-    return next;
+    try {
+      const next = await loadFollowup(contact.id);
+      setLoadError(false);
+      setF(next);
+      return next;
+    } catch {
+      // A transient/RLS/unapplied-migration error must NOT render the "start a
+      // sequence" state — tapping start there would reset a live run. Show an
+      // error/retry state instead.
+      setLoadError(true);
+      setF(null);
+      return null;
+    } finally {
+      setLoading(false);
+    }
   }, [contact.id]);
 
   useEffect(() => { setLoading(true); genRef.current = ''; reload(); }, [reload]);
@@ -48,8 +61,10 @@ export default function FollowupCard({
     else if (f.status === 'active') setDraft(f.days.find(d => d.day === f.currentDay)?.draft ?? '');
   }, [f]);
 
+  // Only messages the rep actually SENT feed the "don't repeat these" context —
+  // skipped days and an unsent/re-drafted recap shouldn't constrain the next draft.
   const priorDrafts = (seq: Followup) =>
-    [seq.recapDraft, ...seq.days.map(d => d.draft)].filter(Boolean);
+    [seq.recapSentAt ? seq.recapDraft : '', ...seq.days.filter(d => d.sent_at).map(d => d.draft)].filter(Boolean);
 
   const draftToday = useCallback(async (seq: Followup) => {
     setBusy(true); setError(null);
@@ -62,9 +77,13 @@ export default function FollowupCard({
       setDraft(text);
       await reload();
     } catch {
+      genRef.current = ''; // clear the guard so the day can auto-retry
       setError('Couldn’t draft this one. Tap “Re-draft” to retry.');
     } finally { setBusy(false); }
-  }, [contact, reload]);
+    // Depend on the primitive contact fields used, not the whole contact object
+    // (which gets a new identity on every parent local update) — avoids needless
+    // re-runs of the auto-draft effect. (contact.id is covered transitively by reload.)
+  }, [contact.name, contact.vehicle, contact.notes, reload]);
 
   // Once the recap is sent, auto-draft the current day's message so it's ready for
   // review — once per day per contact (guarded so it can't loop).
@@ -94,19 +113,32 @@ export default function FollowupCard({
     } catch { /* best effort */ }
   };
 
+  // Open the rep's own composer, then ask them to confirm it actually went out
+  // before advancing. We can't observe an SMS/email send (especially on web, where
+  // the composer modal can be cancelled), so the sequence only advances on the
+  // rep's explicit "Mark as sent" — never optimistically on opening the composer.
   const send = async () => {
     if (!f || !draft.trim()) return;
+    setError(null);
+    await persistDraft();
+    onSendMessage(draft); // opens the rep's own messages app — the app never sends
+    setPendingSend(true);
+  };
+
+  const confirmSent = async () => {
+    if (!f) return;
     setBusy(true); setError(null);
     try {
-      await persistDraft();
-      onSendMessage(draft); // opens the rep's own composer — app never sends
       if (f.status === 'draft') await markRecapSent(f.id);
       else if (f.status === 'active') await markDaySent(f.id, f.currentDay, f.totalDays);
+      setPendingSend(false);
       await reload();
     } catch {
-      setError('Sent from your app, but couldn’t advance the sequence.');
+      setError('Couldn’t advance the sequence. Try again.');
     } finally { setBusy(false); }
   };
+
+  const cancelSend = () => setPendingSend(false);
 
   const doSkip = async () => { if (!f) return; setBusy(true); try { await skipDay(f.id, f.currentDay, f.totalDays); await reload(); } finally { setBusy(false); } };
   const setS = async (s: Followup['status']) => { if (!f) return; setBusy(true); try { await setStatus(f.id, s); await reload(); } finally { setBusy(false); } };
@@ -116,6 +148,20 @@ export default function FollowupCard({
       <View style={styles.card}>
         <Text style={styles.kicker}>REX FOLLOW-UP</Text>
         <Text style={styles.muted}>Loading…</Text>
+      </View>
+    );
+  }
+
+  // A load error must not fall through to the "start" state (tapping start there
+  // could reset a live run). Offer a retry instead.
+  if (loadError) {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.kicker}>REX FOLLOW-UP</Text>
+        <Text style={styles.muted}>Couldn’t load the follow-up.</Text>
+        <Pressable onPress={() => { setLoading(true); reload(); }} disabled={busy} style={styles.ghostBtn}>
+          <Text style={styles.ghostBtnText}>Retry</Text>
+        </Pressable>
       </View>
     );
   }
@@ -167,6 +213,18 @@ export default function FollowupCard({
             </Pressable>
             <Pressable onPress={() => setS('stopped')} disabled={busy} style={styles.ghostBtn}>
               <Text style={styles.ghostBtnText}>Stop</Text>
+            </Pressable>
+          </View>
+        </>
+      ) : pendingSend ? (
+        <>
+          <Text style={styles.body}>Opened your messages app. Did the {isRecap ? 'recap' : 'message'} go out?</Text>
+          <View style={styles.row}>
+            <Pressable onPress={confirmSent} disabled={busy} style={[styles.primaryBtn, busy && { opacity: 0.6 }]}>
+              <Text style={styles.primaryBtnText}>{busy ? 'Saving…' : '✓ Mark as sent'}</Text>
+            </Pressable>
+            <Pressable onPress={cancelSend} disabled={busy} style={styles.ghostBtn}>
+              <Text style={styles.ghostBtnText}>Not yet</Text>
             </Pressable>
           </View>
         </>

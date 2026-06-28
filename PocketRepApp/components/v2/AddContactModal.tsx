@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet,
   KeyboardAvoidingView, Platform,
@@ -45,6 +45,10 @@ export default function AddContactModal({
   const [d, setD] = useState<NewContactDraft>(blank());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Synchronous re-entrancy guard: the state-based `saving` updates async, so a
+  // same-tick double-tap can pass `canSave` twice and create two contacts (+ two
+  // recap kickoffs). This ref blocks the second call before the first's await.
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -62,12 +66,13 @@ export default function AddContactModal({
   const canSave = d.firstName.trim().length > 0 && !saving;
 
   const handleSave = async () => {
-    if (!canSave) return;
+    if (!canSave || savingRef.current) return;
     const parsedBday = parseBirthdayInput(d.birthday ?? '');
     if (parsedBday === false) {
       setError('Birthday must be MM/DD/YYYY');
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -98,6 +103,7 @@ export default function AddContactModal({
     } catch (e: any) {
       setError(e?.message ?? 'Save failed');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };

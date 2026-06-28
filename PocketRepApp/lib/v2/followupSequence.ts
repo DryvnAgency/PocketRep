@@ -69,15 +69,23 @@ export async function loadFollowup(contactId: string): Promise<Followup | null> 
     .select('*')
     .eq('contact_id', contactId)
     .maybeSingle();
-  if (error || !data) return null;
+  // Distinguish a real "no row yet" (null) from a transient/RLS/unapplied-migration
+  // error (throw). Collapsing the two would let the UI show the "start a sequence"
+  // state for a contact that already has a live run -> a clobber on the next start.
+  if (error) throw error;
+  if (!data) return null;
   return rowToFollowup(data);
 }
 
 // Create (or refresh) the recap draft row for a contact. status stays 'draft' until
-// the rep sends the recap. Upsert on contact_id so re-drafting is idempotent.
+// the rep sends the recap. Never resets a sequence that's already past 'draft'.
 export async function startRecap(contactId: string, recapDraft: string, totalDays = 14): Promise<Followup | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
+  // Guard against clobbering a live run: if a non-draft sequence already exists,
+  // leave its progress (current_day/status/sent log) intact.
+  const existing = await loadFollowup(contactId);
+  if (existing && existing.status !== 'draft') return existing;
   const { data, error } = await supabase
     .from('rex_followups')
     .upsert({
@@ -109,7 +117,8 @@ export async function markRecapSent(id: string): Promise<void> {
   const { error } = await supabase
     .from('rex_followups')
     .update({ status: 'active', current_day: 1, recap_sent_at: now, started_at: now, updated_at: now })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('status', 'draft'); // idempotent: a no-op once the recap has already been sent
   if (error) throw error;
 }
 
