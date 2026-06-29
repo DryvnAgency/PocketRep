@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { createContact, type NewContactDraft } from '@/lib/v2/updateContact';
 import { parseBirthdayInput } from '@/lib/v2/birthday';
+import { isRexFollowupEnabled } from '@/lib/v2/rexFeatureFlags';
+import { kickoffRecapForContact } from '@/lib/v2/followupSequence';
 import type { V2Contact } from '@/lib/v2/useContacts';
 
 const PLAN_OPTIONS: Array<{ value: NewContactDraft['planLabel']; label: string }> = [
@@ -42,6 +45,10 @@ export default function AddContactModal({
   const [d, setD] = useState<NewContactDraft>(blank());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Synchronous re-entrancy guard: the state-based `saving` updates async, so a
+  // same-tick double-tap can pass `canSave` twice and create two contacts (+ two
+  // recap kickoffs). This ref blocks the second call before the first's await.
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -59,12 +66,13 @@ export default function AddContactModal({
   const canSave = d.firstName.trim().length > 0 && !saving;
 
   const handleSave = async () => {
-    if (!canSave) return;
+    if (!canSave || savingRef.current) return;
     const parsedBday = parseBirthdayInput(d.birthday ?? '');
     if (parsedBday === false) {
       setError('Birthday must be MM/DD/YYYY');
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -75,17 +83,27 @@ export default function AddContactModal({
       const matchedReferrer = typedReferrer
         ? allContacts.find(c => c.name.toLowerCase() === typedReferrer.toLowerCase())
         : undefined;
-      await createContact({
+      const newId = await createContact({
         ...d,
         birthday: parsedBday,
         referredByName: typedReferrer || null,
         referredByContactId: matchedReferrer?.id ?? null,
       });
+      // P2 follow-up feature (flag-gated): on save, Rex auto-drafts a recap into the
+      // contact's Next Step. Fire-and-forget so it never blocks or fails the save.
+      if (isRexFollowupEnabled()) {
+        kickoffRecapForContact(newId, {
+          name: [d.firstName, d.lastName].filter(Boolean).join(' ').trim(),
+          vehicle: d.vehicle,
+          note: d.notes,
+        }).catch(() => undefined);
+      }
       onCreated();
       onClose();
     } catch (e: any) {
       setError(e?.message ?? 'Save failed');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -93,7 +111,10 @@ export default function AddContactModal({
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
       <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.sheet}>
+      <KeyboardAvoidingView
+        style={styles.sheet}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.handle} />
         <View style={styles.header}>
           <Pressable onPress={onClose} style={styles.headerBtn}>
@@ -293,7 +314,7 @@ export default function AddContactModal({
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <View style={{ height: 28 }} />
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

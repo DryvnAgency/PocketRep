@@ -6,12 +6,15 @@ import { TIERS, stalenessColor, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import WeeklyDigestCard from './WeeklyDigestCard';
 import NurtureBanner from './NurtureBanner';
+import { heatReasons } from '@/lib/v2/heatReasons';
 
 const TODAY_LABEL = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
 
 function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
   const tier = TIERS[c.tier];
   const staleC = stalenessColor(c.days);
+  // Top reasons this contact is hot/at-risk today (derived from saved fields).
+  const reasons = heatReasons(c).slice(0, 2);
   return (
     <Pressable
       onPress={onTap}
@@ -23,6 +26,9 @@ function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
         <Text style={styles.vehicle} numberOfLines={1}>
           {c.vehicle ?? '—'}{c.trim ? ` · ${c.trim}` : ''}
         </Text>
+        {reasons.length > 0 ? (
+          <Text style={styles.reasons} numberOfLines={1}>{reasons.join(' · ')}</Text>
+        ) : null}
       </View>
       <View style={styles.daysWrap}>
         <Text style={[styles.daysNum, { color: staleC }]}>
@@ -40,6 +46,7 @@ export default function HeatSheetTab({
   contacts,
   error,
   onSelect,
+  onRetry,
   nurtureRefetchKey = 0,
   onOpenNurture,
   onAnalyzeStalled,
@@ -47,14 +54,27 @@ export default function HeatSheetTab({
   contacts: V2Contact[] | null;
   error: string | null;
   onSelect: (c: V2Contact) => void;
+  onRetry?: () => void;
   nurtureRefetchKey?: number;
   onOpenNurture?: () => void;
   onAnalyzeStalled?: () => void;
 }) {
-  if (error) {
+  // Full error screen only on a failed first load (no data yet). If a refresh
+  // fails while we already have a list, keep showing the list.
+  if (error && !contacts) {
     return (
       <View style={styles.center}>
-        <Text style={styles.error}>Couldn't load contacts: {error}</Text>
+        <Text style={styles.error}>Couldn't load contacts.</Text>
+        {onRetry ? (
+          <Pressable
+            onPress={onRetry}
+            style={styles.retryBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading contacts"
+          >
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        ) : null}
       </View>
     );
   }
@@ -82,8 +102,8 @@ export default function HeatSheetTab({
           <Text style={styles.bannerLabel}>TODAY · {TODAY_LABEL}</Text>
           <Text style={styles.bannerBody}>
             {overdueCount > 0
-              ? `${overdueCount} follow-up${overdueCount === 1 ? '' : 's'} overdue · 1 appt at 2:30`
-              : 'You\'re caught up · 1 appt at 2:30'}
+              ? `${overdueCount} follow-up${overdueCount === 1 ? '' : 's'} overdue`
+              : "You're caught up"}
           </Text>
         </View>
         <StatNumber value={String(overdueCount)} size={32} color={colors.gold2} />
@@ -119,7 +139,16 @@ export default function HeatSheetTab({
 const styles = StyleSheet.create({
   root: { paddingBottom: spacing.xl },
   center: { padding: spacing.xl, alignItems: 'center' },
-  error: { color: colors.red, fontSize: 13 },
+  error: { color: colors.red, fontSize: 13, marginBottom: 12, textAlign: 'center' },
+  retryBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: radius.full,
+  },
+  retryText: { color: colors.gold, fontWeight: '700', fontSize: 13 },
 
   banner: {
     marginHorizontal: 14,
@@ -180,6 +209,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.grey2,
     marginTop: 2,
+  },
+  reasons: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.gold,
+    marginTop: 3,
+    letterSpacing: 0.1,
   },
 
   daysWrap: { alignItems: 'flex-end' },

@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { REX_COPY_RULES } from './rexActions';
 import { loadBookContext, type BookContact } from './bookContext';
 import { callBrain } from './aiProxy';
+import { frameUntrusted, clampNote } from './promptSafety';
 
 export type NurtureAudience = 'dead' | 'dormant' | 'past_customers' | 'all_inactive';
 export type NurtureTrigger =
@@ -119,10 +120,10 @@ function buildPrompt(
 ): string {
   const rows = contacts.map(c => JSON.stringify({
     id: c.id,
-    name: c.name,
+    name: clampNote(c.name, 80),
     vehicle_model: c.vehicle_model ?? c.vehicle,
     vehicle_year: c.vehicle,
-    last_contact_summary: c.last_contact_summary,
+    last_contact_summary: clampNote(c.last_contact_summary),
     preferred_language: c.preferred_language,
     is_past_customer: c.is_past_customer,
     hooks_to_avoid: c.hooks_to_avoid,
@@ -150,9 +151,7 @@ For each contact:
 ${REX_COPY_RULES}
 
 CONTACTS:
-[
-${rows}
-]
+${frameUntrusted('CONTACT LIST', `[\n${rows}\n]`)}
 
 Return ONLY a single JSON object inside a \`\`\`json fenced block:
 {

@@ -1,0 +1,34 @@
+name: Rex Eval (manual)
+
+# P2-R5: opt-in Rex action-selection eval. This is deliberately NOT a PR gate — it
+# calls a real model, so it needs the OPENROUTER_API_KEY secret and costs a few cents
+# per run. Trigger it by hand from the Actions tab ("Run workflow") once the secret is
+# set in repo settings. See eval/README.md.
+on:
+  workflow_dispatch:
+
+# Don't pile up manual runs.
+concurrency:
+  group: rex-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rex-eval:
+    name: promptfoo eval (Rex action selection)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run promptfoo eval
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::OPENROUTER_API_KEY secret is not set — add it in repo Settings → Secrets to enable this eval."
+            exit 1
+          fi
+          npx --yes promptfoo@latest eval -c eval/promptfooconfig.yaml --no-cache --no-progress-bar

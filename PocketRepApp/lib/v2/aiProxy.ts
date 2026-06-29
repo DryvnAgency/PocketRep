@@ -84,6 +84,10 @@ export async function callBrain(opts: {
   maxTokens?: number;
   signal?: AbortSignal;
   timeoutMs?: number;
+  // P2-R7: optional model tier. The edge function only honors this when its
+  // BRAIN_TIERED env flag is on (default off); otherwise it's ignored. Omitted →
+  // the request body is byte-identical to before, so existing callers are unaffected.
+  tier?: 'fast' | 'default';
 }): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
@@ -100,6 +104,7 @@ export async function callBrain(opts: {
       body: JSON.stringify({
         max_tokens: opts.maxTokens ?? 800,
         messages: opts.messages,
+        ...(opts.tier ? { tier: opts.tier } : {}),
       }),
       signal: t.signal,
     });
@@ -126,6 +131,9 @@ export async function callBrainStream(opts: {
   signal?: AbortSignal;
   timeoutMs?: number;
   onDelta?: (fullText: string, chunk: string) => void;
+  // P2-R7: optional model tier (see callBrain). Honored only when the edge
+  // function's BRAIN_TIERED flag is on; omitted → byte-identical request body.
+  tier?: 'fast' | 'default';
 }): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
@@ -143,6 +151,7 @@ export async function callBrainStream(opts: {
         max_tokens: opts.maxTokens ?? 800,
         messages: opts.messages,
         stream: true,
+        ...(opts.tier ? { tier: opts.tier } : {}),
       }),
       signal: t.signal,
     });

@@ -7,15 +7,21 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:web": "expo export --platform web"
+    "build:web": "expo export --platform web",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
+    "eval:rex": "npx --yes promptfoo@latest eval -c ../eval/promptfooconfig.yaml",
+    "test:followup": "node scripts/test-followup-drafts.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.1",
     "@expo/vector-icons": "^14.0.0",
     "@react-native-async-storage/async-storage": "1.23.1",
+    "@react-native-voice/voice": "3.2.4",
     "@supabase/supabase-js": "^2.39.0",
     "expo": "~51.0.0",
     "expo-av": "~14.0.0",
+    "expo-constants": "16.0.2",
     "expo-image-picker": "~15.0.0",
     "expo-linear-gradient": "~13.0.2",
     "expo-linking": "^55.0.9",
@@ -37,6 +43,8 @@
     "@babel/core": "^7.24.0",
     "@types/react": "~18.2.0",
     "canvas": "^3.2.3",
+    "eslint": "8.57.1",
+    "eslint-config-expo": "7.1.2",
     "typescript": "~5.3.3"
   }
 }

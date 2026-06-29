@@ -101,16 +101,20 @@ export default function ContactsTab({
   error,
   tags,
   onSelect,
+  onRetry,
   onBulkTag,
   onAddContact,
+  onImportContacts,
   onDeleteTag,
 }: {
   contacts: V2Contact[] | null;
   error: string | null;
   tags: V2Tag[];
   onSelect: (c: V2Contact) => void;
+  onRetry?: () => void;
   onBulkTag?: () => void;
   onAddContact?: () => void;
+  onImportContacts?: () => void;
   onDeleteTag?: (name: string) => void;
 }) {
   const [query, setQuery] = useState('');
@@ -159,10 +163,20 @@ export default function ContactsTab({
 
   const letters = useMemo(() => Object.keys(groups).sort(), [groups]);
 
-  if (error) {
+  if (error && !contacts) {
     return (
       <View style={styles.center}>
-        <Text style={styles.error}>Couldn't load contacts: {error}</Text>
+        <Text style={styles.error}>Couldn't load contacts.</Text>
+        {onRetry ? (
+          <Pressable
+            onPress={onRetry}
+            style={styles.retryBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading contacts"
+          >
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        ) : null}
       </View>
     );
   }
@@ -193,6 +207,11 @@ export default function ContactsTab({
             </Pressable>
           ) : null}
         </View>
+        {onImportContacts ? (
+          <Pressable onPress={onImportContacts} style={styles.importBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Import contacts">
+            <Text style={styles.importBtnText}>⇪</Text>
+          </Pressable>
+        ) : null}
         <Pressable onPress={onAddContact} style={styles.addBtn} hitSlop={6}>
           <Text style={styles.addBtnText}>＋</Text>
         </Pressable>
@@ -283,7 +302,16 @@ export default function ContactsTab({
 const styles = StyleSheet.create({
   root: { paddingBottom: spacing.xl },
   center: { padding: spacing.xl, alignItems: 'center' },
-  error: { color: colors.red, fontSize: 13 },
+  error: { color: colors.red, fontSize: 13, marginBottom: 12, textAlign: 'center' },
+  retryBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: radius.full,
+  },
+  retryText: { color: colors.gold, fontWeight: '700', fontSize: 13 },
 
   searchWrap: {
     paddingTop: 12,
@@ -313,6 +341,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addBtnText: { fontSize: 22, fontWeight: '800', color: colors.ink, lineHeight: 24 },
+  importBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  importBtnText: { fontSize: 19, fontWeight: '800', color: colors.gold, lineHeight: 22 },
   searchIcon: { color: colors.grey, fontSize: 14 },
   searchInput: {
     flex: 1,

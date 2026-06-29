@@ -14,7 +14,7 @@ function localSubs(activeCount: number, totalCount: number): Record<TabId, { tit
     heat: { title: 'Heat Sheet', sub: `${weekday} · ${activeCount} active` },
     contacts: { title: 'Contacts', sub: `${totalCount} total · ${activeCount} active` },
     metrics: { title: 'Metrics', sub: monthYear },
-    profile: { title: 'You', sub: '34-month streak' },
+    profile: { title: 'You', sub: 'Profile & settings' },
   };
 }
 

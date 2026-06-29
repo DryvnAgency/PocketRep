@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
 export type V2SequenceStep = {
@@ -25,6 +25,7 @@ export type V2Sequence = {
 export function useSequences(refetchKey: number = 0) {
   const [sequences, setSequences] = useState<V2Sequence[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,10 +49,11 @@ export function useSequences(refetchKey: number = 0) {
 
       if (cancelled) return;
       if (seqRes.error) {
+        // Keep any prior list and surface the error for a Retry affordance.
         setError(seqRes.error.message);
-        setSequences([]);
         return;
       }
+      setError(null);
       const enrolledByseq: Record<string, number> = {};
       for (const e of enrolRes.data ?? []) {
         enrolledByseq[(e as any).sequence_id] = (enrolledByseq[(e as any).sequence_id] ?? 0) + 1;
@@ -72,9 +74,10 @@ export function useSequences(refetchKey: number = 0) {
       setSequences(rows);
     })();
     return () => { cancelled = true; };
-  }, [refetchKey]);
+  }, [refetchKey, tick]);
 
-  return { sequences, error };
+  const reload = useCallback(() => setTick(t => t + 1), []);
+  return { sequences, error, reload };
 }
 
 // Edit a single step's message template + channel + delay. Returns the
@@ -106,5 +109,28 @@ export async function archiveSequence(sequenceId: string): Promise<void> {
     .from('sequences')
     .update({ is_archived: true })
     .eq('id', sequenceId);
+  if (error) throw error;
+}
+
+// Enroll a contact in a sequence (P1-R5). Writes a contact_sequences row using
+// the existing table — no schema change. Idempotent via the
+// (contact_id, sequence_id) unique key: re-enrolling a contact that was
+// previously cancelled/completed resets it to active at step 1.
+export async function enrollContactInSequence(contactId: string, sequenceId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('contact_sequences')
+    .upsert({
+      user_id: user.id,
+      contact_id: contactId,
+      sequence_id: sequenceId,
+      current_step: 1,
+      status: 'active',
+      started_at: now,
+      next_step_at: now,
+      completed_at: null,
+    }, { onConflict: 'contact_id,sequence_id' });
   if (error) throw error;
 }

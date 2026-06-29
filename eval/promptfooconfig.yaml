@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+#
+# P2-R5 — Rex action-selection regression suite (SCAFFOLD).
+#
+# What it checks: given a rep utterance + a small fixed book, does the PocketRep
+# brain pick the right Rex `action` (the JSON in the fenced block that
+# rexActions.parseAction reads)? That action choice is the thing most likely to
+# regress when the prompt or model changes, so it's the regression gate the
+# roadmap (P2-R5) calls for.
+#
+# Status: this is a SEED set (~26 cases) meant to grow toward the 150-utterance
+# target, and it is deliberately NOT wired as a blocking PR gate — it calls a real
+# model, so it needs an OPENROUTER_API_KEY and costs a few cents per run. Run it
+# by hand:
+#
+#   OPENROUTER_API_KEY=sk-... npm run eval:rex            # from PocketRepApp/
+#   # or directly from the repo root:
+#   OPENROUTER_API_KEY=sk-... npx --yes promptfoo@latest eval -c eval/promptfooconfig.yaml
+#
+# See eval/README.md for how this maps to the live ai-proxy brain and how to extend.
+
+description: PocketRep Rex action-selection eval
+
+prompts:
+  - file://rexPrompt.txt
+
+providers:
+  # Mirrors the brain's primary model (ai-proxy BRAIN_MODELS[0]). To exercise the
+  # fallback model instead, run with:  --providers openrouter:moonshotai/kimi-k2.6
+  - id: openrouter:x-ai/grok-4.3
+    config:
+      temperature: 0
+      max_tokens: 400
+
+# Every case asserts the parsed action type equals its `expected_action` var
+# (see assertAction.js — it parses the reply exactly like rexActions.parseAction).
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://assertAction.js
+
+tests: file://cases.yaml

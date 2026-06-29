@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, Platform } from 'react-native';
 import { colors } from '@/constants/theme';
 import CustomNavBar, { TabId } from './CustomNavBar';
 import TabBar from './TabBar';
@@ -13,16 +13,20 @@ import DealLogger, { type DealLoggerPrefill } from './DealLogger';
 import DealDetail from './DealDetail';
 import BulkTagFlow from './BulkTagFlow';
 import AddContactModal from './AddContactModal';
+import ImportContactsModal from './ImportContactsModal';
 import RexDisclosure from './RexDisclosure';
 import HeyRexSheet from './HeyRexSheet';
 import Onboarding from './Onboarding';
+import RexOnboarding from './RexOnboarding';
 import GamePlanSheet from './GamePlanSheet';
+import RexActivityViewer from './RexActivityViewer';
 import BlastSequenceDrafter from './BlastSequenceDrafter';
 import StalledLeadsAnalysis from './StalledLeadsAnalysis';
 import NurtureReviewer from './NurtureReviewer';
 import PayPlanEditor from './PayPlanEditor';
 import NotificationsCenter from './NotificationsCenter';
 import RexCoach from './RexCoach';
+import LockoutScreen from './LockoutScreen';
 import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
 import { warmBrain } from '@/lib/v2/aiProxy';
 import { rolloverCoachLog } from '@/lib/v2/coachLog';
@@ -51,6 +55,10 @@ import {
   syncOnboardingFromProfile,
 } from '@/lib/v2/rexSettings';
 import { useHeyRex } from '@/lib/v2/useHeyRex';
+import { isRexOnboardingEnabled, isContactImportEnabled } from '@/lib/v2/rexFeatureFlags';
+import { useAccessGate } from '@/lib/v2/accessGate';
+import { supabase } from '@/lib/supabase';
+import { captureTimezone } from '@/lib/v2/sendTime';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
@@ -64,10 +72,12 @@ export default function AppShell() {
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [tagsRefetchKey, setTagsRefetchKey] = useState(0);
   const [addContactOpen, setAddContactOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
   const [alwaysListen, setAlwaysListen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [gamePlanOpen, setGamePlanOpen] = useState(false);
+  const [rexActivityOpen, setRexActivityOpen] = useState(false);
   const [blastDraft, setBlastDraft] = useState<BlastDraft | null>(null);
   const [blastDrafting, setBlastDrafting] = useState(false);
   const [stalledOpen, setStalledOpen] = useState(false);
@@ -81,7 +91,12 @@ export default function AppShell() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [rexCoachOpen, setRexCoachOpen] = useState(false);
   const [rexActionError, setRexActionError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const payPlan = usePayPlan(payPlanRefetchKey);
+  // HARD LOCKOUT gate — inert until Eduardo wires the real subscription read in
+  // accessGate.ts (it returns 'allowed' today, so no behavior change). See the
+  // early return below + docs/MASTER_PLAN.md §"Gated P0 — Eduardo only".
+  const access = useAccessGate();
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
   const tags = useTags(tagsRefetchKey);
@@ -102,6 +117,8 @@ export default function AppShell() {
     contacts: contacts ?? [],
     tagNames,
     onOpenContact: setSelectedId,
+    activeScreen: active,
+    selectedContactId: selectedId,
   });
 
   useEffect(() => {
@@ -125,6 +142,9 @@ export default function AppShell() {
       }
       // Fire-and-forget — push registration is silent on web/unsupported devices.
       registerForPush().catch(() => undefined);
+      // Best-effort: record the rep's device timezone on their profile (P2-A3) so
+      // the nurture scheduler can later deliver at their local send hour.
+      captureTimezone().catch(() => undefined);
     });
     return subscribeAlwaysListen(setAlwaysListen);
   }, []);
@@ -197,6 +217,9 @@ export default function AppShell() {
     const blastPayload = rex.action?.type === 'create_blast_sequence' ? rex.action.payload : null;
     const stalledPayload = rex.action?.type === 'analyze_stalled_leads' ? rex.action.payload : null;
     const nurturePayload = rex.action?.type === 'schedule_nurture_blast' ? rex.action.payload : null;
+    // P2-R3: a chain bundles several writes — capture its steps before confirm()
+    // clears the action so we can refresh exactly the surfaces those steps touched.
+    const chainSteps = rex.action?.type === 'chain' ? (rex.action.payload.steps ?? []) : [];
     const result = await rex.confirm();
     // Refresh writers' downstream state
     if (actionType === 'log_deal') {
@@ -210,6 +233,18 @@ export default function AppShell() {
       || actionType === 'batch_action'
     ) {
       reloadContacts();
+    }
+    // P2-R3: a chain can mix deal + contact writes — refresh each surface any
+    // of its steps actually touched.
+    if (actionType === 'chain') {
+      const stepTypes = new Set(chainSteps.map(s => s.type));
+      if (stepTypes.has('log_deal')) setDealsRefetchKey(k => k + 1);
+      if (stepTypes.has('add_contact') || stepTypes.has('update_notes')
+        || stepTypes.has('delete_contact') || stepTypes.has('schedule_followup')
+        || stepTypes.has('retier_contact') || stepTypes.has('batch_action')
+      ) {
+        reloadContacts();
+      }
     }
     if (result?.openContactId) {
       setSelectedId(result.openContactId);
@@ -263,6 +298,82 @@ export default function AppShell() {
     }
   };
 
+  // Pull-to-refresh on the main scroll — reloads the active tab's data.
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (active === 'metrics') {
+        setDealsRefetchKey(k => k + 1);
+      } else if (active === 'profile') {
+        setPayPlanRefetchKey(k => k + 1);
+      } else {
+        await reloadContacts();
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [active, reloadContacts]);
+
+  // Web back button → peel the topmost overlay instead of leaving the app.
+  const closeTopOverlay = () => {
+    if (rexCoachOpen) { setRexCoachOpen(false); return; }
+    if (notifOpen) { setNotifOpen(false); return; }
+    if (stalledOpen) { setStalledOpen(false); setStalledReport(null); return; }
+    if (nurtureReviewerOpen) { setNurtureReviewerOpen(false); return; }
+    if (payPlanOpen) { setPayPlanOpen(false); return; }
+    if (blastDraft) { setBlastDraft(null); return; }
+    if (rexActivityOpen) { setRexActivityOpen(false); return; }
+    if (gamePlanOpen) { setGamePlanOpen(false); return; }
+    if (addContactOpen) { setAddContactOpen(false); return; }
+    if (importOpen) { setImportOpen(false); return; }
+    if (bulkTagOpen) { setBulkTagOpen(false); return; }
+    if (selectedDeal) { setSelectedDeal(null); return; }
+    if (dealLoggerOpen) { setDealLoggerOpen(false); return; }
+    if (selectedId) { setSelectedId(null); return; }
+  };
+  const anyOverlayOpen =
+    rexCoachOpen || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
+    !!blastDraft || gamePlanOpen || rexActivityOpen || addContactOpen || importOpen || bulkTagOpen || !!selectedDeal ||
+    dealLoggerOpen || !!selectedId;
+  const closeTopRef = useRef(closeTopOverlay);
+  closeTopRef.current = closeTopOverlay;
+  const anyOverlayOpenRef = useRef(anyOverlayOpen);
+  anyOverlayOpenRef.current = anyOverlayOpen;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onPop = () => {
+      if (anyOverlayOpenRef.current) {
+        closeTopRef.current();
+        // keep a trap state so the next Back peels the next overlay layer
+        window.history.pushState({ pocketrepOverlay: true }, '');
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    // One trap when the first overlay opens; onPop re-pushes for deeper layers.
+    if (anyOverlayOpen) window.history.pushState({ pocketrepOverlay: true }, '');
+  }, [anyOverlayOpen]);
+
+  // HARD LOCKOUT: when the access gate reports a lapsed account, block the whole
+  // app behind the re-subscribe wall. Inert today (gate returns 'allowed').
+  // TODO(Eduardo): (1) make useAccessGate read the real subscription state;
+  // (2) also gate the UNAUTHENTICATED case by rendering <AuthScreen/> when there's
+  // no session — that requires replacing the demoAuth auto-sign-in (see MASTER_PLAN).
+  if (access.status === 'locked') {
+    return (
+      <LockoutScreen
+        reason={access.reason}
+        onResubscribe={() => { /* TODO(Eduardo): open Stripe checkout / billing portal */ }}
+        onSignOut={() => { supabase.auth.signOut(); }}
+      />
+    );
+  }
+
   return (
     <View style={styles.root}>
       <CustomNavBar
@@ -279,6 +390,14 @@ export default function AppShell() {
         style={styles.content}
         contentContainerStyle={styles.contentInner}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.gold}
+            colors={[colors.gold]}
+          />
+        }
       >
         {!authReady ? (
           <Text style={styles.placeholder}>Signing in…</Text>
@@ -286,6 +405,7 @@ export default function AppShell() {
           <HeatSheetTab
             contacts={contacts}
             error={error}
+            onRetry={reloadContacts}
             onSelect={c => setSelectedId(c.id)}
             nurtureRefetchKey={nurtureRefetchKey}
             onOpenNurture={() => setNurtureReviewerOpen(true)}
@@ -295,10 +415,12 @@ export default function AppShell() {
           <ContactsTab
             contacts={contacts}
             error={error}
+            onRetry={reloadContacts}
             tags={tags}
             onSelect={c => setSelectedId(c.id)}
             onBulkTag={() => setBulkTagOpen(true)}
             onAddContact={() => setAddContactOpen(true)}
+            onImportContacts={isContactImportEnabled() ? () => setImportOpen(true) : undefined}
             onDeleteTag={async (name) => {
               try { await deleteTag(name); } catch (e) { console.warn('deleteTag failed', e); }
               setTagsRefetchKey(k => k + 1);
@@ -308,6 +430,7 @@ export default function AppShell() {
         ) : active === 'profile' ? (
           <ProfileTab
             onOpenGamePlan={() => setGamePlanOpen(true)}
+            onOpenRexActivity={() => setRexActivityOpen(true)}
             onReplayOnboarding={() => setOnboardingOpen(true)}
             onOpenPayPlan={() => setPayPlanOpen(true)}
             onNavigate={setActive}
@@ -372,6 +495,13 @@ export default function AppShell() {
         onCreated={() => { reloadContacts(); setActive('contacts'); }}
       />
 
+      <ImportContactsModal
+        open={importOpen}
+        allContacts={contacts ?? []}
+        onClose={() => setImportOpen(false)}
+        onImported={() => { reloadContacts(); setActive('contacts'); }}
+      />
+
       <RexDisclosure
         open={disclosureOpen}
         onEnable={() => {
@@ -390,17 +520,36 @@ export default function AppShell() {
         }}
       />
 
-      <Onboarding
-        open={onboardingOpen}
-        onClose={() => {
-          markOnboardingComplete();
-          setOnboardingOpen(false);
-        }}
-      />
+      {/* P2-R1: when EXPO_PUBLIC_REX_ONBOARDING is on, first-run is the Rex
+          interview instead of the static carousel (same open + complete contract).
+          Default off → the carousel renders exactly as before. */}
+      {isRexOnboardingEnabled() ? (
+        <RexOnboarding
+          open={onboardingOpen}
+          onClose={() => {
+            markOnboardingComplete();
+            setOnboardingOpen(false);
+          }}
+        />
+      ) : (
+        <Onboarding
+          open={onboardingOpen}
+          onClose={() => {
+            markOnboardingComplete();
+            setOnboardingOpen(false);
+          }}
+        />
+      )}
 
       <GamePlanSheet
         open={gamePlanOpen}
         onClose={() => setGamePlanOpen(false)}
+      />
+
+      <RexActivityViewer
+        open={rexActivityOpen}
+        contacts={contacts ?? []}
+        onClose={() => setRexActivityOpen(false)}
       />
 
       <HeyRexSheet

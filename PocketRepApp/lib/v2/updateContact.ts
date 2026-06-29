@@ -101,6 +101,43 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
   return data!.id as string;
 }
 
+export type ImportContactRow = {
+  firstName: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+};
+
+// Bulk-insert imported contacts in a single round-trip. Fresh imports seed as cold
+// leads (heat_score 35) with today's last-contact date — honest defaults, not faked
+// interest. Rows whose first name is blank are skipped. Returns the count inserted.
+export async function bulkCreateContacts(rows: ImportContactRow[]): Promise<number> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const today = new Date().toISOString().slice(0, 10);
+  const payload = rows
+    .map(r => ({ first: titleCase((r.firstName ?? '').trim()), r }))
+    .filter(x => x.first.length > 0)
+    .map(({ first, r }) => ({
+      user_id: user.id,
+      first_name: first,
+      last_name: titleCase((r.lastName ?? '').trim()) || null,
+      phone: (r.phone ?? '').trim() || null,
+      email: (r.email ?? '').trim() || null,
+      notes: (r.notes ?? '').trim() || null,
+      heat_score: 35,
+      last_contact_date: today,
+      tags: [] as string[],
+      stage: 'active',
+      milestones: [],
+    }));
+  if (payload.length === 0) return 0;
+  const { error } = await supabase.from('contacts').insert(payload);
+  if (error) throw error;
+  return payload.length;
+}
+
 // Hard delete: actually removes the row from the database. Child rows clean up
 // via FK (interactions / nurture_messages / milestones / contact_sequences
 // cascade; deals + rex_messages keep their history with contact_id set null).
@@ -146,5 +183,41 @@ export async function updateContactPreferredLanguage(
     .from('contacts')
     .update({ preferred_language: language, updated_at: new Date().toISOString() })
     .eq('id', id);
+  if (error) throw error;
+}
+
+// Edit the contact's display name. Splits a full-name string into first/last and
+// stores them the same way createContact does (title-cased; empty last → null).
+export async function updateContactName(
+  id: string,
+  firstName: string,
+  lastName: string,
+): Promise<void> {
+  const first = titleCase(firstName.trim());
+  if (!first) throw new Error('Name is required');
+  const { error } = await supabase
+    .from('contacts')
+    .update({
+      first_name: first,
+      last_name: titleCase(lastName.trim()) || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Edit the vehicle-interest card fields. Every key is optional so a single field
+// can be saved on its own; an empty string clears that column to null. vehicle/trim
+// run through normalizeVehicle to match how createContact stores them.
+export async function updateContactVehicleInfo(
+  id: string,
+  patch: { vehicle?: string; trim?: string; budget?: string; tradeIn?: string },
+): Promise<void> {
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.vehicle !== undefined) row.vehicle = normalizeVehicle(patch.vehicle) || null;
+  if (patch.trim !== undefined) row.trim = normalizeVehicle(patch.trim) || null;
+  if (patch.budget !== undefined) row.budget = patch.budget.trim() || null;
+  if (patch.tradeIn !== undefined) row.trade_in = patch.tradeIn.trim() || null;
+  const { error } = await supabase.from('contacts').update(row).eq('id', id);
   if (error) throw error;
 }
