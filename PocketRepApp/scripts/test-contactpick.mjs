@@ -29,7 +29,7 @@ function mapNativeContact(c) {
     firstName = split.firstName;
     lastName = lastName ?? split.lastName;
   }
-  const phone = String(c?.phoneNumbers?.[0]?.number ?? c?.phoneNumbers?.[0]?.digits ?? '').trim();
+  const phone = String(c?.phoneNumbers?.[0]?.number || c?.phoneNumbers?.[0]?.digits || '').trim();
   const email = String(c?.emails?.[0]?.email ?? '').trim();
   return { firstName: firstName || 'Unknown', lastName, phone: phone || undefined, email: email || undefined };
 }
@@ -64,6 +64,12 @@ eq('native: only composite name -> split first/rest',
 eq('native: phone digits fallback when number missing',
   mapNativeContact({ firstName: 'Sam', phoneNumbers: [{ digits: '5550102' }] }),
   { firstName: 'Sam', lastName: undefined, phone: '5550102', email: undefined });
+
+// regression: iOS can hand back an empty-string `number` alongside a real
+// `digits` — the empty string must fall through (|| not ??), not win.
+eq('native: empty-string number falls through to digits',
+  mapNativeContact({ firstName: 'Rae', phoneNumbers: [{ number: '', digits: '5550103' }] }),
+  { firstName: 'Rae', lastName: undefined, phone: '5550103', email: undefined });
 
 eq('native: single-token name -> no last name',
   mapNativeContact({ name: 'Cher' }),

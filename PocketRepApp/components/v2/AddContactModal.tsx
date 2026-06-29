@@ -51,6 +51,9 @@ export default function AddContactModal({
   // same-tick double-tap can pass `canSave` twice and create two contacts (+ two
   // recap kickoffs). This ref blocks the second call before the first's await.
   const savingRef = useRef(false);
+  // Same synchronous guard for opening the picker — `picking` is async state, so
+  // a same-tick double-tap could otherwise present two pickers before re-render.
+  const pickingRef = useRef(false);
 
   // "Add from phone" entry point: only when the import capability is on AND this
   // runtime actually has a picker (native build with expo-contacts, or the web
@@ -82,7 +85,8 @@ export default function AddContactModal({
   // wipes something already typed (|| keeps the existing value), and a cancel is
   // a silent no-op. Errors surface inline via the same `error` line as Save.
   const handlePickFromPhone = async () => {
-    if (picking) return;
+    if (picking || pickingRef.current) return;
+    pickingRef.current = true;
     setError(null);
     setPicking(true);
     try {
@@ -99,6 +103,7 @@ export default function AddContactModal({
       const msg = String(e?.message ?? '');
       if (!/cancel|abort/i.test(msg)) setError(msg || 'Could not open your contacts.');
     } finally {
+      pickingRef.current = false;
       setPicking(false);
     }
   };

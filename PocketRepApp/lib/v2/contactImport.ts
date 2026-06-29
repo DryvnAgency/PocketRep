@@ -223,7 +223,10 @@ function mapNativeContact(c: any): DeviceContactDraft {
     firstName = split.firstName;
     lastName = lastName ?? split.lastName;
   }
-  const phone = String(c?.phoneNumbers?.[0]?.number ?? c?.phoneNumbers?.[0]?.digits ?? '').trim();
+  // `||` (not `??`): iOS can return a PhoneNumber whose `number` is an empty
+  // string while `digits` holds the real value — an empty `number` must fall
+  // through to `digits`, not win the coalesce.
+  const phone = String(c?.phoneNumbers?.[0]?.number || c?.phoneNumbers?.[0]?.digits || '').trim();
   const email = String(c?.emails?.[0]?.email ?? '').trim();
   return { firstName: firstName || 'Unknown', lastName, phone: phone || undefined, email: email || undefined };
 }
