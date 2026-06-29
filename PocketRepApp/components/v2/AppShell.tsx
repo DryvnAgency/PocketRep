@@ -234,11 +234,15 @@ export default function AppShell() {
     ) {
       reloadContacts();
     }
-    // P2-R3: a chain can mix deal + contact writes — refresh each surface any
-    // of its steps actually touched.
+    // A reminder (single action or inside a chain) needs the bell badge to refresh
+    // (useNotifications is keyed on nurtureRefetchKey — same as RexCoach.onActed).
+    if (actionType === 'create_reminder') setNurtureRefetchKey(k => k + 1);
+    // P2-R3: a chain can mix deal + contact + reminder writes — refresh each surface
+    // any of its steps actually touched.
     if (actionType === 'chain') {
       const stepTypes = new Set(chainSteps.map(s => s.type));
       if (stepTypes.has('log_deal')) setDealsRefetchKey(k => k + 1);
+      if (stepTypes.has('create_reminder')) setNurtureRefetchKey(k => k + 1);
       if (stepTypes.has('add_contact') || stepTypes.has('update_notes')
         || stepTypes.has('delete_contact') || stepTypes.has('schedule_followup')
         || stepTypes.has('retier_contact') || stepTypes.has('batch_action')

@@ -531,6 +531,32 @@ export async function rexInterpret(
     }
   }
 
+  // P2-R3 + P2-R4 never-guess for chains: a chain's top-level type is 'chain', so
+  // the guard above never inspects its steps. Apply the same check to each
+  // contact-referencing STEP — if any names someone matching 2+ people, clarify for
+  // the whole chain instead of letting the brain's single guess run mid-chain.
+  // (Reachable only when EXPO_PUBLIC_REX_MULTISTEP is on; 1-step chains already
+  // unwrap to a lone action and re-enter the guard above.)
+  if (action.type === 'chain') {
+    for (const step of action.payload.steps ?? []) {
+      if (!CONTACT_REF_ACTIONS.has(step.type)) continue;
+      const nm = String((step.payload as any)?.contact_name ?? '').trim();
+      if (!nm) continue;
+      const matches = matchContactsByName(nm, contacts);
+      if (matches.length > 1) {
+        const first = nm.split(/\s+/)[0];
+        return {
+          type: 'clarify',
+          payload: {
+            question: `I've got ${matches.length} matches for ${nm}. Which one?`,
+            candidates: matches.slice(0, 6).map(c => ({ id: c.id, label: c.name })),
+          },
+          say: `I've got a few people named ${first}. Which one do you mean before I run that?`,
+        };
+      }
+    }
+  }
+
   return action;
 }
 
@@ -762,6 +788,13 @@ export function failureRecoveryLine(action: RexAction): string {
       return `That didn't go through — the batch update didn't apply. Want me to try again?`;
     case 'chain':
       return `That didn't fully go through — not all of those steps saved. Want me to try again?`;
+    // Read-only / display actions don't "save" anything — a failure there is just a
+    // lookup that didn't load, so use softer, accurate wording.
+    case 'filter_contacts':
+    case 'book_summary':
+    case 'call_next':
+    case 'show_contact':
+      return `Couldn't pull that up. Want me to try again?`;
     default:
       return `That didn't go through. Want me to try again?`;
   }
