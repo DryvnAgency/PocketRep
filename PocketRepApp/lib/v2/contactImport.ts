@@ -175,6 +175,101 @@ export async function pickFromDevice(): Promise<ParsedImportContact[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Single-contact picker for the Add-Contact card ("Add from phone"). Unlike the
+// bulk importer above, this returns ONE contact's core fields to prefill the
+// new-contact form, and it prefers a TRUE NATIVE picker:
+//   • Native build (iOS/Android): expo-contacts presentContactPickerAsync() — the
+//     OS contact sheet. Lazy-required so web / Expo Go / Node tests (where the
+//     native module isn't bundled) never crash; absence => caller hides the button.
+//   • Web: the browser Contacts Picker API (navigator.contacts), single-select, so
+//     the web demo on Android Chrome still works.
+// Field mapping mirrors the bulk path (first phone / first email; a single display
+// name split into first + last on whitespace).
+// ---------------------------------------------------------------------------
+
+// The subset of NewContactDraft fields the Add-Contact form prefills from a pick.
+export type DeviceContactDraft = {
+  firstName: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+};
+
+// `document` exists in a browser / react-native-web runtime but not on native RN,
+// so it cleanly separates the web build from a native build — the same signal the
+// import modal uses for its <input type=file> fallback.
+function isWebRuntime(): boolean {
+  return typeof document !== 'undefined';
+}
+
+// Lazy require: the native module is absent on web / Expo Go / in Node. tsc never
+// module-resolves require() calls, so this stays green even with no native build.
+function loadExpoContacts(): any | null {
+  try { return require('expo-contacts'); } catch { return null; }
+}
+
+// Split a single display name into first + last (mirrors parseVCard's FN split).
+function splitDisplayName(full: string): { firstName: string; lastName?: string } {
+  const toks = full.trim().split(/\s+/).filter(Boolean);
+  return { firstName: toks[0] ?? '', lastName: toks.slice(1).join(' ') || undefined };
+}
+
+// Map an expo-contacts Contact into the form draft.
+function mapNativeContact(c: any): DeviceContactDraft {
+  let firstName = String(c?.firstName ?? '').trim();
+  let lastName: string | undefined = String(c?.lastName ?? '').trim() || undefined;
+  if (!firstName) {
+    const split = splitDisplayName(String(c?.name ?? ''));
+    firstName = split.firstName;
+    lastName = lastName ?? split.lastName;
+  }
+  const phone = String(c?.phoneNumbers?.[0]?.number ?? c?.phoneNumbers?.[0]?.digits ?? '').trim();
+  const email = String(c?.emails?.[0]?.email ?? '').trim();
+  return { firstName: firstName || 'Unknown', lastName, phone: phone || undefined, email: email || undefined };
+}
+
+// Map a browser Contacts Picker record (fields arrive as arrays) into the draft.
+function mapWebContact(c: any): DeviceContactDraft {
+  const { firstName, lastName } = splitDisplayName(
+    String((Array.isArray(c?.name) ? c.name[0] : c?.name) ?? '').trim(),
+  );
+  const phone = String((Array.isArray(c?.tel) ? c.tel[0] : c?.tel) ?? '').trim();
+  const email = String((Array.isArray(c?.email) ? c.email[0] : c?.email) ?? '').trim();
+  return { firstName: firstName || 'Unknown', lastName, phone: phone || undefined, email: email || undefined };
+}
+
+// True when a single-contact picker can actually run in THIS runtime, so callers
+// feature-detect and hide the button otherwise (iOS Safari, desktop, Expo Go).
+export function isDeviceContactPickerSupported(): boolean {
+  if (isWebRuntime()) {
+    return typeof navigator !== 'undefined'
+      && !!(navigator as any).contacts
+      && typeof (navigator as any).contacts.select === 'function';
+  }
+  const C = loadExpoContacts();
+  return !!C && typeof C.presentContactPickerAsync === 'function';
+}
+
+// Present the picker and return ONE mapped contact, or null if the user cancels.
+// Throws only when no picker exists in this runtime (callers guard with
+// isDeviceContactPickerSupported and treat cancel/abort as a silent no-op).
+export async function pickOneFromDevice(): Promise<DeviceContactDraft | null> {
+  if (isWebRuntime()) {
+    const navAny = typeof navigator !== 'undefined' ? (navigator as any) : null;
+    if (!navAny?.contacts?.select) throw new Error('Contact picker is not supported on this device');
+    const sel = await navAny.contacts.select(['name', 'tel', 'email'], { multiple: false });
+    const c = Array.isArray(sel) ? sel[0] : sel;
+    return c ? mapWebContact(c) : null; // empty selection = user cancelled
+  }
+  const C = loadExpoContacts();
+  if (!C || typeof C.presentContactPickerAsync !== 'function') {
+    throw new Error('Contact picker is not available in this build');
+  }
+  const c = await C.presentContactPickerAsync(); // resolves to null on cancel
+  return c ? mapNativeContact(c) : null;
+}
+
+// ---------------------------------------------------------------------------
 // Dedupe keys. phoneKey uses the LAST 10 digits so different dialing formats of
 // the same number match (+1… / 00 1… / local), instead of only stripping a NANP
 // leading 1; nameKey collapses case + whitespace. The review UI uses these to
