@@ -12,7 +12,8 @@
     "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
     "eval:rex": "npx --yes promptfoo@latest eval -c ../eval/promptfooconfig.yaml",
     "test:followup": "node scripts/test-followup-drafts.mjs",
-    "test:chainguard": "node scripts/test-chainguard.mjs"
+    "test:chainguard": "node scripts/test-chainguard.mjs",
+    "test:contactpick": "node scripts/test-contactpick.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.1",
@@ -23,6 +24,7 @@
     "expo": "~51.0.0",
     "expo-av": "~14.0.0",
     "expo-constants": "16.0.2",
+    "expo-contacts": "~13.0.5",
     "expo-image-picker": "~15.0.0",
     "expo-linear-gradient": "~13.0.2",
     "expo-linking": "^55.0.9",
