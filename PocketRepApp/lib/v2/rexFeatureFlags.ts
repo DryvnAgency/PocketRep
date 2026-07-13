@@ -42,6 +42,15 @@ export function isContactImportEnabled(): boolean {
   return envOn(process.env.EXPO_PUBLIC_CONTACT_IMPORT);
 }
 
+// Rex chat v2 ("the closer"): upgrades the gold-orb RexCoach chat to the spec
+// persona (COACH / LENS / BLAST modes detected in-prompt), token streaming, and
+// a durable cross-device thread in rex_messages. Off by default → RexCoach's
+// prompt, transport, and persistence are byte-identical to before.
+export function isRexChatEnabled(): boolean {
+  if (typeof process === 'undefined') return false;
+  return envOn(process.env.EXPO_PUBLIC_REX_CHAT);
+}
+
 // P2-R1: replace the static first-run carousel with a short Rex interview that
 // captures the rep's real, consumed profile fields (name, dealership, title, Rex
 // tone) conversationally. Off by default → first-run shows the existing 8-slide

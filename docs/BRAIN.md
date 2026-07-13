@@ -62,6 +62,7 @@ useHeyRex (wake/listen)
 - **RexAction types:** `add_contact, update_notes, delete_contact, log_deal, schedule_followup, retier_contact, create_reminder, batch_action, show_contact, filter_contacts, book_summary, call_next, clarify, chain, say`.
 - **Rex Lens** = camera/vision path (`fmtContact`, prompt-injection-hardened in P2-A2).
 - **Key files:** `lib/v2/rexActions.ts` (core), `useHeyRex.ts`, `aiProxy.ts`, `components/v2/HeyRexSheet.tsx`, `rexMemory.ts`, `promptSafety.ts`.
+- **Rex chat (gold orb):** `components/v2/RexCoach.tsx` + `lib/v2/coachBrain.ts` (persona + playbooks + `buildCoachMessages`) + `lib/v2/coachThread.ts` (durable thread). Behind `EXPO_PUBLIC_REX_CHAT` the persona is the spec "closer" (`buildRexSystemPrompt(rep)` — COACH default, LENS on pasted worklists, BLAST on mass-text asks, strict formatting, never-send boundary), replies **stream** via `callBrainStream`, and turns persist to `rex_messages` via `recordRexTurn` (one shared Rex memory with the voice path; today's thread reloads on open). Flag off → legacy floor-coach prompt, one-shot `callBrain`, localStorage-only day log (`coachLog.ts`).
 
 ## 6. Edge functions (`supabase/functions/`)
 | Fn | Role | Notes |
@@ -86,14 +87,15 @@ useHeyRex (wake/listen)
 | `EXPO_PUBLIC_REX_FAILURE_HONESTY` | spoken failure-recovery line (P2-R8); logging is always-on |
 | `EXPO_PUBLIC_REX_ONBOARDING` | conversational first-run interview (P2-R1) vs the carousel |
 | `EXPO_PUBLIC_REX_FOLLOWUP` | new-contact → Rex recap → 14-day rep-sent follow-up (also needs the migration applied) |
-| `EXPO_PUBLIC_CONTACT_IMPORT` | "Add from phone" picker **and** the bulk-import (⇪) modal. **Now set `1` in `eas.json` (native); NOT set in Vercel (web).** |
+| `EXPO_PUBLIC_CONTACT_IMPORT` | "Add from phone" picker **and** the bulk-import (⇪) modal. **Set `1` in `eas.json` (native) AND `vercel.json` build.env (web).** |
+| `EXPO_PUBLIC_REX_CHAT` | Rex chat v2: closer persona (COACH/LENS/BLAST in-prompt modes, parameterized rep, Eddie/Nissan-of-Omaha demo defaults), token streaming, durable `rex_messages` thread. **Set `1` in `eas.json` AND `vercel.json` build.env.** Off → RexCoach byte-identical. |
 
 **Server (ai-proxy env):** `BRAIN_TIERED` + `BRAIN_MODELS_FAST` (P2-R7), `AI_RATE_PER_MIN` (default 30). **Nurture:** `SCHEDULER_HOURLY`.
 
 ## 9. Env / build / deploy ⚠️ (where intuition fails)
 - **`EXPO_PUBLIC_*` is build-time inlined by Metro** — it must be set *where each build reads env*, and a build must ship for it to take effect:
   - **Native (EAS):** set in the **EAS dashboard env** (where the real `EXPO_PUBLIC_SUPABASE_*` live — `eas.json`'s `env` only has empty placeholders) and/or `eas.json` build-profile `env`. Build: `eas build`. **Native modules (e.g. `expo-contacts`) ONLY work in a native build** — never web / Expo Go.
-  - **Web (Vercel):** set in the **Vercel project env** (or `vercel.json` `build.env`). Build = `npm run build:web` (`expo export --platform web`) → `dist`. **Vercel does NOT read `eas.json`.**
+  - **Web (Vercel):** feature flags live **in-repo in `PocketRepApp/vercel.json` `build.env`** (the two-homes rule: every flag goes in BOTH `eas.json` and `vercel.json`); secrets (Supabase URL/anon key) stay in the Vercel dashboard env. Build = `npm run build:web` (`expo export --platform web`) → `dist`. **Vercel does NOT read `eas.json`.**
   - `.env` is **git-ignored** (never reaches a cloud build); `.env.example` is the template.
 - **Vercel:** 2 projects — `pocket-rep` and `project-t90u1` (root = `PocketRepApp`). **Production auto-deploys from `main`**; previews from PR branches.
 - **Supabase migrations and edge-function deploys do NOT happen on git merge** — the owner applies/redeploys them.
@@ -116,8 +118,8 @@ useHeyRex (wake/listen)
 - **Web "Add from phone" works only in Chrome on Android** (`navigator.contacts`); the true picker (`expo-contacts.presentContactPickerAsync`) is native-app only.
 - An `eas.json` flag flip does **nothing** for the Vercel website (separate env source).
 
-## 13. Current state (2026-06-29)
-- Merged (flags off unless noted): all **P2-R1…R8** and **P2-A2…A7**; **Add from phone** (#93) + its flag activation in `eas.json` (#94, `EXPO_PUBLIC_CONTACT_IMPORT=1` for native builds — *not* web).
+## 13. Current state (2026-06-30)
+- Merged (flags off unless noted): all **P2-R1…R8** and **P2-A2…A7**; **Add from phone** (#93) + its flag activation (#94); **Rex chat v2 + PWA installability** (closer persona / streaming / durable thread; `postexport-web.js` head injection + manifest + icons — note: `single-page` web output ignores `app/+html.tsx`) with `EXPO_PUBLIC_REX_CHAT=1` + `EXPO_PUBLIC_CONTACT_IMPORT=1` live in **both** flag homes (`vercel.json` build.env → web, `eas.json` → native). Web is installable (Add to Home Screen) on iPhone Safari + Android Chrome. Migration `20260630_v2_future_proofing.sql` (role / store_id / payment targets) committed **NOT applied**.
 - **Still open (owner-gated):** P0-1 web auth · P0-2 RPC grants · P0-3 cron secret · P0-5 billing.
 - Nothing new is user-visible until the owner ships the relevant build/deploy with the flag set in that build's env.
 

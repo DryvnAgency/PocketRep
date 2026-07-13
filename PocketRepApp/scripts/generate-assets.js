@@ -1,7 +1,9 @@
 /**
  * PocketRep — Asset Generator
- * Generates app icon (1024x1024) and splash screen (2048x2048)
+ * Generates app icon (1024x1024) and splash screen (2048x2048), plus the PWA
+ * icon set under public/ (manifest 192/512 + maskable + apple-touch-icon).
  * Run once: node scripts/generate-assets.js
+ * PWA icons only (leaves assets/ untouched): node scripts/generate-assets.js --pwa-only
  */
 
 const { createCanvas } = require('canvas');
@@ -9,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ASSETS_DIR = path.join(__dirname, '..', 'assets');
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
 const INK       = '#0c0c0e';
@@ -150,11 +153,74 @@ function generateSplash() {
   console.log('✅  assets/splash.png  (2048×2048)');
 }
 
+// ── PWA icons (public/) ───────────────────────────────────────────────────────
+// The same brand mark as generateIcon, scaled to `size`. `contentScale` shrinks
+// the art toward the center (maskable icons need ~80% safe zone so launchers can
+// crop to a circle without clipping the mark). Background stays full-bleed ink.
+function drawPwaMark(size, contentScale = 1) {
+  const canvas = createCanvas(size, size);
+  const ctx = canvas.getContext('2d');
+  const s = (size / 1024) * contentScale;
+  const off = (size - 1024 * s) / 2; // center the scaled 1024 layout
+
+  ctx.fillStyle = INK;
+  ctx.fillRect(0, 0, size, size);
+  ctx.save();
+  ctx.translate(off, off);
+  ctx.scale(s, s);
+
+  const PAD = 80;
+  ctx.fillStyle = SURFACE;
+  roundRect(ctx, PAD, PAD, 1024 - PAD * 2, 1024 - PAD * 2, 80);
+  ctx.fill();
+  ctx.fillStyle = GOLD;
+  roundRect(ctx, PAD, PAD, 1024 - PAD * 2, 8, 4);
+  ctx.fill();
+
+  const cx = 512;
+  const cy = 512 - 40;
+  const grad = ctx.createLinearGradient(cx - 200, cy - 180, cx + 200, cy + 180);
+  grad.addColorStop(0, GOLD_LITE);
+  grad.addColorStop(1, GOLD);
+  ctx.fillStyle = grad;
+  ctx.font = 'bold 380px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PR', cx, cy);
+
+  ctx.fillStyle = '#6a7080';
+  ctx.font = '500 52px Arial';
+  ctx.fillText('POCKETREP', cx, cy + 230);
+
+  ctx.fillStyle = GOLD;
+  roundRect(ctx, cx - 90, cy + 300, 180, 4, 2);
+  ctx.fill();
+
+  ctx.restore();
+  return canvas;
+}
+
+function generatePwaIcons() {
+  if (!fs.existsSync(PUBLIC_DIR)) fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+  const out = (name, canvas) => {
+    fs.writeFileSync(path.join(PUBLIC_DIR, name), canvas.toBuffer('image/png'));
+    console.log(`✅  public/${name}`);
+  };
+  out('icon-192.png', drawPwaMark(192));
+  out('icon-512.png', drawPwaMark(512));
+  out('icon-512-maskable.png', drawPwaMark(512, 0.78));
+  out('apple-touch-icon.png', drawPwaMark(180)); // iOS home-screen icon (opaque)
+}
+
 // ── Run ───────────────────────────────────────────────────────────────────────
+const PWA_ONLY = process.argv.includes('--pwa-only');
 try {
-  generateIcon();
-  generateSplash();
-  console.log('\n🎨  Assets ready in assets/');
+  if (!PWA_ONLY) {
+    generateIcon();
+    generateSplash();
+  }
+  generatePwaIcons();
+  console.log(PWA_ONLY ? '\n🎨  PWA icons ready in public/' : '\n🎨  Assets ready in assets/ + public/');
 } catch (err) {
   console.error('❌  Generation failed:', err.message);
   process.exit(1);

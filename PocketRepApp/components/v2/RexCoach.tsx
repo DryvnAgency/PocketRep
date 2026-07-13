@@ -12,9 +12,12 @@ import RadarLoader from './RadarLoader';
 import ConversationComposer from './ConversationComposer';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
-import { callBrain, warmBrain } from '@/lib/v2/aiProxy';
+import { callBrain, callBrainStream, warmBrain } from '@/lib/v2/aiProxy';
 import { serializeRepContext, loadMtdSummary, loadRecentActivity, type MtdSummary } from '@/lib/v2/repContext';
-import { buildCoachMessages } from '@/lib/v2/coachBrain';
+import { buildCoachMessages, type RepIdentity } from '@/lib/v2/coachBrain';
+import { isRexChatEnabled } from '@/lib/v2/rexFeatureFlags';
+import { loadTodayServerThread, loadRepIdentity } from '@/lib/v2/coachThread';
+import { recordRexTurn } from '@/lib/v2/rexMemory';
 import {
   parseCoachReply, executeAction, summarizeAction, type RexAction,
 } from '@/lib/v2/rexActions';
@@ -27,6 +30,11 @@ import type { PayPlan } from '@/lib/v2/payPlan';
 const COACH_ACTIONS = new Set<RexAction['type']>([
   'add_contact', 'update_notes', 'schedule_followup', 'retier_contact', 'log_deal', 'create_reminder',
 ]);
+
+// Rex chat v2 (EXPO_PUBLIC_REX_CHAT): closer persona + token streaming + durable
+// cross-device thread. Build-time env, so this is constant for the app's life;
+// OFF → every path below behaves byte-identically to before.
+const REX_CHAT = isRexChatEnabled();
 
 type ChatMessage = { from: 'rex' | 'user'; text: string; time: string };
 
@@ -80,6 +88,12 @@ export default function RexCoach({
   const [parseOpen, setParseOpen] = useState(false);      // conversation composer (NEW 5)
   const [parsing, setParsing] = useState(false);          // extraction in flight
   const [parseResult, setParseResult] = useState<ConversationParse | null>(null);
+  // Rex chat v2: the in-flight streamed reply (null = not streaming), who Rex
+  // works for, and whether the rep has interacted since open (guards the async
+  // server-thread restore from clobbering a conversation already in progress).
+  const [streamText, setStreamText] = useState<string | null>(null);
+  const repIdent = useRef<RepIdentity>({});
+  const interactedRef = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
 
   // Seed a fresh greeting each time the sheet opens, and refresh month-to-date
@@ -108,17 +122,32 @@ export default function RexCoach({
       setParseOpen(false);
       setParsing(false);
       setParseResult(null);
+      setStreamText(null);
+      interactedRef.current = false;
       // Warm the brain function while the rep reads the greeting + types, so the
       // first real send lands on a warm container instead of a cold start.
       warmBrain();
       loadMtdSummary().then(setMtd).catch(() => setMtd(null));
       loadRecentActivity().then(setActivity).catch(() => setActivity(''));
+      if (REX_CHAT) {
+        // Who Rex works for (best-effort; prompt falls back to demo defaults).
+        loadRepIdentity().then(r => { repIdent.current = r; }).catch(() => undefined);
+        // Durable thread: today's turns from rex_messages beat the local cache —
+        // but never clobber a conversation the rep has already started here.
+        loadTodayServerThread().then(rows => {
+          if (!rows || rows.length === 0 || interactedRef.current) return;
+          const restored: ChatMessage[] = [];
+          if (carry) restored.push({ from: 'rex', text: `↺ Yesterday — ${carry}`, time: stamp() });
+          for (const t of rows) restored.push({ from: t.from, text: t.text, time: t.time });
+          setMessages(restored);
+        }).catch(() => undefined);
+      }
     }
   }, [open]);
 
   useEffect(() => {
     if (open) requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
-  }, [messages, typing, open]);
+  }, [messages, typing, streamText, open]);
 
   if (!open) return null;
 
@@ -137,6 +166,7 @@ export default function RexCoach({
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
     if (!text || typing) return;
+    interactedRef.current = true; // a live conversation beats the async restore
     setRetry(null);
     setPending(null); // a new message supersedes any un-confirmed proposal
     const history = messages;
@@ -158,16 +188,26 @@ export default function RexCoach({
     try {
       for (;;) {
         try {
-          const reply = (await callBrain({
-            // 1200 (was 700) so a complete, structured coaching answer never gets
-            // cut off mid-sentence — the prompt still asks Rex to stay tight.
+          // 1200 (was 700) so a complete, structured coaching answer never gets
+          // cut off mid-sentence — the prompt still asks Rex to stay tight.
+          const brainOpts = {
             maxTokens: 1200,
             messages: buildCoachMessages({
               history, text, repContext,
               contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
               recentActivity: activity,
+              rep: REX_CHAT ? repIdent.current : undefined,
             }),
-          })).trim();
+          };
+          // Rex chat v2 streams tokens into a live bubble; the visible stream
+          // stops at the first fenced block so a trailing action JSON never
+          // flashes on screen. Flag off → the original one-shot call, untouched.
+          const reply = REX_CHAT
+            ? (await callBrainStream({
+                ...brainOpts,
+                onDelta: (full) => setStreamText(full.split('```')[0]),
+              })).trim()
+            : (await callBrain(brainOpts)).trim();
           if (!reply) throw new Error('empty');
           // The reply is coaching text, optionally followed by a structured
           // action when the rep asked Rex to DO something. Show the spoken line;
@@ -175,8 +215,12 @@ export default function RexCoach({
           const { spoken, action } = parseCoachReply(reply);
           const actionable = !!action && COACH_ACTIONS.has(action.type);
           const line = spoken || (actionable ? summarizeAction(action!) : reply);
+          setStreamText(null); // the final bubble replaces the stream
           pushRex(line);
           if (actionable) setPending(action!);
+          // Durable thread: mirror the exchange into rex_messages (fire-and-
+          // forget; also feeds the rolling rex_memory summary shared with voice).
+          if (REX_CHAT) recordRexTurn(text, line).catch(() => undefined);
           return;
         } catch (e: any) {
           const msg = String(e?.message ?? '');
@@ -201,6 +245,7 @@ export default function RexCoach({
       clearTimeout(warmTimer);
       setWarming(false);
       setTyping(false);
+      setStreamText(null); // clear any partial stream on success OR failure
     }
   };
 
@@ -357,7 +402,17 @@ export default function RexCoach({
               </View>
             </View>
           ))}
-          {typing ? (
+          {streamText ? (
+            <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
+              <View style={{ maxWidth: '84%' }}>
+                <Label color={colors.gold}>REX</Label>
+                <View style={[styles.bubble, styles.bubbleRex]}>
+                  <Text style={styles.bubbleText}>{streamText}</Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
+          {typing && !streamText ? (
             <View style={styles.bubbleRow}>
               <View style={[styles.bubble, styles.bubbleRex, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
                 <RadarLoader size={16} />
