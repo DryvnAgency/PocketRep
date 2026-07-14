@@ -136,6 +136,10 @@ export default function RexCoach({
         // but never clobber a conversation the rep has already started here.
         loadTodayServerThread().then(rows => {
           if (!rows || rows.length === 0 || interactedRef.current) return;
+          // Staleness guard: recordRexTurn is fire-and-forget, so a SELECT can
+          // beat the INSERT on a quick reopen. Only replace the local log when
+          // the server genuinely knows MORE than this device does.
+          if (rows.length <= today.length) return;
           const restored: ChatMessage[] = [];
           if (carry) restored.push({ from: 'rex', text: `↺ Yesterday — ${carry}`, time: stamp() });
           for (const t of rows) restored.push({ from: t.from, text: t.text, time: t.time });
@@ -205,7 +209,12 @@ export default function RexCoach({
           const reply = REX_CHAT
             ? (await callBrainStream({
                 ...brainOpts,
-                onDelta: (full) => setStreamText(full.split('```')[0]),
+                // Parity with callBrain's total budget: the stream path's idle
+                // timer resets per chunk, but the non-SSE JSON fallback needs
+                // the full 60s (cold starts run 30-60s).
+                timeoutMs: 60_000,
+                // Trim a partially-arrived fence so 1-2 backticks never flash.
+                onDelta: (full) => setStreamText(full.split('```')[0].replace(/`{1,2}\s*$/, '')),
               })).trim()
             : (await callBrain(brainOpts)).trim();
           if (!reply) throw new Error('empty');
@@ -228,6 +237,7 @@ export default function RexCoach({
           if (attempt === 0 && transient) {
             attempt++;
             setWarming(true);
+            setStreamText(null); // clear the frozen partial so the warming hint shows
             await warmBrain();   // boot the container, then retry once
             continue;
           }
@@ -288,6 +298,7 @@ export default function RexCoach({
   // NEW 5 — parse a whole conversation into a proposed CRM update (extraction is
   // read-only; the write still waits for Confirm below).
   const runParse = async (transcript: string) => {
+    interactedRef.current = true; // a parse in progress beats the async restore
     setParseOpen(false);
     setPending(null);
     setParseResult(null);
@@ -405,7 +416,7 @@ export default function RexCoach({
           {streamText ? (
             <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
               <View style={{ maxWidth: '84%' }}>
-                <Label color={colors.gold}>REX</Label>
+                <Label color={colors.gold}>REX · COACH</Label>
                 <View style={[styles.bubble, styles.bubbleRex]}>
                   <Text style={styles.bubbleText}>{streamText}</Text>
                 </View>

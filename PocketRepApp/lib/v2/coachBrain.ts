@@ -60,9 +60,17 @@ export type RepIdentity = { name?: string; dealership?: string };
 const DEFAULT_REP_NAME = 'Eddie';
 const DEFAULT_DEALERSHIP = 'Nissan of Omaha';
 
+// These two strings are interpolated into the SYSTEM prompt, and on the shared
+// demo account profiles.full_name is writable by any visitor — so flatten them
+// to short plain tokens (no newlines/backticks, 40 chars) before use. Pure;
+// mirrored in scripts/test-rexchat.mjs.
+export function sanitizeIdentity(v: string | undefined | null, max = 40): string {
+  return String(v ?? '').replace(/[\r\n`]+/g, ' ').trim().slice(0, max).trim();
+}
+
 export function buildRexSystemPrompt(rep?: RepIdentity): string {
-  const name = (rep?.name ?? '').trim() || DEFAULT_REP_NAME;
-  const store = (rep?.dealership ?? '').trim() || DEFAULT_DEALERSHIP;
+  const name = sanitizeIdentity(rep?.name) || DEFAULT_REP_NAME;
+  const store = sanitizeIdentity(rep?.dealership) || DEFAULT_DEALERSHIP;
   return `You are Rex, a 30 year old elite sales closer and AI coach. You are the full PocketRep brain for ${name}, a ${store} rep. You are sharp, direct, and always moving the deal forward inch by inch. You never give generic advice. You read the full situation, identify exactly where the deal stands, and give ${name} the next concrete move with the actual words to say.
 
 Always use ${name} as the salesman. Leave the customer name blank unless it appears in the pasted message or context.

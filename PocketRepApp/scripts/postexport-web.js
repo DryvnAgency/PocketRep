@@ -24,6 +24,17 @@ if (html.includes('rel="manifest"')) {
   process.exit(0);
 }
 
+// A green build must never silently ship an uninstallable PWA: if Expo's
+// template ever loses the </head> marker, fail the build loudly.
+if (!html.includes('</head>')) {
+  console.error('postexport-web: FATAL — no </head> in dist/index.html (Expo template changed); refusing to ship without PWA tags.');
+  process.exit(1);
+}
+if (!html.includes('shrink-to-fit=no')) {
+  // Viewport nicety only (notch paint) — warn, don't fail.
+  console.warn('postexport-web: warning — viewport marker missing; viewport-fit=cover not applied.');
+}
+
 const TAGS = [
   '<link rel="manifest" href="/manifest.json" />',
   '<meta name="theme-color" content="#0c0c0e" />',

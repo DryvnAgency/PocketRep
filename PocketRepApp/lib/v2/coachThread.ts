@@ -34,13 +34,10 @@ export function localDayStartIso(now = new Date()): string {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 }
 
-// Pure: server-vs-local pick — the server thread wins whenever it has turns,
-// because it's the cross-device source of truth; otherwise keep the local cache.
-export function pickThread<T>(server: T[] | null, local: T[]): T[] {
-  return server && server.length > 0 ? server : local;
-}
-
-// Today's chat turns from rex_messages, oldest first. null = unavailable.
+// Today's chat turns from rex_messages, oldest first in the result — but the
+// query takes the NEWEST `cap` rows (descending + reverse), so a heavy day
+// drops the morning, never the last exchange. The caller decides whether the
+// server thread replaces the local cache (it must know MORE than the device).
 export async function loadTodayServerThread(cap = 100): Promise<ThreadTurn[] | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -50,12 +47,17 @@ export async function loadTodayServerThread(cap = 100): Promise<ThreadTurn[] | n
       .select('role,content,created_at')
       .eq('user_id', user.id)
       .gte('created_at', localDayStartIso())
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(cap);
     if (error) return null;
     return (data ?? [])
-      .filter((r: any) => String(r?.content ?? '').trim())
-      .map((r: any) => rowToTurn(r));
+      .filter((r: any) => {
+        const c = String(r?.content ?? '').trim();
+        // Drop empties and the voice path's literal no-reply placeholder.
+        return c && c !== '(no spoken reply)';
+      })
+      .map((r: any) => rowToTurn(r))
+      .reverse();
   } catch {
     return null;
   }
