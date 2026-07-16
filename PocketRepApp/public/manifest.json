@@ -1,0 +1,16 @@
+{
+  "name": "PocketRep",
+  "short_name": "PocketRep",
+  "description": "Your book of business in your pocket, and a closer named Rex who works it for you.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c0c0e",
+  "theme_color": "#0c0c0e",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

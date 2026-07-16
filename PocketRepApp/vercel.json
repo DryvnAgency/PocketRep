@@ -1,6 +1,12 @@
 {
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
+  "build": {
+    "env": {
+      "EXPO_PUBLIC_REX_CHAT": "1",
+      "EXPO_PUBLIC_CONTACT_IMPORT": "1"
+    }
+  },
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
