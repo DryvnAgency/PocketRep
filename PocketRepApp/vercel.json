@@ -4,7 +4,8 @@
   "build": {
     "env": {
       "EXPO_PUBLIC_REX_CHAT": "1",
-      "EXPO_PUBLIC_CONTACT_IMPORT": "1"
+      "EXPO_PUBLIC_CONTACT_IMPORT": "1",
+      "EXPO_PUBLIC_REX_ONBOARDING": "1"
     }
   },
   "rewrites": [

@@ -12,7 +12,8 @@
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "",
         "EXPO_PUBLIC_VOICE_PROVIDER_KEY": "",
         "EXPO_PUBLIC_CONTACT_IMPORT": "1",
-        "EXPO_PUBLIC_REX_CHAT": "1"
+        "EXPO_PUBLIC_REX_CHAT": "1",
+        "EXPO_PUBLIC_REX_ONBOARDING": "1"
       }
     },
     "preview": {
@@ -23,7 +24,8 @@
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "",
         "EXPO_PUBLIC_VOICE_PROVIDER_KEY": "",
         "EXPO_PUBLIC_CONTACT_IMPORT": "1",
-        "EXPO_PUBLIC_REX_CHAT": "1"
+        "EXPO_PUBLIC_REX_CHAT": "1",
+        "EXPO_PUBLIC_REX_ONBOARDING": "1"
       }
     },
     "production": {
@@ -34,7 +36,8 @@
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "",
         "EXPO_PUBLIC_VOICE_PROVIDER_KEY": "",
         "EXPO_PUBLIC_CONTACT_IMPORT": "1",
-        "EXPO_PUBLIC_REX_CHAT": "1"
+        "EXPO_PUBLIC_REX_CHAT": "1",
+        "EXPO_PUBLIC_REX_ONBOARDING": "1"
       }
     }
   },
