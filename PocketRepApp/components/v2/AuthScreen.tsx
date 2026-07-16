@@ -1,12 +1,9 @@
-// v2 real per-user sign-in / sign-up (Eduardo's P0 decision #3) — replaces the
-// shared-demo auto-sign-in. This screen does plain Supabase email+password auth;
-// it does NOT touch demoAuth.ts or any billing code.
-//
-// ⚠️ Built but NOT yet wired into the boot flow. Wiring it in (show this when
-// there's no session, instead of auto-signing-in the demo account) is the GATED
-// step Eduardo owns — see docs/MASTER_PLAN.md §"Gated P0 — Eduardo only". With
-// the hard-lockout model, a brand-new signup will land on LockoutScreen until
-// they subscribe (the access gate decides that, not this screen).
+// v2 real per-user sign-in / sign-up (P0-1) — the default when there's no
+// session (wired in AppShell.tsx). Plain Supabase email+password auth; does not
+// call demoAuth.ts directly (the optional onTryDemo prop is the caller's demo
+// hook — see AppShell's handleTryDemo). With the hard-lockout model, a
+// brand-new signup will land on LockoutScreen until they subscribe (the access
+// gate decides that, not this screen — untouched by this file).
 
 import { useState } from 'react';
 import {
@@ -16,7 +13,14 @@ import {
 import { supabase } from '@/lib/supabase';
 import { colors, radius } from '@/constants/theme';
 
-export default function AuthScreen({ onAuthed }: { onAuthed?: () => void }) {
+export default function AuthScreen({
+  onTryDemo,
+}: {
+  // Present only where the demo is reachable (web) — see AppShell. Errors thrown
+  // here surface inline exactly like a failed sign-in, instead of the button
+  // silently doing nothing.
+  onTryDemo?: () => Promise<void>;
+}) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,9 +41,12 @@ export default function AuthScreen({ onAuthed }: { onAuthed?: () => void }) {
     setBusy(true);
     try {
       if (!isSignup) {
+        // No onAuthed callback needed here: AppShell's onAuthStateChange
+        // listener is the single source of truth for the transition and picks
+        // up the resulting SIGNED_IN event on its own (fires before this
+        // await even resolves).
         const { error: signErr } = await supabase.auth.signInWithPassword({ email: em, password });
         if (signErr) { setError('Email or password is incorrect.'); return; }
-        onAuthed?.();
       } else {
         const { data, error: signErr } = await supabase.auth.signUp({
           email: em,
@@ -49,12 +56,26 @@ export default function AuthScreen({ onAuthed }: { onAuthed?: () => void }) {
         if (signErr) { setError(signErr.message); return; }
         // With hard lockout, the access gate sends a fresh (unpaid) account to
         // LockoutScreen → re-subscribe. If email confirmation is on, there's no
-        // session yet, so prompt them to confirm first.
-        if (data.session) onAuthed?.();
-        else setNotice('Check your email to confirm your account, then sign in.');
+        // session yet, so prompt them to confirm first (no session -> no
+        // SIGNED_IN event -> AppShell's listener has nothing to pick up).
+        if (!data.session) setNotice('Check your email to confirm your account, then sign in.');
       }
     } catch (e: any) {
       setError(e?.message ?? 'Something went wrong. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const tryDemo = async () => {
+    if (!onTryDemo || busy) return;
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      await onTryDemo();
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not start the demo. Try again.');
     } finally {
       setBusy(false);
     }
@@ -136,6 +157,18 @@ export default function AuthScreen({ onAuthed }: { onAuthed?: () => void }) {
             <Text style={styles.footerLink}>{isSignup ? 'Sign in' : 'Start free trial'}</Text>
           </Pressable>
         </View>
+
+        {onTryDemo ? (
+          <Pressable
+            onPress={tryDemo}
+            disabled={busy}
+            style={[styles.demoLink, busy && { opacity: 0.6 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Try the live demo"
+          >
+            <Text style={styles.demoLinkText}>Just want to look around? Try the live demo →</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -172,4 +205,6 @@ const styles = StyleSheet.create({
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
   footerText: { color: colors.grey2, fontSize: 14 },
   footerLink: { color: colors.gold, fontWeight: '700', fontSize: 14 },
+  demoLink: { alignItems: 'center', marginTop: 20 },
+  demoLinkText: { color: colors.grey, fontSize: 13 },
 });

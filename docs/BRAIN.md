@@ -109,7 +109,7 @@ useHeyRex (wake/listen)
 - **Ship as stacked, additive, default-off** changes → production stays inert until a flag is flipped + a build ships.
 - **Never fabricate:** no fake/seed data shipped to users, no collecting fields nothing consumes; honest empty states.
 - **Prompt safety:** `promptSafety.frameUntrusted(label, body)` wraps attacker-influenceable CRM text so the model treats it as data, not instructions.
-- **Owner-gated = hard stop** (don't touch without explicit go-ahead): the gated files (`stripe-webhook`, `lib/v2/demoAuth.ts`, `lib/featureFlags.ts`), RPC `EXECUTE` grants, cron rows/secret, any live migration-apply / edge-fn redeploy / secret, schema-breaking changes, and vendor/product/cost decisions.
+- **Owner-gated = hard stop** (don't touch without explicit go-ahead): the gated files (`stripe-webhook`, `lib/featureFlags.ts`), RPC `EXECUTE` grants, cron rows/secret, any live migration-apply / edge-fn redeploy / secret, schema-breaking changes, and vendor/product/cost decisions. `lib/v2/demoAuth.ts` was in this list until the owner explicitly lifted the hold for P0-1 (2026-07-16, real sign-in) — still auth-sensitive, still worth care, but no longer blanket off-limits.
 - Web `Alert.alert` doesn't render buttons → use `window.confirm` on web (native keeps `Alert`).
 - Commit trailers: `Co-Authored-By` + `Claude-Session`. Work branch pattern: `claude/<slug>-f0s519`.
 
@@ -118,15 +118,16 @@ useHeyRex (wake/listen)
 - **Web "Add from phone" works only in Chrome on Android** (`navigator.contacts`); the true picker (`expo-contacts.presentContactPickerAsync`) is native-app only.
 - An `eas.json` flag flip does **nothing** for the Vercel website (separate env source).
 
-## 13. Current state (2026-06-30)
-- Merged (flags off unless noted): all **P2-R1…R8** and **P2-A2…A7**; **Add from phone** (#93) + its flag activation (#94); **Rex chat v2 + PWA installability** (closer persona / streaming / durable thread; `postexport-web.js` head injection + manifest + icons — note: `single-page` web output ignores `app/+html.tsx`) with `EXPO_PUBLIC_REX_CHAT=1` + `EXPO_PUBLIC_CONTACT_IMPORT=1` live in **both** flag homes (`vercel.json` build.env → web, `eas.json` → native). Web is installable (Add to Home Screen) on iPhone Safari + Android Chrome. Migration `20260630_v2_future_proofing.sql` (role / store_id / payment targets) committed **NOT applied**.
-- **Still open (owner-gated):** P0-1 web auth · P0-2 RPC grants · P0-3 cron secret · P0-5 billing.
-- Nothing new is user-visible until the owner ships the relevant build/deploy with the flag set in that build's env.
+## 13. Current state (2026-07-16)
+- Merged (flags off unless noted): all **P2-R1…R8** and **P2-A2…A7**; **Add from phone** (#93) + its flag activation (#94); **Rex chat v2 + PWA installability** (#95, closer persona / streaming / durable thread; `postexport-web.js` head injection + manifest + icons — note: `single-page` web output ignores `app/+html.tsx`) with `EXPO_PUBLIC_REX_CHAT=1` + `EXPO_PUBLIC_CONTACT_IMPORT=1` live in **both** flag homes (`vercel.json` build.env → web, `eas.json` → native) — web is installable (Add to Home Screen) on iPhone Safari + Android Chrome. **P2-R1 Rex-voice onboarding activated** (#96, `EXPO_PUBLIC_REX_ONBOARDING=1`, all four flag homes). **P0-1 real sign-in shipped** — `AppShell.tsx` no longer auto-signs visitors into the shared demo account; `AuthScreen.tsx` (email+password) is the default with an explicit "Try the demo" fallback; `handle_new_user()` no longer seeds a fake contact into real sign-ups (migration committed, NOT applied). Migrations committed **NOT applied**: `20260630_v2_future_proofing.sql` (role / store_id / payment targets), `20260716_v2_new_signup_no_fake_seed.sql`.
+- **Still open (owner-gated):** P0-2 RPC grants · P0-3 cron secret · P0-5 billing (the paywall — `useAccessGate()` still fails open, so real sign-ups get full access with no subscription check yet). **Owner action for P0-1:** rotate the demo account's Supabase Auth password (can't be done from here) + set the real `EXPO_PUBLIC_V2_DEMO_EMAIL`/`_PASSWORD` in the Vercel/EAS dashboards (credentials, not committed like flags).
+- Nothing new is user-visible until the owner ships the relevant build/deploy with the flag set in that build's env (except P0-1, which is live on merge — it's not flag-gated, it's the default auth path once the migration below is applied and the demo password is rotated).
 
 ## 14. Fast file index
 | Need | File |
 |---|---|
 | App shell / routing / overlays | `components/v2/AppShell.tsx`, `app/_layout.tsx` |
+| Sign-in / sign-up / demo fallback | `components/v2/AuthScreen.tsx`, `lib/v2/demoAuth.ts`, `lib/v2/localSessionClear.ts` (sign-out localStorage sweep) |
 | Rex core logic | `lib/v2/rexActions.ts`, `lib/v2/useHeyRex.ts`, `lib/v2/aiProxy.ts` |
 | Feature flags (safe) | `lib/v2/rexFeatureFlags.ts` |
 | Contacts list / add / detail | `components/v2/ContactsTab.tsx`, `AddContactModal.tsx`, `ContactDetail.tsx` |

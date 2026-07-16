@@ -6,6 +6,11 @@ const DEMO_PASSWORD = process.env.EXPO_PUBLIC_V2_DEMO_PASSWORD ?? 'PocketRepDemo
 
 let inflight: Promise<void> | null = null;
 
+// P0-1: now called ONLY from an explicit "Try the demo" tap (AppShell's
+// handleTryDemo), not automatically on every mount — so a failure here must
+// reach the caller as a real error (AuthScreen shows it inline) instead of the
+// button silently doing nothing. Was previously console.warn-and-swallow, which
+// was fine when this ran unattended at boot; it isn't fine for a user action.
 export async function ensureDemoSession(): Promise<void> {
   if (Platform.OS !== 'web') return;
   if (inflight) return inflight;
@@ -18,9 +23,7 @@ export async function ensureDemoSession(): Promise<void> {
       email: DEMO_EMAIL,
       password: DEMO_PASSWORD,
     });
-    if (error) {
-      console.warn('[v2] demo sign-in failed:', error.message);
-    }
+    if (error) throw error;
   })();
 
   try {
