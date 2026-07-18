@@ -27,6 +27,7 @@ import PayPlanEditor from './PayPlanEditor';
 import NotificationsCenter from './NotificationsCenter';
 import RexCoach from './RexCoach';
 import LockoutScreen from './LockoutScreen';
+import AuthScreen from './AuthScreen';
 import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
 import { warmBrain } from '@/lib/v2/aiProxy';
 import { rolloverCoachLog } from '@/lib/v2/coachLog';
@@ -39,6 +40,7 @@ import {
 import { scheduleNurtureBlast } from '@/lib/v2/nurtureEngine';
 import { useNotifications } from '@/lib/v2/notifications';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
+import { clearLocalSessionState } from '@/lib/v2/localSessionClear';
 import { registerForPush } from '@/lib/v2/pushNotifications';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
@@ -64,6 +66,11 @@ export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
   const [orbState, setOrbState] = useState<OrbState>('idle');
   const [authReady, setAuthReady] = useState(false);
+  // True once we've checked for a session and found none — renders AuthScreen
+  // instead of the app shell. Stays false (shell shows "Signing in…") while the
+  // initial session check is still in flight, so there's no AuthScreen flash for
+  // a returning signed-in visitor.
+  const [needsAuth, setNeedsAuth] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dealLoggerOpen, setDealLoggerOpen] = useState(false);
   const [dealLoggerPrefill, setDealLoggerPrefill] = useState<DealLoggerPrefill | undefined>();
@@ -121,12 +128,30 @@ export default function AppShell() {
     selectedContactId: selectedId,
   });
 
+  // P0-1: real sign-in. Every visitor used to be silently auto-signed into one
+  // shared demo account here; now we check for an actual session and, if there
+  // isn't one, render AuthScreen instead (the demo is still reachable, but only
+  // via an explicit "Try the demo" tap — see handleTryDemo). onAuthStateChange
+  // is the single source of truth for session presence, so a real sign-in/up
+  // (AuthScreen's own supabase calls), a demo sign-in (handleTryDemo below), and
+  // a sign-out (LockoutScreen's onSignOut) all flow through the same path.
   useEffect(() => {
-    ensureDemoSession().finally(async () => {
+    let cancelled = false;
+    // Audit finding (MED): Supabase's onAuthStateChange re-fires SIGNED_IN for
+    // the SAME user on every tab-visibility-change recovery, not just on a real
+    // sign-in — without this guard, finishBoot() (network calls: profile sync,
+    // warmBrain, timezone capture) would redundantly re-run on every alt-tab.
+    // Also closes the cold-boot race where getSession().then() and the listener
+    // can both resolve for the same session near-simultaneously.
+    const lastUserIdRef = { current: null as string | null };
+
+    const finishBoot = async () => {
       // Hydrate the localStorage cache from the canonical profile flag so a
       // fresh browser doesn't show the playbook again to a user who already
       // ran through it on another device.
       await syncOnboardingFromProfile().catch(() => undefined);
+      if (cancelled) return;
+      setNeedsAuth(false);
       setAuthReady(true);
       setAlwaysListen(getAlwaysListenEnabled());
       // Warm the ai-proxy brain on launch so the rep's first Rex call (coach or
@@ -145,9 +170,67 @@ export default function AppShell() {
       // Best-effort: record the rep's device timezone on their profile (P2-A3) so
       // the nurture scheduler can later deliver at their local send hour.
       captureTimezone().catch(() => undefined);
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return;
+      if (session?.user) {
+        lastUserIdRef.current = session.user.id;
+        finishBoot();
+      } else {
+        setNeedsAuth(true);
+      }
     });
-    return subscribeAlwaysListen(setAlwaysListen);
+
+    const { data: authSub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (event === 'SIGNED_IN' && session?.user) {
+        if (lastUserIdRef.current === session.user.id) return; // redundant re-notify, not a real transition
+        lastUserIdRef.current = session.user.id;
+        finishBoot();
+      } else if (event === 'SIGNED_OUT') {
+        lastUserIdRef.current = null;
+        setNeedsAuth(true);
+        setAuthReady(false);
+        // Cross-account leak guard (audit finding, HIGH): AppShell never
+        // unmounts across a sign-out/sign-in transition, so useContacts/
+        // useTags/usePayPlan/useUserDeals/useNotifications all keep the
+        // PREVIOUS rep's data in memory until each independently refetches —
+        // a real risk on a shared/kiosk device (rep A signs out, rep B signs
+        // in on the same tab and briefly sees rep A's book). A full reload is
+        // the simplest guarantee that every hook's state — these five and any
+        // other in-memory cache — starts genuinely empty for whoever signs in
+        // next. Web only; on native there is no cheap reload equivalent, but
+        // native has no real distribution yet (this go-live is web-first).
+        //
+        // The reload alone isn't enough: several per-user PREFERENCES survive
+        // it in localStorage (always-listen mic consent + disclosure-seen,
+        // onboarding-seen, the coach chat log) — clearLocalSessionState()
+        // closes that (audit finding, HIGH — without it, the next sign-in on
+        // this device could inherit always-listening mic consent they never
+        // gave).
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          clearLocalSessionState();
+          window.location.reload();
+        }
+      }
+    });
+
+    const unsubAlwaysListen = subscribeAlwaysListen(setAlwaysListen);
+    return () => {
+      cancelled = true;
+      authSub.subscription.unsubscribe();
+      unsubAlwaysListen();
+    };
   }, []);
+
+  // The demo stays reachable, but only as an explicit tap on AuthScreen (not an
+  // automatic sign-in) — the resulting SIGNED_IN event is picked up by the
+  // listener above, so this just needs to trigger the sign-in and let a real
+  // failure propagate (AuthScreen shows it) instead of silently doing nothing.
+  const handleTryDemo = async () => {
+    await ensureDemoSession();
+  };
 
   // Map listener state to the orb visual
   useEffect(() => {
@@ -363,11 +446,19 @@ export default function AppShell() {
     if (anyOverlayOpen) window.history.pushState({ pocketrepOverlay: true }, '');
   }, [anyOverlayOpen]);
 
+  // P0-1: no session -> real sign-in/up, with the demo as an explicit fallback
+  // (checked before the lockout gate below — an unauthenticated visitor should
+  // see "sign in", not "your subscription lapsed").
+  if (needsAuth) {
+    return (
+      <AuthScreen onTryDemo={Platform.OS === 'web' ? handleTryDemo : undefined} />
+    );
+  }
+
   // HARD LOCKOUT: when the access gate reports a lapsed account, block the whole
   // app behind the re-subscribe wall. Inert today (gate returns 'allowed').
-  // TODO(Eduardo): (1) make useAccessGate read the real subscription state;
-  // (2) also gate the UNAUTHENTICATED case by rendering <AuthScreen/> when there's
-  // no session — that requires replacing the demoAuth auto-sign-in (see MASTER_PLAN).
+  // TODO(Eduardo): make useAccessGate read the real subscription state once the
+  // Stripe webhook writes it onto profiles (see docs/MASTER_PLAN.md §"Gated P0").
   if (access.status === 'locked') {
     return (
       <LockoutScreen
