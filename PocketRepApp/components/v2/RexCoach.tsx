@@ -15,7 +15,7 @@ import { Label } from './atoms';
 import { callBrain, callBrainStream, warmBrain } from '@/lib/v2/aiProxy';
 import { serializeRepContext, loadMtdSummary, loadRecentActivity, type MtdSummary } from '@/lib/v2/repContext';
 import { buildCoachMessages, type RepIdentity } from '@/lib/v2/coachBrain';
-import { isRexChatEnabled } from '@/lib/v2/rexFeatureFlags';
+import { isRexChatEnabled, isVehicleFinderEnabled } from '@/lib/v2/rexFeatureFlags';
 import { loadTodayServerThread, loadRepIdentity } from '@/lib/v2/coachThread';
 import { recordRexTurn } from '@/lib/v2/rexMemory';
 import {
@@ -27,8 +27,12 @@ import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
 
 // The coach may emit these (write) actions; delete/batch stay voice/UI-only.
+// find_vehicles (read-only pivot) joins the list only when its flag is on — off
+// → the model isn't taught the action and the set is unchanged, so a stray
+// find_vehicles degrades to plain text like any non-allowed action.
 const COACH_ACTIONS = new Set<RexAction['type']>([
   'add_contact', 'update_notes', 'schedule_followup', 'retier_contact', 'log_deal', 'create_reminder',
+  ...(isVehicleFinderEnabled() ? (['find_vehicles'] as RexAction['type'][]) : []),
 ]);
 
 // Rex chat v2 (EXPO_PUBLIC_REX_CHAT): closer persona + token streaming + durable

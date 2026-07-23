@@ -15,7 +15,8 @@
     "test:chainguard": "node scripts/test-chainguard.mjs",
     "test:contactpick": "node scripts/test-contactpick.mjs",
     "test:rexchat": "node scripts/test-rexchat.mjs",
-    "test:authflow": "node scripts/test-authflow.mjs"
+    "test:authflow": "node scripts/test-authflow.mjs",
+    "test:vehiclefinder": "node scripts/test-vehiclefinder.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.1",

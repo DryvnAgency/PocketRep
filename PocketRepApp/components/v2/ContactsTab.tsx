@@ -105,6 +105,7 @@ export default function ContactsTab({
   onBulkTag,
   onAddContact,
   onImportContacts,
+  onFindVehicles,
   onDeleteTag,
 }: {
   contacts: V2Contact[] | null;
@@ -115,6 +116,7 @@ export default function ContactsTab({
   onBulkTag?: () => void;
   onAddContact?: () => void;
   onImportContacts?: () => void;
+  onFindVehicles?: () => void;
   onDeleteTag?: (name: string) => void;
 }) {
   const [query, setQuery] = useState('');
@@ -207,6 +209,11 @@ export default function ContactsTab({
             </Pressable>
           ) : null}
         </View>
+        {onFindVehicles ? (
+          <Pressable onPress={onFindVehicles} style={styles.importBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Find vehicles">
+            <Text style={styles.importBtnText}>🚗</Text>
+          </Pressable>
+        ) : null}
         {onImportContacts ? (
           <Pressable onPress={onImportContacts} style={styles.importBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Import contacts">
             <Text style={styles.importBtnText}>⇪</Text>

@@ -10,7 +10,7 @@
 // and not in this file. The technique is what matters; the source is stripped.
 
 import { REX_COPY_RULES } from './rexActions';
-import { isRexChatEnabled } from './rexFeatureFlags';
+import { isRexChatEnabled, isVehicleFinderEnabled } from './rexFeatureFlags';
 import type { BrainMessage } from './aiProxy';
 
 export type Playbook = {
@@ -206,6 +206,11 @@ function actionsBlock(contacts: CoachContact[], recentActivity: string): string 
   const activity = recentActivity.trim()
     ? `\nRECENT ACTIVITY (your logged calls/texts/emails/notes, newest first — use to answer recall like "who did I talk to yesterday / this week"; to answer "who haven't I touched in N weeks" use the "since contact" days in CONTACT IDS):\n${recentActivity.trim()}`
     : '';
+  // Vehicle Finder (default-off): teach the coach find_vehicles only when the
+  // flag is on. Off → empty string → this block is byte-identical to before.
+  const vehicleBlock = isVehicleFinderEnabled()
+    ? `\n7. find_vehicles — the rep wants inventory matches for what a customer wants (payment, type, seats, features, colors, credit, down payment). Extract into the payload; the app opens the vehicle finder (nothing is written). payload: { raw_notes: string, requirements: { monthly_budget?, down_payment?, credit_score?, vehicle_type? ("suv"|"truck"|"sedan"|"minivan"|"coupe"|"hatchback"|"convertible"|"wagon"), min_seats?, features?: string[] (remote_start, heated_seats, sunroof, leather, awd, third_row, backup_camera, carplay, android_auto, navigation, tow_package, blind_spot), color_pref? ("dark"|"light"), colors?: string[], max_mileage?, max_price?, condition? ("new"|"used") } }`
+    : '';
   return `TAKING ACTIONS — only when the rep CLEARLY asks you to DO one of these for their own book:
 Respond with your short natural spoken line FIRST, then ONE \`\`\`json fenced block on the next line: { "action": "<name>", "payload": { ... } }. Nothing after the closing fence. For ANY other message — coaching, "what do I say", role-play, recall questions, small talk, or anything off-topic or disallowed — reply with normal text and NO json block, and keep coaching or declining exactly as you do now. Adding the ability to act NEVER widens what you'll talk about.
 Never invent a contact_id: use one from CONTACT IDS. If no existing contact clearly matches for an update / follow-up / tier change / reminder-about-someone, ask which one in plain text instead of guessing. The app shows the rep a Confirm button before anything is written, so propose — never claim it's already done.
@@ -216,7 +221,7 @@ Actions:
 3. schedule_followup — set a follow-up N days out. payload: { contact_id (req), contact_name (req), days_from_now (req number), note? }
 4. retier_contact — move an existing contact UP a tier when they're heating up/reviving. payload: { contact_id (req), contact_name (req), tier ("hot"|"warm"|"cold"), reason? }
 5. log_deal — record a closed sale. payload: { customer_name (req), contact_id?, stock (req), vehicle (req), front_gross (req number), back_gross (req number), type? ("NEW"|"CPO"|"USED"), funding? ("finance"|"lease"|"cash") }
-6. create_reminder — set a reminder/notification for the rep. payload: { title (req, short), due_at (req, ISO 8601 — resolve "this afternoon at 4" / "tomorrow morning" / "in 2 hours" from CURRENT DATE & TIME below), contact_id? (if about a specific person), contact_name?, body? }
+6. create_reminder — set a reminder/notification for the rep. payload: { title (req, short), due_at (req, ISO 8601 — resolve "this afternoon at 4" / "tomorrow morning" / "in 2 hours" from CURRENT DATE & TIME below), contact_id? (if about a specific person), contact_name?, body? }${vehicleBlock}
 
 CURRENT DATE & TIME: ${now.toString()} (ISO ${now.toISOString()}).
 

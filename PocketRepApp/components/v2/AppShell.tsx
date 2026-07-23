@@ -26,6 +26,7 @@ import NurtureReviewer from './NurtureReviewer';
 import PayPlanEditor from './PayPlanEditor';
 import NotificationsCenter from './NotificationsCenter';
 import RexCoach from './RexCoach';
+import VehicleFinderModal from './VehicleFinderModal';
 import LockoutScreen from './LockoutScreen';
 import AuthScreen from './AuthScreen';
 import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
@@ -57,7 +58,8 @@ import {
   syncOnboardingFromProfile,
 } from '@/lib/v2/rexSettings';
 import { useHeyRex } from '@/lib/v2/useHeyRex';
-import { isRexOnboardingEnabled, isContactImportEnabled } from '@/lib/v2/rexFeatureFlags';
+import { isRexOnboardingEnabled, isContactImportEnabled, isVehicleFinderEnabled } from '@/lib/v2/rexFeatureFlags';
+import type { FindVehiclesPayload } from '@/lib/v2/rexActions';
 import { useAccessGate } from '@/lib/v2/accessGate';
 import { supabase } from '@/lib/supabase';
 import { captureTimezone } from '@/lib/v2/sendTime';
@@ -80,6 +82,8 @@ export default function AppShell() {
   const [tagsRefetchKey, setTagsRefetchKey] = useState(0);
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [vehicleFinderOpen, setVehicleFinderOpen] = useState(false);
+  const [vehicleFinderPrefill, setVehicleFinderPrefill] = useState<FindVehiclesPayload | null>(null);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
   const [alwaysListen, setAlwaysListen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -124,6 +128,9 @@ export default function AppShell() {
     contacts: contacts ?? [],
     tagNames,
     onOpenContact: setSelectedId,
+    // Vehicle Finder pivot — only wired when the flag is on, so find_vehicles is
+    // a no-op (nothing opens) with the flag off even if the action is emitted.
+    onFindVehicles: isVehicleFinderEnabled() ? (payload: FindVehiclesPayload) => openVehicleFinder(payload) : undefined,
     activeScreen: active,
     selectedContactId: selectedId,
   });
@@ -273,6 +280,11 @@ export default function AppShell() {
     setDealLoggerOpen(true);
   };
 
+  const openVehicleFinder = (prefill?: FindVehiclesPayload) => {
+    setVehicleFinderPrefill(prefill ?? null);
+    setVehicleFinderOpen(true);
+  };
+
   // Opens the Stalled Leads analysis overlay and runs the analyzer. Reachable
   // both from a Rex voice action and the Heat Sheet "Review stalled leads" button.
   const openStalledAnalysis = async (opts?: { daysSilentThreshold?: number; includeDead?: boolean }) => {
@@ -413,6 +425,7 @@ export default function AppShell() {
     if (gamePlanOpen) { setGamePlanOpen(false); return; }
     if (addContactOpen) { setAddContactOpen(false); return; }
     if (importOpen) { setImportOpen(false); return; }
+    if (vehicleFinderOpen) { setVehicleFinderOpen(false); setVehicleFinderPrefill(null); return; }
     if (bulkTagOpen) { setBulkTagOpen(false); return; }
     if (selectedDeal) { setSelectedDeal(null); return; }
     if (dealLoggerOpen) { setDealLoggerOpen(false); return; }
@@ -420,7 +433,7 @@ export default function AppShell() {
   };
   const anyOverlayOpen =
     rexCoachOpen || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
-    !!blastDraft || gamePlanOpen || rexActivityOpen || addContactOpen || importOpen || bulkTagOpen || !!selectedDeal ||
+    !!blastDraft || gamePlanOpen || rexActivityOpen || addContactOpen || importOpen || vehicleFinderOpen || bulkTagOpen || !!selectedDeal ||
     dealLoggerOpen || !!selectedId;
   const closeTopRef = useRef(closeTopOverlay);
   closeTopRef.current = closeTopOverlay;
@@ -516,6 +529,7 @@ export default function AppShell() {
             onBulkTag={() => setBulkTagOpen(true)}
             onAddContact={() => setAddContactOpen(true)}
             onImportContacts={isContactImportEnabled() ? () => setImportOpen(true) : undefined}
+            onFindVehicles={isVehicleFinderEnabled() ? () => openVehicleFinder() : undefined}
             onDeleteTag={async (name) => {
               try { await deleteTag(name); } catch (e) { console.warn('deleteTag failed', e); }
               setTagsRefetchKey(k => k + 1);
@@ -596,6 +610,14 @@ export default function AppShell() {
         onClose={() => setImportOpen(false)}
         onImported={() => { reloadContacts(); setActive('contacts'); }}
       />
+
+      {isVehicleFinderEnabled() ? (
+        <VehicleFinderModal
+          open={vehicleFinderOpen}
+          prefill={vehicleFinderPrefill}
+          onClose={() => { setVehicleFinderOpen(false); setVehicleFinderPrefill(null); }}
+        />
+      ) : null}
 
       <RexDisclosure
         open={disclosureOpen}
@@ -709,6 +731,12 @@ export default function AppShell() {
             reloadContacts();
           }
           if (t === 'create_reminder') setNurtureRefetchKey(k => k + 1); // refresh the bell
+          // Vehicle Finder pivot from chat: close the coach and open the finder
+          // pre-filled with the model's extracted requirements. Flag-gated.
+          if (t === 'find_vehicles' && isVehicleFinderEnabled()) {
+            setRexCoachOpen(false);
+            openVehicleFinder(action.payload);
+          }
         }}
       />
 

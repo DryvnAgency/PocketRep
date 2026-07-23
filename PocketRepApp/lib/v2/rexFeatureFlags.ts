@@ -60,3 +60,14 @@ export function isRexOnboardingEnabled(): boolean {
   if (typeof process === 'undefined') return false;
   return envOn(process.env.EXPO_PUBLIC_REX_ONBOARDING);
 }
+
+// Vehicle Finder: the rep saves their dealership website once (Profile →
+// Dealership website), then matches shorthand customer notes against live
+// inventory read by the inventory-search edge function (COMMITTED, NOT
+// DEPLOYED). Off by default → no 🚗 button, no modal, no Rex action doc in
+// either prompt, so behaviour is byte-identical. Turn on per environment AND
+// deploy inventory-search for it to do anything.
+export function isVehicleFinderEnabled(): boolean {
+  if (typeof process === 'undefined') return false;
+  return envOn(process.env.EXPO_PUBLIC_VEHICLE_FINDER);
+}

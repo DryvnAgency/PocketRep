@@ -70,6 +70,7 @@ useHeyRex (wake/listen)
 | **ai-proxy** | the ONE AI gateway (brain / rexlens / streaming / `/stt` 501 stub) | `verify_jwt=false` (self-auths). `authAndPlan()` = auth → per-minute throttle (`bump_ai_minute`, fails **open**) → daily cost cap (`daily_ai_usage`). ~v32. |
 | **nurture-scheduler** | pg_cron daily nurture + referral asks + push | `verify_jwt=false`, **`CRON_SECRET` unset = P0-3 blocker**. TZ-aware mode behind `SCHEDULER_HOURLY` (P2-A7, not deployed). |
 | stripe-webhook | billing | ⚠️ **GATED** (prod-only, owner-owned). |
+| **inventory-search** | Vehicle Finder: fetch + parse a dealership site's public inventory | `verify_jwt`-style (self-auths like send-push). **COMMITTED, NOT DEPLOYED.** SSRF-guarded user-URL fetch (the first in the repo); stateless, no DB, no secrets. Parse cascade JSON-LD→embedded-JSON→HTML. |
 | ai-closer · support-reply · send-push · waitlist-notify | closer drafts · support · push · waitlist email | support-reply is in repo, not deployed. |
 
 ## 7. Data model (Postgres, owner-scoped RLS on all ~29 tables)
@@ -89,6 +90,7 @@ useHeyRex (wake/listen)
 | `EXPO_PUBLIC_REX_FOLLOWUP` | new-contact → Rex recap → 14-day rep-sent follow-up (also needs the migration applied) |
 | `EXPO_PUBLIC_CONTACT_IMPORT` | "Add from phone" picker **and** the bulk-import (⇪) modal. **Set `1` in `eas.json` (native) AND `vercel.json` build.env (web).** |
 | `EXPO_PUBLIC_REX_CHAT` | Rex chat v2: closer persona (COACH/LENS/BLAST in-prompt modes, parameterized rep, Eddie/Nissan-of-Omaha demo defaults), token streaming, durable `rex_messages` thread. **Set `1` in `eas.json` AND `vercel.json` build.env.** Off → RexCoach byte-identical. |
+| `EXPO_PUBLIC_VEHICLE_FINDER` | Vehicle Finder (P2-V1): rep saves dealership URL (Profile → Dealership website), notes → AI+regex requirement extract → `inventory-search` edge fn reads site inventory → ranked matches + "You might like" near-misses. 🚗 modal + Rex `find_vehicles` pivot (voice+chat). **Also needs `inventory-search` deployed** (committed, NOT deployed). Off → no button/modal/action doc, byte-identical. Set `1` in `eas.json` AND `vercel.json`. |
 
 **Server (ai-proxy env):** `BRAIN_TIERED` + `BRAIN_MODELS_FAST` (P2-R7), `AI_RATE_PER_MIN` (default 30). **Nurture:** `SCHEDULER_HOURLY`.
 
@@ -132,6 +134,7 @@ useHeyRex (wake/listen)
 | Feature flags (safe) | `lib/v2/rexFeatureFlags.ts` |
 | Contacts list / add / detail | `components/v2/ContactsTab.tsx`, `AddContactModal.tsx`, `ContactDetail.tsx` |
 | Contact import / device picker | `lib/v2/contactImport.ts`, `components/v2/ImportContactsModal.tsx` |
+| Vehicle Finder (match engine / orchestration / UI / edge fn) | `lib/v2/vehicleMatch.ts` (pure), `lib/v2/vehicleFinder.ts`, `components/v2/VehicleFinderModal.tsx`, `supabase/functions/inventory-search/index.ts` |
 | Contact writes | `lib/v2/updateContact.ts` |
 | AI gateway | `supabase/functions/ai-proxy/index.ts` |
 | Nurture engine / cron | `supabase/functions/nurture-scheduler/index.ts`, `lib/v2/nurtureEngine.ts` |
