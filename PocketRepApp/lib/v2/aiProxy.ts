@@ -88,6 +88,11 @@ export async function callBrain(opts: {
   // BRAIN_TIERED env flag is on (default off); otherwise it's ignored. Omitted →
   // the request body is byte-identical to before, so existing callers are unaffected.
   tier?: 'fast' | 'default';
+  // P3-A1: optional triad role + sampling temperature. The edge function honors
+  // `role` only once redeployed with BRAIN_MODELS_<ROLE> env lists set; older
+  // deployments ignore both unknown fields. Omitted → body byte-identical.
+  role?: 'planner' | 'executor' | 'parser';
+  temperature?: number;
 }): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
@@ -105,6 +110,8 @@ export async function callBrain(opts: {
         max_tokens: opts.maxTokens ?? 800,
         messages: opts.messages,
         ...(opts.tier ? { tier: opts.tier } : {}),
+        ...(opts.role ? { role: opts.role } : {}),
+        ...(typeof opts.temperature === 'number' ? { temperature: opts.temperature } : {}),
       }),
       signal: t.signal,
     });
@@ -134,6 +141,10 @@ export async function callBrainStream(opts: {
   // P2-R7: optional model tier (see callBrain). Honored only when the edge
   // function's BRAIN_TIERED flag is on; omitted → byte-identical request body.
   tier?: 'fast' | 'default';
+  // P3-A1: optional triad role + temperature (see callBrain). Honored only by a
+  // redeployed ai-proxy with BRAIN_MODELS_<ROLE> set; omitted → body identical.
+  role?: 'planner' | 'executor' | 'parser';
+  temperature?: number;
 }): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
@@ -152,6 +163,8 @@ export async function callBrainStream(opts: {
         messages: opts.messages,
         stream: true,
         ...(opts.tier ? { tier: opts.tier } : {}),
+        ...(opts.role ? { role: opts.role } : {}),
+        ...(typeof opts.temperature === 'number' ? { temperature: opts.temperature } : {}),
       }),
       signal: t.signal,
     });

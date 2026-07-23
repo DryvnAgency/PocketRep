@@ -51,6 +51,18 @@ export function isRexChatEnabled(): boolean {
   return envOn(process.env.EXPO_PUBLIC_REX_CHAT);
 }
 
+// P3-A1: the Rex triad — split the coach chat into a PLANNER pass (deal
+// diagnosis + tactical plan as structured JSON) and an EXECUTOR pass (the final
+// scripts, streamed). The `role` sent per call is honored by ai-proxy only after
+// the owner redeploys it AND sets BRAIN_MODELS_PLANNER/EXECUTOR/PARSER — until
+// then both passes ride the default BRAIN_MODELS. Off by default → RexCoach
+// makes the exact single callBrain/callBrainStream request it makes today,
+// byte-identical. Even on, any triad failure quietly falls back to that path.
+export function isRexTriadEnabled(): boolean {
+  if (typeof process === 'undefined') return false;
+  return envOn(process.env.EXPO_PUBLIC_REX_TRIAD);
+}
+
 // P2-R1: replace the static first-run carousel with a short Rex interview that
 // captures the rep's real, consumed profile fields (name, dealership, title, Rex
 // tone) conversationally. Off by default → first-run shows the existing 8-slide

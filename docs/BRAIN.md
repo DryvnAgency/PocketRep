@@ -63,6 +63,7 @@ useHeyRex (wake/listen)
 - **Rex Lens** = camera/vision path (`fmtContact`, prompt-injection-hardened in P2-A2).
 - **Key files:** `lib/v2/rexActions.ts` (core), `useHeyRex.ts`, `aiProxy.ts`, `components/v2/HeyRexSheet.tsx`, `rexMemory.ts`, `promptSafety.ts`.
 - **Rex chat (gold orb):** `components/v2/RexCoach.tsx` + `lib/v2/coachBrain.ts` (persona + playbooks + `buildCoachMessages`) + `lib/v2/coachThread.ts` (durable thread). Behind `EXPO_PUBLIC_REX_CHAT` the persona is the spec "closer" (`buildRexSystemPrompt(rep)` — COACH default, LENS on pasted worklists, BLAST on mass-text asks, strict formatting, never-send boundary), replies **stream** via `callBrainStream`, and turns persist to `rex_messages` via `recordRexTurn` (one shared Rex memory with the voice path; today's thread reloads on open). Flag off → legacy floor-coach prompt, one-shot `callBrain`, localStorage-only day log (`coachLog.ts`).
+- **Rex triad (P3-A1, `EXPO_PUBLIC_REX_TRIAD`, needs REX_CHAT):** `lib/v2/rexTriad.ts` splits the chat coach into a **planner** pass (`buildPlannerSystem` → JSON plan: diagnosis/objective/angle/script_type/talking_points/close/clarify/action) and an **executor** pass (`buildExecutorSystem` → the streamed words). `runTriadCoach` calls `/brain` twice with `role:'planner'|'executor'`; ai-proxy routes each to `BRAIN_MODELS_<ROLE>` env lists (fallback → `BRAIN_MODELS`). A `clarify` plan short-circuits (no executor call); an unparseable plan silently falls back to the single-call REX_CHAT path. Prompts carry the v2.0 "closer" strategy content (Four Forces, financial plays) with **no guru names** (ATTRIBUTION POLICY). Off → `RexCoach.deliver()` byte-identical.
 
 ## 6. Edge functions (`supabase/functions/`)
 | Fn | Role | Notes |
@@ -91,8 +92,9 @@ useHeyRex (wake/listen)
 | `EXPO_PUBLIC_CONTACT_IMPORT` | "Add from phone" picker **and** the bulk-import (⇪) modal. **Set `1` in `eas.json` (native) AND `vercel.json` build.env (web).** |
 | `EXPO_PUBLIC_REX_CHAT` | Rex chat v2: closer persona (COACH/LENS/BLAST in-prompt modes, parameterized rep, Eddie/Nissan-of-Omaha demo defaults), token streaming, durable `rex_messages` thread. **Set `1` in `eas.json` AND `vercel.json` build.env.** Off → RexCoach byte-identical. |
 | `EXPO_PUBLIC_VEHICLE_FINDER` | Vehicle Finder (P2-V1): rep saves dealership URL (Profile → Dealership website), notes → AI+regex requirement extract → `inventory-search` edge fn reads site inventory → ranked matches + "You might like" near-misses. 🚗 modal + Rex `find_vehicles` pivot (voice+chat). **Also needs `inventory-search` deployed** (committed, NOT deployed). Off → no button/modal/action doc, byte-identical. Set `1` in `eas.json` AND `vercel.json`. |
+| `EXPO_PUBLIC_REX_TRIAD` | Rex triad (P3-A1): the gold-orb chat coach runs planner→executor two-pass (`lib/v2/rexTriad.ts`) instead of one call. **Needs `EXPO_PUBLIC_REX_CHAT` on too.** Full model routing needs ai-proxy redeployed + `BRAIN_MODELS_<ROLE>` env set (else both passes ride `BRAIN_MODELS`). Plan-parse failure → silent single-call fallback. Off → `deliver()` byte-identical. Set `1` in `eas.json` AND `vercel.json`. |
 
-**Server (ai-proxy env):** `BRAIN_TIERED` + `BRAIN_MODELS_FAST` (P2-R7), `AI_RATE_PER_MIN` (default 30). **Nurture:** `SCHEDULER_HOURLY`.
+**Server (ai-proxy env):** `BRAIN_TIERED` + `BRAIN_MODELS_FAST` (P2-R7), **`BRAIN_MODELS_PLANNER` / `BRAIN_MODELS_EXECUTOR` / `BRAIN_MODELS_PARSER` (P3-A1 triad, comma-lists; unset → role falls back to `BRAIN_MODELS`)**, `AI_RATE_PER_MIN` (default 30). **Nurture:** `SCHEDULER_HOURLY`.
 
 ## 9. Env / build / deploy ⚠️ (where intuition fails)
 - **`EXPO_PUBLIC_*` is build-time inlined by Metro** — it must be set *where each build reads env*, and a build must ship for it to take effect:
@@ -131,6 +133,7 @@ useHeyRex (wake/listen)
 | App shell / routing / overlays | `components/v2/AppShell.tsx`, `app/_layout.tsx` |
 | Sign-in / sign-up / demo fallback | `components/v2/AuthScreen.tsx`, `lib/v2/demoAuth.ts`, `lib/v2/localSessionClear.ts` (sign-out localStorage sweep) |
 | Rex core logic | `lib/v2/rexActions.ts`, `lib/v2/useHeyRex.ts`, `lib/v2/aiProxy.ts` |
+| Rex chat coach / triad | `components/v2/RexCoach.tsx`, `lib/v2/coachBrain.ts`, `lib/v2/rexTriad.ts` (P3-A1 planner→executor) |
 | Feature flags (safe) | `lib/v2/rexFeatureFlags.ts` |
 | Contacts list / add / detail | `components/v2/ContactsTab.tsx`, `AddContactModal.tsx`, `ContactDetail.tsx` |
 | Contact import / device picker | `lib/v2/contactImport.ts`, `components/v2/ImportContactsModal.tsx` |

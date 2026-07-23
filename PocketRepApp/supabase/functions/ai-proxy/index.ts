@@ -32,6 +32,29 @@ function modelsForTier(tier: unknown): string[] {
   return BRAIN_MODELS;
 }
 
+// P3-A1: per-role model routing for the Rex triad (planner / executor / parser).
+// COMMITTED — NOT DEPLOYED: this handler change ships in the repo; the owner
+// redeploys ai-proxy and sets the env lists below when ready. Each role reads a
+// comma-separated OpenRouter model list from its own env var (same parse as
+// BRAIN_MODELS_FAST). A role with no configured list falls back to the tier
+// routing above, so before the env is set every request is byte-identical to
+// today. Suggested IDs to verify at deploy time (do NOT hardcode — set in env):
+//   BRAIN_MODELS_PLANNER  → a strong reasoner, e.g. anthropic/claude-sonnet-4.5
+//   BRAIN_MODELS_EXECUTOR → a fast writer, e.g. a deepseek chat model
+//   BRAIN_MODELS_PARSER   → a cheap JSON extractor, e.g. a hermes model
+const ROLE_MODELS: Record<string, string[]> = {
+  planner: (Deno.env.get('BRAIN_MODELS_PLANNER') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  executor: (Deno.env.get('BRAIN_MODELS_EXECUTOR') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  parser: (Deno.env.get('BRAIN_MODELS_PARSER') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+};
+
+// Choose the model list for one request: an explicit triad role with a
+// configured list wins; otherwise fall back to the existing tier routing.
+function modelsForRequest(role: unknown, tier: unknown): string[] {
+  if (typeof role === 'string' && ROLE_MODELS[role]?.length > 0) return ROLE_MODELS[role];
+  return modelsForTier(tier);
+}
+
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const REXLENS_DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
@@ -242,8 +265,13 @@ async function handleBrain(req: Request) {
   const msgs = (body.messages as Array<{ role: string; content: unknown }>) || [];
   const sys = typeof body.system === 'string' ? body.system : '';
   const messages = sys ? [{ role: 'system', content: sys }, ...msgs] : msgs;
-  // P2-R7: choose the model list for this request's tier (default-off → BRAIN_MODELS).
-  const models = modelsForTier(body.tier);
+  // P2-R7 / P3-A1: choose the model list for this request. A triad role with a
+  // configured env list wins; else the tier routing (default-off → BRAIN_MODELS).
+  const models = modelsForRequest(body.role, body.tier);
+  // P3-A1: optional sampling temperature (0-2), passed through to OpenRouter when
+  // the caller sets it. Omitted → OpenRouter's default, byte-identical to before.
+  const temp = (typeof body.temperature === 'number' && body.temperature >= 0 && body.temperature <= 2)
+    ? { temperature: body.temperature } : {};
 
   // Streaming passthrough (opt-in via { stream: true }). Pipe OpenRouter's SSE
   // straight to the client for a Siri-style token-by-token reply, teeing the
@@ -256,7 +284,7 @@ async function handleBrain(req: Request) {
       upstream = await fetch(OPENROUTER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' },
-        body: JSON.stringify({ models, messages, max_tokens: maxTok, stream: true, usage: { include: true } }),
+        body: JSON.stringify({ models, messages, max_tokens: maxTok, stream: true, usage: { include: true }, ...temp }),
       });
     } catch (e: unknown) {
       return json({ error: { type: 'OVERLOADED', message: 'AI at capacity.', detail: e instanceof Error ? e.message : 'Unknown' } }, 503);
@@ -307,7 +335,7 @@ async function handleBrain(req: Request) {
   let apiJson: any = null; let lastErr: any = null;
   for (let i = 0; i < 3; i++) {
     try {
-      const r = await fetch(OPENROUTER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' }, body: JSON.stringify({ models, messages, max_tokens: maxTok, usage: { include: true } }) });
+      const r = await fetch(OPENROUTER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' }, body: JSON.stringify({ models, messages, max_tokens: maxTok, usage: { include: true }, ...temp }) });
       const j = await r.json();
       if (r.ok && !j.error && j.choices?.length) { apiJson = j; break; }
       lastErr = { status: r.status, error: j.error ?? j };

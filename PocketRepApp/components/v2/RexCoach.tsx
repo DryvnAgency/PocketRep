@@ -15,7 +15,8 @@ import { Label } from './atoms';
 import { callBrain, callBrainStream, warmBrain } from '@/lib/v2/aiProxy';
 import { serializeRepContext, loadMtdSummary, loadRecentActivity, type MtdSummary } from '@/lib/v2/repContext';
 import { buildCoachMessages, type RepIdentity } from '@/lib/v2/coachBrain';
-import { isRexChatEnabled, isVehicleFinderEnabled } from '@/lib/v2/rexFeatureFlags';
+import { isRexChatEnabled, isVehicleFinderEnabled, isRexTriadEnabled } from '@/lib/v2/rexFeatureFlags';
+import { runTriadCoach } from '@/lib/v2/rexTriad';
 import { loadTodayServerThread, loadRepIdentity } from '@/lib/v2/coachThread';
 import { recordRexTurn } from '@/lib/v2/rexMemory';
 import {
@@ -39,6 +40,11 @@ const COACH_ACTIONS = new Set<RexAction['type']>([
 // cross-device thread. Build-time env, so this is constant for the app's life;
 // OFF → every path below behaves byte-identically to before.
 const REX_CHAT = isRexChatEnabled();
+
+// P3-A1: the two-pass planner→executor triad. Requires REX_CHAT (it upgrades the
+// same chat path) AND its own flag. Build-time constant → OFF makes deliver()
+// take the exact single-call path it takes today.
+const TRIAD = REX_CHAT && isRexTriadEnabled();
 
 type ChatMessage = { from: 'rex' | 'user'; text: string; time: string };
 
@@ -193,9 +199,46 @@ export default function RexCoach({
     const warmTimer = setTimeout(() => setWarming(true), 5_000);
     const repContext = serializeRepContext({ contacts, payPlan, mtd });
     let attempt = 0;
+    // P3-A1: flips to false only if the planner returns an unusable plan, so this
+    // turn falls back to the single call without a hard error. Transient failures
+    // keep TRIAD on and re-run the two-pass path on the warm retry.
+    let useTriad = TRIAD;
     try {
       for (;;) {
         try {
+          // P3-A1 triad: PLANNER (diagnose → JSON plan) then EXECUTOR (stream the
+          // words). Only a plan-parse miss falls through to the single call below;
+          // transient errors rethrow into the same warm-and-retry loop as always.
+          if (useTriad) {
+            try {
+              const { reply, action } = await runTriadCoach({
+                planner: {
+                  history, text, repContext,
+                  contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
+                  recentActivity: activity,
+                  rep: repIdent.current,
+                },
+                rep: repIdent.current,
+                onDelta: (full) => setStreamText(full),
+              });
+              const actionable = !!action && COACH_ACTIONS.has(action.type);
+              const line = reply || (actionable ? summarizeAction(action!) : '');
+              if (!line) throw new Error('empty');
+              setStreamText(null);
+              pushRex(line);
+              if (actionable) setPending(action!);
+              recordRexTurn(text, line).catch(() => undefined);
+              return;
+            } catch (e: any) {
+              // A bad/unparseable plan is not worth erroring on — quietly use the
+              // single-call path this same attempt. Anything else (timeout,
+              // network, empty) propagates to the transient handler below.
+              if (!String(e?.message ?? '').includes('triad plan')) throw e;
+              useTriad = false;
+              setStreamText(null);
+            }
+          }
+
           // 1200 (was 700) so a complete, structured coaching answer never gets
           // cut off mid-sentence — the prompt still asks Rex to stay tight.
           const brainOpts = {

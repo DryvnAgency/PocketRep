@@ -177,7 +177,9 @@ export function matchPlaybooks(text: string, max = 2): Playbook[] {
   return scored.slice(0, max).map((s) => s.pb);
 }
 
-function serializePlaybooks(pbs: Playbook[]): string {
+// Exported so the Rex triad planner (lib/v2/rexTriad.ts) can reuse the exact
+// same playbook-serialization; pure, no behavior change for existing callers.
+export function serializePlaybooks(pbs: Playbook[]): string {
   if (pbs.length === 0) return '';
   const blocks = pbs
     .map(
@@ -198,7 +200,9 @@ export type CoachContact = { id: string; name: string; days: number };
 // Everything else (coaching, questions, off-topic, disallowed) stays plain text,
 // so the existing refusals/guardrails are untouched. delete/batch are
 // intentionally excluded — those stay voice/UI-only.
-function actionsBlock(contacts: CoachContact[], recentActivity: string): string {
+// Exported so the Rex triad planner (lib/v2/rexTriad.ts) reuses the identical
+// action manifest + contact-id list; pure, no behavior change for existing callers.
+export function actionsBlock(contacts: CoachContact[], recentActivity: string): string {
   const now = new Date();
   const idList = contacts.slice(0, 80)
     .map(c => `${c.name} | ${c.id} | ${c.days}d since contact`)
