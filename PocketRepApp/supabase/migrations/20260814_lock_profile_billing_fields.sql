@@ -21,11 +21,19 @@ create policy "Users update safe profile fields"
   with check (auth.uid() = id);
 
 -- Do not let browser clients create/delete profile rows or update arbitrary
--- columns. Users only need their own display name/industry. Stripe and the
--- signup trigger use security-definer/service-role paths for server changes.
+-- columns. Authenticated users may only write their own NON-billing profile
+-- fields (display name/industry/username + the local onboarding/send-time
+-- prefs the app persists). Billing/entitlement columns (plan, unlimited,
+-- trial_ends_at, stripe_customer_id, subscription_status) are NOT granted, so
+-- they stay server-managed (signup trigger / Stripe webhook via service role).
+-- NOTE: this column list must cover every profiles column the client updates as
+-- the authenticated user, or those writes will silently 403 — currently
+-- full_name (signup/onboarding/profile), industry + username (signup),
+-- onboarding_complete (rexSettings), timezone + send_hour (sendTime).
 revoke insert, update, delete on public.profiles from authenticated;
 grant select on public.profiles to authenticated;
-grant update (full_name, industry) on public.profiles to authenticated;
+grant update (full_name, industry, username, onboarding_complete, timezone, send_hour)
+  on public.profiles to authenticated;
 
 -- Defense in depth: even if privileges/policies are changed later, authenticated
 -- callers still cannot mutate server-controlled billing/entitlement columns.
