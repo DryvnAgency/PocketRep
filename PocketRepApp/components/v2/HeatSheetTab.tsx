@@ -5,6 +5,7 @@ import { HeatStripe, SectionHead, StatNumber } from './atoms';
 import { TIERS, stalenessColor, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import WeeklyDigestCard from './WeeklyDigestCard';
+import DailyCheckIn from './DailyCheckIn';
 import NurtureBanner from './NurtureBanner';
 import { heatReasons } from '@/lib/v2/heatReasons';
 
@@ -13,7 +14,6 @@ const TODAY_LABEL = new Date().toLocaleDateString('en-US', { month: 'short', day
 function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
   const tier = TIERS[c.tier];
   const staleC = stalenessColor(c.days);
-  // Top reasons this contact is hot/at-risk today (derived from saved fields).
   const reasons = heatReasons(c).slice(0, 2);
   return (
     <Pressable
@@ -59,8 +59,6 @@ export default function HeatSheetTab({
   onOpenNurture?: () => void;
   onAnalyzeStalled?: () => void;
 }) {
-  // Full error screen only on a failed first load (no data yet). If a refresh
-  // fails while we already have a list, keep showing the list.
   if (error && !contacts) {
     return (
       <View style={styles.center}>
@@ -93,9 +91,9 @@ export default function HeatSheetTab({
 
   return (
     <View style={styles.root}>
-      {/* Weekly Digest sits at the very top — it's the Monday-morning review the
-          rep opens to. The daily TODAY banner follows underneath. */}
       <WeeklyDigestCard />
+
+      <DailyCheckIn contacts={contacts} />
 
       <View style={styles.banner}>
         <View style={{ flex: 1 }}>
@@ -149,7 +147,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   retryText: { color: colors.gold, fontWeight: '700', fontSize: 13 },
-
   banner: {
     marginHorizontal: 14,
     marginTop: 12,
@@ -178,7 +175,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     letterSpacing: -0.2,
   },
-
   row: {
     position: 'relative',
     backgroundColor: colors.surface2,
@@ -198,41 +194,12 @@ const styles = StyleSheet.create({
   rowPressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   stripe: { borderTopLeftRadius: radius.md, borderBottomLeftRadius: radius.md },
   rowText: { flex: 1, minWidth: 0 },
-  name: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.white,
-    letterSpacing: -0.2,
-  },
-  vehicle: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: colors.grey2,
-    marginTop: 2,
-  },
-  reasons: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.gold,
-    marginTop: 3,
-    letterSpacing: 0.1,
-  },
-
+  name: { fontSize: 15, fontWeight: '600', color: colors.white, letterSpacing: -0.2 },
+  vehicle: { fontSize: 11, fontWeight: '500', color: colors.grey2, marginTop: 2 },
+  reasons: { fontSize: 10, fontWeight: '700', color: colors.gold, marginTop: 3, letterSpacing: 0.1 },
   daysWrap: { alignItems: 'flex-end' },
-  daysNum: {
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-    lineHeight: 18,
-  },
-  daysLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.grey,
-    marginTop: 4,
-    letterSpacing: 0.6,
-  },
-
+  daysNum: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5, lineHeight: 18 },
+  daysLabel: { fontSize: 9, fontWeight: '700', color: colors.grey, marginTop: 4, letterSpacing: 0.6 },
   stalledBtn: {
     marginHorizontal: 14,
     marginTop: 6,
