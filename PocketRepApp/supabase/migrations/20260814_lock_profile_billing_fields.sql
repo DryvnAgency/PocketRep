@@ -5,10 +5,6 @@
 
 begin;
 
--- The original broad "Users manage own profile" policy allowed an authenticated
--- user to UPDATE every column in their own profile, including `unlimited`, `plan`,
--- `trial_ends_at`, and Stripe identifiers. RLS checked row ownership but did not
--- restrict which columns could be changed.
 drop policy if exists "Users manage own profile" on public.profiles;
 
 create policy "Users read own profile"
@@ -24,9 +20,14 @@ create policy "Users update safe profile fields"
   using (auth.uid() = id)
   with check (auth.uid() = id);
 
--- Defense in depth: even if a client obtains UPDATE permission on the row,
--- authenticated callers cannot mutate server-controlled billing/entitlement
--- columns. Service-role operations (Stripe webhook/admin) remain allowed.
+-- Column-level defense: PostgREST/authenticated clients cannot request updates
+-- to billing/entitlement columns at all. Server-side service_role remains able
+-- to update them for Stripe lifecycle events.
+revoke update (plan, unlimited, trial_ends_at, stripe_customer_id)
+  on public.profiles from authenticated;
+
+-- Defense in depth: even if privileges/policies are changed later, authenticated
+-- callers still cannot mutate server-controlled billing/entitlement columns.
 create or replace function public.protect_profile_billing_fields()
 returns trigger
 language plpgsql
