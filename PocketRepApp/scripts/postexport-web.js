@@ -45,6 +45,9 @@ const TAGS = [
   '<link rel="apple-touch-icon" href="/apple-touch-icon.png" />',
   // Match the app's ink background before the bundle paints (no white flash).
   '<style>html,body{background:#0c0c0e}</style>',
+  // Register the offline app-shell service worker (public/sw.js). Network-first
+  // for navigations, so this never serves a stale shell to online users.
+  '<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})});}</script>',
 ].join('\n    ');
 
 // Standalone mode should paint behind the iPhone notch.
