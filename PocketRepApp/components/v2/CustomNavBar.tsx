@@ -1,4 +1,4 @@
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { colors } from '@/constants/theme';
@@ -101,7 +101,9 @@ export default function CustomNavBar({
 
 const styles = StyleSheet.create({
   root: {
-    paddingTop: 54,
+    // Clear the status bar / notch on installed web (Dynamic Island ~59px);
+    // native keeps the fixed value.
+    paddingTop: Platform.OS === 'web' ? ('max(54px, env(safe-area-inset-top))' as any) : 54,
     paddingHorizontal: 16,
     paddingBottom: 10,
   },

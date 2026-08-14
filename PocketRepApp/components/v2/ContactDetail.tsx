@@ -1368,7 +1368,7 @@ const styles = StyleSheet.create({
   },
 
   topBar: {
-    paddingTop: Platform.OS === 'web' ? 16 : 52,
+    paddingTop: Platform.OS === 'web' ? ('max(16px, env(safe-area-inset-top))' as any) : 52,
     paddingHorizontal: 14,
     paddingBottom: 12,
     flexDirection: 'row',

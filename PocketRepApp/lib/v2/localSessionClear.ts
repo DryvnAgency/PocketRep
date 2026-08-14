@@ -15,6 +15,7 @@
 // remember to add it here when they add a new local cache.
 
 import { Platform } from 'react-native';
+import { supabase } from '@/lib/supabase';
 
 const PREFIX = 'pocketrep:v2:';
 
@@ -28,4 +29,32 @@ export function clearLocalSessionState(): void {
     if (key && key.startsWith(PREFIX)) toRemove.push(key);
   }
   for (const key of toRemove) localStorage.removeItem(key);
+}
+
+// The robust sign-out behind every "Sign Out" control (v2 ProfileTab + the
+// lockout screen, and the legacy v1 More tab). Fixes two failure modes that
+// left users unable to log out:
+//   1. The default signOut() uses scope:'global' — a NETWORK revoke round-trip.
+//      If it hangs or fails (offline, slow, or an already-invalid session) the
+//      promise never resolves, so a caller awaiting it is stuck (the ProfileTab
+//      spinner spins forever) AND the SIGNED_OUT event that drives the reload
+//      never fires. scope:'local' clears the session from storage immediately
+//      with no network dependency.
+//   2. Teardown is forced in a finally, independent of the auth event — so even
+//      if signOut throws, per-user localStorage prefs are swept and (on web) the
+//      page hard-reloads, guaranteeing the next rep on a shared device starts
+//      from genuinely empty state. (The AppShell SIGNED_OUT listener still runs
+//      the same teardown for sign-outs triggered by other means, e.g. session
+//      expiry — belt and suspenders.)
+export async function signOutAndReset(): Promise<void> {
+  try {
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch {
+    /* fall through — force teardown regardless of a signOut error */
+  } finally {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      clearLocalSessionState();
+      window.location.reload();
+    }
+  }
 }

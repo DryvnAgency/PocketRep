@@ -102,9 +102,12 @@ export default function SignupScreen() {
     }
 
     if (data.user) {
+      // `plan` is intentionally NOT written here — it's a server-managed billing
+      // column. handle_new_user() sets it from the signUp() metadata above
+      // (options.data.plan), and the profile-billing lock blocks client writes
+      // to it. Only the user's own display/profile fields are written here.
       await supabase.from('profiles').update({
         full_name: name,
-        plan,
         industry,
         username: username.trim(),
       }).eq('id', data.user.id);
