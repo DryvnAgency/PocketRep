@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { signOutAndReset } from '@/lib/v2/localSessionClear';
 import { colors, radius, spacing } from '@/constants/theme';
 import type { Profile } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
@@ -74,7 +75,7 @@ export default function MoreScreen() {
   async function signOut() {
     Alert.alert('Sign out', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+      { text: 'Sign Out', style: 'destructive', onPress: () => { signOutAndReset(); } },
     ]);
   }
 

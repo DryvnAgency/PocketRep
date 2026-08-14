@@ -53,8 +53,7 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
         if (cancelled) return;
         setDemos(((data ?? []) as DemoContact[]).filter(c => DEMO_NAMES.has(`${c.first_name} ${c.last_name}`)));
         setLoading(false);
-      })
-      .catch(() => { if (!cancelled) setLoading(false); });
+      }, () => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; stopSpeaking(); };
   }, [open]);
 

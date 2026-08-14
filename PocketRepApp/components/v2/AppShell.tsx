@@ -16,7 +16,6 @@ import AddContactModal from './AddContactModal';
 import ImportContactsModal from './ImportContactsModal';
 import RexDisclosure from './RexDisclosure';
 import HeyRexSheet from './HeyRexSheet';
-import Onboarding from './Onboarding';
 import RexOnboarding from './RexOnboarding';
 import GamePlanSheet from './GamePlanSheet';
 import RexActivityViewer from './RexActivityViewer';
@@ -40,7 +39,7 @@ import {
 import { scheduleNurtureBlast } from '@/lib/v2/nurtureEngine';
 import { useNotifications } from '@/lib/v2/notifications';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
-import { clearLocalSessionState } from '@/lib/v2/localSessionClear';
+import { clearLocalSessionState, signOutAndReset } from '@/lib/v2/localSessionClear';
 import { registerForPush } from '@/lib/v2/pushNotifications';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
@@ -57,7 +56,7 @@ import {
   syncOnboardingFromProfile,
 } from '@/lib/v2/rexSettings';
 import { useHeyRex } from '@/lib/v2/useHeyRex';
-import { isRexOnboardingEnabled, isContactImportEnabled } from '@/lib/v2/rexFeatureFlags';
+import { isContactImportEnabled } from '@/lib/v2/rexFeatureFlags';
 import { useAccessGate } from '@/lib/v2/accessGate';
 import { supabase } from '@/lib/supabase';
 import { captureTimezone } from '@/lib/v2/sendTime';
@@ -464,7 +463,7 @@ export default function AppShell() {
       <LockoutScreen
         reason={access.reason}
         onResubscribe={() => { /* TODO(Eduardo): open Stripe checkout / billing portal */ }}
-        onSignOut={() => { supabase.auth.signOut(); }}
+        onSignOut={() => { signOutAndReset(); }}
       />
     );
   }
@@ -615,26 +614,16 @@ export default function AppShell() {
         }}
       />
 
-      {/* P2-R1: when EXPO_PUBLIC_REX_ONBOARDING is on, first-run is the Rex
-          interview instead of the static carousel (same open + complete contract).
-          Default off → the carousel renders exactly as before. */}
-      {isRexOnboardingEnabled() ? (
-        <RexOnboarding
-          open={onboardingOpen}
-          onClose={() => {
-            markOnboardingComplete();
-            setOnboardingOpen(false);
-          }}
-        />
-      ) : (
-        <Onboarding
-          open={onboardingOpen}
-          onClose={() => {
-            markOnboardingComplete();
-            setOnboardingOpen(false);
-          }}
-        />
-      )}
+      {/* First-run onboarding: the Rex interview. The old static-carousel
+          duplicate (components/v2/Onboarding.tsx) was removed in the onboarding
+          consolidation, so this is the single onboarding path. */}
+      <RexOnboarding
+        open={onboardingOpen}
+        onClose={() => {
+          markOnboardingComplete();
+          setOnboardingOpen(false);
+        }}
+      />
 
       <GamePlanSheet
         open={gamePlanOpen}
