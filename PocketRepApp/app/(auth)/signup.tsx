@@ -365,7 +365,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.sm, padding: spacing.md,
-    color: colors.white, fontSize: 15,
+    color: colors.white, fontSize: 16,
   },
   btn: {
     backgroundColor: colors.gold, borderRadius: radius.sm,
