@@ -1,4 +1,4 @@
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { colors } from '@/constants/theme';
 import HeyRexOrb, { OrbState } from './HeyRexOrb';
@@ -105,7 +105,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.ink4,
     backgroundColor: colors.ink2,
-    paddingBottom: 28, // safe area
+    // Respect the iPhone home-indicator inset on installed web (34px), not a
+    // fixed guess; native keeps its numeric fallback.
+    paddingBottom: Platform.OS === 'web' ? ('max(28px, env(safe-area-inset-bottom))' as any) : 28,
     position: 'relative',
   },
   row: {
