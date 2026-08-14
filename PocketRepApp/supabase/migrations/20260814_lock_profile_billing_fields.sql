@@ -20,11 +20,12 @@ create policy "Users update safe profile fields"
   using (auth.uid() = id)
   with check (auth.uid() = id);
 
--- Column-level defense: PostgREST/authenticated clients cannot request updates
--- to billing/entitlement columns at all. Server-side service_role remains able
--- to update them for Stripe lifecycle events.
-revoke update (plan, unlimited, trial_ends_at, stripe_customer_id)
-  on public.profiles from authenticated;
+-- Do not let browser clients create/delete profile rows or update arbitrary
+-- columns. Users only need their own display name/industry. Stripe and the
+-- signup trigger use security-definer/service-role paths for server changes.
+revoke insert, update, delete on public.profiles from authenticated;
+grant select on public.profiles to authenticated;
+grant update (full_name, industry) on public.profiles to authenticated;
 
 -- Defense in depth: even if privileges/policies are changed later, authenticated
 -- callers still cannot mutate server-controlled billing/entitlement columns.
