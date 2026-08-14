@@ -51,9 +51,16 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST' && req.method !== 'GET') {
     return new Response('method not allowed', { status: 405 });
   }
-  if (CRON_SECRET) {
-    const got = req.headers.get('X-Cron-Secret') ?? '';
-    if (got !== CRON_SECRET) return new Response('forbidden', { status: 403 });
+  // Fail CLOSED. verify_jwt=false, so this URL is publicly reachable; the ONLY
+  // access control is this shared secret. If CRON_SECRET is unset the previous
+  // code skipped the check entirely, leaving the endpoint open — anyone could
+  // trigger a full fan-out (OpenRouter drafts for every rep + Expo push to the
+  // whole base). Refuse to run unless a matching secret is present.
+  // Owner: `supabase secrets set CRON_SECRET=...` AND send the same value as the
+  // X-Cron-Secret header from the pg_cron job, or the daily run will 403.
+  const got = req.headers.get('X-Cron-Secret') ?? '';
+  if (!CRON_SECRET || got !== CRON_SECRET) {
+    return new Response('forbidden', { status: 403 });
   }
   if (!POCKETREP_API_KEY) {
     return json({ ok: false, error: 'POCKETREP_API_KEY not configured' }, 500);
