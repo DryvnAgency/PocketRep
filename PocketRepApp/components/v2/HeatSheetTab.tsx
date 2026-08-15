@@ -22,7 +22,10 @@ function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
     >
       <HeatStripe color={tier.color} style={styles.stripe} />
       <View style={styles.rowText}>
-        <Text style={styles.name} numberOfLines={1}>{c.name}</Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name} numberOfLines={1}>{c.name}</Text>
+          {c.isDemo ? <Text style={styles.demoPill}>DEMO</Text> : null}
+        </View>
         <Text style={styles.vehicle} numberOfLines={1}>
           {c.vehicle ?? '—'}{c.trim ? ` · ${c.trim}` : ''}
         </Text>
@@ -225,7 +228,13 @@ const styles = StyleSheet.create({
   rowPressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   stripe: { borderTopLeftRadius: radius.md, borderBottomLeftRadius: radius.md },
   rowText: { flex: 1, minWidth: 0 },
-  name: { fontSize: 15, fontWeight: '600', color: colors.white, letterSpacing: -0.2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  name: { fontSize: 15, fontWeight: '600', color: colors.white, letterSpacing: -0.2, flexShrink: 1 },
+  demoPill: {
+    fontSize: 8, fontWeight: '800', letterSpacing: 0.8, color: colors.gold,
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, overflow: 'hidden',
+  },
   vehicle: { fontSize: 11, fontWeight: '500', color: colors.grey2, marginTop: 2 },
   reasons: { fontSize: 10, fontWeight: '700', color: colors.gold, marginTop: 3, letterSpacing: 0.1 },
   daysWrap: { alignItems: 'flex-end' },
