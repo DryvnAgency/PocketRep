@@ -17,9 +17,17 @@ export type SendableDraft = {
   contact_name: string;
   phone: string | null;
   message: string;
+  // Demo/tour contact — the send is SIMULATED (never dialed out to a carrier).
+  isDemo?: boolean;
 };
 
 export async function launchSms(draft: SendableDraft): Promise<boolean> {
+  // The single guarantee that a demo/tour contact never receives a real carrier
+  // SMS: short-circuit BEFORE any sms: intent. The caller records the outbound
+  // and schedules the simulated replies. Returns true so the caller's send loop
+  // treats it as delivered.
+  if (draft.isDemo) return true;
+
   const phone = digitsOnly(draft.phone);
   if (!phone) return false;
   // iOS prefers `&`, Android `?`. Use the universal pattern that both honor.

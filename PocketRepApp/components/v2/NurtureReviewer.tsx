@@ -58,6 +58,7 @@ export default function NurtureReviewer({
         contact_name: d.contact_name,
         phone: d.phone,
         message: d.message_text,
+        isDemo: d.isDemo,
       });
       if (opened) {
         await markNurtureSent(d.id);

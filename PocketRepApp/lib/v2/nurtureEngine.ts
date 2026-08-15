@@ -31,6 +31,7 @@ export type PendingNurture = {
   trigger_type: string;
   scheduled_for: string | null;
   phone: string | null;
+  isDemo: boolean;
 };
 
 export type NurtureBlastResult = {
@@ -319,6 +320,9 @@ export async function scheduleNurtureBlast({
       trigger_type: s.trigger_type,
       scheduled_for: s.scheduled_for,
       phone: phoneById.get(s.contact_id) ?? null,
+      // Best-effort; the authoritative isDemo for sending comes from
+      // loadPendingNurtures' DB join (NurtureReviewer). launchSms is the guarantee.
+      isDemo: !!(c as any)?.isDemo,
     };
   });
 
@@ -338,7 +342,7 @@ export async function loadPendingNurtures(): Promise<PendingNurture[]> {
   if (!user) return [];
   const { data } = await supabase
     .from('nurture_messages')
-    .select('id,contact_id,message_text,language,hook_used,pitch_intensity,trigger_type,scheduled_for,contacts!inner(first_name,last_name,phone)')
+    .select('id,contact_id,message_text,language,hook_used,pitch_intensity,trigger_type,scheduled_for,contacts!inner(first_name,last_name,phone,is_demo)')
     .eq('user_id', user.id)
     .is('sent_at', null)
     .order('scheduled_for', { ascending: true });
@@ -353,6 +357,7 @@ export async function loadPendingNurtures(): Promise<PendingNurture[]> {
     trigger_type: r.trigger_type,
     scheduled_for: r.scheduled_for,
     phone: r.contacts?.phone ?? null,
+    isDemo: !!r.contacts?.is_demo,
   }));
 }
 

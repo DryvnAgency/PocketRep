@@ -96,6 +96,7 @@ export default function BlastSequenceDrafter({
           contact_name: s.contact_name,
           phone: c?.phone ?? null,
           message: s.message,
+          isDemo: c?.isDemo,
         };
         const opened = await launchSms(sendable);
         if (opened) {
