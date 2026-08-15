@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
-import { Label, Avatar } from './atoms';
+import { Avatar } from './atoms';
 import LanguageToggle from './LanguageToggle';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { BlastDraft, DraftedStep } from '@/lib/v2/blastSequences';
@@ -22,6 +22,7 @@ type StepState = DraftedStep & {
   sent: boolean;
   editing: boolean;
   translating: boolean;
+  simulated: boolean;
 };
 
 export default function BlastSequenceDrafter({
@@ -38,7 +39,7 @@ export default function BlastSequenceDrafter({
   onSent: () => void;
 }) {
   const [steps, setSteps] = useState<StepState[]>(() =>
-    (draft?.drafted_steps ?? []).map(s => ({ ...s, skipped: false, sent: false, editing: false, translating: false }))
+    (draft?.drafted_steps ?? []).map(s => ({ ...s, skipped: false, sent: false, editing: false, translating: false, simulated: false }))
   );
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,10 +50,9 @@ export default function BlastSequenceDrafter({
     return m;
   }, [contacts]);
 
-  // Re-seed steps when the draft prop swaps.
   useMemo(() => {
     if (!draft) return;
-    setSteps(draft.drafted_steps.map(s => ({ ...s, skipped: false, sent: false, editing: false, translating: false })));
+    setSteps(draft.drafted_steps.map(s => ({ ...s, skipped: false, sent: false, editing: false, translating: false, simulated: false })));
     setError(null);
     setSending(false);
   }, [draft?.sequence_id]);
@@ -65,10 +65,6 @@ export default function BlastSequenceDrafter({
   const updateStep = (id: string, patch: Partial<StepState>) =>
     setSteps(prev => prev.map(s => (s.contact_id === id ? { ...s, ...patch } : s)));
 
-  // Flipping the EN/ES toggle actually rewrites the message in the target
-  // language (ES = real Mexican Spanish, not literal). Optimistically flip the
-  // label, show a spinner on the card, then swap in the rewrite; revert the
-  // label if the brain call fails so the toggle never strands a half-changed row.
   const retranslateStep = async (step: StepState, next: 'en' | 'es') => {
     if (next === step.language || step.translating) return;
     updateStep(step.contact_id, { language: next, translating: true });
@@ -96,16 +92,17 @@ export default function BlastSequenceDrafter({
           contact_name: s.contact_name,
           phone: c?.phone ?? null,
           message: s.message,
+          is_demo: !!c?.isDemo,
         };
-        const opened = await launchSms(sendable);
-        if (opened) {
+        const result = await launchSms(sendable);
+        if (result.ok) {
           recordSentBlast({
             contactId: s.contact_id,
             message: s.message,
             language: s.language,
             hookUsed: s.hook_used,
           }).catch(() => undefined);
-          updateStep(s.contact_id, { sent: true });
+          updateStep(s.contact_id, { sent: true, simulated: result.simulated });
         }
       }
       await markBlastApproved(draft.sequence_id);
@@ -170,7 +167,14 @@ export default function BlastSequenceDrafter({
                 <View style={styles.cardHead}>
                   <Avatar name={step.contact_name} size={32} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.cardName}>{step.contact_name}</Text>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.cardName}>{step.contact_name}</Text>
+                      {c?.isDemo ? (
+                        <View style={styles.demoBadge}>
+                          <Text style={styles.demoText}>DEMO</Text>
+                        </View>
+                      ) : null}
+                    </View>
                     <Text style={styles.cardMeta} numberOfLines={1}>
                       {step.hook_used.replace('_', ' ')} · {step.char_count}c
                     </Text>
@@ -205,29 +209,23 @@ export default function BlastSequenceDrafter({
                 ) : null}
 
                 {violations.length > 0 ? (
-                  <Text style={styles.warn}>
-                    ⚠ copy rule: {violations.join(', ')}
-                  </Text>
+                  <Text style={styles.warn}>⚠ copy rule: {violations.join(', ')}</Text>
                 ) : null}
 
                 {step.sent ? (
-                  <View style={styles.sentBadge}>
-                    <Text style={styles.sentText}>✓ SENT</Text>
+                  <View style={[styles.sentBadge, step.simulated && styles.demoSentBadge]}>
+                    <Text style={[styles.sentText, step.simulated && styles.demoSentText]}>
+                      {step.simulated ? '✓ DEMO SENT · SIMULATED' : '✓ SENT'}
+                    </Text>
                   </View>
                 ) : (
                   <View style={styles.cardActions}>
                     {step.editing ? (
-                      <Pressable
-                        onPress={() => updateStep(step.contact_id, { editing: false })}
-                        style={styles.cardBtn}
-                      >
+                      <Pressable onPress={() => updateStep(step.contact_id, { editing: false })} style={styles.cardBtn}>
                         <Text style={styles.cardBtnText}>Done</Text>
                       </Pressable>
                     ) : (
-                      <Pressable
-                        onPress={() => updateStep(step.contact_id, { editing: true })}
-                        style={styles.cardBtn}
-                      >
+                      <Pressable onPress={() => updateStep(step.contact_id, { editing: true })} style={styles.cardBtn}>
                         <Text style={styles.cardBtnText}>Edit</Text>
                       </Pressable>
                     )}
@@ -235,14 +233,10 @@ export default function BlastSequenceDrafter({
                       onPress={() => updateStep(step.contact_id, { skipped: !step.skipped })}
                       style={[styles.cardBtn, step.skipped && { backgroundColor: colors.ink4 }]}
                     >
-                      <Text style={styles.cardBtnText}>
-                        {step.skipped ? 'Skipped — undo' : 'Skip'}
-                      </Text>
+                      <Text style={styles.cardBtnText}>{step.skipped ? 'Skipped — undo' : 'Skip'}</Text>
                     </Pressable>
                     {!c?.phone ? (
-                      <Text style={[styles.cardBtnText, { color: colors.red, alignSelf: 'center' }]}>
-                        no phone
-                      </Text>
+                      <Text style={[styles.cardBtnText, { color: colors.red, alignSelf: 'center' }]}>no phone</Text>
                     ) : null}
                   </View>
                 )}
@@ -261,92 +255,42 @@ export default function BlastSequenceDrafter({
 const styles = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.75)' },
   sheet: {
-    position: 'absolute',
-    left: 0, right: 0, bottom: 0, top: '6%',
-    backgroundColor: colors.ink2,
-    borderTopWidth: 1,
-    borderTopColor: colors.goldBorder,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
+    position: 'absolute', left: 0, right: 0, bottom: 0, top: '6%',
+    backgroundColor: colors.ink2, borderTopWidth: 1, borderTopColor: colors.goldBorder,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden',
   } as any,
-  handle: {
-    alignSelf: 'center',
-    width: 42, height: 4, borderRadius: 2,
-    backgroundColor: colors.ink4,
-    marginTop: 10, marginBottom: 4,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 8, paddingBottom: 14,
-    borderBottomWidth: 1, borderBottomColor: colors.ink4,
-  },
-  headerBtn: {
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 16,
-    backgroundColor: colors.surface2,
-    borderWidth: 1, borderColor: colors.ink4,
-    minWidth: 84, alignItems: 'center',
-  },
+  handle: { alignSelf: 'center', width: 42, height: 4, borderRadius: 2, backgroundColor: colors.ink4, marginTop: 10, marginBottom: 4 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: colors.ink4 },
+  headerBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4, minWidth: 84, alignItems: 'center' },
   headerBtnPrimary: { backgroundColor: colors.gold, borderColor: colors.gold },
   headerBtnDisabled: { backgroundColor: colors.ink4, borderColor: colors.ink4 },
   headerBtnText: { fontSize: 12, fontWeight: '700', color: colors.grey2 },
   headerKicker: { fontSize: 10, fontWeight: '700', color: colors.gold, letterSpacing: 1.4 },
   headerTitle: { fontSize: 14, fontWeight: '700', color: colors.white, marginTop: 2, letterSpacing: -0.2 },
-
   body: { padding: 14, gap: 12 },
   empty: { padding: 40, alignItems: 'center', gap: 12 },
   emptyText: { color: colors.grey2, fontSize: 13 },
-
-  card: {
-    backgroundColor: colors.surface2,
-    borderWidth: 1, borderColor: colors.ink4,
-    borderRadius: radius.lg,
-    paddingHorizontal: 14, paddingVertical: 12,
-    gap: 8,
-  },
+  card: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.lg, paddingHorizontal: 14, paddingVertical: 12, gap: 8 },
   cardSent: { borderColor: colors.green, opacity: 0.9 },
   cardSkipped: { opacity: 0.5 },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   cardName: { fontSize: 14, fontWeight: '700', color: colors.white },
   cardMeta: { fontSize: 11, color: colors.grey2, marginTop: 2 },
-  input: {
-    minHeight: 90,
-    color: colors.white,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlignVertical: 'top' as any,
-    backgroundColor: colors.ink,
-    borderWidth: 1, borderColor: colors.gold,
-    borderRadius: radius.md,
-    padding: 10,
-  } as any,
+  demoBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, backgroundColor: colors.gold, alignSelf: 'flex-start' },
+  demoText: { fontSize: 8, fontWeight: '900', color: colors.ink, letterSpacing: 0.8 },
+  input: { minHeight: 90, color: colors.white, fontSize: 14, lineHeight: 20, textAlignVertical: 'top' as any, backgroundColor: colors.ink, borderWidth: 1, borderColor: colors.gold, borderRadius: radius.md, padding: 10 } as any,
   message: { fontSize: 14, color: colors.white, lineHeight: 20 },
   translating: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   translatingText: { fontSize: 13, color: colors.gold, fontWeight: '600' },
   gamePlan: { fontSize: 11, color: colors.gold, fontStyle: 'italic' },
   warn: { fontSize: 11, color: colors.red, fontWeight: '600' },
-
   cardActions: { flexDirection: 'row', gap: 6 },
-  cardBtn: {
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: radius.full,
-    backgroundColor: colors.ink2,
-    borderWidth: 1, borderColor: colors.ink4,
-  },
+  cardBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.full, backgroundColor: colors.ink2, borderWidth: 1, borderColor: colors.ink4 },
   cardBtnText: { fontSize: 12, fontWeight: '700', color: colors.grey3, letterSpacing: 0.3 },
-
-  sentBadge: {
-    paddingHorizontal: 10, paddingVertical: 4,
-    backgroundColor: colors.greenBg,
-    borderWidth: 1, borderColor: colors.greenBorder,
-    borderRadius: radius.full,
-    alignSelf: 'flex-start',
-  },
+  sentBadge: { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: colors.greenBg, borderWidth: 1, borderColor: colors.greenBorder, borderRadius: radius.full, alignSelf: 'flex-start' },
   sentText: { fontSize: 10, fontWeight: '800', color: colors.green, letterSpacing: 1.0 },
-
+  demoSentBadge: { backgroundColor: colors.goldBg, borderColor: colors.goldBorder },
+  demoSentText: { color: colors.gold },
   error: { color: colors.red, fontSize: 13, paddingHorizontal: 4 },
 });
