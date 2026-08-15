@@ -32,6 +32,7 @@ export type V2Contact = {
   isPastCustomer: boolean;
   doNotContact: boolean;
   photoUrl: string | null;
+  isDemo: boolean;
 
   // Referral link (D3)
   referredByContactId: string | null;
@@ -81,6 +82,7 @@ function rowToContact(r: any): V2Contact {
     isPastCustomer: !!r.is_past_customer,
     doNotContact: !!r.do_not_contact,
     photoUrl: r.photo_url ?? null,
+    isDemo: !!r.is_demo,
     referredByContactId: r.referred_by_contact_id ?? null,
     referredByName: r.referred_by_name ?? null,
   };
@@ -94,7 +96,7 @@ export function useContacts() {
     const { data, error } = await supabase
       .from('contacts')
       .select(
-        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,email,budget,trade_in,tags,notes,next_step,birthday,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url,tier_override,referred_by_contact_id,referred_by_name'
+        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,email,budget,trade_in,tags,notes,next_step,birthday,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url,tier_override,is_demo,referred_by_contact_id,referred_by_name'
       )
       .eq('is_deleted', false);
 
