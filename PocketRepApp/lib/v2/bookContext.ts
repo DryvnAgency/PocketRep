@@ -70,7 +70,11 @@ export async function loadBookContext(): Promise<BookContext> {
     .select(
       'id,first_name,last_name,heat_score,vehicle,vehicle_make,vehicle_model,last_contact_date,last_contact_summary,lease_end_date,current_mileage,preferred_language,rep_decision,is_past_customer,do_not_contact,tags'
     )
-    .eq('is_deleted', false);
+    .eq('is_deleted', false)
+    // Never surface demo/tour contacts to the brain — this is the audience source
+    // for blasts, nurture, and stalled-lead sends, so a demo contact here can end
+    // up in a REAL text. Demo contacts must never enter a real send.
+    .eq('is_demo', false);
 
   if (error) {
     return {
