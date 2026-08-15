@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   headerKicker: { fontSize: 10, fontWeight: '700', color: colors.gold, letterSpacing: 1.4 },
   headerTitle: { fontSize: 14, fontWeight: '700', color: colors.white, marginTop: 2, letterSpacing: -0.2 },
 
-  body: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24, gap: 12 },
+  body: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: Platform.OS === 'web' ? ('max(24px, env(safe-area-inset-bottom))' as any) : 24, gap: 12 },
   sourceBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 14, paddingVertical: 16,
