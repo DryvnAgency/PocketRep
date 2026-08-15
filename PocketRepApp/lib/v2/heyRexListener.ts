@@ -1,5 +1,7 @@
 // Always-on "Hey Rex" wake-word listener for the v2 web surface.
-// Uses the Web Speech API (Chrome/Edge/Safari iOS 14.5+); on unsupported
+// Uses the Web Speech API (desktop Chrome/Edge; NOT iOS — Safari and Chrome on
+// iOS are both WebKit and do not implement SpeechRecognition, so iPhone users
+// fall back to the Rex chat); on unsupported
 // platforms start() resolves with `supported: false` and the orb stays
 // push-to-talk only.
 //

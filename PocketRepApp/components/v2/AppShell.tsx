@@ -246,7 +246,7 @@ export default function AppShell() {
     if (rex.state === 'denied') {
       setRexActionError('Microphone access is blocked. Enable it in your browser settings to use Hey Rex.');
     } else if (rex.state === 'unsupported') {
-      setRexActionError("Voice isn't supported in this browser — try Chrome or Safari.");
+      setRexActionError("Voice isn't supported in this browser. On iPhone, tap the gold Rex orb to chat instead; on desktop, use Chrome.");
     }
   }, [rex.state]);
 
