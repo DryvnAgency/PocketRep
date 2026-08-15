@@ -19,7 +19,7 @@ import { isRexChatEnabled } from '@/lib/v2/rexFeatureFlags';
 import { loadTodayServerThread, loadRepIdentity } from '@/lib/v2/coachThread';
 import { recordRexTurn } from '@/lib/v2/rexMemory';
 import {
-  parseCoachReply, executeAction, summarizeAction, type RexAction,
+  parseCoachReply, executeAction, summarizeAction, logRexAction, type RexAction,
 } from '@/lib/v2/rexActions';
 import { extractFromConversation, type ConversationParse } from '@/lib/v2/conversationParse';
 import { getTodayLog, getCarrySummary, appendCoachEntry } from '@/lib/v2/coachLog';
@@ -290,11 +290,13 @@ export default function RexCoach({
     setActing(true);
     try {
       const result = await executeAction(action, contacts);
+      logRexAction(action, 'success').catch(() => undefined); // audit chat-taken writes too
       pushRex(`✓ Done — ${summarizeAction(action)}`);
       onActed?.(action);
       if (result.openContactId) onOpenContact?.(result.openContactId);
       setPending(null);
     } catch (e: any) {
+      logRexAction(action, 'failed', { failure_reason: e?.message }).catch(() => undefined);
       setMessages(m => [...m, {
         from: 'rex',
         text: `Couldn't do that: ${e?.message ?? 'save failed'}. Want to try again?`,
@@ -364,6 +366,7 @@ export default function RexCoach({
           },
         };
         const res = await executeAction(add, contacts);
+        logRexAction(add, 'success').catch(() => undefined);
         contactId = res.openContactId ?? null;
         onActed?.(add);
       } else {
@@ -372,6 +375,7 @@ export default function RexCoach({
           payload: { contact_id: contactId, contact_name: name, notes_append: r.notes },
         };
         await executeAction(upd, contacts);
+        logRexAction(upd, 'success').catch(() => undefined);
         onActed?.(upd);
       }
       if (contactId && r.followup_days && r.followup_days > 0) {
@@ -380,6 +384,7 @@ export default function RexCoach({
           payload: { contact_id: contactId, contact_name: name, days_from_now: r.followup_days, note: r.plan },
         };
         await executeAction(fu, contacts);
+        logRexAction(fu, 'success').catch(() => undefined);
         onActed?.(fu);
       }
       pushRex(`✓ Saved. ${r.is_new ? 'Added' : 'Updated'} ${name}${r.followup_days ? ` · follow-up in ${r.followup_days}d` : ''}.`);
