@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, RefreshControl, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, Platform, Linking } from 'react-native';
 import { colors } from '@/constants/theme';
 import CustomNavBar, { TabId } from './CustomNavBar';
 import TabBar from './TabBar';
@@ -462,7 +462,7 @@ export default function AppShell() {
     return (
       <LockoutScreen
         reason={access.reason}
-        onResubscribe={() => { /* TODO(Eduardo): open Stripe checkout / billing portal */ }}
+        onResubscribe={() => { Linking.openURL('https://pocketrep.pro/upgrade').catch(() => undefined); }}
         onSignOut={() => { signOutAndReset(); }}
       />
     );
