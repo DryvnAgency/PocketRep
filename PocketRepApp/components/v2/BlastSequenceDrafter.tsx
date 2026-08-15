@@ -170,9 +170,11 @@ export default function BlastSequenceDrafter({
 
         <ScrollView contentContainerStyle={styles.body}>
           {steps.length === 0 ? (
+            // The draft is already resolved by the time this renders, so zero
+            // steps means the brain returned nothing usable — show an honest
+            // state instead of a spinner that never resolves. Close (header) to retry.
             <View style={styles.empty}>
-              <RadarLoader size={28} />
-              <Text style={styles.emptyText}>Drafting…</Text>
+              <Text style={styles.emptyText}>Couldn't draft any messages for this blast. Close and try again.</Text>
             </View>
           ) : steps.map(step => {
             const c = contactById.get(step.contact_id);
