@@ -16,6 +16,7 @@ import {
   translateBlastMessage,
 } from '@/lib/v2/blastSequences';
 import { launchSms, type SendableDraft } from '@/lib/v2/smsLauncher';
+import { registerDemoSend } from '@/lib/v2/demoBlastSim';
 
 type StepState = DraftedStep & {
   skipped: boolean;
@@ -89,6 +90,7 @@ export default function BlastSequenceDrafter({
     setSending(true);
     setError(null);
     try {
+      let demoIndex = 0; // staggers demo replies at 15s / 30s / 60s by send order
       for (const s of toSend) {
         const c = contactById.get(s.contact_id);
         const sendable: SendableDraft = {
@@ -100,12 +102,25 @@ export default function BlastSequenceDrafter({
         };
         const opened = await launchSms(sendable);
         if (opened) {
-          recordSentBlast({
-            contactId: s.contact_id,
-            message: s.message,
-            language: s.language,
-            hookUsed: s.hook_used,
-          }).catch(() => undefined);
+          if (c?.isDemo) {
+            // Demo send: record the outbound, capture its id, and schedule the
+            // simulated reply (15/30/60s). No real SMS left the app (launchSms
+            // short-circuited above).
+            const msgId = await recordSentBlast({
+              contactId: s.contact_id,
+              message: s.message,
+              language: s.language,
+              hookUsed: s.hook_used,
+            }).catch(() => null);
+            if (msgId) registerDemoSend(s.contact_id, msgId, demoIndex++);
+          } else {
+            recordSentBlast({
+              contactId: s.contact_id,
+              message: s.message,
+              language: s.language,
+              hookUsed: s.hook_used,
+            }).catch(() => undefined);
+          }
           updateStep(s.contact_id, { sent: true });
         }
       }

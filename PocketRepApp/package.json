@@ -15,6 +15,7 @@
     "test:chainguard": "node scripts/test-chainguard.mjs",
     "test:contactpick": "node scripts/test-contactpick.mjs",
     "test:rexchat": "node scripts/test-rexchat.mjs",
+    "test:demoblast": "node scripts/test-demoblast.mjs",
     "test:authflow": "node scripts/test-authflow.mjs"
   },
   "dependencies": {

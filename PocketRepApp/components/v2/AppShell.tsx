@@ -40,6 +40,7 @@ import { scheduleNurtureBlast } from '@/lib/v2/nurtureEngine';
 import { useNotifications } from '@/lib/v2/notifications';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { clearLocalSessionState, signOutAndReset } from '@/lib/v2/localSessionClear';
+import { materializeDueResponses, clearDemoSim } from '@/lib/v2/demoBlastSim';
 import { registerForPush } from '@/lib/v2/pushNotifications';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
@@ -105,6 +106,23 @@ export default function AppShell() {
   const access = useAccessGate();
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
+
+  // Demo-blast simulation: fire any due simulated replies (15/30/60s after a demo
+  // blast) on mount + a short timer, then refresh the book so they surface on the
+  // Heat Sheet / activity immediately. No-op when no demo blast is pending, and
+  // idempotent across refresh (see demoBlastSim.ts).
+  const reloadContactsRef = useRef(reloadContacts);
+  reloadContactsRef.current = reloadContacts;
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      const fired = await materializeDueResponses();
+      if (!cancelled && fired > 0) reloadContactsRef.current();
+    };
+    void tick();
+    const iv = setInterval(() => { void tick(); }, 5000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, []);
   const tags = useTags(tagsRefetchKey);
   const tagNames = useMemo(() => tags.map(t => t.name), [tags]);
   const { items: notifItems, unread: notifUnread } = useNotifications(
@@ -588,14 +606,14 @@ export default function AppShell() {
         open={addContactOpen}
         allContacts={contacts ?? []}
         onClose={() => setAddContactOpen(false)}
-        onCreated={() => { reloadContacts(); setActive('contacts'); }}
+        onCreated={() => { clearDemoSim(); reloadContacts(); setActive('contacts'); }}
       />
 
       <ImportContactsModal
         open={importOpen}
         allContacts={contacts ?? []}
         onClose={() => setImportOpen(false)}
-        onImported={() => { reloadContacts(); setActive('contacts'); }}
+        onImported={() => { clearDemoSim(); reloadContacts(); setActive('contacts'); }}
       />
 
       <RexDisclosure
