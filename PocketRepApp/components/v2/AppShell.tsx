@@ -501,6 +501,8 @@ export default function AppShell() {
             error={error}
             onRetry={reloadContacts}
             onSelect={c => setSelectedId(c.id)}
+            onAddContact={() => setAddContactOpen(true)}
+            onImportContacts={isContactImportEnabled() ? () => setImportOpen(true) : undefined}
             nurtureRefetchKey={nurtureRefetchKey}
             onOpenNurture={() => setNurtureReviewerOpen(true)}
             onAnalyzeStalled={() => openStalledAnalysis()}

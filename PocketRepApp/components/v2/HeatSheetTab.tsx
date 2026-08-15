@@ -47,6 +47,8 @@ export default function HeatSheetTab({
   error,
   onSelect,
   onRetry,
+  onAddContact,
+  onImportContacts,
   nurtureRefetchKey = 0,
   onOpenNurture,
   onAnalyzeStalled,
@@ -55,6 +57,8 @@ export default function HeatSheetTab({
   error: string | null;
   onSelect: (c: V2Contact) => void;
   onRetry?: () => void;
+  onAddContact?: () => void;
+  onImportContacts?: () => void;
   nurtureRefetchKey?: number;
   onOpenNurture?: () => void;
   onAnalyzeStalled?: () => void;
@@ -80,6 +84,33 @@ export default function HeatSheetTab({
     return (
       <View style={styles.center}>
         <RadarLoader size={36} />
+      </View>
+    );
+  }
+
+  // Empty book (seed failed, or the rep cleared/imported nothing yet): don't
+  // show empty tier headers + a misleading "You're caught up" — give a real
+  // first-run CTA to add or import.
+  if (contacts.length === 0) {
+    return (
+      <View style={styles.root}>
+        <DailyCheckIn contacts={contacts} />
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Your book is empty</Text>
+          <Text style={styles.emptyBody}>Add your first customer or import your book to start working your day.</Text>
+          <View style={styles.emptyBtns}>
+            {onAddContact ? (
+              <Pressable onPress={onAddContact} style={styles.emptyPrimary} accessibilityRole="button" accessibilityLabel="Add a customer">
+                <Text style={styles.emptyPrimaryText}>＋ Add a customer</Text>
+              </Pressable>
+            ) : null}
+            {onImportContacts ? (
+              <Pressable onPress={onImportContacts} style={styles.emptySecondary} accessibilityRole="button" accessibilityLabel="Import your book">
+                <Text style={styles.emptySecondaryText}>⇪ Import your book</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
       </View>
     );
   }
@@ -218,4 +249,27 @@ const styles = StyleSheet.create({
   stalledTitle: { fontSize: 14, fontWeight: '700', color: colors.white, letterSpacing: -0.2 },
   stalledSub: { fontSize: 11, color: colors.grey2, marginTop: 2 },
   stalledChev: { fontSize: 16, color: colors.gold },
+  emptyCard: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    padding: 20,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+  },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: colors.white, letterSpacing: -0.2 },
+  emptyBody: { fontSize: 13, color: colors.grey2, textAlign: 'center', marginTop: 6, lineHeight: 19 },
+  emptyBtns: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16 },
+  emptyPrimary: {
+    paddingHorizontal: 18, paddingVertical: 11,
+    backgroundColor: colors.gold, borderRadius: radius.full,
+  },
+  emptyPrimaryText: { color: colors.ink, fontWeight: '800', fontSize: 13 },
+  emptySecondary: {
+    paddingHorizontal: 18, paddingVertical: 11,
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.gold, borderRadius: radius.full,
+  },
+  emptySecondaryText: { color: colors.gold, fontWeight: '800', fontSize: 13 },
 });
