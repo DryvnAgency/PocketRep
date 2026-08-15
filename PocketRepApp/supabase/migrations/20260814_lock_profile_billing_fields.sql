@@ -7,12 +7,17 @@ begin;
 
 drop policy if exists "Users manage own profile" on public.profiles;
 
+-- Idempotent: prod already has these policies (applied via an earlier path), so
+-- drop-before-create lets this migration be re-run safely without a
+-- "policy already exists" error.
+drop policy if exists "Users read own profile" on public.profiles;
 create policy "Users read own profile"
   on public.profiles
   for select
   to authenticated
   using (auth.uid() = id);
 
+drop policy if exists "Users update safe profile fields" on public.profiles;
 create policy "Users update safe profile fields"
   on public.profiles
   for update
