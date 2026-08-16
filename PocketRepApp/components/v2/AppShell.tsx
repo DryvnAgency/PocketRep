@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, RefreshControl, Platform, Linking } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, Platform } from 'react-native';
 import { colors } from '@/constants/theme';
 import CustomNavBar, { TabId } from './CustomNavBar';
 import TabBar from './TabBar';
@@ -40,6 +40,7 @@ import { scheduleNurtureBlast } from '@/lib/v2/nurtureEngine';
 import { useNotifications } from '@/lib/v2/notifications';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { clearLocalSessionState, signOutAndReset } from '@/lib/v2/localSessionClear';
+import { openMarketing } from '@/lib/v2/links';
 import { materializeDueResponses, clearDemoSim } from '@/lib/v2/demoBlastSim';
 import { registerForPush } from '@/lib/v2/pushNotifications';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
@@ -472,15 +473,14 @@ export default function AppShell() {
     );
   }
 
-  // HARD LOCKOUT: when the access gate reports a lapsed account, block the whole
-  // app behind the re-subscribe wall. Inert today (gate returns 'allowed').
-  // TODO(Eduardo): make useAccessGate read the real subscription state once the
-  // Stripe webhook writes it onto profiles (see docs/MASTER_PLAN.md §"Gated P0").
+  // HARD LOCKOUT: when the access gate reports a lapsed OR invalid/deleted
+  // account, block the whole app. The re-subscribe / re-entry CTA routes to the
+  // marketing landing page — the canonical acquisition + re-subscription funnel.
   if (access.status === 'locked') {
     return (
       <LockoutScreen
         reason={access.reason}
-        onResubscribe={() => { Linking.openURL('https://pocketrep.pro/upgrade').catch(() => undefined); }}
+        onResubscribe={() => openMarketing()}
         onSignOut={() => { signOutAndReset(); }}
       />
     );
