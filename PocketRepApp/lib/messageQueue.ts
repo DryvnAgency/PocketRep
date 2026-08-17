@@ -40,6 +40,7 @@ export interface QueueItem {
   due_date: string;
   channel: 'text' | 'call' | 'email';
   status: 'pending' | 'sent' | 'skipped' | 'saved';
+  isDemo?: boolean;
 }
 
 export interface QueueState {
@@ -163,7 +164,7 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
   const contactIds = [...new Set(enrollments.map((e: any) => e.contact_id))];
   const { data: contacts, error: contactError } = await supabase
     .from('contacts')
-    .select('id,first_name,last_name,phone,vehicle_year,vehicle_make,vehicle_model,is_deleted')
+    .select('id,first_name,last_name,phone,vehicle_year,vehicle_make,vehicle_model,is_deleted,is_demo')
     .in('id', contactIds);
   if (contactError) throw contactError;
 
@@ -192,6 +193,7 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
       due_date: dueAt.split('T')[0],
       channel: step.channel,
       status: 'pending',
+      isDemo: Boolean(contact.is_demo),
     });
     if (items.length >= limit) break;
   }
