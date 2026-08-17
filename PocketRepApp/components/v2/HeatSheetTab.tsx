@@ -7,6 +7,7 @@ import type { V2Contact } from '@/lib/v2/useContacts';
 import WeeklyDigestCard from './WeeklyDigestCard';
 import DailyCheckIn from './DailyCheckIn';
 import NurtureBanner from './NurtureBanner';
+import FollowUpQueue from './FollowUpQueue';
 import { heatReasons } from '@/lib/v2/heatReasons';
 
 const TODAY_LABEL = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
@@ -98,6 +99,7 @@ export default function HeatSheetTab({
     return (
       <View style={styles.root}>
         <DailyCheckIn contacts={contacts} />
+        <FollowUpQueue />
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>Your book is empty</Text>
           <Text style={styles.emptyBody}>Add your first customer or import your book to start working your day.</Text>
@@ -144,6 +146,8 @@ export default function HeatSheetTab({
       {onOpenNurture ? (
         <NurtureBanner refetchKey={nurtureRefetchKey} onOpenReviewer={onOpenNurture} />
       ) : null}
+
+      <FollowUpQueue />
 
       {onAnalyzeStalled ? (
         <Pressable onPress={onAnalyzeStalled} style={styles.stalledBtn}>
