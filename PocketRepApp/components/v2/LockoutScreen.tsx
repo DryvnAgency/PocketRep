@@ -27,6 +27,10 @@ const REASON_COPY: Record<LockReason, { title: string; body: string }> = {
     title: 'Subscription required',
     body: 'PocketRep needs an active subscription. Subscribe to unlock your book.',
   },
+  invalid_account: {
+    title: 'Account not found',
+    body: 'This account is no longer active. Head to PocketRep to sign up or re-subscribe.',
+  },
 };
 
 export default function LockoutScreen({
@@ -41,6 +45,9 @@ export default function LockoutScreen({
   onSignOut?: () => void;
 }) {
   const copy = REASON_COPY[reason] ?? REASON_COPY.no_subscription;
+  // A deleted/invalid account can't "re-subscribe" — the CTA sends them to the
+  // landing page to sign up fresh; lapsed accounts keep the "Re-subscribe" label.
+  const primaryLabel = reason === 'invalid_account' ? 'Go to PocketRep' : 'Re-subscribe';
   return (
     <View style={styles.root}>
       <View style={styles.card}>
@@ -54,9 +61,9 @@ export default function LockoutScreen({
           style={styles.primaryBtn}
           onPress={onResubscribe}
           accessibilityRole="button"
-          accessibilityLabel="Re-subscribe"
+          accessibilityLabel={primaryLabel}
         >
-          <Text style={styles.primaryText}>Re-subscribe</Text>
+          <Text style={styles.primaryText}>{primaryLabel}</Text>
         </Pressable>
 
         <Pressable

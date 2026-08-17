@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform,
 } from 'react-native';
 import RadarLoader from './RadarLoader';
 import ConversationComposer from './ConversationComposer';
@@ -19,7 +19,7 @@ import { isRexChatEnabled } from '@/lib/v2/rexFeatureFlags';
 import { loadTodayServerThread, loadRepIdentity } from '@/lib/v2/coachThread';
 import { recordRexTurn } from '@/lib/v2/rexMemory';
 import {
-  parseCoachReply, executeAction, summarizeAction, type RexAction,
+  parseCoachReply, executeAction, summarizeAction, logRexAction, type RexAction,
 } from '@/lib/v2/rexActions';
 import { extractFromConversation, type ConversationParse } from '@/lib/v2/conversationParse';
 import { getTodayLog, getCarrySummary, appendCoachEntry } from '@/lib/v2/coachLog';
@@ -95,6 +95,22 @@ export default function RexCoach({
   const repIdent = useRef<RepIdentity>({});
   const interactedRef = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
+
+  // Web keyboard-avoidance: iOS Safari doesn't shrink the layout viewport for
+  // the on-screen keyboard, so the bottom-pinned input gets covered. Track the
+  // keyboard height via visualViewport and lift the sheet's bottom by it. 0 on
+  // native and whenever the keyboard is closed.
+  const [kbInset, setKbInset] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const vv = (window as any).visualViewport;
+    if (!vv) return;
+    const update = () => setKbInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    update();
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+  }, []);
 
   // Seed a fresh greeting each time the sheet opens, and refresh month-to-date
   // numbers so coaching reflects the rep's current standing.
@@ -274,11 +290,13 @@ export default function RexCoach({
     setActing(true);
     try {
       const result = await executeAction(action, contacts);
+      logRexAction(action, 'success').catch(() => undefined); // audit chat-taken writes too
       pushRex(`✓ Done — ${summarizeAction(action)}`);
       onActed?.(action);
       if (result.openContactId) onOpenContact?.(result.openContactId);
       setPending(null);
     } catch (e: any) {
+      logRexAction(action, 'failed', { failure_reason: e?.message }).catch(() => undefined);
       setMessages(m => [...m, {
         from: 'rex',
         text: `Couldn't do that: ${e?.message ?? 'save failed'}. Want to try again?`,
@@ -348,6 +366,7 @@ export default function RexCoach({
           },
         };
         const res = await executeAction(add, contacts);
+        logRexAction(add, 'success').catch(() => undefined);
         contactId = res.openContactId ?? null;
         onActed?.(add);
       } else {
@@ -356,6 +375,7 @@ export default function RexCoach({
           payload: { contact_id: contactId, contact_name: name, notes_append: r.notes },
         };
         await executeAction(upd, contacts);
+        logRexAction(upd, 'success').catch(() => undefined);
         onActed?.(upd);
       }
       if (contactId && r.followup_days && r.followup_days > 0) {
@@ -364,6 +384,7 @@ export default function RexCoach({
           payload: { contact_id: contactId, contact_name: name, days_from_now: r.followup_days, note: r.plan },
         };
         await executeAction(fu, contacts);
+        logRexAction(fu, 'success').catch(() => undefined);
         onActed?.(fu);
       }
       pushRex(`✓ Saved. ${r.is_new ? 'Added' : 'Updated'} ${name}${r.followup_days ? ` · follow-up in ${r.followup_days}d` : ''}.`);
@@ -386,7 +407,7 @@ export default function RexCoach({
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
       <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, kbInset > 0 ? ({ bottom: kbInset } as any) : null]}>
         <View style={styles.header}>
           <View style={styles.live} />
           <Text style={styles.headerLabel}>REX · COACH</Text>
@@ -649,7 +670,9 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 14,
     paddingTop: 10,
-    paddingBottom: 24,
+    // Home-indicator inset on installed web (keyboard-up reports inset 0, so no
+    // double gap when the sheet is already lifted by kbInset).
+    paddingBottom: Platform.OS === 'web' ? ('max(24px, env(safe-area-inset-bottom))' as any) : 24,
     backgroundColor: colors.ink2,
     borderTopWidth: 1,
     borderTopColor: colors.ink4,

@@ -1,9 +1,12 @@
-// v2 real per-user sign-in / sign-up (P0-1) — the default when there's no
-// session (wired in AppShell.tsx). Plain Supabase email+password auth; does not
-// call demoAuth.ts directly (the optional onTryDemo prop is the caller's demo
-// hook — see AppShell's handleTryDemo). With the hard-lockout model, a
-// brand-new signup will land on LockoutScreen until they subscribe (the access
-// gate decides that, not this screen — untouched by this file).
+// v2 real per-user SIGN-IN — the default when there's no session (wired in
+// AppShell.tsx). Plain Supabase email+password auth; does not call demoAuth.ts
+// directly (the optional onTryDemo prop is the caller's demo hook — see AppShell's
+// handleTryDemo).
+//
+// Acquisition (new signup) is routed to the marketing landing page (openMarketing)
+// for now — the in-app email-confirmation flow is deferred (the "link not provided"
+// blocker lives in the Supabase email template), so this screen is sign-in-only.
+// Existing users sign in here; new users create/subscribe on pocketrep.pro.
 
 import { useState } from 'react';
 import {
@@ -11,6 +14,7 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import { openMarketing } from '@/lib/v2/links';
 import { colors, radius } from '@/constants/theme';
 
 export default function AuthScreen({
@@ -21,45 +25,23 @@ export default function AuthScreen({
   // silently doing nothing.
   onTryDemo?: () => Promise<void>;
 }) {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  const isSignup = mode === 'signup';
 
   const submit = async () => {
     setError(null);
-    setNotice(null);
     const em = email.trim().toLowerCase();
     if (!em || !password) { setError('Enter your email and password.'); return; }
-    if (isSignup && password.length < 8) { setError('Password must be at least 8 characters.'); return; }
 
     setBusy(true);
     try {
-      if (!isSignup) {
-        // No onAuthed callback needed here: AppShell's onAuthStateChange
-        // listener is the single source of truth for the transition and picks
-        // up the resulting SIGNED_IN event on its own (fires before this
-        // await even resolves).
-        const { error: signErr } = await supabase.auth.signInWithPassword({ email: em, password });
-        if (signErr) { setError('Email or password is incorrect.'); return; }
-      } else {
-        const { data, error: signErr } = await supabase.auth.signUp({
-          email: em,
-          password,
-          options: { data: { full_name: fullName.trim() } },
-        });
-        if (signErr) { setError(signErr.message); return; }
-        // With hard lockout, the access gate sends a fresh (unpaid) account to
-        // LockoutScreen → re-subscribe. If email confirmation is on, there's no
-        // session yet, so prompt them to confirm first (no session -> no
-        // SIGNED_IN event -> AppShell's listener has nothing to pick up).
-        if (!data.session) setNotice('Check your email to confirm your account, then sign in.');
-      }
+      // No onAuthed callback needed here: AppShell's onAuthStateChange listener
+      // is the single source of truth for the transition and picks up the
+      // resulting SIGNED_IN event on its own (fires before this await resolves).
+      const { error: signErr } = await supabase.auth.signInWithPassword({ email: em, password });
+      if (signErr) { setError('Email or password is incorrect.'); return; }
     } catch (e: any) {
       setError(e?.message ?? 'Something went wrong. Try again.');
     } finally {
@@ -70,7 +52,6 @@ export default function AuthScreen({
   const tryDemo = async () => {
     if (!onTryDemo || busy) return;
     setError(null);
-    setNotice(null);
     setBusy(true);
     try {
       await onTryDemo();
@@ -89,24 +70,10 @@ export default function AuthScreen({
           <Text style={styles.wordmark}>Pocket<Text style={{ color: colors.gold }}>Rep</Text></Text>
         </View>
 
-        <Text style={styles.headline}>{isSignup ? 'Start closing with Rex.' : 'Welcome back, closer.'}</Text>
-        <Text style={styles.sub}>{isSignup ? 'Create your account.' : 'Sign in to your book.'}</Text>
+        <Text style={styles.headline}>Welcome back, closer.</Text>
+        <Text style={styles.sub}>Sign in to your book.</Text>
 
         <View style={styles.form}>
-          {isSignup ? (
-            <>
-              <Text style={styles.label}>FULL NAME</Text>
-              <TextInput
-                style={styles.input}
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="Jordan Rivera"
-                placeholderTextColor={colors.grey}
-                autoCapitalize="words"
-              />
-            </>
-          ) : null}
-
           <Text style={styles.label}>EMAIL</Text>
           <TextInput
             style={styles.input}
@@ -132,29 +99,28 @@ export default function AuthScreen({
           />
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
           <Pressable
             style={[styles.btn, busy && { opacity: 0.7 }]}
             onPress={submit}
             disabled={busy}
             accessibilityRole="button"
-            accessibilityLabel={isSignup ? 'Create account' : 'Sign in'}
+            accessibilityLabel="Sign in"
           >
             {busy
               ? <ActivityIndicator color={colors.ink} />
-              : <Text style={styles.btnText}>{isSignup ? 'Create account' : 'Sign in'}</Text>}
+              : <Text style={styles.btnText}>Sign in</Text>}
           </Pressable>
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>{isSignup ? 'Already have an account? ' : 'No account yet? '}</Text>
+          <Text style={styles.footerText}>No account yet? </Text>
           <Pressable
-            onPress={() => { setMode(isSignup ? 'signin' : 'signup'); setError(null); setNotice(null); }}
+            onPress={openMarketing}
             accessibilityRole="button"
-            accessibilityLabel={isSignup ? 'Switch to sign in' : 'Switch to sign up'}
+            accessibilityLabel="Start free trial at pocketrep.pro"
           >
-            <Text style={styles.footerLink}>{isSignup ? 'Sign in' : 'Start free trial'}</Text>
+            <Text style={styles.footerLink}>Start free trial</Text>
           </Pressable>
         </View>
 
@@ -201,7 +167,6 @@ const styles = StyleSheet.create({
   },
   btnText: { color: colors.ink, fontWeight: '800', fontSize: 15 },
   error: { color: colors.red, fontSize: 13, marginTop: 8 },
-  notice: { color: colors.gold, fontSize: 13, marginTop: 8 },
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
   footerText: { color: colors.grey2, fontSize: 14 },
   footerLink: { color: colors.gold, fontWeight: '700', fontSize: 14 },

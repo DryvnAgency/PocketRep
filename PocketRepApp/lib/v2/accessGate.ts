@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-export type LockReason = 'trial_expired' | 'subscription_canceled' | 'payment_failed' | 'no_subscription';
+export type LockReason = 'trial_expired' | 'subscription_canceled' | 'payment_failed' | 'no_subscription' | 'invalid_account';
 export type AccessState =
   | { status: 'loading' }
   | { status: 'allowed' }
@@ -54,7 +54,10 @@ export function useAccessGate(): AccessState {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        if (!cancelled) setState({ status: 'locked', reason: 'no_subscription' });
+        // Authenticated session on the client, but the server says this user no
+        // longer exists (deleted/invalid account). Surface a distinct reason so
+        // the UI routes to the landing page instead of the misleading paywall.
+        if (!cancelled) setState({ status: 'locked', reason: 'invalid_account' });
         return;
       }
 

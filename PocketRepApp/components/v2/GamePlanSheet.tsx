@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
 import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Label, Pill, HeatStripe } from './atoms';
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   iconBtnText: { color: colors.gold, fontSize: 18, fontWeight: '700' },
   topTitle: { fontSize: 16, fontWeight: '700', color: colors.white, letterSpacing: -0.2, marginTop: 2 },
 
-  body: { paddingBottom: 30 },
+  body: { paddingBottom: Platform.OS === 'web' ? ('max(30px, env(safe-area-inset-bottom))' as any) : 30 },
   center: { padding: 40, alignItems: 'center' },
   error: { color: colors.red, padding: 16, fontSize: 13 },
   empty: {

@@ -7,6 +7,7 @@ import type { V2Contact } from '@/lib/v2/useContacts';
 import WeeklyDigestCard from './WeeklyDigestCard';
 import DailyCheckIn from './DailyCheckIn';
 import NurtureBanner from './NurtureBanner';
+import FollowUpQueue from './FollowUpQueue';
 import { heatReasons } from '@/lib/v2/heatReasons';
 
 const TODAY_LABEL = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
@@ -22,7 +23,10 @@ function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
     >
       <HeatStripe color={tier.color} style={styles.stripe} />
       <View style={styles.rowText}>
-        <Text style={styles.name} numberOfLines={1}>{c.name}</Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name} numberOfLines={1}>{c.name}</Text>
+          {c.isDemo ? <Text style={styles.demoPill}>DEMO</Text> : null}
+        </View>
         <Text style={styles.vehicle} numberOfLines={1}>
           {c.vehicle ?? '—'}{c.trim ? ` · ${c.trim}` : ''}
         </Text>
@@ -47,6 +51,8 @@ export default function HeatSheetTab({
   error,
   onSelect,
   onRetry,
+  onAddContact,
+  onImportContacts,
   nurtureRefetchKey = 0,
   onOpenNurture,
   onAnalyzeStalled,
@@ -55,6 +61,8 @@ export default function HeatSheetTab({
   error: string | null;
   onSelect: (c: V2Contact) => void;
   onRetry?: () => void;
+  onAddContact?: () => void;
+  onImportContacts?: () => void;
   nurtureRefetchKey?: number;
   onOpenNurture?: () => void;
   onAnalyzeStalled?: () => void;
@@ -80,6 +88,34 @@ export default function HeatSheetTab({
     return (
       <View style={styles.center}>
         <RadarLoader size={36} />
+      </View>
+    );
+  }
+
+  // Empty book (seed failed, or the rep cleared/imported nothing yet): don't
+  // show empty tier headers + a misleading "You're caught up" — give a real
+  // first-run CTA to add or import.
+  if (contacts.length === 0) {
+    return (
+      <View style={styles.root}>
+        <DailyCheckIn contacts={contacts} />
+        <FollowUpQueue />
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Your book is empty</Text>
+          <Text style={styles.emptyBody}>Add your first customer or import your book to start working your day.</Text>
+          <View style={styles.emptyBtns}>
+            {onAddContact ? (
+              <Pressable onPress={onAddContact} style={styles.emptyPrimary} accessibilityRole="button" accessibilityLabel="Add a customer">
+                <Text style={styles.emptyPrimaryText}>＋ Add a customer</Text>
+              </Pressable>
+            ) : null}
+            {onImportContacts ? (
+              <Pressable onPress={onImportContacts} style={styles.emptySecondary} accessibilityRole="button" accessibilityLabel="Import your book">
+                <Text style={styles.emptySecondaryText}>⇪ Import your book</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
       </View>
     );
   }
@@ -110,6 +146,8 @@ export default function HeatSheetTab({
       {onOpenNurture ? (
         <NurtureBanner refetchKey={nurtureRefetchKey} onOpenReviewer={onOpenNurture} />
       ) : null}
+
+      <FollowUpQueue />
 
       {onAnalyzeStalled ? (
         <Pressable onPress={onAnalyzeStalled} style={styles.stalledBtn}>
@@ -194,7 +232,13 @@ const styles = StyleSheet.create({
   rowPressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   stripe: { borderTopLeftRadius: radius.md, borderBottomLeftRadius: radius.md },
   rowText: { flex: 1, minWidth: 0 },
-  name: { fontSize: 15, fontWeight: '600', color: colors.white, letterSpacing: -0.2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  name: { fontSize: 15, fontWeight: '600', color: colors.white, letterSpacing: -0.2, flexShrink: 1 },
+  demoPill: {
+    fontSize: 8, fontWeight: '800', letterSpacing: 0.8, color: colors.gold,
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+    borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, overflow: 'hidden',
+  },
   vehicle: { fontSize: 11, fontWeight: '500', color: colors.grey2, marginTop: 2 },
   reasons: { fontSize: 10, fontWeight: '700', color: colors.gold, marginTop: 3, letterSpacing: 0.1 },
   daysWrap: { alignItems: 'flex-end' },
@@ -218,4 +262,27 @@ const styles = StyleSheet.create({
   stalledTitle: { fontSize: 14, fontWeight: '700', color: colors.white, letterSpacing: -0.2 },
   stalledSub: { fontSize: 11, color: colors.grey2, marginTop: 2 },
   stalledChev: { fontSize: 16, color: colors.gold },
+  emptyCard: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    padding: 20,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+  },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: colors.white, letterSpacing: -0.2 },
+  emptyBody: { fontSize: 13, color: colors.grey2, textAlign: 'center', marginTop: 6, lineHeight: 19 },
+  emptyBtns: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16 },
+  emptyPrimary: {
+    paddingHorizontal: 18, paddingVertical: 11,
+    backgroundColor: colors.gold, borderRadius: radius.full,
+  },
+  emptyPrimaryText: { color: colors.ink, fontWeight: '800', fontSize: 13 },
+  emptySecondary: {
+    paddingHorizontal: 18, paddingVertical: 11,
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.gold, borderRadius: radius.full,
+  },
+  emptySecondaryText: { color: colors.gold, fontWeight: '800', fontSize: 13 },
 });
