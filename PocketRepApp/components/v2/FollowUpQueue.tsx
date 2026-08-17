@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing } from '@/constants/theme';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { colors, radius } from '@/constants/theme';
 import { generateQueue, markSentAndLog, markSkipped, type QueueItem } from '@/lib/messageQueue';
 import { launchSms } from '@/lib/v2/smsLauncher';
 import { supabase } from '@/lib/supabase';
