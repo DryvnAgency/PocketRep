@@ -4,294 +4,78 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
-<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTYiIGhlaWdodD0iOTYiIHZpZXdCb3g9IjAgMCA5NiA5NiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IlBvY2tldFJlcCI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InByVGlsZSIgeDE9IjEwIiB5MT0iNiIgeDI9Ijg2IiB5Mj0iOTIiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZjNkMjdlIj48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMC41IiBzdG9wLWNvbG9yPSIjZTJiNTUyIj48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2YwYzA2MCI+PC9zdG9wPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0icHJHbG9zcyIgY3g9IjAuMyIgY3k9IjAuMjIiIHI9IjAuOSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIgc3RvcC1vcGFjaXR5PSIwLjQ1Ij48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMC41IiBzdG9wLWNvbG9yPSIjZmZmZmZmIiBzdG9wLW9wYWNpdHk9IjAiPjwvc3RvcD4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHg9IjYiIHk9IjYiIHdpZHRoPSI4NCIgaGVpZ2h0PSI4NCIgcng9IjI0IiBmaWxsPSJ1cmwoI3ByVGlsZSkiPjwvcmVjdD4KICA8cmVjdCB4PSI2IiB5PSI2IiB3aWR0aD0iODQiIGhlaWdodD0iODQiIHJ4PSIyNCIgZmlsbD0idXJsKCNwckdsb3NzKSI+PC9yZWN0PgogIDxyZWN0IHg9IjYuNzUiIHk9IjYuNzUiIHdpZHRoPSI4Mi41IiBoZWlnaHQ9IjgyLjUiIHJ4PSIyMy4yNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utb3BhY2l0eT0iMC4yMiIgc3Ryb2tlLXdpZHRoPSIxLjUiPjwvcmVjdD4KICAKICA8cGF0aCBkPSJNMzkgNzIgVjI3IEg1My41IEExMi41IDEyLjUgMCAwIDEgNTMuNSA1MiBIMzkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzBhMGMxMiIgc3Ryb2tlLW9wYWNpdHk9IjAuMjgiIHN0cm9rZS13aWR0aD0iOS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMS41KSI+PC9wYXRoPgogIDxwYXRoIGQ9Ik0zOSA3MiBWMjcgSDUzLjUgQTEyLjUgMTIuNSAwIDAgMSA1My41IDUyIEgzOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjguNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48L3BhdGg+CiAgCiAgPGNpcmNsZSBjeD0iNjIuNSIgY3k9IjY4IiByPSI1IiBmaWxsPSIjMGEwYzEyIiBmaWxsLW9wYWNpdHk9IjAuMjUiPjwvY2lyY2xlPgogIDxjaXJjbGUgY3g9IjYyIiBjeT0iNjciIHI9IjUiIGZpbGw9IiNmZjdhNDUiPjwvY2lyY2xlPgo8L3N2Zz4=" type="image/svg+xml">
-<title>PocketRep.pro — You're In. Finish Setup.</title>
-<script>
-/* PocketRep Team signups get the dedicated dealership thank-you. Redirect before
-   render to avoid a flash of the individual page. Driven by the existing ?plan= flow. */
-(function(){try{
-  var p=new URLSearchParams(location.search).get('plan');
-  if(!p){var r=sessionStorage.getItem('pr_signup');if(r){try{p=JSON.parse(r).plan}catch(e){}}}
-  if(p==='teams'){location.replace('thankyou-teams.html'+location.search);}
-}catch(e){}})();
-</script>
-<!-- ════ STRIPE WIRING — individual plan (Elite / Retail) ════
-     This page finishes the PAID signup: it verifies the Stripe Checkout Session
-     server-side (checkout-account Edge Function), then lets the customer set a
-     password and hands them straight into the app. It requires the Checkout
-     Session ID in the URL, so in the Stripe Payment Link's
-     "After payment → Redirect to your website" set:
-         https://pocketrep.pro/thankyou.html?session_id={CHECKOUT_SESSION_ID}
-     (No secret is used here — only the public anon key. Verification + account
-     creation happen in the Edge Function with the Stripe secret + service role.)
-     ═══════════════════════════════════════════════════════════ -->
+<title>PocketRep — Finish Setup</title>
 <link rel="stylesheet" href="brand.css">
 <style>
-  /* page-specific layout only — design tokens/components come from brand.css */
-  .hero-pad { padding-top: 122px; }
-  .center { text-align: center; }
-  .center .eyebrow { justify-content: center; }
-  .plan-line { display: inline-block; margin-top: 18px; font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.4px; color: var(--muted); border: 1px solid var(--line-2); border-radius: 12px; padding: 9px 16px; }
-  .plan-line b { color: var(--cyan); }
-  .setup { max-width: 460px; margin: 26px auto 0; }
-  .verified-email { display: flex; align-items: center; gap: 10px; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; }
-  .verified-email .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); flex-shrink: 0; }
-  .verified-email .em { font-family: var(--mono); font-size: 13.5px; color: var(--ink); word-break: break-all; }
-  .verified-email .lbl { font-size: 10.5px; letter-spacing: 0.6px; text-transform: uppercase; color: var(--muted); }
-  .pwa-note { max-width: 460px; margin: 16px auto 0; font-size: 13px; color: var(--muted); text-align: center; line-height: 1.6; }
-  .pwa-note b { color: var(--ink); }
-  .muted-link { color: var(--muted); text-decoration: underline; }
-  .spin { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.25); border-top-color: var(--cyan); border-radius: 50%; animation: prspin 0.7s linear infinite; vertical-align: middle; }
-  @keyframes prspin { to { transform: rotate(360deg); } }
-  .state { display: none; }
-  .state.on { display: block; }
-  .big-ok { font-family: var(--display); font-weight: 700; font-size: 1.4rem; color: var(--cyan); }
-  .err-box { color: var(--red); font-size: 13.5px; margin-top: 10px; text-align: center; }
+  .hero-pad{padding-top:122px}.center{text-align:center}.setup{max-width:460px;margin:28px auto 0}
+  .state{display:none}.state.on{display:block}.spin{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.25);border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}@keyframes spin{to{transform:rotate(360deg)}}
+  .verified{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:12px;padding:12px 14px}.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);flex-shrink:0}.email{font-family:var(--mono);font-size:13.5px;word-break:break-all}
+  .note{max-width:460px;margin:15px auto 0;font-size:13px;color:var(--muted);text-align:center;line-height:1.6}.err{color:var(--red);font-size:13px;margin-top:10px;text-align:center}.success{font-family:var(--display);font-weight:700;font-size:1.4rem;color:var(--cyan)}
 </style>
 </head>
 <body class="js">
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <linearGradient id="mTile" x1="10" y1="6" x2="86" y2="92" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#f3d27e"></stop><stop offset="0.5" stop-color="#e2b552"></stop><stop offset="1" stop-color="#f0c060"></stop>
-    </linearGradient>
-    <radialGradient id="mGloss" cx="0.3" cy="0.22" r="0.9">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.45"></stop><stop offset="0.5" stop-color="#ffffff" stop-opacity="0"></stop>
-    </radialGradient>
-    <symbol id="prmark" viewBox="0 0 96 96">
-      <rect x="6" y="6" width="84" height="84" rx="24" fill="url(#mTile)"></rect>
-      <rect x="6" y="6" width="84" height="84" rx="24" fill="url(#mGloss)"></rect>
-      <rect x="6.75" y="6.75" width="82.5" height="82.5" rx="23.25" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.5"></rect>
-      <path d="M39 72 V27 H53.5 A12.5 12.5 0 0 1 53.5 52 H39" fill="none" stroke="#0a0c12" stroke-opacity="0.28" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,1.5)"></path>
-      <path d="M39 72 V27 H53.5 A12.5 12.5 0 0 1 53.5 52 H39" fill="none" stroke="#ffffff" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"></path>
-      <circle cx="62" cy="67" r="5" fill="#ff7a45"></circle>
-    </symbol>
-  </defs>
-</svg>
 <div class="bg-field"></div><div class="bg-grid"></div><div class="bg-grain"></div>
-
-<header class="nav scrolled" id="nav">
-  <div class="wrap nav-inner">
-    <a class="brand" href="/">
-      <svg class="brand-mark" aria-hidden="true"><use href="#prmark"></use></svg>
-      <span class="brand-name">PocketRep<span class="dot">.</span></span>
-    </a>
-    <div class="nav-cta">
-      <span class="nav-chip"><span class="pip"></span> <span>Founding Member</span></span>
-      <a class="nav-login" href="https://app.pocketrep.pro">Log in</a>
-    </div>
-  </div>
-</header>
-
+<header class="nav scrolled"><div class="wrap nav-inner"><a class="brand" href="/"><span class="brand-name">PocketRep<span class="dot">.</span></span></a><div class="nav-cta"><a class="nav-login" href="https://app.pocketrep.pro">Log in</a></div></div></header>
 <main>
 <section class="wrap hero-pad center">
   <span class="eyebrow center"><span class="pip" style="width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)"></span> Payment successful</span>
   <h1 class="display" style="margin-top:16px">You're in! Welcome<br><span class="grad-text">to PocketRep 👊</span></h1>
-  <p class="lead" style="max-width:540px;margin:16px auto 0">Your payment was successful. Let's finish setting up your PocketRep account — create your password below and we'll take you straight in.</p>
-  <div class="plan-line">PocketRep · <b>$39/mo</b> founding rate · locked forever</div>
-
+  <p class="lead" style="max-width:540px;margin:16px auto 0">Your payment went through. Create your password below, then we'll log you into PocketRep automatically.</p>
   <div class="setup">
-    <!-- LOADING -->
-    <div class="state on" id="state-loading">
-      <div class="card center">
-        <span class="spin"></span>
-        <p class="muted" style="color:var(--muted);margin-top:12px;font-size:14px">Confirming your payment…</p>
-      </div>
-    </div>
-
-    <!-- ERROR (missing / invalid / unverifiable session) -->
-    <div class="state" id="state-error">
-      <div class="card center">
-        <div class="big-ok" style="color:var(--ink)">Almost there.</div>
-        <p class="muted" id="error-msg" style="color:var(--muted);margin-top:8px;font-size:14px">We couldn't verify your purchase automatically.</p>
-        <p class="muted" style="color:var(--muted);margin-top:12px;font-size:13.5px">If you just paid, give it a moment and refresh. Already have access? <a class="muted-link" href="https://app.pocketrep.pro">Open PocketRep</a>. Need a hand? <a class="muted-link" href="mailto:support@pocketrep.pro">support@pocketrep.pro</a>.</p>
-      </div>
-    </div>
-
-    <!-- CREATE PASSWORD (verified) -->
-    <div class="state" id="state-form">
-      <form class="card" id="pw-form" novalidate>
-        <div class="field">
-          <span class="lbl" style="display:block;margin-bottom:6px">Your account email</span>
-          <div class="verified-email"><span class="dot"></span><span class="em" id="verified-email">you@email.com</span></div>
-        </div>
-        <div class="field">
-          <label class="label" for="pw">Create a password <span class="req">*</span></label>
-          <input class="input" type="password" id="pw" autocomplete="new-password" placeholder="At least 8 characters">
-        </div>
-        <div class="field">
-          <label class="label" for="pw2">Confirm password <span class="req">*</span></label>
-          <input class="input" type="password" id="pw2" autocomplete="new-password" placeholder="Re-enter your password">
-          <div class="field-err" id="pw-err">Passwords must match and be at least 8 characters</div>
-        </div>
-        <button type="submit" class="btn btn-primary btn-full" id="pw-submit" style="margin-top:18px">Create My PocketRep Account <span class="arrow">→</span></button>
-      </form>
-      <p class="pwa-note"><b>PocketRep works right in your browser — no download required.</b> You can also add it to your phone's home screen for an app-like experience.</p>
-    </div>
-
-    <!-- READY (already provisioned on a refresh) -->
-    <div class="state" id="state-ready">
-      <div class="card center">
-        <div class="big-ok">Your account is ready.</div>
-        <p class="muted" style="color:var(--muted);margin-top:8px;font-size:14px">You've already set this one up. Jump back into PocketRep.</p>
-        <button type="button" class="btn btn-primary btn-full" id="ready-btn" style="margin-top:16px">Finish Setting Up PocketRep <span class="arrow">→</span></button>
-        <div class="err-box" id="ready-err" style="display:none"></div>
-      </div>
-    </div>
-
-    <!-- DONE (handing off into the app) -->
-    <div class="state" id="state-done">
-      <div class="card center">
-        <div class="big-ok">Account created 🎉</div>
-        <p class="muted" style="color:var(--muted);margin-top:8px;font-size:14px">Taking you into PocketRep…</p>
-        <a class="btn btn-primary btn-full" id="done-link" href="https://app.pocketrep.pro" style="margin-top:16px">Finish Setting Up PocketRep <span class="arrow">→</span></a>
-      </div>
-    </div>
+    <div class="state on" id="loading"><div class="card center"><span class="spin"></span><p style="color:var(--muted);margin-top:12px;font-size:14px">Confirming your payment…</p></div></div>
+    <div class="state" id="error"><div class="card center"><div class="success" style="color:var(--ink)">Almost there.</div><p id="errorText" style="color:var(--muted);margin-top:8px;font-size:14px">We couldn't verify your purchase yet.</p><button class="btn btn-primary btn-full" id="retry" style="margin-top:16px">Try Again</button><p class="note">If you already created your account, <a href="https://app.pocketrep.pro">log in here</a>.</p></div></div>
+    <div class="state" id="formState"><form class="card" id="form" novalidate>
+      <div class="field"><span class="label">Your account email</span><div class="verified"><span class="dot"></span><span class="email" id="email">—</span></div></div>
+      <div class="field"><label class="label" for="password">Create your password <span class="req">*</span></label><input class="input" id="password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"></div>
+      <div class="field"><label class="label" for="confirm">Confirm your password <span class="req">*</span></label><input class="input" id="confirm" type="password" autocomplete="new-password" minlength="8" placeholder="Re-enter your password"><div class="field-err" id="pwError">Passwords must match and be at least 8 characters.</div></div>
+      <button type="submit" class="btn btn-primary btn-full" id="submit">Create My PocketRep Account <span class="arrow">→</span></button>
+    </form><p class="note"><b>PocketRep works in your browser.</b> After setup, we'll take you straight into the app.</p></div>
+    <div class="state" id="done"><div class="card center"><div class="success">Account created 🎉</div><p style="color:var(--muted);margin-top:8px;font-size:14px">Logging you into PocketRep…</p><a class="btn btn-primary btn-full" id="continue" href="https://app.pocketrep.pro" style="margin-top:16px">Open PocketRep <span class="arrow">→</span></a></div></div>
   </div>
 </section>
-
-<!-- WHAT'S NEXT -->
-<section class="wrap section-sm" style="padding-top:6px">
-  <div class="steps" style="display:grid;gap:12px;max-width:620px;margin:0 auto">
-    <div class="head-c" style="text-align:center;max-width:620px;margin:0 auto 4px">
-      <span class="eyebrow center">What happens next</span>
-    </div>
-    <div style="display:flex;gap:15px;align-items:flex-start">
-      <div style="flex-shrink:0;width:30px;height:30px;border-radius:9px;background:var(--signal-soft);border:1px solid rgba(240,192,96,0.25);color:var(--cyan);font-family:var(--mono);font-size:12px;display:flex;align-items:center;justify-content:center">1</div>
-      <div><h4 style="font-family:var(--display);font-size:1rem;margin-bottom:2px">Create your password</h4><p style="color:var(--muted);font-size:14px">Above — that's your login for the web app and your phone's home screen.</p></div>
-    </div>
-    <div style="display:flex;gap:15px;align-items:flex-start">
-      <div style="flex-shrink:0;width:30px;height:30px;border-radius:9px;background:var(--signal-soft);border:1px solid rgba(240,192,96,0.25);color:var(--cyan);font-family:var(--mono);font-size:12px;display:flex;align-items:center;justify-content:center">2</div>
-      <div><h4 style="font-family:var(--display);font-size:1rem;margin-bottom:2px">Meet Rex &amp; your Heat Sheet</h4><p style="color:var(--muted);font-size:14px">We'll drop you straight into onboarding with three example customers so you can see how it works.</p></div>
-    </div>
-    <div style="display:flex;gap:15px;align-items:flex-start">
-      <div style="flex-shrink:0;width:30px;height:30px;border-radius:9px;background:var(--signal-soft);border:1px solid rgba(240,192,96,0.25);color:var(--cyan);font-family:var(--mono);font-size:12px;display:flex;align-items:center;justify-content:center">3</div>
-      <div><h4 style="font-family:var(--display);font-size:1rem;margin-bottom:2px">Add your book</h4><p style="color:var(--muted);font-size:14px">Import the people you've sold in the last 90 days and run your first Heat Sheet. The example customers clear out automatically on your first real import.</p></div>
-    </div>
-  </div>
-</section>
+<section class="wrap section-sm" style="padding-top:10px"><div style="max-width:620px;margin:auto"><span class="eyebrow center" style="justify-content:center">What happens next</span><div style="display:grid;gap:12px;margin-top:16px"><div><b>1. Create your password</b><p style="color:var(--muted);font-size:14px;margin-top:3px">This becomes your PocketRep login.</p></div><div><b>2. Log in automatically</b><p style="color:var(--muted);font-size:14px;margin-top:3px">We'll securely hand you into the app after your account is created.</p></div><div><b>3. Start your onboarding</b><p style="color:var(--muted);font-size:14px;margin-top:3px">You'll see the example customers and Heat Sheet so you can start using PocketRep immediately.</p></div></div></div></section>
 </main>
-
-<footer class="footer">
-  <div class="wrap">
-    <div class="footer-inner">
-      <a class="brand" href="/">
-        <svg class="brand-mark" aria-hidden="true"><use href="#prmark"></use></svg>
-        <span class="brand-name">PocketRep<span class="dot">.</span></span>
-      </a>
-      <div class="footer-links">
-        <a href="/privacy.html">Privacy</a>
-        <a href="/terms.html">Terms</a>
-        <a href="/cancel.html">Cancel</a>
-        <a href="https://app.pocketrep.pro">Log in</a>
-      </div>
-      <div class="muted">© 2026 PocketRep — Built for closers</div>
-    </div>
-    <p class="disclaimer">PocketRep is an independent tool and is not affiliated with, endorsed by, or sponsored by any third-party CRM, DMS, or software provider. You are responsible for how you use PocketRep, including following your employer's policies and all applicable laws (such as the TCPA) when contacting customers. You send every message yourself — PocketRep never sends on your behalf.</p>
-  </div>
-</footer>
-
+<footer class="footer"><div class="wrap"><div class="footer-inner"><a class="brand" href="/"><span class="brand-name">PocketRep<span class="dot">.</span></span></a><div class="footer-links"><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="/cancel.html">Cancel</a><a href="https://app.pocketrep.pro">Log in</a></div><div class="muted">© 2026 PocketRep — Built for closers</div></div></div></footer>
 <script>
 (function(){
-  var nav=document.getElementById('nav');
-  function onScroll(){ if(window.scrollY>24) nav.classList.add('scrolled'); }
-  window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
-
-  // Public config (anon key is safe to expose; verification + account creation
-  // happen server-side in the checkout-account Edge Function).
   var SUPABASE_URL="https://fwvrauqdoevwmwwqlfav.supabase.co";
-  var SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0";
-  var FN_URL=SUPABASE_URL+"/functions/v1/checkout-account";
-
-  function show(id){
-    ['state-loading','state-error','state-form','state-ready','state-done'].forEach(function(s){
-      var el=document.getElementById(s); if(el) el.classList.toggle('on', s===id);
-    });
+  var ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0";
+  var FN=SUPABASE_URL+"/functions/v1/checkout-account";
+  var sessionId=new URLSearchParams(location.search).get("session_id");
+  var states=["loading","error","formState","done"];
+  function show(id){states.forEach(function(x){document.getElementById(x).classList.toggle("on",x===id);});}
+  function api(payload){return fetch(FN,{method:"POST",headers:{apikey:ANON,Authorization:"Bearer "+ANON,"Content-Type":"application/json"},body:JSON.stringify(payload)}).then(function(r){return r.json().catch(function(){return {};}).then(function(body){return{status:r.status,body:body};});});}
+  function error(msg){document.getElementById("errorText").textContent=msg;show("error");}
+  function verify(){
+    if(!sessionId||!sessionId.startsWith("cs_")){error("This page is missing the Stripe checkout reference. Please return to your Stripe receipt and use the setup link again.");return;}
+    show("loading");
+    api({action:"verify",session_id:sessionId}).then(function(r){
+      if(r.status===200&&r.body&&r.body.ok){
+        document.getElementById("email").textContent=r.body.email||"your account";
+        show("formState");
+        return;
+      }
+      if(r.status===503){error("PocketRep is still connecting to Stripe. Wait a few seconds and tap Try Again.");return;}
+      if(r.status===402){error("Stripe hasn't marked this checkout as complete yet. Wait a moment and try again.");return;}
+      error("We couldn't verify your purchase yet. Please tap Try Again.");
+    }).catch(function(){error("We couldn't reach PocketRep. Check your connection and try again.");});
   }
-  function showError(msg){
-    var m=document.getElementById('error-msg');
-    if(m&&msg) m.textContent=msg;
-    show('state-error');
-  }
-  function api(payload){
-    return fetch(FN_URL,{
-      method:"POST",
-      headers:{
-        "apikey":SUPABASE_ANON_KEY,
-        "Authorization":"Bearer "+SUPABASE_ANON_KEY,
-        "Content-Type":"application/json"
-      },
-      body:JSON.stringify(payload)
-    }).then(function(res){ return res.json().catch(function(){return {};}).then(function(j){ return {status:res.status, body:j}; }); });
-  }
-
-  var sessionId=new URLSearchParams(location.search).get('session_id');
-
-  if(!sessionId){
-    // Payment Link success URL isn't passing the Checkout Session ID yet.
-    showError("We couldn't verify your purchase automatically (no checkout reference in the link).");
-    return;
-  }
-
-  // Step 1: verify the session, reveal the password form with the verified email.
-  api({action:"verify", session_id:sessionId}).then(function(r){
-    if(r.status!==200||!r.body||!r.body.ok){
-      showError("We couldn't verify your purchase. If you just paid, wait a moment and refresh.");
-      return;
-    }
-    if(r.body.alreadyProvisioned){
-      show('state-ready');
-      return;
-    }
-    var ev=document.getElementById('verified-email');
-    if(ev) ev.textContent=r.body.email||'your account';
-    show('state-form');
-  }).catch(function(){
-    showError("We couldn't reach the server. Check your connection and refresh.");
+  document.getElementById("retry").addEventListener("click",verify);
+  document.getElementById("form").addEventListener("submit",function(e){
+    e.preventDefault();
+    var pw=document.getElementById("password").value, confirm=document.getElementById("confirm").value, err=document.getElementById("pwError"), btn=document.getElementById("submit");
+    if(pw.length<8||pw!==confirm){err.classList.add("show");return;} err.classList.remove("show");
+    btn.disabled=true;btn.innerHTML="Creating your account… <span class=\"spin\"></span>";
+    api({action:"provision",session_id:sessionId,password:pw}).then(function(r){
+      if(r.status===200&&r.body&&r.body.ok){
+        var link=r.body.action_link||"https://app.pocketrep.pro";
+        document.getElementById("continue").href=link;show("done");
+        setTimeout(function(){location.href=link;},800);return;
+      }
+      btn.disabled=false;btn.innerHTML="Create My PocketRep Account <span class=\"arrow\">→</span>";err.textContent="We couldn't finish creating your account. Please try again.";err.classList.add("show");
+    }).catch(function(){btn.disabled=false;btn.innerHTML="Create My PocketRep Account <span class=\"arrow\">→</span>";err.textContent="Connection error. Please try again.";err.classList.add("show");});
   });
-
-  // Step 2: create the account with the customer-chosen password, then hand off.
-  function handOff(actionLink){
-    var dl=document.getElementById('done-link');
-    if(actionLink&&dl) dl.setAttribute('href', actionLink);
-    show('state-done');
-    // Auto-redirect into the app; the button is the manual fallback.
-    setTimeout(function(){ location.href=(actionLink||"https://app.pocketrep.pro"); }, 900);
-  }
-
-  var form=document.getElementById('pw-form');
-  if(form){
-    form.addEventListener('submit',function(e){
-      e.preventDefault();
-      var pw=document.getElementById('pw').value;
-      var pw2=document.getElementById('pw2').value;
-      var err=document.getElementById('pw-err');
-      if(pw.length<8||pw!==pw2){ if(err) err.classList.add('show'); return; }
-      if(err) err.classList.remove('show');
-      var btn=document.getElementById('pw-submit');
-      btn.disabled=true; btn.innerHTML='Creating your account… <span class="spin"></span>';
-      api({action:"provision", session_id:sessionId, password:pw}).then(function(r){
-        if(r.status===200&&r.body&&r.body.ok){ handOff(r.body.action_link); return; }
-        btn.disabled=false; btn.innerHTML='Create My PocketRep Account <span class="arrow">→</span>';
-        if(err){ err.textContent="We couldn't finish setup. Please try again."; err.classList.add('show'); }
-      }).catch(function(){
-        btn.disabled=false; btn.innerHTML='Create My PocketRep Account <span class="arrow">→</span>';
-        if(err){ err.textContent="Network error. Please try again."; err.classList.add('show'); }
-      });
-    });
-  }
-
-  // Already-provisioned refresh: fetch a fresh magic link and hand off.
-  var readyBtn=document.getElementById('ready-btn');
-  if(readyBtn){
-    readyBtn.addEventListener('click',function(){
-      readyBtn.disabled=true; readyBtn.innerHTML='Opening PocketRep… <span class="spin"></span>';
-      api({action:"provision", session_id:sessionId}).then(function(r){
-        if(r.status===200&&r.body&&r.body.ok&&r.body.action_link){ location.href=r.body.action_link; return; }
-        location.href="https://app.pocketrep.pro";
-      }).catch(function(){ location.href="https://app.pocketrep.pro"; });
-    });
-  }
+  verify();
 })();
 </script>
 </body>
