@@ -31,6 +31,7 @@ ok(sms.includes("return sent ? 'opened' : 'not_sent';"), 'SMS launcher only retu
 ok(sms.includes("status: 'opened'"), 'SMS composer-open state is recorded separately');
 ok(sms.includes('markSmsSent'), 'confirmed SMS transitions to sent state');
 ok(sms.includes('markSmsNotSent'), 'negative confirmation transitions to not_sent state');
+ok(sms.includes('const returnPromise = waitForComposerReturn();'), 'SMS return listener is installed before opening native Messages');
 
 ok(webhook.includes('status: "processing"'), 'Stripe webhook claims events in processing state');
 ok(webhook.includes('existing?.status === "processed"'), 'processed Stripe events are ignored on redelivery');
@@ -38,6 +39,9 @@ ok(webhook.includes('existing?.status === "failed" || stale'), 'failed/stale Str
 ok(webhook.includes('status: "failed"'), 'failed Stripe events are persisted for retry');
 ok(webhook.includes('status: "processed"'), 'successful Stripe events are marked processed');
 ok(webhook.includes('return new Response("Webhook already processing", { status: 409'), 'concurrent webhook delivery receives retryable response');
+ok(webhook.includes('Idempotency-Key'), 'Stripe reward requests use idempotency keys');
+ok(webhook.includes('pocketrep_referral_coupon_'), 'referral coupon creation has a stable idempotency key');
+ok(webhook.includes('pocketrep_referral_apply_'), 'referral subscription application has a stable idempotency key');
 
 ok(migration.includes('ALTER COLUMN processed_at DROP NOT NULL'), 'webhook ledger permits in-progress events');
 ok(migration.includes('prevent_duplicate_blast_sms_action'), 'database blast-action dedupe trigger exists');
