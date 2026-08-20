@@ -237,10 +237,12 @@ export async function recordSentBlast({
   message: string;
   language: 'en' | 'es';
   hookUsed: string;
-}): Promise<void> {
+}): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-  await supabase.from('nurture_messages').insert({
+  if (!user) return null;
+  // Return the inserted row id so a demo blast can later mark its simulated reply
+  // against this exact nurture_messages row (see lib/v2/demoBlastSim.ts).
+  const { data } = await supabase.from('nurture_messages').insert({
     user_id: user.id,
     contact_id: contactId,
     message_text: message,
@@ -249,7 +251,8 @@ export async function recordSentBlast({
     trigger_type: 'blast',
     pitch_intensity: 'medium',
     sent_at: new Date().toISOString(),
-  });
+  }).select('id').single();
+  return (data as { id: string } | null)?.id ?? null;
 }
 
 export async function markBlastApproved(sequenceId: string): Promise<void> {

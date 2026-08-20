@@ -17,9 +17,6 @@ export async function updateContactTags(id: string, tags: string[]): Promise<voi
   if (error) throw error;
 }
 
-// Records a call/text/email touch: stamps last_contact_date=today, the method
-// and a short summary, and pushes the follow-up clock out a few days. This is
-// what makes "working a lead IS logging it" — no double entry.
 export async function logContactTouch(
   id: string,
   method: 'call' | 'text' | 'email',
@@ -40,7 +37,6 @@ export async function logContactTouch(
   if (error) throw error;
 }
 
-// `value` is a YYYY-MM-DD date string, or null to clear it.
 export async function updateContactBirthday(id: string, value: string | null): Promise<void> {
   const { error } = await supabase
     .from('contacts')
@@ -78,8 +74,8 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
       user_id: user.id,
       first_name: titleCase(draft.firstName),
       last_name: titleCase(draft.lastName) || null,
-      phone: draft.phone.trim() || null,
-      email: draft.email?.trim() || null,
+      phone: normalizePhone(draft.phone) || null,
+      email: normalizeEmail(draft.email) || null,
       vehicle: normalizeVehicle(draft.vehicle) || null,
       trim: normalizeVehicle(draft.trim) || null,
       budget: draft.budget.trim() || null,
@@ -109,38 +105,95 @@ export type ImportContactRow = {
   notes?: string;
 };
 
-// Bulk-insert imported contacts in a single round-trip. Fresh imports seed as cold
-// leads (heat_score 35) with today's last-contact date — honest defaults, not faked
-// interest. Rows whose first name is blank are skipped. Returns the count inserted.
+function normalizePhone(value?: string | null): string {
+  const raw = (value ?? '').trim();
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  // Keep international numbers intact; normalize common US 1XXXXXXXXXX to +1.
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  return raw;
+}
+
+function phoneKey(value?: string | null): string {
+  const digits = (value ?? '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
+function normalizeEmail(value?: string | null): string {
+  return (value ?? '').trim().toLowerCase();
+}
+
+// Bulk import is intentionally idempotent by phone/email within the signed-in
+// user's book. The review UI catches obvious duplicates first, but this second
+// check protects against stale lists, repeated imports, and concurrent imports.
 export async function bulkCreateContacts(rows: ImportContactRow[]): Promise<number> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not signed in');
+
   const today = new Date().toISOString().slice(0, 10);
-  const payload = rows
-    .map(r => ({ first: titleCase((r.firstName ?? '').trim()), r }))
-    .filter(x => x.first.length > 0)
-    .map(({ first, r }) => ({
-      user_id: user.id,
-      first_name: first,
-      last_name: titleCase((r.lastName ?? '').trim()) || null,
-      phone: (r.phone ?? '').trim() || null,
-      email: (r.email ?? '').trim() || null,
+  const candidates = rows
+    .map(r => ({
+      first: titleCase((r.firstName ?? '').trim()),
+      last: titleCase((r.lastName ?? '').trim()) || null,
+      phone: normalizePhone(r.phone),
+      email: normalizeEmail(r.email),
       notes: (r.notes ?? '').trim() || null,
-      heat_score: 35,
-      last_contact_date: today,
-      tags: [] as string[],
-      stage: 'active',
-      milestones: [],
-    }));
-  if (payload.length === 0) return 0;
+    }))
+    .filter(r => r.first.length > 0);
+
+  if (candidates.length === 0) return 0;
+
+  // De-dupe the incoming batch itself before touching the database.
+  const seenPhones = new Set<string>();
+  const seenEmails = new Set<string>();
+  const unique = candidates.filter(r => {
+    const pk = phoneKey(r.phone);
+    const ek = r.email;
+    const duplicate = (pk && seenPhones.has(pk)) || (ek && seenEmails.has(ek));
+    if (pk) seenPhones.add(pk);
+    if (ek) seenEmails.add(ek);
+    return !duplicate;
+  });
+
+  // Pull only the fields needed for duplicate detection for this user's book.
+  const { data: existing, error: existingError } = await supabase
+    .from('contacts')
+    .select('phone,email')
+    .eq('user_id', user.id)
+    .eq('is_deleted', false);
+  if (existingError) throw existingError;
+
+  const existingPhones = new Set((existing ?? []).map(r => phoneKey(r.phone)).filter(Boolean));
+  const existingEmails = new Set((existing ?? []).map(r => normalizeEmail(r.email)).filter(Boolean));
+
+  const fresh = unique.filter(r => {
+    const pk = phoneKey(r.phone);
+    const ek = r.email;
+    return !(pk && existingPhones.has(pk)) && !(ek && existingEmails.has(ek));
+  });
+
+  if (fresh.length === 0) return 0;
+
+  const payload = fresh.map(r => ({
+    user_id: user.id,
+    first_name: r.first,
+    last_name: r.last,
+    phone: r.phone || null,
+    email: r.email || null,
+    notes: r.notes,
+    heat_score: 35,
+    last_contact_date: today,
+    tags: [] as string[],
+    stage: 'active',
+    milestones: [],
+  }));
+
   const { error } = await supabase.from('contacts').insert(payload);
   if (error) throw error;
   return payload.length;
 }
 
-// Hard delete: actually removes the row from the database. Child rows clean up
-// via FK (interactions / nurture_messages / milestones / contact_sequences
-// cascade; deals + rex_messages keep their history with contact_id set null).
 export async function deleteContact(id: string): Promise<void> {
   const { error } = await supabase
     .from('contacts')
@@ -149,7 +202,6 @@ export async function deleteContact(id: string): Promise<void> {
   if (error) throw error;
 }
 
-// Rep-set heat tier — overrides the heat_score-derived tier in the v2 UI.
 export async function updateContactTier(id: string, tier: 'hot' | 'warm' | 'cold'): Promise<void> {
   const { error } = await supabase
     .from('contacts')
@@ -158,8 +210,6 @@ export async function updateContactTier(id: string, tier: 'hot' | 'warm' | 'cold
   if (error) throw error;
 }
 
-// Who referred this contact. Links to a saved contact (contactId) when the
-// referrer is in the book, and/or stores a free-text name. Pass nulls to clear.
 export async function updateContactReferredBy(
   id: string,
   referredBy: { contactId: string | null; name: string | null },
@@ -186,8 +236,6 @@ export async function updateContactPreferredLanguage(
   if (error) throw error;
 }
 
-// Edit the contact's display name. Splits a full-name string into first/last and
-// stores them the same way createContact does (title-cased; empty last → null).
 export async function updateContactName(
   id: string,
   firstName: string,
@@ -206,9 +254,6 @@ export async function updateContactName(
   if (error) throw error;
 }
 
-// Edit the vehicle-interest card fields. Every key is optional so a single field
-// can be saved on its own; an empty string clears that column to null. vehicle/trim
-// run through normalizeVehicle to match how createContact stores them.
 export async function updateContactVehicleInfo(
   id: string,
   patch: { vehicle?: string; trim?: string; budget?: string; tradeIn?: string },

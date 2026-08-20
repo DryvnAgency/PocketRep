@@ -127,7 +127,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink2,
     borderTopWidth: 1, borderTopColor: colors.goldBorder,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingHorizontal: 16, paddingBottom: 24,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'web' ? ('max(24px, env(safe-area-inset-bottom))' as any) : 24,
   },
   handle: {
     alignSelf: 'center', width: 42, height: 4, borderRadius: 2,

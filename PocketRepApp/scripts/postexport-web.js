@@ -44,7 +44,13 @@ const TAGS = [
   '<meta name="apple-mobile-web-app-title" content="PocketRep" />',
   '<link rel="apple-touch-icon" href="/apple-touch-icon.png" />',
   // Match the app's ink background before the bundle paints (no white flash).
-  '<style>html,body{background:#0c0c0e}</style>',
+  // Also: force inputs to >=16px so focusing a field never triggers iOS Safari's
+  // auto-zoom (the classic "this is a website" tell), and kill the gray tap-flash.
+  // Web-only (this patches the Expo web export) — native inputs are unaffected.
+  '<style>html,body{background:#0c0c0e}*{-webkit-tap-highlight-color:transparent}input,textarea{font-size:16px!important}</style>',
+  // Register the offline app-shell service worker (public/sw.js). Network-first
+  // for navigations, so this never serves a stale shell to online users.
+  '<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})});}</script>',
 ].join('\n    ');
 
 // Standalone mode should paint behind the iPhone notch.

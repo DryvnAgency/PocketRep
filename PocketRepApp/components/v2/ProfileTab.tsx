@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, Pill, SectionHead } from './atoms';
 import { supabase } from '@/lib/supabase';
+import { signOutAndReset } from '@/lib/v2/localSessionClear';
 import {
   getAlwaysListenEnabled,
   setAlwaysListenEnabled,
@@ -176,7 +177,9 @@ export default function ProfileTab({
   const doSignOut = async () => {
     setSigningOut(true);
     try {
-      await supabase.auth.signOut();
+      // Robust local-scope sign-out: never hangs on a network revoke, and
+      // force-clears local state + reloads (web) so logout can't get stuck.
+      await signOutAndReset();
     } catch (e) {
       console.warn('sign out failed', e);
       setSigningOut(false);

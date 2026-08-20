@@ -36,6 +36,10 @@ export type V2Contact = {
   // Referral link (D3)
   referredByContactId: string | null;
   referredByName: string | null;
+
+  // Seeded demo/tour contact — shown in the book but marked so the rep never
+  // mistakes it for a real lead (and it's excluded from real blasts server-side).
+  isDemo: boolean;
 };
 
 export function tierFromScore(score: number): TierKey {
@@ -83,6 +87,7 @@ function rowToContact(r: any): V2Contact {
     photoUrl: r.photo_url ?? null,
     referredByContactId: r.referred_by_contact_id ?? null,
     referredByName: r.referred_by_name ?? null,
+    isDemo: !!r.is_demo,
   };
 }
 
@@ -94,7 +99,7 @@ export function useContacts() {
     const { data, error } = await supabase
       .from('contacts')
       .select(
-        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,email,budget,trade_in,tags,notes,next_step,birthday,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url,tier_override,referred_by_contact_id,referred_by_name'
+        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,email,budget,trade_in,tags,notes,next_step,birthday,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url,tier_override,referred_by_contact_id,referred_by_name,is_demo'
       )
       .eq('is_deleted', false);
 

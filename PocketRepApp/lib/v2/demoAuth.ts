@@ -1,8 +1,12 @@
 import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 
-const DEMO_EMAIL = process.env.EXPO_PUBLIC_V2_DEMO_EMAIL ?? 'demo@pocketrep.pro';
-const DEMO_PASSWORD = process.env.EXPO_PUBLIC_V2_DEMO_PASSWORD ?? 'PocketRepDemo2026!';
+// Credentials come ONLY from build-time env (EXPO_PUBLIC_* is inlined by Metro).
+// No hardcoded fallback: shipping a known demo password in the web bundle is a
+// standing credential leak. When these are unset the demo must fail safe (see
+// the guard in ensureDemoSession) rather than sign in with a baked-in password.
+const DEMO_EMAIL = process.env.EXPO_PUBLIC_V2_DEMO_EMAIL ?? '';
+const DEMO_PASSWORD = process.env.EXPO_PUBLIC_V2_DEMO_PASSWORD ?? '';
 
 let inflight: Promise<void> | null = null;
 
@@ -18,6 +22,12 @@ export async function ensureDemoSession(): Promise<void> {
   inflight = (async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) return;
+
+    // Fail safe: never fall back to a known/blank password. If the deploy is
+    // missing the demo credentials, surface a clear error to the caller instead.
+    if (!DEMO_EMAIL || !DEMO_PASSWORD) {
+      throw new Error('Live demo is not configured.');
+    }
 
     const { error } = await supabase.auth.signInWithPassword({
       email: DEMO_EMAIL,
