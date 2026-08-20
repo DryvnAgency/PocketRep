@@ -44,6 +44,37 @@ function confirmSent(contactName: string): Promise<boolean> {
   });
 }
 
+function waitForComposerReturn(): Promise<void> {
+  return new Promise(resolve => {
+    let sawBackground = false;
+    let settled = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const subscription = AppState.addEventListener('change', next => {
+      if (next === 'background' || next === 'inactive') {
+        sawBackground = true;
+      } else if (next === 'active' && sawBackground) {
+        setTimeout(finish, 150);
+      }
+    });
+
+    function finish() {
+      if (settled) return;
+      settled = true;
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      subscription.remove();
+      resolve();
+    }
+
+    // Web/browser handoffs may not emit AppState transitions. On native, the
+    // listener is installed BEFORE openURL, so the fallback cannot race ahead
+    // of a background event that was emitted during the handoff.
+    fallbackTimer = setTimeout(() => {
+      if (!sawBackground) finish();
+    }, 1500);
+  });
+}
+
 /**
  * Opens the native SMS composer pre-filled with the draft message.
  *
@@ -68,6 +99,7 @@ export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> 
 
   const url = `sms:${phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(draft.message)}`;
   let actionId: string | null = null;
+  const returnPromise = waitForComposerReturn();
   try {
     await Linking.openURL(url);
     actionId = await recordSmsOpened({
@@ -85,34 +117,7 @@ export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> 
     return 'failed';
   }
 
-  // Wait for the app to return from Messages. On native this is the AppState
-  // background → active transition. Some web/browser handoffs do not emit the
-  // background event, so a short fallback prevents the flow from hanging.
-  await new Promise<void>(resolve => {
-    let sawBackground = false;
-    let settled = false;
-    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      if (fallbackTimer) clearTimeout(fallbackTimer);
-      subscription.remove();
-      resolve();
-    };
-
-    const subscription = AppState.addEventListener('change', next => {
-      if (next === 'background' || next === 'inactive') {
-        sawBackground = true;
-      } else if (next === 'active' && sawBackground) {
-        setTimeout(finish, 150);
-      }
-    });
-
-    fallbackTimer = setTimeout(() => {
-      if (!sawBackground) finish();
-    }, 1500);
-  });
+  await returnPromise;
 
   const sent = await confirmSent(draft.contact_name);
   if (actionId) {
