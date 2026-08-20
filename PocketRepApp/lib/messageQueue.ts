@@ -106,16 +106,20 @@ export async function markSentAndLog(item: QueueItem, userId: string): Promise<v
 
     if (nextStep) {
       const nextAt = addDays(enrollment.started_at ?? now, Number(nextStep.delay_days ?? 0)).toISOString();
+      // Optimistic lock: another device may have already advanced this step.
+      // If current_step no longer matches, 0 rows are updated — that's fine.
       const { error } = await supabase
         .from('contact_sequences')
         .update({ current_step: nextStep.step_number, next_step_at: nextAt })
-        .eq('id', enrollment.id);
+        .eq('id', enrollment.id)
+        .eq('current_step', item.step_number);
       if (error) throw error;
     } else {
       const { error } = await supabase
         .from('contact_sequences')
         .update({ current_step: item.step_number, next_step_at: null, status: 'completed', completed_at: now })
-        .eq('id', enrollment.id);
+        .eq('id', enrollment.id)
+        .eq('current_step', item.step_number);
       if (error) throw error;
     }
   }

@@ -26,7 +26,7 @@ const TONES = [
 ];
 const DEMO_NAMES = new Set(['Marcus Holloway', 'Sarah Thompson', 'Mike Rodriguez']);
 
-export default function RexOnboarding({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function RexOnboarding({ open, onClose }: { open: boolean; onClose: (completed: boolean) => void }) {
   const [step, setStep] = useState(0);
   const [demos, setDemos] = useState<DemoContact[]>([]);
   const [answers, setAnswers] = useState<Answers>(EMPTY);
@@ -77,12 +77,12 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
       if (answers.tone) setRepSetting('voiceTone', answers.tone);
     } catch { /* profile setup is best effort; do not trap the rep */ }
     finally {
-      stopSpeaking(); setSaving(false); onClose();
+      stopSpeaking(); setSaving(false); onClose(true);
       setTimeout(() => { setStep(0); setAnswers(EMPTY); }, 200);
     }
   };
 
-  const skip = () => { stopSpeaking(); onClose(); };
+  const skip = () => { stopSpeaking(); onClose(false); };
   const start = () => { startedRef.current = true; setStep(1); };
   const next = () => setStep(s => Math.min(s + 1, 6));
 

@@ -662,8 +662,8 @@ export default function AppShell() {
           consolidation, so this is the single onboarding path. */}
       <RexOnboarding
         open={onboardingOpen}
-        onClose={() => {
-          markOnboardingComplete();
+        onClose={(completed) => {
+          if (completed) markOnboardingComplete();
           setOnboardingOpen(false);
         }}
       />
