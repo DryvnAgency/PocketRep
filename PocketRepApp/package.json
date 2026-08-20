@@ -18,7 +18,11 @@
     "test:demoblast": "node scripts/test-demoblast.mjs",
     "test:authflow": "node scripts/test-authflow.mjs",
     "test:vehiclefinder": "node scripts/test-vehiclefinder.mjs",
-    "test:rextriad": "node scripts/test-rextriad.mjs"
+    "test:rextriad": "node scripts/test-rextriad.mjs",
+    "test:accessgate": "node scripts/test-accessgate.mjs",
+    "test:smsstatus": "node scripts/test-sms-status.mjs",
+    "test:followuplogic": "node scripts/test-followup-logic.mjs",
+    "test:sequencerace": "node scripts/test-sequence-race.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.1",
