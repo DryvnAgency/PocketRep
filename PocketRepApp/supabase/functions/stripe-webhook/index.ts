@@ -84,11 +84,38 @@ Deno.serve(async (req: Request) => {
   if (!sig || !(await verify(body, sig, secret))) return new Response("Invalid signature", { status: 401, headers });
   let event: any; try { event = JSON.parse(body); } catch { return new Response("Invalid JSON", { status: 400, headers }); }
   const admin = createClient(url, key);
-  // Event deduplication — idempotent on redelivery
+
+  // Claim the event before processing. A completed event is safely ignored on
+  // redelivery; a failed or stale in-progress event is allowed to retry.
   if (event.id) {
-    const { data: inserted } = await admin.from("stripe_webhook_events").insert({ event_id: event.id, event_type: event.type }).select("event_id").maybeSingle();
-    if (!inserted) return new Response(JSON.stringify({ received: true, duplicate: true }), { status: 200, headers: { ...headers, "Content-Type": "application/json" } });
+    const now = new Date().toISOString();
+    const { data: inserted } = await admin.from("stripe_webhook_events")
+      .insert({ event_id: event.id, event_type: event.type, status: "processing", processing_started_at: now, processed_at: null })
+      .select("event_id")
+      .maybeSingle();
+    if (!inserted) {
+      const { data: existing } = await admin.from("stripe_webhook_events")
+        .select("status,processing_started_at")
+        .eq("event_id", event.id)
+        .maybeSingle();
+      if (existing?.status === "processed") {
+        return new Response(JSON.stringify({ received: true, duplicate: true }), { status: 200, headers: { ...headers, "Content-Type": "application/json" } });
+      }
+      const started = existing?.processing_started_at ? new Date(existing.processing_started_at).getTime() : 0;
+      const stale = !started || Date.now() - started > 5 * 60 * 1000;
+      if (existing?.status === "failed" || stale) {
+        const { data: reclaimed } = await admin.from("stripe_webhook_events")
+          .update({ status: "processing", processing_started_at: now, processed_at: null })
+          .eq("event_id", event.id)
+          .select("event_id")
+          .maybeSingle();
+        if (!reclaimed) return new Response("Webhook already processing", { status: 409, headers });
+      } else {
+        return new Response("Webhook already processing", { status: 409, headers });
+      }
+    }
   }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -128,6 +155,19 @@ Deno.serve(async (req: Request) => {
         break;
       }
     }
-  } catch (e) { console.error("Webhook processing error", e); return new Response("Webhook processing error", { status: 500, headers }); }
+    if (event.id) {
+      await admin.from("stripe_webhook_events")
+        .update({ status: "processed", processed_at: new Date().toISOString(), processing_started_at: null })
+        .eq("event_id", event.id);
+    }
+  } catch (e) {
+    if (event.id) {
+      await admin.from("stripe_webhook_events")
+        .update({ status: "failed", processing_started_at: null })
+        .eq("event_id", event.id);
+    }
+    console.error("Webhook processing error", e);
+    return new Response("Webhook processing error", { status: 500, headers });
+  }
   return new Response(JSON.stringify({ received: true }), { status: 200, headers: { ...headers, "Content-Type": "application/json" } });
 });
