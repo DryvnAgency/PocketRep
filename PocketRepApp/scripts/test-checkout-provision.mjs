@@ -41,7 +41,7 @@ function simulateProvision(subscriptionStatus) {
   return {
     subscription_status: subscriptionStatus ?? 'active',
     entitlement_status: _verified ? null : 'pending',
-    entitlement_pending_until: _verified ? null : new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    entitlement_pending_until: _verified ? null : new Date(Date.now() + 5 * 60 * 1000).toISOString(),
   };
 }
 
