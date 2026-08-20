@@ -12,10 +12,24 @@ import { heatReasons } from '@/lib/v2/heatReasons';
 
 const TODAY_LABEL = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
 
+function followUpLabel(c: V2Contact): { text: string; color: string } | null {
+  if (!c.nextFollowupDate) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  if (c.nextFollowupDate < today) {
+    const d = Math.max(1, Math.floor((Date.now() - new Date(c.nextFollowupDate + 'T00:00:00Z').getTime()) / 86_400_000));
+    return { text: `Follow-up ${d}d overdue`, color: colors.red };
+  }
+  if (c.nextFollowupDate === today) return { text: 'Follow-up today', color: colors.gold };
+  const d2 = Math.floor((new Date(c.nextFollowupDate + 'T00:00:00Z').getTime() - Date.now()) / 86_400_000);
+  if (d2 <= 1) return { text: 'Follow-up tomorrow', color: colors.orange };
+  return null;
+}
+
 function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
   const tier = TIERS[c.tier];
   const staleC = stalenessColor(c.days);
   const reasons = heatReasons(c).slice(0, 2);
+  const fu = followUpLabel(c);
   return (
     <Pressable
       onPress={onTap}
@@ -30,7 +44,9 @@ function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
         <Text style={styles.vehicle} numberOfLines={1}>
           {c.vehicle ?? '—'}{c.trim ? ` · ${c.trim}` : ''}
         </Text>
-        {reasons.length > 0 ? (
+        {fu ? (
+          <Text style={[styles.reasons, { color: fu.color }]} numberOfLines={1}>{fu.text}</Text>
+        ) : reasons.length > 0 ? (
           <Text style={styles.reasons} numberOfLines={1}>{reasons.join(' · ')}</Text>
         ) : null}
       </View>
