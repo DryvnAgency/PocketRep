@@ -17,22 +17,61 @@ export async function updateContactTags(id: string, tags: string[]): Promise<voi
   if (error) throw error;
 }
 
+export type CallOutcome = 'answered' | 'no-answer' | 'voicemail' | 'wrong-number';
+
 export async function logContactTouch(
   id: string,
   method: 'call' | 'text' | 'email',
   summary?: string,
+  outcome?: CallOutcome | null,
 ): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
-  const nextFollowUp = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+
+  // Read the current follow-up date so we don't clobber a Rex-set or rep-set
+  // future date with a blind 3-day default.
+  const { data: existing } = await supabase
+    .from('contacts')
+    .select('next_followup_date')
+    .eq('id', id)
+    .maybeSingle();
+
+  const existingFollowup = existing?.next_followup_date ?? null;
+  const hasFutureFollowup = existingFollowup != null && existingFollowup > today;
+
+  // Outcome-aware follow-up scheduling:
+  // - wrong-number  → clear any follow-up (don't chase a dead number)
+  // - no-answer / voicemail → 1-day follow-up (unless a sooner date is already set)
+  // - answered / text / email / default → 3-day default (unless a future date exists)
+  let nextFollowUp: string | null;
+  if (outcome === 'wrong-number') {
+    nextFollowUp = null;
+  } else if (outcome === 'no-answer' || outcome === 'voicemail') {
+    const oneDay = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    // Don't push a follow-up LATER if one is already sooner
+    nextFollowUp = hasFutureFollowup && existingFollowup! <= oneDay
+      ? existingFollowup
+      : oneDay;
+  } else {
+    // 3-day default — only apply when no future date exists
+    nextFollowUp = hasFutureFollowup
+      ? existingFollowup
+      : new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+  }
+
+  const patch: Record<string, unknown> = {
+    last_contact_date: today,
+    last_contact_method: method,
+    last_contact_summary: (summary ?? `${method} sent`).slice(0, 140),
+    updated_at: new Date().toISOString(),
+  };
+  // Only touch next_followup_date if we're actually changing it
+  if (nextFollowUp !== existingFollowup) {
+    patch.next_followup_date = nextFollowUp;
+  }
+
   const { error } = await supabase
     .from('contacts')
-    .update({
-      last_contact_date: today,
-      last_contact_method: method,
-      last_contact_summary: (summary ?? `${method} sent`).slice(0, 140),
-      next_followup_date: nextFollowUp,
-      updated_at: new Date().toISOString(),
-    })
+    .update(patch)
     .eq('id', id);
   if (error) throw error;
 }

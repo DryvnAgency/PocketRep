@@ -15,8 +15,9 @@ import { chooseNextCall } from './callNext';
 import { executeBatchAction, type BatchActionKind } from './batchActions';
 import { callBrainStream, type BrainMessage } from './aiProxy';
 import type { V2Contact } from './useContacts';
-import { isRexMultistepEnabled } from './rexFeatureFlags';
+import { isRexMultistepEnabled, isVehicleFinderEnabled } from './rexFeatureFlags';
 import { frameUntrusted } from './promptSafety';
+import type { VehicleRequirements } from './vehicleMatch';
 
 export type RexAction =
   | { type: 'add_contact'; payload: AddContactPayload; say: string }
@@ -34,9 +35,19 @@ export type RexAction =
   | { type: 'create_blast_sequence'; payload: CreateBlastSequencePayload; say: string }
   | { type: 'analyze_stalled_leads'; payload: AnalyzeStalledLeadsPayload; say: string }
   | { type: 'schedule_nurture_blast'; payload: ScheduleNurtureBlastPayload; say: string }
+  | { type: 'find_vehicles'; payload: FindVehiclesPayload; say: string }
   | { type: 'chain'; payload: ChainPayload; say: string }
   | { type: 'clarify'; payload: ClarifyPayload; say: string }
   | { type: 'say'; payload: Record<string, never>; say: string };
+
+// Vehicle Finder pivot (EXPO_PUBLIC_VEHICLE_FINDER). The interpreting model
+// extracts the customer's requirements inline into `requirements` (no second AI
+// call on the voice path); AppShell opens VehicleFinderModal pre-filled. Nothing
+// is written — executeAction returns { ok: true } and the modal is the result.
+export type FindVehiclesPayload = {
+  raw_notes?: string;
+  requirements?: VehicleRequirements;
+};
 
 export type AnalyzeStalledLeadsPayload = {
   days_silent_threshold?: number;
@@ -245,6 +256,13 @@ function buildPrompt(
   const chainSection = multistep
     ? `\n17. chain — bundle 2+ DISTINCT write actions the rep asked for in one utterance, confirmed together. Use ONLY when the utterance clearly asks for several different things (e.g. "log the M3 deal for Marcus, set a follow-up next week, and tag him hot"). For a single intent, NEVER use chain — pick the one action. Do NOT nest chains. Only chain these write actions: add_contact, update_notes, delete_contact, log_deal, schedule_followup, retier_contact, create_reminder, batch_action.\n    payload: { steps: [ { "action": "log_deal", "payload": { ... } }, { "action": "schedule_followup", "payload": { ... } } ] }\n`
     : '';
+  // Vehicle Finder (default-off): only when enabled do we teach Rex the
+  // find_vehicles action. Off → empty string → the prompt is byte-identical.
+  // Numbered after chain (18 when multistep is also on, else 17).
+  const vehicleFinder = isVehicleFinderEnabled();
+  const vehicleSection = vehicleFinder
+    ? `\n${multistep ? 18 : 17}. find_vehicles — the rep describes what a CUSTOMER wants in a vehicle (monthly payment / budget, type, seats, features, colors, credit score, down payment) and wants matching inventory from the dealership site. Extract the requirements YOURSELF into the payload as plain integers (no "$" or ","). "500month" → monthly_budget 500; "3k down" → down_payment 3000.\n    payload: { raw_notes: string (the rep's words), requirements: { monthly_budget?, down_payment?, credit_score?, vehicle_type? ("suv"|"truck"|"sedan"|"minivan"|"coupe"|"hatchback"|"convertible"|"wagon"), min_seats?, features?: string[] (from: remote_start, heated_seats, sunroof, leather, awd, third_row, backup_camera, carplay, android_auto, navigation, tow_package, blind_spot), color_pref? ("dark"|"light"), colors?: string[], max_mileage?, max_price?, condition? ("new"|"used") } }\n    Use ONLY for inventory matching ("find her an SUV", "what do we have under 500 a month"), never for logging deals or adding contacts. The spoken line is a short ack ("on it, searching the lot now").\n`
+    : '';
   const memorySection = memory.trim()
     ? `\nWHAT YOU REMEMBER ABOUT THIS REP (use to disambiguate / recall context — never quote it back verbatim):\n${memory.trim()}\n`
     : '';
@@ -317,7 +335,7 @@ Actions you can take, with required + optional payload fields:
 
 16. say — informational reply, no write
     payload: {}
-${chainSection}
+${chainSection}${vehicleSection}
 EXISTING TAGS the rep uses: ${tagList}
 
 RULES:
@@ -343,7 +361,7 @@ const KNOWN_ACTION_TYPES: ReadonlySet<RexAction['type']> = new Set([
   'add_contact', 'update_notes', 'delete_contact', 'log_deal', 'schedule_followup',
   'retier_contact', 'create_reminder', 'show_contact', 'filter_contacts', 'book_summary',
   'call_next', 'batch_action', 'create_blast_sequence', 'analyze_stalled_leads',
-  'schedule_nurture_blast', 'chain', 'clarify', 'say',
+  'schedule_nurture_blast', 'find_vehicles', 'chain', 'clarify', 'say',
 ]);
 
 // P2-R3: the actions Rex may bundle into a chain. Read-only / heavyweight actions
@@ -691,6 +709,11 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
       // pending nurture_messages rows), and opens NurtureReviewer.
       return { ok: true };
     }
+    case 'find_vehicles': {
+      // Read-only pivot — no DB write. useHeyRex auto-runs it and AppShell
+      // (flag-gated) opens VehicleFinderModal pre-filled with the payload.
+      return { ok: true };
+    }
     case 'chain': {
       // Run each normalized step in order, stopping at the first failure so we
       // never silently half-apply past an error. parseAction guarantees steps are
@@ -749,6 +772,16 @@ export function summarizeAction(action: RexAction): string {
       return `Analyze stalled leads (≥${p.days_silent_threshold ?? 14}d silent)`;
     case 'schedule_nurture_blast':
       return `Nurture blast · ${p.trigger?.replace('_', ' ')} · ${p.audience?.replace('_', ' ')}`;
+    case 'find_vehicles': {
+      const r = (p.requirements ?? {}) as Record<string, any>;
+      const bits = [
+        r.vehicle_type ? String(r.vehicle_type).toUpperCase() : null,
+        r.monthly_budget ? `$${r.monthly_budget}/mo` : null,
+        r.min_seats ? `${r.min_seats}+ seats` : null,
+        r.features?.length ? `${r.features.length} feature${r.features.length === 1 ? '' : 's'}` : null,
+      ].filter(Boolean);
+      return `Find vehicles${bits.length ? ' · ' + bits.join(' · ') : ''}`;
+    }
     case 'chain': {
       const steps = (p.steps ?? []) as RexAction[];
       return steps.map((s, i) => `${i + 1}. ${summarizeAction(s)}`).join('\n');
@@ -794,6 +827,7 @@ export function failureRecoveryLine(action: RexAction): string {
     case 'book_summary':
     case 'call_next':
     case 'show_contact':
+    case 'find_vehicles':
       return `Couldn't pull that up. Want me to try again?`;
     default:
       return `That didn't go through. Want me to try again?`;

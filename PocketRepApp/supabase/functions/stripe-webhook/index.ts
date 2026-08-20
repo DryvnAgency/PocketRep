@@ -11,7 +11,12 @@ async function verify(payload: string, sigHeader: string, secret: string, tolera
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${payload}`));
   const expected = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, "0")).join("");
-  return sigs.some(s => s.length === expected.length && [...s].every((c, i) => c === expected[i]));
+  return sigs.some(s => {
+    if (s.length !== expected.length) return false;
+    let mismatch = 0;
+    for (let i = 0; i < expected.length; i++) mismatch |= s.charCodeAt(i) ^ expected.charCodeAt(i);
+    return mismatch === 0;
+  });
 }
 
 async function stripe(path: string, method: string, body?: Record<string, unknown>) {
@@ -79,6 +84,11 @@ Deno.serve(async (req: Request) => {
   if (!sig || !(await verify(body, sig, secret))) return new Response("Invalid signature", { status: 401, headers });
   let event: any; try { event = JSON.parse(body); } catch { return new Response("Invalid JSON", { status: 400, headers }); }
   const admin = createClient(url, key);
+  // Event deduplication — idempotent on redelivery
+  if (event.id) {
+    const { data: inserted } = await admin.from("stripe_webhook_events").insert({ event_id: event.id, event_type: event.type }).select("event_id").maybeSingle();
+    if (!inserted) return new Response(JSON.stringify({ received: true, duplicate: true }), { status: 200, headers: { ...headers, "Content-Type": "application/json" } });
+  }
   try {
     switch (event.type) {
       case "checkout.session.completed": {

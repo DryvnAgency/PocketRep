@@ -37,6 +37,9 @@ export type V2Contact = {
   referredByContactId: string | null;
   referredByName: string | null;
 
+  // Next follow-up date (canonical field; Rex and rep can both set it)
+  nextFollowupDate: string | null;
+
   // Seeded demo/tour contact — shown in the book but marked so the rep never
   // mistakes it for a real lead (and it's excluded from real blasts server-side).
   isDemo: boolean;
@@ -87,21 +90,25 @@ function rowToContact(r: any): V2Contact {
     photoUrl: r.photo_url ?? null,
     referredByContactId: r.referred_by_contact_id ?? null,
     referredByName: r.referred_by_name ?? null,
+    nextFollowupDate: r.next_followup_date ?? null,
     isDemo: !!r.is_demo,
   };
 }
 
-export function useContacts() {
+export function useContacts(enabled: boolean = true) {
   const [contacts, setContacts] = useState<V2Contact[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!enabled) return;
     const { data, error } = await supabase
       .from('contacts')
       .select(
-        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,email,budget,trade_in,tags,notes,next_step,birthday,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url,tier_override,referred_by_contact_id,referred_by_name,is_demo'
+        'id,first_name,last_name,vehicle,trim,heat_score,last_contact_date,plan_label,phone,email,budget,trade_in,tags,notes,next_step,birthday,milestones,preferred_language,rep_decision,vehicle_make,vehicle_model,vehicle_year,lease_end_date,current_mileage,is_past_customer,do_not_contact,photo_url,tier_override,referred_by_contact_id,referred_by_name,next_followup_date,is_demo'
       )
-      .eq('is_deleted', false);
+      .eq('is_deleted', false)
+      .order('heat_score', { ascending: false })
+      .limit(200);
 
     if (error) {
       // Keep any previously-loaded list and surface the error so the UI can show
@@ -112,12 +119,22 @@ export function useContacts() {
     setError(null);
 
     const rows = (data ?? []).map(rowToContact);
-    // Group by tier (override-aware) first, then by heat, so a manually-set
-    // tier sorts with its band rather than by its raw heat score.
+    // Group by tier (override-aware) first, then by follow-up urgency (overdue
+    // contacts float to the top within their tier), then by heat score.
     const rank: Record<TierKey, number> = { hot: 3, warm: 2, cold: 1 };
-    rows.sort((a, b) => rank[b.tier] - rank[a.tier] || b.heatScore - a.heatScore || a.days - b.days);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const overdueDays = (c: V2Contact): number => {
+      if (!c.nextFollowupDate || c.nextFollowupDate > todayStr) return 0;
+      return Math.max(1, daysSince(c.nextFollowupDate));
+    };
+    rows.sort((a, b) =>
+      rank[b.tier] - rank[a.tier]
+      || overdueDays(b) - overdueDays(a)
+      || b.heatScore - a.heatScore
+      || a.days - b.days
+    );
     setContacts(rows);
-  }, []);
+  }, [enabled]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -17,6 +17,7 @@ import {
   actionWritesData,
   failureRecoveryLine,
   type RexAction,
+  type FindVehiclesPayload,
 } from './rexActions';
 import { isRexFailureHonestyEnabled } from './rexFeatureFlags';
 import { recordRexTurn } from './rexMemory';
@@ -36,6 +37,10 @@ export type UseHeyRexInput = {
   tagNames: string[];
   // Lets auto-run open a contact card directly (show_contact / call_next).
   onOpenContact?: (id: string) => void;
+  // Vehicle Finder pivot: auto-run hands the extracted requirements up so
+  // AppShell opens VehicleFinderModal. AppShell only passes this when
+  // EXPO_PUBLIC_VEHICLE_FINDER is on, so flag-off makes find_vehicles a no-op.
+  onFindVehicles?: (payload: FindVehiclesPayload) => void;
   // P2-R2: screen/state awareness — the tab the rep is on + the contact they
   // have open, so Rex can resolve "this one" / "log a deal on her" in context.
   activeScreen?: string;
@@ -108,11 +113,13 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
   const contactsRef = useRef(input.contacts);
   const tagsRef = useRef(input.tagNames);
   const onOpenRef = useRef(input.onOpenContact);
+  const onFindVehiclesRef = useRef(input.onFindVehicles);
   const activeScreenRef = useRef(input.activeScreen);
   const selectedContactIdRef = useRef(input.selectedContactId);
   useEffect(() => { contactsRef.current = input.contacts; }, [input.contacts]);
   useEffect(() => { tagsRef.current = input.tagNames; }, [input.tagNames]);
   useEffect(() => { onOpenRef.current = input.onOpenContact; }, [input.onOpenContact]);
+  useEffect(() => { onFindVehiclesRef.current = input.onFindVehicles; }, [input.onFindVehicles]);
   useEffect(() => { activeScreenRef.current = input.activeScreen; }, [input.activeScreen]);
   useEffect(() => { selectedContactIdRef.current = input.selectedContactId; }, [input.selectedContactId]);
 
@@ -159,7 +166,7 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
     // follow-up (silence falls back to idle wake-word scanning on its own).
     const scheduleAutoDismiss = (act: RexAction) => {
       clearDismiss();
-      const navigates = act.type === 'show_contact' || act.type === 'call_next';
+      const navigates = act.type === 'show_contact' || act.type === 'call_next' || act.type === 'find_vehicles';
       const ms = navigates ? NAV_DISMISS_MS : INFO_DISMISS_MS;
       dismissRef.current = setTimeout(() => {
         setAction(null);
@@ -175,6 +182,9 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
         const result = await executeAction(act, contactsRef.current);
         if (result.openContactId) onOpenRef.current?.(result.openContactId);
         if (result.filteredIds && result.filteredIds.length > 0) setFilteredIds(result.filteredIds);
+        // Vehicle-finder pivot: the modal is the result. onFindVehicles is only
+        // wired when EXPO_PUBLIC_VEHICLE_FINDER is on, so this is a no-op off.
+        if (act.type === 'find_vehicles') onFindVehiclesRef.current?.(act.payload);
         recordRexTurn(lastUtteranceRef.current, act.say || '(no spoken reply)', result.openContactId)
           .catch(() => undefined);
         logRexAction(act, 'success').catch(() => undefined);

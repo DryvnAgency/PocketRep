@@ -13,13 +13,13 @@ function channelLabel(channel: QueueItem['channel']) {
 
 async function launchChannel(item: QueueItem): Promise<boolean> {
   if (item.isDemo) return true;
-  if (item.channel === 'text') return launchSms({
+  if (item.channel === 'text') return (await launchSms({
     contact_id: item.contact_id,
     contact_name: item.contact_name,
     phone: item.phone,
     message: item.message,
     isDemo: item.isDemo,
-  });
+  })) === 'opened';
 
   const digits = (item.phone ?? '').replace(/[^\d+]/g, '');
   if (!digits) return false;

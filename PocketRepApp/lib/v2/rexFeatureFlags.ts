@@ -51,6 +51,18 @@ export function isRexChatEnabled(): boolean {
   return envOn(process.env.EXPO_PUBLIC_REX_CHAT);
 }
 
+// P3-A1: the Rex triad — split the coach chat into a PLANNER pass (deal
+// diagnosis + tactical plan as structured JSON) and an EXECUTOR pass (the final
+// scripts, streamed). The `role` sent per call is honored by ai-proxy only after
+// the owner redeploys it AND sets BRAIN_MODELS_PLANNER/EXECUTOR/PARSER — until
+// then both passes ride the default BRAIN_MODELS. Off by default → RexCoach
+// makes the exact single callBrain/callBrainStream request it makes today,
+// byte-identical. Even on, any triad failure quietly falls back to that path.
+export function isRexTriadEnabled(): boolean {
+  if (typeof process === 'undefined') return false;
+  return envOn(process.env.EXPO_PUBLIC_REX_TRIAD);
+}
+
 // P2-R1: replace the static first-run carousel with a short Rex interview that
 // captures the rep's real, consumed profile fields (name, dealership, title, Rex
 // tone) conversationally. Off by default → first-run shows the existing 8-slide
@@ -59,4 +71,15 @@ export function isRexChatEnabled(): boolean {
 export function isRexOnboardingEnabled(): boolean {
   if (typeof process === 'undefined') return false;
   return envOn(process.env.EXPO_PUBLIC_REX_ONBOARDING);
+}
+
+// Vehicle Finder: the rep saves their dealership website once (Profile →
+// Dealership website), then matches shorthand customer notes against live
+// inventory read by the inventory-search edge function (COMMITTED, NOT
+// DEPLOYED). Off by default → no 🚗 button, no modal, no Rex action doc in
+// either prompt, so behaviour is byte-identical. Turn on per environment AND
+// deploy inventory-search for it to do anything.
+export function isVehicleFinderEnabled(): boolean {
+  if (typeof process === 'undefined') return false;
+  return envOn(process.env.EXPO_PUBLIC_VEHICLE_FINDER);
 }

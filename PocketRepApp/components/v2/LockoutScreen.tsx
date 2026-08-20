@@ -31,6 +31,10 @@ const REASON_COPY: Record<LockReason, { title: string; body: string }> = {
     title: 'Account not found',
     body: 'This account is no longer active. Head to PocketRep to sign up or re-subscribe.',
   },
+  entitlement_unverified: {
+    title: 'Subscription pending',
+    body: 'Your subscription is still being set up. This usually takes a few seconds — try refreshing.',
+  },
 };
 
 export default function LockoutScreen({

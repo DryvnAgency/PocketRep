@@ -1,21 +1,27 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-// A single entry in a contact's activity timeline. Backed by public.interactions
-// (RLS: user_id = auth.uid()), written whenever the rep calls/texts/emails or
-// saves a note from the contact detail screen.
+// A single entry in a contact's activity timeline. Write-side entries go to
+// public.interactions; the read-side useInteractions queries the unified
+// public.contact_timeline view.
 export type InteractionType = 'call' | 'text' | 'email' | 'note';
+
+export type TimelineEventType =
+  | InteractionType
+  | 'nurture'
+  | 'reply'
+  | 'referral_ask'
+  | string;
 
 export type Interaction = {
   id: string;
-  type: InteractionType;
+  type: TimelineEventType;
   notes: string | null;
   outcome: string | null;
-  interactionDate: string; // ISO timestamp
+  interactionDate: string;
+  source: 'interaction' | 'sequence_step' | 'nurture' | 'reply' | 'sms_action';
 };
 
-// Append an interaction. RLS requires user_id = auth.uid(), so stamp it
-// explicitly (same pattern as deals/nurture/tags inserts).
 export async function logInteraction(
   contactId: string,
   type: InteractionType,
@@ -35,8 +41,6 @@ export async function logInteraction(
   if (error) throw error;
 }
 
-// Reads a contact's recent interactions, newest first. `refetchKey` bumps to
-// re-pull after a new interaction is logged (same shape as useContactNurtures).
 export function useInteractions(
   contactId: string | null,
   refetchKey: number = 0,
@@ -50,27 +54,25 @@ export function useInteractions(
     }
     let cancelled = false;
     supabase
-      .from('interactions')
-      .select('id,type,notes,outcome,interaction_date')
+      .from('contact_timeline')
+      .select('id,event_type,notes,outcome,event_date,source')
       .eq('contact_id', contactId)
-      .order('interaction_date', { ascending: false })
-      .limit(20)
+      .order('event_date', { ascending: false })
+      .limit(50)
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error) {
-          // Surface read failures (RLS / network) instead of silently rendering
-          // an empty timeline. Keep any previously-loaded rows rather than
-          // blanking on a failed refetch.
-          console.error('useInteractions: failed to load interactions', error);
+          console.error('useInteractions: failed to load timeline', error);
           return;
         }
         setRows(
           ((data ?? []) as any[]).map((r) => ({
             id: r.id,
-            type: r.type,
+            type: r.event_type as TimelineEventType,
             notes: r.notes,
             outcome: r.outcome,
-            interactionDate: r.interaction_date,
+            interactionDate: r.event_date,
+            source: r.source,
           })),
         );
       });

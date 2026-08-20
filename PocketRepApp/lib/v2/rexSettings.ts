@@ -59,20 +59,26 @@ export function hasCompletedOnboarding(): boolean {
   return localStorage.getItem(ONBOARDING_KEY) === '1';
 }
 
-export function markOnboardingComplete(): void {
+export async function markOnboardingComplete(): Promise<void> {
+  // Persist to DB first — only cache locally after DB succeeds, so a failed
+  // write doesn't permanently hide onboarding behind a stale localStorage flag.
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { error } = await supabase
+      .from('profiles')
+      .update({ onboarding_complete: true })
+      .eq('id', user.id);
+    if (error) throw error;
+  } catch {
+    // DB write failed — don't cache. Onboarding will re-appear next session
+    // so the rep doesn't lose their setup.
+    return;
+  }
   memOnboarding = true;
   if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
     localStorage.setItem(ONBOARDING_KEY, '1');
   }
-  // Fire-and-forget profile sync — failure shouldn't block UX.
-  (async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase
-      .from('profiles')
-      .update({ onboarding_complete: true })
-      .eq('id', user.id);
-  })().catch(() => undefined);
 }
 
 // Called on app boot — pulls the profile flag and seeds the localStorage

@@ -24,7 +24,7 @@ import {
 import { titleCase, normalizeVehicle } from '@/lib/v2/format';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 import { useContactNurtures } from '@/lib/v2/contactNurtures';
-import { logInteraction, useInteractions, type InteractionType } from '@/lib/v2/interactions';
+import { logInteraction, useInteractions, type InteractionType, type TimelineEventType } from '@/lib/v2/interactions';
 import { pickAndUploadContactPhoto } from '@/lib/v2/contactPhoto';
 import { formatBirthday, parseBirthdayInput } from '@/lib/v2/birthday';
 import LanguageToggle from './LanguageToggle';
@@ -41,11 +41,14 @@ const MILESTONE_ICONS: Record<string, { icon: string; color: string }> = {
   'no-response': { icon: '∅',  color: colors.red },
 };
 
-const INTERACTION_META: Record<InteractionType, { icon: string; color: string; label: string; verb: string }> = {
-  call:  { icon: '📞', color: colors.green, label: 'CALL',  verb: 'Logged a call' },
-  text:  { icon: '💬', color: colors.gold,  label: 'TEXT',  verb: 'Sent a text' },
-  email: { icon: '✉️', color: colors.gold2, label: 'EMAIL', verb: 'Sent an email' },
-  note:  { icon: '📝', color: colors.grey2, label: 'NOTE',  verb: 'Added a note' },
+const INTERACTION_META: Record<string, { icon: string; color: string; label: string; verb: string }> = {
+  call:         { icon: '📞', color: colors.green, label: 'CALL',    verb: 'Logged a call' },
+  text:         { icon: '💬', color: colors.gold,  label: 'TEXT',    verb: 'Sent a text' },
+  email:        { icon: '✉️', color: colors.gold2, label: 'EMAIL',   verb: 'Sent an email' },
+  note:         { icon: '📝', color: colors.grey2, label: 'NOTE',    verb: 'Added a note' },
+  nurture:      { icon: '🤖', color: colors.gold,  label: 'NURTURE', verb: 'Rex nurture sent' },
+  reply:        { icon: '↩️', color: colors.green, label: 'REPLY',   verb: 'Customer replied' },
+  referral_ask: { icon: '🤝', color: colors.gold2, label: 'REFERRAL', verb: 'Referral ask sent' },
 };
 
 function digitsOnly(s: string | null): string {

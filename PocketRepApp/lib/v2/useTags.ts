@@ -3,10 +3,11 @@ import { supabase } from '@/lib/supabase';
 
 export type V2Tag = { id: string; name: string; color: string };
 
-export function useTags(refetchKey: number = 0): V2Tag[] {
+export function useTags(refetchKey: number = 0, enabled: boolean = true): V2Tag[] {
   const [tags, setTags] = useState<V2Tag[]>([]);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     supabase
       .from('tags')
@@ -17,7 +18,7 @@ export function useTags(refetchKey: number = 0): V2Tag[] {
         setTags((data ?? []) as V2Tag[]);
       });
     return () => { cancelled = true; };
-  }, [refetchKey]);
+  }, [refetchKey, enabled]);
 
   return tags;
 }

@@ -1,20 +1,22 @@
 // Smart Blast Sequences. Rep voice intent → filter to N contacts → personalized
 // draft per contact (one brain call) → review UI → fire to native SMS one-by-one.
 //
-// We persist the sequence + per-contact steps so the rep can come back to a
-// pending review later (sequences.draft_status='pending_review').
+// Native SMS truthfulness: opening the OS composer is NOT proof that Send was
+// tapped. Blast history therefore records the exact message as `opened`, while
+// leaving `sent_at` null until a real send-confirmation path exists.
 
 import { supabase } from '@/lib/supabase';
 import { REX_COPY_RULES } from './rexActions';
 import type { V2Contact } from './useContacts';
 import { callBrain } from './aiProxy';
+import { recordSmsOpened, type SmsActionSource } from './smsActions';
 
 export type BlastPromotion = {
   vehicle?: string;
   payment?: string;
   down?: string;
   term?: string;
-  details?: string; // free-form catch-all
+  details?: string;
 };
 
 export type DraftedStep = {
@@ -127,8 +129,6 @@ function parseDraftedSteps(raw: string): DraftedStep[] {
   }
 }
 
-// Local copy-rule sanity check — flags any draft that slips a forbidden token
-// past the brain. Returns the indexes that need a redraft (handled in the UI).
 const FORBIDDEN_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: 'em-dash', re: /—/ },
   { name: 'en-dash', re: /–/ },
@@ -160,23 +160,15 @@ export async function createBlastDraft({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not signed in');
   if (contacts.length === 0) {
-    return {
-      sequence_id: '',
-      intent,
-      filter_summary: filterSummary,
-      promotion,
-      drafted_steps: [],
-    };
+    return { sequence_id: '', intent, filter_summary: filterSummary, promotion, drafted_steps: [] };
   }
 
-  // 1) Ask the brain to draft one message per contact.
   const raw = await callBrain({
     maxTokens: 2000,
     messages: [{ role: 'user', content: buildBlastPrompt({ intent, promotion, contacts }) }],
   });
   const drafted = parseDraftedSteps(raw);
 
-  // 2) Persist the sequence + per-contact steps so the rep can come back to it.
   const inferredLanguage = (() => {
     const langs = new Set(drafted.map(d => d.language));
     if (langs.size > 1) return 'mixed';
@@ -220,16 +212,17 @@ export async function createBlastDraft({
     if (stepsErr) throw stepsErr;
   }
 
-  return {
-    sequence_id: sequenceId,
-    intent,
-    filter_summary: filterSummary,
-    promotion,
-    drafted_steps: drafted,
-  };
+  return { sequence_id: sequenceId, intent, filter_summary: filterSummary, promotion, drafted_steps: drafted };
 }
 
-// Log each sent (or skipped) draft into nurture_messages for variety tracking.
+/**
+ * Record a blast recipient as an outbound SMS action.
+ *
+ * IMPORTANT: sent_at intentionally remains NULL. Opening the native composer is
+ * observable; tapping Send inside Messages is not. The customer history will
+ * therefore contain the exact message with status `opened` until a confirmation
+ * flow marks it `sent`.
+ */
 export async function recordSentBlast({
   contactId, message, language, hookUsed,
 }: {
@@ -240,9 +233,9 @@ export async function recordSentBlast({
 }): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  // Return the inserted row id so a demo blast can later mark its simulated reply
-  // against this exact nurture_messages row (see lib/v2/demoBlastSim.ts).
-  const { data } = await supabase.from('nurture_messages').insert({
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase.from('nurture_messages').insert({
     user_id: user.id,
     contact_id: contactId,
     message_text: message,
@@ -250,29 +243,29 @@ export async function recordSentBlast({
     hook_used: hookUsed,
     trigger_type: 'blast',
     pitch_intensity: 'medium',
-    sent_at: new Date().toISOString(),
+    sent_at: null,
+    opened_at: now,
+    sms_status: 'opened',
   }).select('id').single();
+  if (error) throw error;
+
+  await recordSmsOpened({
+    contactId,
+    message,
+    source: 'blast' as SmsActionSource,
+  }).catch(() => undefined);
+
   return (data as { id: string } | null)?.id ?? null;
 }
 
 export async function markBlastApproved(sequenceId: string): Promise<void> {
-  await supabase
-    .from('sequences')
-    .update({ draft_status: 'sent' })
-    .eq('id', sequenceId);
+  await supabase.from('sequences').update({ draft_status: 'sent' }).eq('id', sequenceId);
 }
 
 export async function markBlastCancelled(sequenceId: string): Promise<void> {
-  await supabase
-    .from('sequences')
-    .update({ draft_status: 'cancelled' })
-    .eq('id', sequenceId);
+  await supabase.from('sequences').update({ draft_status: 'cancelled' }).eq('id', sequenceId);
 }
 
-// Re-translate a single drafted message when the rep flips its EN/ES toggle in
-// the review UI. ES is real Mexican Spanish (natural slang), not a literal
-// translation — matching how the batch was drafted. Returns the original on any
-// failure so the toggle never destroys the rep's text.
 export async function translateBlastMessage({
   message, targetLang,
 }: {
@@ -303,8 +296,5 @@ ${trimmed}`;
 }
 
 export async function updateDraftStep(stepId: string, message: string): Promise<void> {
-  await supabase
-    .from('sequence_steps')
-    .update({ message_template: message, rep_edited: true })
-    .eq('id', stepId);
+  await supabase.from('sequence_steps').update({ message_template: message, rep_edited: true }).eq('id', stepId);
 }

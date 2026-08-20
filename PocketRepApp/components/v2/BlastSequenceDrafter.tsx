@@ -91,6 +91,8 @@ export default function BlastSequenceDrafter({
     setError(null);
     try {
       let demoIndex = 0; // staggers demo replies at 15s / 30s / 60s by send order
+      let openedCount = 0;
+      let noPhoneCount = 0;
       for (const s of toSend) {
         const c = contactById.get(s.contact_id);
         const sendable: SendableDraft = {
@@ -100,8 +102,9 @@ export default function BlastSequenceDrafter({
           message: s.message,
           isDemo: c?.isDemo,
         };
-        const opened = await launchSms(sendable);
-        if (opened) {
+        const result = await launchSms(sendable);
+        if (result === 'opened') {
+          openedCount++;
           if (c?.isDemo) {
             // Demo send: record the outbound, capture its id, and schedule the
             // simulated reply (15/30/60s). No real SMS left the app (launchSms
@@ -122,9 +125,12 @@ export default function BlastSequenceDrafter({
             }).catch(() => undefined);
           }
           updateStep(s.contact_id, { sent: true });
+        } else if (result === 'no_phone') {
+          noPhoneCount++;
         }
       }
-      await markBlastApproved(draft.sequence_id);
+      // Only mark approved if at least one message was opened
+      if (openedCount > 0) await markBlastApproved(draft.sequence_id);
       onSent();
       onClose();
     } catch (e: any) {
@@ -230,7 +236,7 @@ export default function BlastSequenceDrafter({
 
                 {step.sent ? (
                   <View style={styles.sentBadge}>
-                    <Text style={styles.sentText}>✓ SENT</Text>
+                    <Text style={styles.sentText}>✓ OPENED</Text>
                   </View>
                 ) : (
                   <View style={styles.cardActions}>
@@ -359,12 +365,12 @@ const styles = StyleSheet.create({
 
   sentBadge: {
     paddingHorizontal: 10, paddingVertical: 4,
-    backgroundColor: colors.greenBg,
-    borderWidth: 1, borderColor: colors.greenBorder,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1, borderColor: colors.goldBorder,
     borderRadius: radius.full,
     alignSelf: 'flex-start',
   },
-  sentText: { fontSize: 10, fontWeight: '800', color: colors.green, letterSpacing: 1.0 },
+  sentText: { fontSize: 10, fontWeight: '800', color: colors.gold, letterSpacing: 1.0 },
 
   error: { color: colors.red, fontSize: 13, paddingHorizontal: 4 },
 });

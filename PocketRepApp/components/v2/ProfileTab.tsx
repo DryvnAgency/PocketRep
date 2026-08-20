@@ -16,6 +16,7 @@ import {
   type RepSettingKey,
 } from '@/lib/v2/repSettings';
 import { sendTestPush } from '@/lib/v2/pushNotifications';
+import { isVehicleFinderEnabled } from '@/lib/v2/rexFeatureFlags';
 import { loadSendTime, setSendHour as persistSendHour, formatHour, DEFAULT_SEND_HOUR } from '@/lib/v2/sendTime';
 import { usePayPlan } from '@/lib/v2/payPlan';
 import PayPlanSummary from './PayPlanSummary';
@@ -222,8 +223,13 @@ export default function ProfileTab({
       <View style={styles.group}>
         <Row icon="🏢" label="Dealership" detail={dealership || 'Add'}
           onPress={() => editSetting('dealership', 'Dealership', 'DEALERSHIP')} />
-        <Row icon="🚗" label="Inventory feed" detail={getRepSetting('inventoryFeed') || 'Not connected'}
-          onPress={() => editSetting('inventoryFeed', 'Inventory feed', 'FEED STATUS / SOURCE')} />
+        <Row
+          icon="🚗"
+          label={isVehicleFinderEnabled() ? 'Dealership website' : 'Inventory feed'}
+          detail={getRepSetting('inventoryFeed') || (isVehicleFinderEnabled() ? 'Add URL' : 'Not connected')}
+          onPress={() => isVehicleFinderEnabled()
+            ? editSetting('inventoryFeed', 'Dealership website', 'INVENTORY URL (https)', { placeholder: 'https://www.yourdealership.com', keyboardType: 'url' })
+            : editSetting('inventoryFeed', 'Inventory feed', 'FEED STATUS / SOURCE')} />
         <Row icon="🔔" label="Weekly digest" detail="View →" onPress={() => onNavigate?.('heat')} />
         <Row icon="⏰" label="Daily send time" detail={formatHour(sendHour)} onPress={() => setShowSendPicker(true)} />
         <Row icon="📊" label="Goals & quota" detail="View →" onPress={() => onNavigate?.('metrics')} />

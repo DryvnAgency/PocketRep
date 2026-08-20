@@ -7,7 +7,7 @@ import { TIERS, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { V2Tag } from '@/lib/v2/useTags';
 import { logInteraction } from '@/lib/v2/interactions';
-import { logContactTouch } from '@/lib/v2/updateContact';
+import { logContactTouch, type CallOutcome } from '@/lib/v2/updateContact';
 
 type FilterTag = null | { kind: 'tier'; tier: TierKey; name: string; color: string; icon: string } | { kind: 'custom'; name: string; color: string };
 const TIER_CHIPS: Extract<FilterTag, { kind: 'tier' }>[] = [
@@ -26,13 +26,13 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
   const [copied, setCopied] = useState(false);
   const current = queue[index] ?? null;
   const textBody = current ? `Hey ${current.name.split(' ')[0]}, it’s Eddie. Just tried giving you a call. Wanted to catch up with you real quick. Give me a call or text when you get a chance.` : '';
-  const record = async (type: 'call' | 'text', notes: string) => {
+  const record = async (type: 'call' | 'text', notes: string, callOutcome?: CallOutcome) => {
     if (!current) return;
-    try { await logContactTouch(current.id, type, notes); } catch (e) { console.warn('call queue touch', e); }
-    try { await logInteraction(current.id, type, notes); } catch (e) { console.warn('call queue interaction', e); }
+    try { await logContactTouch(current.id, type, notes, callOutcome); } catch (e) { console.warn('call queue touch', e); }
+    try { await logInteraction(current.id, type, notes, callOutcome); } catch (e) { console.warn('call queue interaction', e); }
   };
   const openCall = () => { if (!current) return; setCalled(true); Linking.openURL(`tel:${digitsOnly(current.phone)}`).catch(() => undefined); };
-  const chooseOutcome = async (next: NonNullable<typeof outcome>) => { if (!current) return; setOutcome(next); await record('call', `Call outcome: ${next.replace('-', ' ')}`); };
+  const chooseOutcome = async (next: NonNullable<typeof outcome>) => { if (!current) return; setOutcome(next); await record('call', `Call outcome: ${next.replace('-', ' ')}`, next); };
   const openText = async () => {
     if (!current) return;
     setTextOpened(true);
@@ -68,7 +68,7 @@ function ContactRow({ c, onTap, allTags }: { c: V2Contact; onTap: () => void; al
 }
 function Chip({ label, icon, color, active, onPress, dashed }: { label:string; icon?:string; color:string; active:boolean; onPress:()=>void; dashed?:boolean }) { return <Pressable onPress={onPress} style={[styles.chip,dashed?{borderStyle:'dashed',borderColor:colors.goldBorder,backgroundColor:'transparent'}:active?{backgroundColor:color,borderColor:color}:{backgroundColor:colors.surface2,borderColor:colors.ink4}]}>{icon?<Text style={styles.chipIcon}>{icon}</Text>:!dashed?<View style={[styles.chipDot,{backgroundColor:active?colors.white:color}]}/>:null}<Text style={[styles.chipText,{color:dashed?colors.gold:active?(color===colors.gold?colors.ink:colors.white):colors.grey3}]}>{label}</Text></Pressable>; }
 
-export default function ContactsTab({ contacts, error, tags, onSelect, onRetry, onBulkTag, onAddContact, onImportContacts, onDeleteTag }: { contacts:V2Contact[]|null; error:string|null; tags:V2Tag[]; onSelect:(c:V2Contact)=>void; onRetry?:()=>void; onBulkTag?:()=>void; onAddContact?:()=>void; onImportContacts?:()=>void; onDeleteTag?:(name:string)=>void }) {
+export default function ContactsTab({ contacts, error, tags, onSelect, onRetry, onBulkTag, onAddContact, onImportContacts, onFindVehicles, onDeleteTag }: { contacts:V2Contact[]|null; error:string|null; tags:V2Tag[]; onSelect:(c:V2Contact)=>void; onRetry?:()=>void; onBulkTag?:()=>void; onAddContact?:()=>void; onImportContacts?:()=>void; onFindVehicles?:()=>void; onDeleteTag?:(name:string)=>void }) {
   const [query,setQuery]=useState(''); const [filter,setFilter]=useState<FilterTag>(null); const [callQueueOpen,setCallQueueOpen]=useState(false);
   const confirmDeleteTag=(name:string)=>{const proceed=()=>{onDeleteTag?.(name);setFilter(null)};const msg=`Delete the "${name}" tag? It'll be removed from all contacts.`;if(Platform.OS==='web'){if(typeof window==='undefined'||window.confirm(msg))proceed();}else Alert.alert('Delete tag',msg,[{text:'Cancel',style:'cancel'},{text:'Delete',style:'destructive',onPress:proceed}]);};
   const filtered=useMemo(()=>{if(!contacts)return[];const q=query.trim().toLowerCase();return contacts.filter(c=>{const mq=!q||c.name.toLowerCase().includes(q)||(c.vehicle??'').toLowerCase().includes(q)||c.tags.some(t=>t.toLowerCase().includes(q));const mf=!filter?true:filter.kind==='tier'?c.tier===filter.tier:c.tags.includes(filter.name);return mq&&mf;});},[contacts,query,filter]);
@@ -78,7 +78,7 @@ export default function ContactsTab({ contacts, error, tags, onSelect, onRetry, 
   if(error&&!contacts)return <View style={styles.center}><Text style={styles.error}>Couldn't load contacts.</Text>{onRetry?<Pressable onPress={onRetry} style={styles.retryBtn}><Text style={styles.retryText}>Try again</Text></Pressable>:null}</View>;
   if(!contacts)return <View style={styles.center}><RadarLoader size={36}/></View>;
   return <View style={styles.root}>
-    <View style={styles.searchWrap}><View style={styles.searchBox}><Text style={styles.searchIcon}>⌕</Text><TextInput value={query} onChangeText={setQuery} placeholder={`Search ${contacts.length} contacts`} placeholderTextColor={colors.grey} style={styles.searchInput} accessibilityLabel="Search contacts"/>{query?<Pressable onPress={()=>setQuery('')} hitSlop={8}><Text style={styles.searchClear}>✕</Text></Pressable>:null}</View>{onImportContacts?<Pressable onPress={onImportContacts} style={styles.importBtn} hitSlop={6}><Text style={styles.importBtnText}>⇪</Text></Pressable>:null}<Pressable onPress={onAddContact} style={styles.addBtn} hitSlop={6}><Text style={styles.addBtnText}>＋</Text></Pressable></View>
+    <View style={styles.searchWrap}><View style={styles.searchBox}><Text style={styles.searchIcon}>⌕</Text><TextInput value={query} onChangeText={setQuery} placeholder={`Search ${contacts.length} contacts`} placeholderTextColor={colors.grey} style={styles.searchInput} accessibilityLabel="Search contacts"/>{query?<Pressable onPress={()=>setQuery('')} hitSlop={8}><Text style={styles.searchClear}>✕</Text></Pressable>:null}</View>{onFindVehicles?<Pressable onPress={onFindVehicles} style={styles.importBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Find vehicles"><Text style={styles.importBtnText}>🚗</Text></Pressable>:null}{onImportContacts?<Pressable onPress={onImportContacts} style={styles.importBtn} hitSlop={6}><Text style={styles.importBtnText}>⇪</Text></Pressable>:null}<Pressable onPress={onAddContact} style={styles.addBtn} hitSlop={6}><Text style={styles.addBtnText}>＋</Text></Pressable></View>
     <Pressable disabled={!queueContacts.length} onPress={()=>setCallQueueOpen(true)} style={[styles.queueLauncher,!queueContacts.length&&styles.queueLauncherDisabled]}><Text style={styles.queueLauncherIcon}>📞</Text><View style={{flex:1}}><Text style={styles.queueLauncherTitle}>START CALL QUEUE</Text><Text style={styles.queueLauncherSub}>{queueContacts.length} customer{queueContacts.length===1?'':'s'} with a phone number · call → outcome → text → next</Text></View><Text style={styles.queueLauncherArrow}>→</Text></Pressable>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}><Chip label="All" color={colors.gold} active={filter===null} onPress={()=>setFilter(null)}/>{TIER_CHIPS.map(chip=><Chip key={chip.tier} label={chip.name} icon={chip.icon} color={chip.color} active={filter?.kind==='tier'&&filter.tier===chip.tier} onPress={()=>setFilter(chip)}/>)}{tags.map(t=><Chip key={t.id} label={t.name} color={t.color} active={filter?.kind==='custom'&&filter.name===t.name} onPress={()=>setFilter({kind:'custom',name:t.name,color:t.color})}/>)}<Chip label="＋ Tag" color={colors.gold} active={false} onPress={()=>onBulkTag?.()} dashed/></ScrollView>
     {filter?<View style={styles.filterHint}><Text style={styles.filterLabel}>FILTER</Text><Text style={styles.filterValue}>{filter.kind==='tier'?`${filter.icon} ${filter.name}`:filter.name}</Text><Text style={styles.filterCount}>· {filtered.length} contact{filtered.length===1?'':'s'}</Text><View style={{flex:1}}/>{filter.kind==='custom'&&onDeleteTag?<Pressable onPress={()=>confirmDeleteTag(filter.name)} hitSlop={8}><Text style={styles.filterDelete}>DELETE TAG</Text></Pressable>:null}<Pressable onPress={()=>setFilter(null)} hitSlop={8}><Text style={styles.filterClear}>CLEAR</Text></Pressable></View>:null}
