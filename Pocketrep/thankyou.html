@@ -51,6 +51,15 @@
     show("loading");
     api({action:"verify",session_id:sessionId}).then(function(r){
       if(r.status===200&&r.body&&r.body.ok){
+        if(r.body.alreadyProvisioned){
+          document.getElementById("email").textContent=r.body.email||"your account";
+          api({action:"provision",session_id:sessionId}).then(function(p){
+            var link=p.body&&p.body.action_link;
+            if(link){document.getElementById("continue").href=link;show("done");setTimeout(function(){location.href=link;},800);}
+            else{error("Your account already exists. Log in at app.pocketrep.pro");}
+          }).catch(function(){error("Your account already exists. Log in at app.pocketrep.pro");});
+          return;
+        }
         document.getElementById("email").textContent=r.body.email||"your account";
         show("formState");
         return;

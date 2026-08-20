@@ -122,7 +122,7 @@ Deno.serve(async (req: Request) => {
     switch (event.type) {
       case "checkout.session.completed": {
         const s = event.data.object, email = String(s.customer_details?.email || s.customer_email || "").toLowerCase(), customer = s.customer;
-        if (email) await admin.from("profiles").update({ stripe_customer_id: customer, plan: "pocketrep", subscription_status: "active", trial_ends_at: null }).eq("email", email);
+        if (email) await admin.from("profiles").update({ stripe_customer_id: customer, plan: "pocketrep", subscription_status: "active", trial_ends_at: null, entitlement_status: null, entitlement_pending_until: null }).eq("email", email);
         if (customer) {
           const { data: ref } = await admin.from("referrals").select("*").eq("stripe_customer_id", customer).maybeSingle();
           if (ref) await admin.from("referrals").update({ stripe_checkout_session_id: s.id }).eq("id", ref.id);
@@ -132,7 +132,7 @@ Deno.serve(async (req: Request) => {
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const s = event.data.object, profileId = await profileIdForCustomer(admin, s.customer);
-        if (profileId) await admin.from("profiles").update({ plan: "pocketrep", subscription_status: s.status, trial_ends_at: s.status === "trialing" && s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null }).eq("id", profileId);
+        if (profileId) await admin.from("profiles").update(Object.assign({ plan: "pocketrep", subscription_status: s.status, trial_ends_at: s.status === "trialing" && s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null }, ["active","trialing"].includes(s.status) ? { entitlement_status: null, entitlement_pending_until: null } : {})).eq("id", profileId);
         break;
       }
       case "customer.subscription.deleted": {
@@ -147,7 +147,7 @@ Deno.serve(async (req: Request) => {
       }
       case "invoice.payment_succeeded": {
         const i = event.data.object, profileId = await profileIdForCustomer(admin, i.customer);
-        if (profileId) await admin.from("profiles").update({ subscription_status: "active" }).eq("id", profileId);
+        if (profileId) await admin.from("profiles").update({ subscription_status: "active", entitlement_status: null, entitlement_pending_until: null }).eq("id", profileId);
         const { data: ref } = await admin.from("referrals").select("*").eq("stripe_customer_id", i.customer).maybeSingle();
         if (ref && ref.status !== "rewarded") {
           await admin.from("referrals").update({ paid_at: ref.paid_at ?? new Date().toISOString(), status: "qualified" }).eq("id", ref.id);
