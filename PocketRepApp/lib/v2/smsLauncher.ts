@@ -18,12 +18,12 @@ export type SendableDraft = {
 /**
  * Result of an SMS action.
  *
- * `confirmed_sent` means the native composer opened AND the rep explicitly
- * confirmed they tapped Send. `not_sent` means the rep returned without
- * sending. PocketRep never claims carrier delivery because the native
- * Messages app does not expose that information to us.
+ * `opened` is a legacy return name retained for existing callers. It means
+ * the composer opened AND the rep explicitly confirmed they tapped Send.
+ * The database status is `sent`; composer-open alone is never treated as sent.
+ * `not_sent` means the rep returned without sending.
  */
-export type SmsLaunchResult = 'confirmed_sent' | 'not_sent' | 'no_phone' | 'failed';
+export type SmsLaunchResult = 'opened' | 'not_sent' | 'no_phone' | 'failed';
 
 function confirmSent(contactName: string): Promise<boolean> {
   if (Platform.OS === 'web') {
@@ -53,7 +53,7 @@ function confirmSent(contactName: string): Promise<boolean> {
  * action as `sent` or `not_sent`.
  */
 export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> {
-  if (draft.isDemo) return 'confirmed_sent';
+  if (draft.isDemo) return 'opened';
 
   const phone = digitsOnly(draft.phone);
   if (!phone) {
@@ -122,5 +122,5 @@ export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> 
       await markSmsNotSent(actionId).catch(() => undefined);
     }
   }
-  return sent ? 'confirmed_sent' : 'not_sent';
+  return sent ? 'opened' : 'not_sent';
 }
