@@ -7,6 +7,7 @@
 -- completed. New events begin in processing state and are only marked processed
 -- after the handler finishes successfully.
 ALTER TABLE public.stripe_webhook_events
+  ALTER COLUMN processed_at DROP NOT NULL,
   ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'processed',
   ADD COLUMN IF NOT EXISTS processing_started_at timestamptz;
 
