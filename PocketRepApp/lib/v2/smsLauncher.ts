@@ -1,5 +1,5 @@
 import { Alert, AppState, Linking, Platform } from 'react-native';
-import { recordSmsOpened, markSmsSent, markSmsNotSent, recordSmsFailure } from '@/lib/v2/smsActions';
+import { recordSmsOpened, markSmsSent, markSmsNotSent, recordSmsFailure, type SmsActionSource } from '@/lib/v2/smsActions';
 
 function digitsOnly(phone: string | null | undefined): string {
   return (phone ?? '').replace(/[^\d]/g, '');
@@ -12,17 +12,18 @@ export type SendableDraft = {
   message: string;
   // Demo/tour contact — the send is SIMULATED (never dialed out to a carrier).
   isDemo?: boolean;
+  source?: SmsActionSource;
 };
 
 /**
- * Result of attempting an SMS action.
+ * Result of an SMS action.
  *
- * `opened` is retained for compatibility with the existing send queues, but it
- * now means the rep confirmed they actually sent the message after returning
- * from the native SMS composer. PocketRep never treats composer-open alone as
- * a sent message.
+ * `confirmed_sent` means the native composer opened AND the rep explicitly
+ * confirmed they tapped Send. `not_sent` means the rep returned without
+ * sending. PocketRep never claims carrier delivery because the native
+ * Messages app does not expose that information to us.
  */
-export type SmsLaunchResult = 'opened' | 'no_phone' | 'failed';
+export type SmsLaunchResult = 'confirmed_sent' | 'not_sent' | 'no_phone' | 'failed';
 
 function confirmSent(contactName: string): Promise<boolean> {
   if (Platform.OS === 'web') {
@@ -47,12 +48,12 @@ function confirmSent(contactName: string): Promise<boolean> {
  * Opens the native SMS composer pre-filled with the draft message.
  *
  * There is no OS callback telling PocketRep whether the rep tapped Send.
- * Therefore this records `opened`, waits for the rep to return to PocketRep,
- * asks for an explicit confirmation, and only then marks the outbound action
- * `sent`. A "Not Sent" response is stored as `not_sent`.
+ * Therefore this records the composer opening, waits for the rep to return to
+ * PocketRep, asks for explicit confirmation, and only then marks the outbound
+ * action as `sent` or `not_sent`.
  */
 export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> {
-  if (draft.isDemo) return 'opened';
+  if (draft.isDemo) return 'confirmed_sent';
 
   const phone = digitsOnly(draft.phone);
   if (!phone) {
@@ -60,6 +61,7 @@ export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> 
       contactId: draft.contact_id,
       message: draft.message,
       status: 'no_phone',
+      source: draft.source,
     }).catch(() => undefined);
     return 'no_phone';
   }
@@ -71,13 +73,14 @@ export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> 
     actionId = await recordSmsOpened({
       contactId: draft.contact_id,
       message: draft.message,
-      source: 'manual',
+      source: draft.source ?? 'manual',
     });
   } catch {
     await recordSmsFailure({
       contactId: draft.contact_id,
       message: draft.message,
       status: 'failed',
+      source: draft.source,
     }).catch(() => undefined);
     return 'failed';
   }
@@ -119,5 +122,5 @@ export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> 
       await markSmsNotSent(actionId).catch(() => undefined);
     }
   }
-  return sent ? 'opened' : 'failed';
+  return sent ? 'confirmed_sent' : 'not_sent';
 }
