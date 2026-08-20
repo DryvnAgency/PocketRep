@@ -19,6 +19,7 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 
 const blast = read('components/v2/BlastSequenceDrafter.tsx');
 const sms = read('lib/v2/smsLauncher.ts');
+const smsActions = read('lib/v2/smsActions.ts');
 const webhook = read('supabase/functions/stripe-webhook/index.ts');
 const migration = read('../supabase/migrations/20260821_production_retry_and_sms_dedupe.sql');
 
@@ -28,7 +29,7 @@ ok(!blast.includes("recordSentBlast({\n              contactId: s.contact_id,\n 
 ok(blast.includes('✓ SENT'), 'confirmed blast UI says SENT rather than OPENED');
 
 ok(sms.includes("return sent ? 'opened' : 'not_sent';"), 'SMS launcher only returns opened after confirmation');
-ok(sms.includes("status: 'opened'"), 'SMS composer-open state is recorded separately');
+ok(smsActions.includes("status: 'opened'"), 'SMS composer-open state is recorded separately');
 ok(sms.includes('markSmsSent'), 'confirmed SMS transitions to sent state');
 ok(sms.includes('markSmsNotSent'), 'negative confirmation transitions to not_sent state');
 ok(sms.includes('const returnPromise = waitForComposerReturn();'), 'SMS return listener is installed before opening native Messages');
