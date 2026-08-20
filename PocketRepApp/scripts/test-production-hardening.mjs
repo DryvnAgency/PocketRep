@@ -20,7 +20,7 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 const blast = read('components/v2/BlastSequenceDrafter.tsx');
 const sms = read('lib/v2/smsLauncher.ts');
 const webhook = read('supabase/functions/stripe-webhook/index.ts');
-const migration = read('../supabase/migrations/20260821_production_retry_and_sms_dedupe.sql');
+const migration = read('../../supabase/migrations/20260821_production_retry_and_sms_dedupe.sql');
 
 ok(blast.includes("source: 'blast'"), 'blast sends identify SMS source as blast');
 ok(blast.includes('Do not create a second SMS'), 'real blast path documents single authoritative SMS action');
