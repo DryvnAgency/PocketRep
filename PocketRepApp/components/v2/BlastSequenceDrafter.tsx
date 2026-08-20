@@ -117,6 +117,7 @@ export default function BlastSequenceDrafter({
               message: s.message,
               language: s.language,
               hookUsed: s.hook_used,
+              isDemo: true,
             }).catch(() => null);
             if (msgId) registerDemoSend(s.contact_id, msgId, demoIndex++);
           }

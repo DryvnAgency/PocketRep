@@ -409,6 +409,7 @@ export default function ContactDetail({
           { text: 'Answered', onPress: () => resolve('answered') },
           { text: 'No Answer', onPress: () => resolve('no-answer') },
           { text: 'Left VM', onPress: () => resolve('voicemail') },
+          { text: 'Wrong #', onPress: () => resolve('wrong-number') },
         ],
         { cancelable: false },
       );
