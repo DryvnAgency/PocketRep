@@ -19,10 +19,12 @@ async function verify(payload: string, sigHeader: string, secret: string, tolera
   });
 }
 
-async function stripe(path: string, method: string, body?: Record<string, unknown>) {
+async function stripe(path: string, method: string, body?: Record<string, unknown>, idempotencyKey?: string) {
   const secret = Deno.env.get("STRIPE_SECRET_KEY");
   if (!secret) throw new Error("missing_stripe_secret");
-  const init: RequestInit = { method, headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/x-www-form-urlencoded" } };
+  const stripeHeaders: Record<string, string> = { Authorization: `Bearer ${secret}`, "Content-Type": "application/x-www-form-urlencoded" };
+  if (idempotencyKey) stripeHeaders["Idempotency-Key"] = idempotencyKey;
+  const init: RequestInit = { method, headers: stripeHeaders };
   if (body) { const f = new URLSearchParams(); for (const [k, v] of Object.entries(body)) f.append(k, String(v)); init.body = f.toString(); }
   const r = await fetch(`https://api.stripe.com/v1/${path}`, init);
   const j = await r.json().catch(() => ({}));
@@ -65,8 +67,10 @@ async function reward(admin: any, referral: any) {
     }
     if (!rewardId) continue;
     try {
-      const coupon = await stripe("coupons", "POST", { percent_off: 100, duration: "once", name: `PocketRep referral ${rewardId}`, metadata: { pocketrep_reward_id: rewardId } });
-      await stripe(`subscriptions/${encodeURIComponent(sub.id)}`, "POST", { "discounts[0][coupon]": coupon.id, proration_behavior: "none", "metadata[pocketrep_referral_reward_id]": rewardId });
+      // Stripe idempotency keys make reward retries safe even if the database
+      // update succeeds after Stripe but the webhook response is lost.
+      const coupon = await stripe("coupons", "POST", { percent_off: 100, duration: "once", name: `PocketRep referral ${rewardId}`, metadata: { pocketrep_reward_id: rewardId } }, `pocketrep_referral_coupon_${rewardId}`);
+      await stripe(`subscriptions/${encodeURIComponent(sub.id)}`, "POST", { "discounts[0][coupon]": coupon.id, proration_behavior: "none", "metadata[pocketrep_referral_reward_id]": rewardId }, `pocketrep_referral_apply_${rewardId}`);
       await admin.from("referral_rewards").update({ status: "applied", stripe_credit_id: coupon.id, issued_at: new Date().toISOString(), applied_at: new Date().toISOString() }).eq("id", rewardId);
       applied++;
     } catch (e) { console.error("reward failed", rewardId, e); await admin.from("referral_rewards").update({ status: "failed" }).eq("id", rewardId); }
@@ -85,8 +89,6 @@ Deno.serve(async (req: Request) => {
   let event: any; try { event = JSON.parse(body); } catch { return new Response("Invalid JSON", { status: 400, headers }); }
   const admin = createClient(url, key);
 
-  // Claim the event before processing. A completed event is safely ignored on
-  // redelivery; a failed or stale in-progress event is allowed to retry.
   if (event.id) {
     const now = new Date().toISOString();
     const { data: inserted } = await admin.from("stripe_webhook_events")
