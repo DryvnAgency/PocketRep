@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet, Linking, Platform,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet, Linking, Platform, Alert,
 } from 'react-native';
 import { colors, radius, spacing } from '@/constants/theme';
 import { Avatar, Label, Pill, rgbaTint } from './atoms';
@@ -20,11 +20,13 @@ import {
   updateContactName,
   updateContactVehicleInfo,
   logContactTouch,
+  type CallOutcome,
 } from '@/lib/v2/updateContact';
 import { titleCase, normalizeVehicle } from '@/lib/v2/format';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 import { useContactNurtures } from '@/lib/v2/contactNurtures';
 import { logInteraction, useInteractions, type InteractionType, type TimelineEventType } from '@/lib/v2/interactions';
+import { launchSms } from '@/lib/v2/smsLauncher';
 import { pickAndUploadContactPhoto } from '@/lib/v2/contactPhoto';
 import { formatBirthday, parseBirthdayInput } from '@/lib/v2/birthday';
 import LanguageToggle from './LanguageToggle';
@@ -394,17 +396,46 @@ export default function ContactDetail({
 
   // Call/Text: native dials/opens Messages directly; web opens a compose modal
   // (tel:/sms: are no-ops in most desktop browsers, so the modal is the result).
-  const openCall = () => {
+  const openCall = async () => {
     if (!contact.phone) { flash('No number on file'); return; }
     if (Platform.OS === 'web') { setCompose({ mode: 'call', body: '' }); return; }
-    Linking.openURL(channelUrl('call'));
-    recordTouch('call');
+    await Linking.openURL(channelUrl('call')).catch(() => undefined);
+    // Prompt for structured call outcome after the rep returns from the dialer.
+    const outcome = await new Promise<CallOutcome | null>(resolve => {
+      Alert.alert(
+        'Call outcome',
+        `How did the call with ${contact.name.split(' ')[0]} go?`,
+        [
+          { text: 'Answered', onPress: () => resolve('answered') },
+          { text: 'No Answer', onPress: () => resolve('no-answer') },
+          { text: 'Left VM', onPress: () => resolve('voicemail') },
+        ],
+        { cancelable: false },
+      );
+    });
+    if (outcome) {
+      const summary = `Call outcome: ${outcome.replace('-', ' ')}`;
+      logContactTouch(contact.id, 'call', summary, outcome).catch(e => console.warn('logContactTouch', e));
+      logInteraction(contact.id, 'call', summary, outcome)
+        .then(() => setInteractionsKey(k => k + 1))
+        .catch(e => console.warn('logInteraction', e));
+      onLocalUpdate({ ...contact, days: 0 });
+      flash('✓ Call logged');
+    }
   };
-  const openText = (body?: string) => {
+  const openText = async (body?: string) => {
     if (!contact.phone) { flash('No number on file'); return; }
     if (Platform.OS === 'web') { setCompose({ mode: 'text', body: body ?? '' }); return; }
-    Linking.openURL(channelUrl('text', body));
-    recordTouch('text', body);
+    const result = await launchSms({
+      contact_id: contact.id,
+      contact_name: contact.name,
+      phone: contact.phone,
+      message: body ?? '',
+      isDemo: contact.isDemo,
+    });
+    if (result === 'opened') {
+      recordTouch('text', body);
+    }
   };
   // Email mirrors Call/Text: web opens the compose modal (mailto: silently
   // no-ops when no desktop mail client is registered, which read as a dead

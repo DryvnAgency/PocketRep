@@ -96,7 +96,7 @@ Deno.serve(async (req: Request) => {
         if (email) await admin.from("profiles").update({ stripe_customer_id: customer, plan: "pocketrep", subscription_status: "active", trial_ends_at: null }).eq("email", email);
         if (customer) {
           const { data: ref } = await admin.from("referrals").select("*").eq("stripe_customer_id", customer).maybeSingle();
-          if (ref) await admin.from("referrals").update({ paid_at: new Date().toISOString(), status: "paid", stripe_checkout_session_id: s.id }).eq("id", ref.id);
+          if (ref) await admin.from("referrals").update({ stripe_checkout_session_id: s.id }).eq("id", ref.id);
         }
         break;
       }

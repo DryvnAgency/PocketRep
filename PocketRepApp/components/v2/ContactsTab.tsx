@@ -8,6 +8,7 @@ import type { V2Contact } from '@/lib/v2/useContacts';
 import type { V2Tag } from '@/lib/v2/useTags';
 import { logInteraction } from '@/lib/v2/interactions';
 import { logContactTouch, type CallOutcome } from '@/lib/v2/updateContact';
+import { launchSms } from '@/lib/v2/smsLauncher';
 
 type FilterTag = null | { kind: 'tier'; tier: TierKey; name: string; color: string; icon: string } | { kind: 'custom'; name: string; color: string };
 const TIER_CHIPS: Extract<FilterTag, { kind: 'tier' }>[] = [
@@ -36,8 +37,16 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
   const openText = async () => {
     if (!current) return;
     setTextOpened(true);
-    await record('text', 'Text opened after no answer');
-    Linking.openURL(`sms:${digitsOnly(current.phone)}?&body=${encodeURIComponent(textBody)}`).catch(() => undefined);
+    const result = await launchSms({
+      contact_id: current.id,
+      contact_name: current.name,
+      phone: current.phone,
+      message: textBody,
+      isDemo: current.isDemo,
+    });
+    if (result === 'opened') {
+      await record('text', 'Text sent after no answer');
+    }
   };
   const copyText = async () => { try { if (typeof navigator !== 'undefined' && navigator.clipboard) { await navigator.clipboard.writeText(textBody); setCopied(true); setTimeout(() => setCopied(false), 1400); } } catch {} };
   const next = () => { setIndex(i => i + 1); setCalled(false); setOutcome(null); setTextOpened(false); setCopied(false); };

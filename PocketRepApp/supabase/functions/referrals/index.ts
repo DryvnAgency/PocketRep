@@ -32,8 +32,8 @@ Deno.serve(async (req) => {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { autoRefreshToken: false, persistSession: false } });
   const { data: profile } = await admin.from('profiles').select('plan,subscription_status,email').eq('id', user.id).maybeSingle();
-  if (profile?.plan !== 'elite' || !['active', 'trialing'].includes(profile?.subscription_status ?? '')) {
-    return json({ ok: false, error: 'elite_required' }, 403, origin);
+  if (!['active', 'trialing'].includes(profile?.subscription_status ?? '')) {
+    return json({ ok: false, error: 'subscription_required' }, 403, origin);
   }
 
   const body = await req.json().catch(() => ({}));

@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Switch, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Switch, Platform, Share } from 'react-native';
 import Constants from 'expo-constants';
 import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, Pill, SectionHead } from './atoms';
@@ -91,6 +91,8 @@ export default function ProfileTab({
   const [timezone, setTimezone] = useState<string | null>(null);
   const [showSendPicker, setShowSendPicker] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referralCount, setReferralCount] = useState(0);
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   const payPlan = usePayPlan(payPlanRefetchKey);
 
@@ -109,6 +111,15 @@ export default function ProfileTab({
       if (data && !cancelled) setProfile(data as ProfileRow);
       const st = await loadSendTime();
       if (!cancelled) { setSendHourState(st.send_hour); setTimezone(st.timezone); }
+      // Fetch referral code (ensures row exists in referral_codes table)
+      const { data: code } = await supabase.rpc('ensure_my_referral_code');
+      if (code && !cancelled) setReferralCode(code);
+      // Fetch referral count
+      const { count } = await supabase
+        .from('referrals')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrer_user_id', user.id);
+      if (!cancelled) setReferralCount(count ?? 0);
     })();
     const unsub = subscribeRepSettings(forceTick);
     return () => { cancelled = true; unsub(); };
@@ -163,7 +174,22 @@ export default function ProfileTab({
   const dealership = getRepSetting('dealership');
   const title = getRepSetting('title');
   const heroSub = [dealership, title].filter(Boolean).join(' · ') || 'Tap to set up your profile';
-  const referLink = `https://app.pocketrep.pro/?ref=${encodeURIComponent(profile?.email ?? 'rep')}`;
+  const referLink = referralCode
+    ? `https://app.pocketrep.pro/?ref=${encodeURIComponent(referralCode)}`
+    : null;
+
+  const shareReferral = async () => {
+    if (!referLink) { flash('Loading your referral code…'); return; }
+    if (Platform.OS === 'web') {
+      await copy(referLink, 'Referral link copied');
+      return;
+    }
+    try {
+      await Share.share({
+        message: `Give a Month. Get a Month. Sign up for PocketRep with my link and we both get a free month: ${referLink}`,
+      });
+    } catch { /* user cancelled share sheet */ }
+  };
   // Real build identity from the Expo config (app.json) — no hardcoded version.
   const appVersion = Constants.expoConfig?.version ?? null;
   const buildNo =
@@ -289,8 +315,13 @@ export default function ProfileTab({
           onPress={() => editSetting('phone', 'Phone', 'PHONE NUMBER', { keyboardType: 'phone-pad' })} />
         <Row icon="🔒" label="Security" detail={getRepSetting('security') || 'Not set'}
           onPress={() => editSetting('security', 'Security', 'SIGN-IN METHOD')} />
-        <Row icon="↗" label="Refer a rep" detail="$50 each"
-          onPress={() => copy(referLink, 'Referral link copied')} />
+        <Row icon="↗" label="Refer a rep" detail={referralCode ?? 'Loading…'}
+          onPress={shareReferral} />
+        {referralCount > 0 ? (
+          <Row icon="🎁" label="Give a Month. Get a Month." detail={`${referralCount} referred`} chevron={false} />
+        ) : (
+          <Row icon="🎁" label="Give a Month. Get a Month." detail="Share & earn" chevron={false} />
+        )}
       </View>
 
       <Pressable
