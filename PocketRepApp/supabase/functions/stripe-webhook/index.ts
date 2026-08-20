@@ -84,6 +84,11 @@ Deno.serve(async (req: Request) => {
   if (!sig || !(await verify(body, sig, secret))) return new Response("Invalid signature", { status: 401, headers });
   let event: any; try { event = JSON.parse(body); } catch { return new Response("Invalid JSON", { status: 400, headers }); }
   const admin = createClient(url, key);
+  // Event deduplication — idempotent on redelivery
+  if (event.id) {
+    const { data: inserted } = await admin.from("stripe_webhook_events").insert({ event_id: event.id, event_type: event.type }).select("event_id").maybeSingle();
+    if (!inserted) return new Response(JSON.stringify({ received: true, duplicate: true }), { status: 200, headers: { ...headers, "Content-Type": "application/json" } });
+  }
   try {
     switch (event.type) {
       case "checkout.session.completed": {
