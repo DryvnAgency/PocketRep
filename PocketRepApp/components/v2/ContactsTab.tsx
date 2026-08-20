@@ -7,7 +7,7 @@ import { TIERS, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { V2Tag } from '@/lib/v2/useTags';
 import { logInteraction } from '@/lib/v2/interactions';
-import { logContactTouch } from '@/lib/v2/updateContact';
+import { logContactTouch, type CallOutcome } from '@/lib/v2/updateContact';
 
 type FilterTag = null | { kind: 'tier'; tier: TierKey; name: string; color: string; icon: string } | { kind: 'custom'; name: string; color: string };
 const TIER_CHIPS: Extract<FilterTag, { kind: 'tier' }>[] = [
@@ -26,13 +26,13 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
   const [copied, setCopied] = useState(false);
   const current = queue[index] ?? null;
   const textBody = current ? `Hey ${current.name.split(' ')[0]}, it’s Eddie. Just tried giving you a call. Wanted to catch up with you real quick. Give me a call or text when you get a chance.` : '';
-  const record = async (type: 'call' | 'text', notes: string) => {
+  const record = async (type: 'call' | 'text', notes: string, callOutcome?: CallOutcome) => {
     if (!current) return;
-    try { await logContactTouch(current.id, type, notes); } catch (e) { console.warn('call queue touch', e); }
-    try { await logInteraction(current.id, type, notes); } catch (e) { console.warn('call queue interaction', e); }
+    try { await logContactTouch(current.id, type, notes, callOutcome); } catch (e) { console.warn('call queue touch', e); }
+    try { await logInteraction(current.id, type, notes, callOutcome); } catch (e) { console.warn('call queue interaction', e); }
   };
   const openCall = () => { if (!current) return; setCalled(true); Linking.openURL(`tel:${digitsOnly(current.phone)}`).catch(() => undefined); };
-  const chooseOutcome = async (next: NonNullable<typeof outcome>) => { if (!current) return; setOutcome(next); await record('call', `Call outcome: ${next.replace('-', ' ')}`); };
+  const chooseOutcome = async (next: NonNullable<typeof outcome>) => { if (!current) return; setOutcome(next); await record('call', `Call outcome: ${next.replace('-', ' ')}`, next); };
   const openText = async () => {
     if (!current) return;
     setTextOpened(true);
