@@ -60,7 +60,7 @@ export default function NurtureReviewer({
         message: d.message_text,
         isDemo: d.isDemo,
       });
-      if (opened) {
+      if (opened === 'opened') {
         await markNurtureSent(d.id);
         dropDraft(d.id);
         onChanged();
