@@ -91,11 +91,12 @@ function rowToContact(r: any): V2Contact {
   };
 }
 
-export function useContacts() {
+export function useContacts(enabled: boolean = true) {
   const [contacts, setContacts] = useState<V2Contact[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!enabled) return;
     const { data, error } = await supabase
       .from('contacts')
       .select(
@@ -117,7 +118,7 @@ export function useContacts() {
     const rank: Record<TierKey, number> = { hot: 3, warm: 2, cold: 1 };
     rows.sort((a, b) => rank[b.tier] - rank[a.tier] || b.heatScore - a.heatScore || a.days - b.days);
     setContacts(rows);
-  }, []);
+  }, [enabled]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -104,13 +104,13 @@ export default function AppShell() {
   const [rexCoachOpen, setRexCoachOpen] = useState(false);
   const [rexActionError, setRexActionError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const payPlan = usePayPlan(payPlanRefetchKey);
+  const payPlan = usePayPlan(payPlanRefetchKey, authReady);
   // HARD LOCKOUT gate — inert until Eduardo wires the real subscription read in
   // accessGate.ts (it returns 'allowed' today, so no behavior change). See the
   // early return below + docs/MASTER_PLAN.md §"Gated P0 — Eduardo only".
   const access = useAccessGate();
 
-  const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
+  const { contacts, error, patchLocal, reload: reloadContacts } = useContacts(authReady);
 
   // Demo-blast simulation: fire any due simulated replies (15/30/60s after a demo
   // blast) on mount + a short timer, then refresh the book so they surface on the
@@ -128,11 +128,12 @@ export default function AppShell() {
     const iv = setInterval(() => { void tick(); }, 5000);
     return () => { cancelled = true; clearInterval(iv); };
   }, []);
-  const tags = useTags(tagsRefetchKey);
+  const tags = useTags(tagsRefetchKey, authReady);
   const tagNames = useMemo(() => tags.map(t => t.name), [tags]);
   const { items: notifItems, unread: notifUnread } = useNotifications(
     contacts,
     nurtureRefetchKey,
+    authReady,
   );
   // "active" = hot + warm leads (the rep's working pipeline).
   const activeCount = useMemo(

@@ -129,15 +129,17 @@ export type ResolvedNotification = NotificationItem & { read: boolean };
 export function useNotifications(
   contacts: V2Contact[] | null,
   refetchKey: number = 0,
+  enabled: boolean = true,
 ): { items: ResolvedNotification[]; unread: number } {
   const [raw, setRaw] = useState<NotificationItem[]>([]);
   const [, bump] = useReducer((x: number) => x + 1, 0);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     loadNotifications(contacts ?? []).then(r => { if (!cancelled) setRaw(r); });
     return () => { cancelled = true; };
-  }, [contacts, refetchKey]);
+  }, [contacts, refetchKey, enabled]);
 
   useEffect(() => subscribeNotifReads(bump), []);
 
