@@ -32,8 +32,8 @@ Deno.serve(async (req) => {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { autoRefreshToken: false, persistSession: false } });
   const { data: profile } = await admin.from('profiles').select('plan,subscription_status,email').eq('id', user.id).maybeSingle();
-  if (profile?.plan !== 'elite' || !['active', 'trialing'].includes(profile?.subscription_status ?? '')) {
-    return json({ ok: false, error: 'elite_required' }, 403, origin);
+  if (!profile || !['active', 'trialing'].includes(profile.subscription_status ?? '')) {
+    return json({ ok: false, error: 'active_subscription_required' }, 403, origin);
   }
 
   const body = await req.json().catch(() => ({}));
@@ -52,13 +52,13 @@ Deno.serve(async (req) => {
 
   const { data: rewards } = await admin
     .from('referral_rewards')
-    .select('id,referral_id,status,created_at,applied_at')
+    .select('id,referral_id,reward_months,status,reward_type,created_at,applied_at')
     .eq('recipient_user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(100);
 
   const successful = (referrals ?? []).filter((r: any) => ['qualified', 'rewarded'].includes(r.status)).length;
-  const earned = (rewards ?? []).filter((r: any) => r.status === 'applied').length;
+  const earned = (rewards ?? []).filter((r: any) => r.status === 'applied').reduce((sum: number, r: any) => sum + Number(r.reward_months ?? 1), 0);
 
   return json({
     ok: true,
@@ -68,5 +68,6 @@ Deno.serve(async (req) => {
     rewards: rewards ?? [],
     successful,
     monthsEarned: earned,
+    offer: 'Refer a rep. When they activate PocketRep after their trial, you both get one month free.',
   }, 200, origin);
 });
