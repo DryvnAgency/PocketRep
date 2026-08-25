@@ -67,8 +67,6 @@ async function reward(admin: any, referral: any) {
     }
     if (!rewardId) continue;
     try {
-      // Stripe idempotency keys make reward retries safe even if the database
-      // update succeeds after Stripe but the webhook response is lost.
       const coupon = await stripe("coupons", "POST", { percent_off: 100, duration: "once", name: `PocketRep referral ${rewardId}`, metadata: { pocketrep_reward_id: rewardId } }, `pocketrep_referral_coupon_${rewardId}`);
       await stripe(`subscriptions/${encodeURIComponent(sub.id)}`, "POST", { "discounts[0][coupon]": coupon.id, proration_behavior: "none", "metadata[pocketrep_referral_reward_id]": rewardId }, `pocketrep_referral_apply_${rewardId}`);
       await admin.from("referral_rewards").update({ status: "applied", stripe_credit_id: coupon.id, issued_at: new Date().toISOString(), applied_at: new Date().toISOString() }).eq("id", rewardId);
@@ -121,8 +119,13 @@ Deno.serve(async (req: Request) => {
   try {
     switch (event.type) {
       case "checkout.session.completed": {
+        // Checkout completion provisions the account, but does NOT qualify a referral
+        // or force a trial subscription to active. Stripe's paid invoice is the trigger.
         const s = event.data.object, email = String(s.customer_details?.email || s.customer_email || "").toLowerCase(), customer = s.customer;
-        if (email) await admin.from("profiles").update({ stripe_customer_id: customer, plan: "pocketrep", subscription_status: "active", trial_ends_at: null, entitlement_status: null, entitlement_pending_until: null }).eq("email", email);
+        if (email && customer) {
+          const { data: profile } = await admin.from("profiles").select("id").eq("email", email).maybeSingle();
+          if (profile?.id) await admin.from("profiles").update({ stripe_customer_id: customer, plan: "pocketrep" }).eq("id", profile.id);
+        }
         if (customer) {
           const { data: ref } = await admin.from("referrals").select("*").eq("stripe_customer_id", customer).maybeSingle();
           if (ref) await admin.from("referrals").update({ stripe_checkout_session_id: s.id }).eq("id", ref.id);
@@ -148,9 +151,11 @@ Deno.serve(async (req: Request) => {
       case "invoice.payment_succeeded": {
         const i = event.data.object, profileId = await profileIdForCustomer(admin, i.customer);
         if (profileId) await admin.from("profiles").update({ subscription_status: "active", entitlement_status: null, entitlement_pending_until: null }).eq("id", profileId);
+        // Referral qualification is intentionally tied to a successful subscription invoice.
+        const subscriptionId = typeof i.subscription === "string" ? i.subscription : i.subscription?.id ?? null;
         const { data: ref } = await admin.from("referrals").select("*").eq("stripe_customer_id", i.customer).maybeSingle();
-        if (ref && ref.status !== "rewarded") {
-          await admin.from("referrals").update({ paid_at: ref.paid_at ?? new Date().toISOString(), status: "qualified" }).eq("id", ref.id);
+        if (ref && subscriptionId && ref.status !== "rewarded") {
+          await admin.from("referrals").update({ paid_at: ref.paid_at ?? new Date().toISOString(), stripe_subscription_id: ref.stripe_subscription_id ?? subscriptionId, status: "qualified" }).eq("id", ref.id);
           const { data: u } = await admin.from("referrals").select("*").eq("id", ref.id).single();
           await reward(admin, u);
         }
