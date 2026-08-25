@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
-export type SmsActionStatus = 'opened' | 'sent' | 'not_sent' | 'failed' | 'no_phone' | 'simulated_sent';
+export type SmsActionStatus = 'opened' | 'confirmed_sent' | 'not_sent' | 'failed' | 'no_phone' | 'simulated_sent';
 export type SmsActionSource = 'manual' | 'blast' | 'sequence' | 'demo';
 
 export type SmsAction = {
@@ -37,11 +37,11 @@ export async function recordSmsOpened(input: {
   return data?.id ?? null;
 }
 
-/** Mark a previously-opened native SMS as actually sent after the rep confirms it. */
+/** Mark a previously-opened native SMS as confirmed sent after the rep confirms it. */
 export async function markSmsSent(actionId: string): Promise<void> {
   const { error } = await supabase
     .from('outbound_sms_actions')
-    .update({ status: 'sent', completed_at: new Date().toISOString() })
+    .update({ status: 'confirmed_sent', completed_at: new Date().toISOString() })
     .eq('id', actionId);
   if (error) throw error;
 }

@@ -91,8 +91,7 @@ export default function BlastSequenceDrafter({
     setError(null);
     try {
       let demoIndex = 0; // staggers demo replies at 15s / 30s / 60s by send order
-      let openedCount = 0;
-      let noPhoneCount = 0;
+      let confirmedCount = 0;
       for (const s of toSend) {
         const c = contactById.get(s.contact_id);
         const sendable: SendableDraft = {
@@ -101,36 +100,32 @@ export default function BlastSequenceDrafter({
           phone: c?.phone ?? null,
           message: s.message,
           isDemo: c?.isDemo,
+          source: 'blast',
         };
+        // For real contacts, launchSms is the single authoritative outbound
+        // action. It records composer_opened, waits for the rep to return, and
+        // changes that same row to sent/not_sent. Do not create a second SMS
+        // action in recordSentBlast for a real contact.
         const result = await launchSms(sendable);
         if (result === 'opened') {
-          openedCount++;
+          confirmedCount++;
           if (c?.isDemo) {
-            // Demo send: record the outbound, capture its id, and schedule the
-            // simulated reply (15/30/60s). No real SMS left the app (launchSms
-            // short-circuited above).
+            // Demo send: launchSms is intentionally simulated, so record the
+            // demo history row and schedule the simulated reply.
             const msgId = await recordSentBlast({
               contactId: s.contact_id,
               message: s.message,
               language: s.language,
               hookUsed: s.hook_used,
+              isDemo: true,
             }).catch(() => null);
             if (msgId) registerDemoSend(s.contact_id, msgId, demoIndex++);
-          } else {
-            recordSentBlast({
-              contactId: s.contact_id,
-              message: s.message,
-              language: s.language,
-              hookUsed: s.hook_used,
-            }).catch(() => undefined);
           }
           updateStep(s.contact_id, { sent: true });
-        } else if (result === 'no_phone') {
-          noPhoneCount++;
         }
       }
-      // Only mark approved if at least one message was opened
-      if (openedCount > 0) await markBlastApproved(draft.sequence_id);
+      // Only mark approved if at least one message was confirmed by the rep.
+      if (confirmedCount > 0) await markBlastApproved(draft.sequence_id);
       onSent();
       onClose();
     } catch (e: any) {
@@ -176,9 +171,6 @@ export default function BlastSequenceDrafter({
 
         <ScrollView contentContainerStyle={styles.body}>
           {steps.length === 0 ? (
-            // The draft is already resolved by the time this renders, so zero
-            // steps means the brain returned nothing usable — show an honest
-            // state instead of a spinner that never resolves. Close (header) to retry.
             <View style={styles.empty}>
               <Text style={styles.emptyText}>Couldn't draft any messages for this blast. Close and try again.</Text>
             </View>
@@ -236,7 +228,7 @@ export default function BlastSequenceDrafter({
 
                 {step.sent ? (
                   <View style={styles.sentBadge}>
-                    <Text style={styles.sentText}>✓ OPENED</Text>
+                    <Text style={styles.sentText}>✓ SENT</Text>
                   </View>
                 ) : (
                   <View style={styles.cardActions}>

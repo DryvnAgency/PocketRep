@@ -19,10 +19,12 @@ async function verify(payload: string, sigHeader: string, secret: string, tolera
   });
 }
 
-async function stripe(path: string, method: string, body?: Record<string, unknown>) {
+async function stripe(path: string, method: string, body?: Record<string, unknown>, idempotencyKey?: string) {
   const secret = Deno.env.get("STRIPE_SECRET_KEY");
   if (!secret) throw new Error("missing_stripe_secret");
-  const init: RequestInit = { method, headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/x-www-form-urlencoded" } };
+  const stripeHeaders: Record<string, string> = { Authorization: `Bearer ${secret}`, "Content-Type": "application/x-www-form-urlencoded" };
+  if (idempotencyKey) stripeHeaders["Idempotency-Key"] = idempotencyKey;
+  const init: RequestInit = { method, headers: stripeHeaders };
   if (body) { const f = new URLSearchParams(); for (const [k, v] of Object.entries(body)) f.append(k, String(v)); init.body = f.toString(); }
   const r = await fetch(`https://api.stripe.com/v1/${path}`, init);
   const j = await r.json().catch(() => ({}));
@@ -65,8 +67,10 @@ async function reward(admin: any, referral: any) {
     }
     if (!rewardId) continue;
     try {
-      const coupon = await stripe("coupons", "POST", { percent_off: 100, duration: "once", name: `PocketRep referral ${rewardId}`, metadata: { pocketrep_reward_id: rewardId } });
-      await stripe(`subscriptions/${encodeURIComponent(sub.id)}`, "POST", { "discounts[0][coupon]": coupon.id, proration_behavior: "none", "metadata[pocketrep_referral_reward_id]": rewardId });
+      // Stripe idempotency keys make reward retries safe even if the database
+      // update succeeds after Stripe but the webhook response is lost.
+      const coupon = await stripe("coupons", "POST", { percent_off: 100, duration: "once", name: `PocketRep referral ${rewardId}`, metadata: { pocketrep_reward_id: rewardId } }, `pocketrep_referral_coupon_${rewardId}`);
+      await stripe(`subscriptions/${encodeURIComponent(sub.id)}`, "POST", { "discounts[0][coupon]": coupon.id, proration_behavior: "none", "metadata[pocketrep_referral_reward_id]": rewardId }, `pocketrep_referral_apply_${rewardId}`);
       await admin.from("referral_rewards").update({ status: "applied", stripe_credit_id: coupon.id, issued_at: new Date().toISOString(), applied_at: new Date().toISOString() }).eq("id", rewardId);
       applied++;
     } catch (e) { console.error("reward failed", rewardId, e); await admin.from("referral_rewards").update({ status: "failed" }).eq("id", rewardId); }
@@ -84,26 +88,51 @@ Deno.serve(async (req: Request) => {
   if (!sig || !(await verify(body, sig, secret))) return new Response("Invalid signature", { status: 401, headers });
   let event: any; try { event = JSON.parse(body); } catch { return new Response("Invalid JSON", { status: 400, headers }); }
   const admin = createClient(url, key);
-  // Event deduplication — idempotent on redelivery
+
   if (event.id) {
-    const { data: inserted } = await admin.from("stripe_webhook_events").insert({ event_id: event.id, event_type: event.type }).select("event_id").maybeSingle();
-    if (!inserted) return new Response(JSON.stringify({ received: true, duplicate: true }), { status: 200, headers: { ...headers, "Content-Type": "application/json" } });
+    const now = new Date().toISOString();
+    const { data: inserted } = await admin.from("stripe_webhook_events")
+      .insert({ event_id: event.id, event_type: event.type, status: "processing", processing_started_at: now, processed_at: null })
+      .select("event_id")
+      .maybeSingle();
+    if (!inserted) {
+      const { data: existing } = await admin.from("stripe_webhook_events")
+        .select("status,processing_started_at")
+        .eq("event_id", event.id)
+        .maybeSingle();
+      if (existing?.status === "processed") {
+        return new Response(JSON.stringify({ received: true, duplicate: true }), { status: 200, headers: { ...headers, "Content-Type": "application/json" } });
+      }
+      const started = existing?.processing_started_at ? new Date(existing.processing_started_at).getTime() : 0;
+      const stale = !started || Date.now() - started > 5 * 60 * 1000;
+      if (existing?.status === "failed" || stale) {
+        const { data: reclaimed } = await admin.from("stripe_webhook_events")
+          .update({ status: "processing", processing_started_at: now, processed_at: null })
+          .eq("event_id", event.id)
+          .select("event_id")
+          .maybeSingle();
+        if (!reclaimed) return new Response("Webhook already processing", { status: 409, headers });
+      } else {
+        return new Response("Webhook already processing", { status: 409, headers });
+      }
+    }
   }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
         const s = event.data.object, email = String(s.customer_details?.email || s.customer_email || "").toLowerCase(), customer = s.customer;
-        if (email) await admin.from("profiles").update({ stripe_customer_id: customer, plan: "pocketrep", subscription_status: "active", trial_ends_at: null }).eq("email", email);
+        if (email) await admin.from("profiles").update({ stripe_customer_id: customer, plan: "pocketrep", subscription_status: "active", trial_ends_at: null, entitlement_status: null, entitlement_pending_until: null }).eq("email", email);
         if (customer) {
           const { data: ref } = await admin.from("referrals").select("*").eq("stripe_customer_id", customer).maybeSingle();
-          if (ref) await admin.from("referrals").update({ paid_at: new Date().toISOString(), status: "paid", stripe_checkout_session_id: s.id }).eq("id", ref.id);
+          if (ref) await admin.from("referrals").update({ stripe_checkout_session_id: s.id }).eq("id", ref.id);
         }
         break;
       }
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const s = event.data.object, profileId = await profileIdForCustomer(admin, s.customer);
-        if (profileId) await admin.from("profiles").update({ plan: "pocketrep", subscription_status: s.status, trial_ends_at: s.status === "trialing" && s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null }).eq("id", profileId);
+        if (profileId) await admin.from("profiles").update(Object.assign({ plan: "pocketrep", subscription_status: s.status, trial_ends_at: s.status === "trialing" && s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null }, ["active","trialing"].includes(s.status) ? { entitlement_status: null, entitlement_pending_until: null } : {})).eq("id", profileId);
         break;
       }
       case "customer.subscription.deleted": {
@@ -118,7 +147,7 @@ Deno.serve(async (req: Request) => {
       }
       case "invoice.payment_succeeded": {
         const i = event.data.object, profileId = await profileIdForCustomer(admin, i.customer);
-        if (profileId) await admin.from("profiles").update({ subscription_status: "active" }).eq("id", profileId);
+        if (profileId) await admin.from("profiles").update({ subscription_status: "active", entitlement_status: null, entitlement_pending_until: null }).eq("id", profileId);
         const { data: ref } = await admin.from("referrals").select("*").eq("stripe_customer_id", i.customer).maybeSingle();
         if (ref && ref.status !== "rewarded") {
           await admin.from("referrals").update({ paid_at: ref.paid_at ?? new Date().toISOString(), status: "qualified" }).eq("id", ref.id);
@@ -128,6 +157,19 @@ Deno.serve(async (req: Request) => {
         break;
       }
     }
-  } catch (e) { console.error("Webhook processing error", e); return new Response("Webhook processing error", { status: 500, headers }); }
+    if (event.id) {
+      await admin.from("stripe_webhook_events")
+        .update({ status: "processed", processed_at: new Date().toISOString(), processing_started_at: null })
+        .eq("event_id", event.id);
+    }
+  } catch (e) {
+    if (event.id) {
+      await admin.from("stripe_webhook_events")
+        .update({ status: "failed", processing_started_at: null })
+        .eq("event_id", event.id);
+    }
+    console.error("Webhook processing error", e);
+    return new Response("Webhook processing error", { status: 500, headers });
+  }
   return new Response(JSON.stringify({ received: true }), { status: 200, headers: { ...headers, "Content-Type": "application/json" } });
 });

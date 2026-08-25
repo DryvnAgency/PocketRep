@@ -1,5 +1,5 @@
 import { Alert, AppState, Linking, Platform } from 'react-native';
-import { recordSmsOpened, markSmsSent, markSmsNotSent, recordSmsFailure } from '@/lib/v2/smsActions';
+import { recordSmsOpened, markSmsSent, markSmsNotSent, recordSmsFailure, type SmsActionSource } from '@/lib/v2/smsActions';
 
 function digitsOnly(phone: string | null | undefined): string {
   return (phone ?? '').replace(/[^\d]/g, '');
@@ -12,17 +12,18 @@ export type SendableDraft = {
   message: string;
   // Demo/tour contact — the send is SIMULATED (never dialed out to a carrier).
   isDemo?: boolean;
+  source?: SmsActionSource;
 };
 
 /**
- * Result of attempting an SMS action.
+ * Result of an SMS action.
  *
- * `opened` is retained for compatibility with the existing send queues, but it
- * now means the rep confirmed they actually sent the message after returning
- * from the native SMS composer. PocketRep never treats composer-open alone as
- * a sent message.
+ * `opened` is a legacy return name retained for existing callers. It means
+ * the composer opened AND the rep explicitly confirmed they tapped Send.
+ * The database status is `sent`; composer-open alone is never treated as sent.
+ * `not_sent` means the rep returned without sending.
  */
-export type SmsLaunchResult = 'opened' | 'no_phone' | 'failed';
+export type SmsLaunchResult = 'opened' | 'not_sent' | 'no_phone' | 'failed';
 
 function confirmSent(contactName: string): Promise<boolean> {
   if (Platform.OS === 'web') {
@@ -43,13 +44,44 @@ function confirmSent(contactName: string): Promise<boolean> {
   });
 }
 
+function waitForComposerReturn(): Promise<void> {
+  return new Promise(resolve => {
+    let sawBackground = false;
+    let settled = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const subscription = AppState.addEventListener('change', next => {
+      if (next === 'background' || next === 'inactive') {
+        sawBackground = true;
+      } else if (next === 'active' && sawBackground) {
+        setTimeout(finish, 150);
+      }
+    });
+
+    function finish() {
+      if (settled) return;
+      settled = true;
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      subscription.remove();
+      resolve();
+    }
+
+    // Web/browser handoffs may not emit AppState transitions. On native, the
+    // listener is installed BEFORE openURL, so the fallback cannot race ahead
+    // of a background event that was emitted during the handoff.
+    fallbackTimer = setTimeout(() => {
+      if (!sawBackground) finish();
+    }, 1500);
+  });
+}
+
 /**
  * Opens the native SMS composer pre-filled with the draft message.
  *
  * There is no OS callback telling PocketRep whether the rep tapped Send.
- * Therefore this records `opened`, waits for the rep to return to PocketRep,
- * asks for an explicit confirmation, and only then marks the outbound action
- * `sent`. A "Not Sent" response is stored as `not_sent`.
+ * Therefore this records the composer opening, waits for the rep to return to
+ * PocketRep, asks for explicit confirmation, and only then marks the outbound
+ * action as `sent` or `not_sent`.
  */
 export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> {
   if (draft.isDemo) return 'opened';
@@ -60,56 +92,32 @@ export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> 
       contactId: draft.contact_id,
       message: draft.message,
       status: 'no_phone',
+      source: draft.source,
     }).catch(() => undefined);
     return 'no_phone';
   }
 
   const url = `sms:${phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(draft.message)}`;
   let actionId: string | null = null;
+  const returnPromise = waitForComposerReturn();
   try {
     await Linking.openURL(url);
     actionId = await recordSmsOpened({
       contactId: draft.contact_id,
       message: draft.message,
-      source: 'manual',
+      source: draft.source ?? 'manual',
     });
   } catch {
     await recordSmsFailure({
       contactId: draft.contact_id,
       message: draft.message,
       status: 'failed',
+      source: draft.source,
     }).catch(() => undefined);
     return 'failed';
   }
 
-  // Wait for the app to return from Messages. On native this is the AppState
-  // background → active transition. Some web/browser handoffs do not emit the
-  // background event, so a short fallback prevents the flow from hanging.
-  await new Promise<void>(resolve => {
-    let sawBackground = false;
-    let settled = false;
-    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      if (fallbackTimer) clearTimeout(fallbackTimer);
-      subscription.remove();
-      resolve();
-    };
-
-    const subscription = AppState.addEventListener('change', next => {
-      if (next === 'background' || next === 'inactive') {
-        sawBackground = true;
-      } else if (next === 'active' && sawBackground) {
-        setTimeout(finish, 150);
-      }
-    });
-
-    fallbackTimer = setTimeout(() => {
-      if (!sawBackground) finish();
-    }, 1500);
-  });
+  await returnPromise;
 
   const sent = await confirmSent(draft.contact_name);
   if (actionId) {
@@ -119,5 +127,5 @@ export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> 
       await markSmsNotSent(actionId).catch(() => undefined);
     }
   }
-  return sent ? 'opened' : 'failed';
+  return sent ? 'opened' : 'not_sent';
 }

@@ -216,20 +216,21 @@ export async function createBlastDraft({
 }
 
 /**
- * Record a blast recipient as an outbound SMS action.
+ * Record a blast recipient in nurture_messages after the rep confirms send.
  *
- * IMPORTANT: sent_at intentionally remains NULL. Opening the native composer is
- * observable; tapping Send inside Messages is not. The customer history will
- * therefore contain the exact message with status `opened` until a confirmation
- * flow marks it `sent`.
+ * For real contacts `launchSms` already wrote an `outbound_sms_actions` row
+ * (via the "Did you send?" confirmation flow), so we skip `recordSmsOpened`
+ * to avoid duplicates. For demo contacts `launchSms` short-circuits — no
+ * native SMS opens — so we DO call `recordSmsOpened` as the sole record.
  */
 export async function recordSentBlast({
-  contactId, message, language, hookUsed,
+  contactId, message, language, hookUsed, isDemo,
 }: {
   contactId: string;
   message: string;
   language: 'en' | 'es';
   hookUsed: string;
+  isDemo?: boolean;
 }): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -243,17 +244,21 @@ export async function recordSentBlast({
     hook_used: hookUsed,
     trigger_type: 'blast',
     pitch_intensity: 'medium',
-    sent_at: null,
+    sent_at: now,
     opened_at: now,
-    sms_status: 'opened',
+    sms_status: isDemo ? 'simulated_sent' : 'sent',
   }).select('id').single();
   if (error) throw error;
 
-  await recordSmsOpened({
-    contactId,
-    message,
-    source: 'blast' as SmsActionSource,
-  }).catch(() => undefined);
+  // Only record outbound_sms_actions for demo contacts — real contacts
+  // already have an entry created by launchSms's confirmation flow.
+  if (isDemo) {
+    await recordSmsOpened({
+      contactId,
+      message,
+      source: 'blast' as SmsActionSource,
+    }).catch(() => undefined);
+  }
 
   return (data as { id: string } | null)?.id ?? null;
 }
