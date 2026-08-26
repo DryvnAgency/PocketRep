@@ -149,6 +149,120 @@ export function copyRuleViolations(message: string): string[] {
   return hits;
 }
 
+// ── Batch uniqueness enforcement ──────────────────────────────────────────────
+// Post-generation validation: every message in a blast batch must be genuinely
+// unique. Prompt instructions alone are not enough — this is the code-level gate.
+
+export type UniquenessResult = {
+  passed: boolean;
+  violations: string[];
+};
+
+/**
+ * Normalize a message body for comparison: lowercase, collapse whitespace,
+ * strip leading/trailing whitespace.
+ */
+function normalizeBody(msg: string): string {
+  return msg.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Validate that a batch of drafted messages are genuinely unique.
+ * Returns { passed, violations[] } — violations describe each failure.
+ *
+ * Checks:
+ * 1. Exact-duplicate bodies (normalized)
+ * 2. First-name-only substitution (bodies identical after removing the contact's first name)
+ * 3. Hook reuse (same hook_used on multiple contacts)
+ * 4. Opener similarity (>80% of messages share the same first 40 chars after the greeting)
+ */
+export function enforceUniqueness(steps: DraftedStep[]): UniquenessResult {
+  const violations: string[] = [];
+  if (steps.length <= 1) return { passed: true, violations };
+
+  // 1. Exact-duplicate check
+  const bodyMap = new Map<string, string[]>();
+  for (const s of steps) {
+    const norm = normalizeBody(s.message);
+    const existing = bodyMap.get(norm);
+    if (existing) {
+      existing.push(s.contact_name);
+    } else {
+      bodyMap.set(norm, [s.contact_name]);
+    }
+  }
+  for (const [, names] of bodyMap) {
+    if (names.length > 1) {
+      violations.push(`Exact duplicate message shared by: ${names.join(', ')}`);
+    }
+  }
+
+  // 2. First-name-only substitution check
+  // If removing the contact's first name from two messages makes them identical,
+  // it's template substitution, not real personalization.
+  const strippedBodies = steps.map(s => {
+    const firstName = s.contact_name.split(/\s+/)[0];
+    if (!firstName) return { name: s.contact_name, stripped: normalizeBody(s.message) };
+    const re = new RegExp(firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    return { name: s.contact_name, stripped: normalizeBody(s.message.replace(re, '')) };
+  });
+  const strippedMap = new Map<string, string[]>();
+  for (const { name, stripped } of strippedBodies) {
+    const existing = strippedMap.get(stripped);
+    if (existing) {
+      existing.push(name);
+    } else {
+      strippedMap.set(stripped, [name]);
+    }
+  }
+  for (const [, names] of strippedMap) {
+    if (names.length > 1) {
+      // Don't double-report if already caught as exact duplicate
+      const alreadyReported = violations.some(v => v.startsWith('Exact duplicate'));
+      if (!alreadyReported) {
+        violations.push(`Template substitution (only first name differs): ${names.join(', ')}`);
+      }
+    }
+  }
+
+  // 3. Hook diversity check
+  const hookMap = new Map<string, string[]>();
+  for (const s of steps) {
+    const hook = s.hook_used.toLowerCase();
+    const existing = hookMap.get(hook);
+    if (existing) {
+      existing.push(s.contact_name);
+    } else {
+      hookMap.set(hook, [s.contact_name]);
+    }
+  }
+  for (const [hook, names] of hookMap) {
+    if (names.length > 1) {
+      violations.push(`Hook "${hook}" reused across: ${names.join(', ')}`);
+    }
+  }
+
+  // 4. Opener similarity check
+  // Extract the opener after the greeting (hey/hola + name), compare first 40 chars.
+  const openerRe = /^(?:hey|hola|qu[eé]\s+(?:tal|onda))\s+\S+[,!]?\s*/i;
+  const openers = steps.map(s => {
+    const afterGreeting = s.message.replace(openerRe, '').toLowerCase().trim();
+    return afterGreeting.slice(0, 40);
+  });
+  const openerCounts = new Map<string, number>();
+  for (const o of openers) {
+    openerCounts.set(o, (openerCounts.get(o) ?? 0) + 1);
+  }
+  for (const [opener, count] of openerCounts) {
+    if (opener && count / steps.length > 0.8 && count > 1) {
+      violations.push(`${count}/${steps.length} messages share the same opener structure`);
+      break; // one report is enough
+    }
+  }
+
+  return { passed: violations.length === 0, violations };
+}
+
 export async function createBlastDraft({
   intent, filterSummary, promotion, contacts,
 }: {
