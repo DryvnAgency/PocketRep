@@ -26,6 +26,8 @@ import NurtureReviewer from './NurtureReviewer';
 import PayPlanEditor from './PayPlanEditor';
 import NotificationsCenter from './NotificationsCenter';
 import RexCoach from './RexCoach';
+import SupportChat from './SupportChat';
+import AdminSupportDashboard from './AdminSupportDashboard';
 import VehicleFinderModal from './VehicleFinderModal';
 import LockoutScreen from './LockoutScreen';
 import AuthScreen from './AuthScreen';
@@ -65,6 +67,7 @@ import type { FindVehiclesPayload } from '@/lib/v2/rexActions';
 import { useAccessGate } from '@/lib/v2/accessGate';
 import { supabase } from '@/lib/supabase';
 import { captureTimezone } from '@/lib/v2/sendTime';
+import { checkIsAdmin, countOpenTickets } from '@/lib/v2/supportChat';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
@@ -104,6 +107,10 @@ export default function AppShell() {
   const [payPlanRefetchKey, setPayPlanRefetchKey] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [rexCoachOpen, setRexCoachOpen] = useState(false);
+  const [supportChatOpen, setSupportChatOpen] = useState(false);
+  const [adminSupportOpen, setAdminSupportOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminOpenTicketCount, setAdminOpenTicketCount] = useState(0);
   const [rexActionError, setRexActionError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const payPlan = usePayPlan(payPlanRefetchKey, authReady);
@@ -182,6 +189,12 @@ export default function AppShell() {
       setNeedsAuth(false);
       setAuthReady(true);
       setAlwaysListen(getAlwaysListenEnabled());
+      // Check admin role for support inbox
+      checkIsAdmin().then(admin => {
+        if (cancelled) return;
+        setIsAdmin(admin);
+        if (admin) countOpenTickets().then(c => { if (!cancelled) setAdminOpenTicketCount(c); }).catch(() => {});
+      }).catch(() => {});
       // Warm the ai-proxy brain on launch so the rep's first Rex call (coach or
       // voice) isn't a 30-60s cold start.
       warmBrain();
@@ -436,6 +449,8 @@ export default function AppShell() {
 
   // Web back button → peel the topmost overlay instead of leaving the app.
   const closeTopOverlay = () => {
+    if (supportChatOpen) { setSupportChatOpen(false); return; }
+    if (adminSupportOpen) { setAdminSupportOpen(false); return; }
     if (rexCoachOpen) { setRexCoachOpen(false); return; }
     if (notifOpen) { setNotifOpen(false); return; }
     if (stalledOpen) { setStalledOpen(false); setStalledReport(null); return; }
@@ -453,6 +468,7 @@ export default function AppShell() {
     if (selectedId) { setSelectedId(null); return; }
   };
   const anyOverlayOpen =
+    supportChatOpen || adminSupportOpen ||
     rexCoachOpen || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
     !!blastDraft || gamePlanOpen || rexActivityOpen || addContactOpen || importOpen || vehicleFinderOpen || bulkTagOpen || !!selectedDeal ||
     dealLoggerOpen || !!selectedId;
@@ -566,6 +582,10 @@ export default function AppShell() {
             onOpenPayPlan={() => setPayPlanOpen(true)}
             onInstallApp={() => setInstallPromptOpen(true)}
             onNavigate={setActive}
+            onOpenSupport={() => setSupportChatOpen(true)}
+            isAdmin={isAdmin}
+            onOpenAdminSupport={() => setAdminSupportOpen(true)}
+            adminOpenTicketCount={adminOpenTicketCount}
             payPlanRefetchKey={payPlanRefetchKey}
           />
         ) : (
@@ -762,6 +782,18 @@ export default function AppShell() {
           }
         }}
       />
+
+      <SupportChat
+        open={supportChatOpen}
+        onClose={() => setSupportChatOpen(false)}
+      />
+
+      {isAdmin ? (
+        <AdminSupportDashboard
+          open={adminSupportOpen}
+          onClose={() => { setAdminSupportOpen(false); countOpenTickets().then(setAdminOpenTicketCount).catch(() => {}); }}
+        />
+      ) : null}
 
       <StalledLeadsAnalysis
         open={stalledOpen}

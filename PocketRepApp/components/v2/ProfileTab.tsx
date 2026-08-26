@@ -74,6 +74,10 @@ export default function ProfileTab({
   onOpenPayPlan,
   onInstallApp,
   onNavigate,
+  onOpenSupport,
+  isAdmin,
+  onOpenAdminSupport,
+  adminOpenTicketCount,
   payPlanRefetchKey = 0,
 }: {
   onOpenGamePlan?: () => void;
@@ -82,6 +86,10 @@ export default function ProfileTab({
   onOpenPayPlan?: () => void;
   onInstallApp?: () => void;
   onNavigate?: (tab: TabId) => void;
+  onOpenSupport?: () => void;
+  isAdmin?: boolean;
+  onOpenAdminSupport?: () => void;
+  adminOpenTicketCount?: number;
   payPlanRefetchKey?: number;
 } = {}) {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -323,8 +331,21 @@ export default function ProfileTab({
         </Pressable>
       ) : null}
 
+      {isAdmin ? (
+        <>
+          <SectionHead label="ADMIN" color={colors.green} />
+          <View style={styles.group}>
+            <Row icon="🛟" label="Support inbox"
+              detail={adminOpenTicketCount ? `${adminOpenTicketCount} open` : 'No tickets'}
+              onPress={onOpenAdminSupport} />
+          </View>
+        </>
+      ) : null}
+
       <SectionHead label="ACCOUNT" color={colors.grey2} />
       <View style={styles.group}>
+        <Row icon="💬" label="Support" detail="Chat with PocketRep"
+          onPress={onOpenSupport} />
         <Row icon="✉" label="Email" detail={profile?.email ?? '—'}
           onPress={() => profile?.email && copy(profile.email, 'Email copied')} />
         <Row icon="📱" label="Phone" detail={getRepSetting('phone') || 'Add'}
