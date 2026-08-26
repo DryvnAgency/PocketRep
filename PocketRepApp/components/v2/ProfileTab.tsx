@@ -5,6 +5,7 @@ import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, Pill, SectionHead } from './atoms';
 import { supabase } from '@/lib/supabase';
 import { signOutAndReset } from '@/lib/v2/localSessionClear';
+import { shouldShowInstallRow } from './PWAInstallPrompt';
 import {
   getAlwaysListenEnabled,
   setAlwaysListenEnabled,
@@ -71,6 +72,7 @@ export default function ProfileTab({
   onOpenRexActivity,
   onReplayOnboarding,
   onOpenPayPlan,
+  onInstallApp,
   onNavigate,
   payPlanRefetchKey = 0,
 }: {
@@ -78,6 +80,7 @@ export default function ProfileTab({
   onOpenRexActivity?: () => void;
   onReplayOnboarding?: () => void;
   onOpenPayPlan?: () => void;
+  onInstallApp?: () => void;
   onNavigate?: (tab: TabId) => void;
   payPlanRefetchKey?: number;
 } = {}) {
@@ -306,6 +309,19 @@ export default function ProfileTab({
         </View>
         <Text style={[styles.chevron, { color: colors.gold }]}>›</Text>
       </Pressable>
+
+      {shouldShowInstallRow() ? (
+        <Pressable onPress={onInstallApp} style={styles.learnCard}>
+          <View style={styles.learnPlay}>
+            <Text style={styles.learnPlayIcon}>📲</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.learnTitle}>Install app</Text>
+            <Text style={styles.learnHint}>Add to home screen · instant launch</Text>
+          </View>
+          <Text style={[styles.chevron, { color: colors.gold }]}>›</Text>
+        </Pressable>
+      ) : null}
 
       <SectionHead label="ACCOUNT" color={colors.grey2} />
       <View style={styles.group}>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
@@ -30,8 +30,8 @@ export default function LoginScreen() {
         <TouchableOpacity style={s.btn} onPress={handleLogin} disabled={loading} activeOpacity={0.85}>{loading ? <ActivityIndicator color={colors.ink}/> : <Text style={s.btnText}>Sign In →</Text>}</TouchableOpacity>
         <TouchableOpacity onPress={() => router.push('/(auth)/reset-password')} style={s.forgot}><Text style={s.forgotText}>Forgot password?</Text></TouchableOpacity>
       </View>
-      <View style={s.footer}><Text style={s.footerText}>No account? </Text><TouchableOpacity onPress={() => router.push('/(auth)/signup')}><Text style={s.footerLink}>Start free trial</Text></TouchableOpacity></View>
-      <TouchableOpacity style={s.siteLink} onPress={() => router.push('/(auth)/signup')}><Text style={s.siteLinkText}>pocketrep.pro</Text></TouchableOpacity>
+      <View style={s.footer}><Text style={s.footerText}>No account? </Text><TouchableOpacity onPress={() => Linking.openURL('https://pocketrep.pro')}><Text style={s.footerLink}>Start free trial</Text></TouchableOpacity></View>
+      <TouchableOpacity style={s.siteLink} onPress={() => Linking.openURL('https://pocketrep.pro')}><Text style={s.siteLinkText}>pocketrep.pro</Text></TouchableOpacity>
     </ScrollView>
   </KeyboardAvoidingView>;
 }
