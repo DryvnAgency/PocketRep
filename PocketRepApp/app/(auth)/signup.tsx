@@ -15,12 +15,11 @@ function usernameToEmail(username: string) {
   return `${username.trim().toLowerCase()}@pocketrep.pro`;
 }
 
-const PLANS: { id: Plan; name: string; price: string; after: string; features: string[] }[] = [
+const PLANS: { id: Plan; name: string; price: string; features: string[] }[] = [
   {
     id: 'rex_lens',
     name: 'Rex Lens',
     price: '$29',
-    after: '$39/mo after Apr 30',
     features: [
       'Chrome extension — reads your CRM in real-time',
       'Deep Scan — action plans for 30 contacts at once',
@@ -32,7 +31,6 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
     id: 'pro',
     name: 'PocketRep Pro — The Closer',
     price: '$29',
-    after: '$49/mo after Apr 30',
     features: [
       'Zero-Entry Logging — just talk, Rex files it',
       'Heat Sheet — 3-tier predictive commission radar',
@@ -44,7 +42,6 @@ const PLANS: { id: Plan; name: string; price: string; after: string; features: s
     id: 'elite',
     name: 'PocketRep Elite — Everything',
     price: '$59',
-    after: '$89/mo after Apr 30',
     features: [
       'Everything in Pro + Rex Lens',
       'Proximity Alerts — 500ft trigger on hot leads',
@@ -192,7 +189,6 @@ export default function SignupScreen() {
                   <Text style={[s.planName, plan === p.id && { color: colors.gold }]}>{p.name}</Text>
                   <View>
                     <Text style={s.planPrice}>{p.price}<Text style={s.planPer}>/mo</Text></Text>
-                    <Text style={s.planAfter}>{p.after}</Text>
                   </View>
                 </View>
                 {p.features.map((f, i) => (
@@ -354,7 +350,6 @@ const s = StyleSheet.create({
   planName: { fontSize: 15, fontWeight: '700', color: colors.white, flex: 1, paddingRight: 8 },
   planPrice: { fontSize: 22, fontWeight: '800', color: colors.white, textAlign: 'right' },
   planPer: { fontSize: 13, fontWeight: '500', color: colors.grey2 },
-  planAfter: { fontSize: 11, color: colors.grey, textAlign: 'right' },
   featureRow: { flexDirection: 'row', gap: 7, alignItems: 'flex-start' },
   featureCheck: { color: colors.green, fontSize: 12, marginTop: 2 },
   featureText: { color: colors.grey3, fontSize: 13, flex: 1, lineHeight: 18 },

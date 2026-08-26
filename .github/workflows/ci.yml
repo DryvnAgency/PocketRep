@@ -37,8 +37,5 @@ jobs:
       - name: Lint (eslint)
         run: npm run lint
 
-      - name: Referral tests
-        run: npm run test:referral
-
-      - name: Production hardening tests
-        run: npm run test:productionhardening
+      - name: All mirror tests (304+ checks)
+        run: npm run test:all
