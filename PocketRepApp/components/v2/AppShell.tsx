@@ -17,6 +17,7 @@ import ImportContactsModal from './ImportContactsModal';
 import RexDisclosure from './RexDisclosure';
 import HeyRexSheet from './HeyRexSheet';
 import RexOnboarding from './RexOnboarding';
+import PWAInstallPrompt, { shouldAutoPrompt } from './PWAInstallPrompt';
 import GamePlanSheet from './GamePlanSheet';
 import RexActivityViewer from './RexActivityViewer';
 import BlastSequenceDrafter from './BlastSequenceDrafter';
@@ -88,6 +89,7 @@ export default function AppShell() {
   const [disclosureOpen, setDisclosureOpen] = useState(false);
   const [alwaysListen, setAlwaysListen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [installPromptOpen, setInstallPromptOpen] = useState(false);
   const [gamePlanOpen, setGamePlanOpen] = useState(false);
   const [rexActivityOpen, setRexActivityOpen] = useState(false);
   const [blastDraft, setBlastDraft] = useState<BlastDraft | null>(null);
@@ -562,6 +564,7 @@ export default function AppShell() {
             onOpenRexActivity={() => setRexActivityOpen(true)}
             onReplayOnboarding={() => setOnboardingOpen(true)}
             onOpenPayPlan={() => setPayPlanOpen(true)}
+            onInstallApp={() => setInstallPromptOpen(true)}
             onNavigate={setActive}
             payPlanRefetchKey={payPlanRefetchKey}
           />
@@ -665,7 +668,17 @@ export default function AppShell() {
         onClose={(completed) => {
           if (completed) markOnboardingComplete();
           setOnboardingOpen(false);
+          // After onboarding, prompt the user to install the PWA (once per device,
+          // browser-only — the check is inside shouldAutoPrompt).
+          if (completed && shouldAutoPrompt()) {
+            setTimeout(() => setInstallPromptOpen(true), 600);
+          }
         }}
+      />
+
+      <PWAInstallPrompt
+        open={installPromptOpen}
+        onClose={() => setInstallPromptOpen(false)}
       />
 
       <GamePlanSheet
