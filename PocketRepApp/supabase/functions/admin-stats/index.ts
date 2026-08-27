@@ -9,7 +9,7 @@ function corsHeaders(origin: string | null) {
   const ok = origin && (
     origin === "https://pocketrep.pro" ||
     origin === "https://app.pocketrep.pro" ||
-    origin.endsWith(".vercel.app")
+    /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin)
   );
   return {
     "Access-Control-Allow-Origin": ok ? origin as string : "https://pocketrep.pro",
@@ -38,12 +38,27 @@ async function stripeGet(path: string): Promise<any> {
   return r.json();
 }
 
+/** Paginate through all Stripe subscriptions for a given status. */
+async function listAllSubscriptions(status: string): Promise<any[]> {
+  const all: any[] = [];
+  let hasMore = true;
+  let startingAfter: string | null = null;
+  while (hasMore) {
+    const qs = `status=${status}&limit=100${startingAfter ? `&starting_after=${startingAfter}` : ""}`;
+    const page = await stripeGet(`/subscriptions?${qs}`);
+    for (const sub of page.data ?? []) all.push(sub);
+    hasMore = page.has_more;
+    if (page.data?.length) startingAfter = page.data[page.data.length - 1].id;
+  }
+  return all;
+}
+
 async function fetchStats() {
-  // Active subscriptions + MRR
-  const subs = await stripeGet("/subscriptions?status=active&limit=100");
-  const activeSubscriptions: number = subs.data?.length ?? 0;
+  // Active subscriptions + MRR (paginated — handles >100 subs)
+  const activeSubs = await listAllSubscriptions("active");
+  const activeSubscriptions = activeSubs.length;
   let mrr = 0;
-  for (const sub of subs.data ?? []) {
+  for (const sub of activeSubs) {
     for (const item of sub.items?.data ?? []) {
       const price = item.price;
       if (!price) continue;
@@ -53,24 +68,55 @@ async function fetchStats() {
     }
   }
 
-  // Revenue this month — use balance transactions
+  // Trialing subscriptions
+  const trialingSubs = await listAllSubscriptions("trialing");
+  const trialingSubscriptions = trialingSubs.length;
+
+  // Past-due subscriptions (failed payments)
+  const pastDueSubs = await listAllSubscriptions("past_due");
+  const pastDueSubscriptions = pastDueSubs.length;
+
+  // Canceled this month
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const created = Math.floor(monthStart.getTime() / 1000);
-  let revenueThisMonth = 0;
-  let hasMore = true;
-  let startingAfter: string | null = null;
-  while (hasMore) {
-    const qs = `created[gte]=${created}&limit=100&type=charge${startingAfter ? `&starting_after=${startingAfter}` : ""}`;
-    const txns = await stripeGet(`/balance_transactions?${qs}`);
-    for (const t of txns.data ?? []) {
-      revenueThisMonth += t.net ?? 0;
+  const monthStartUnix = Math.floor(monthStart.getTime() / 1000);
+  let canceledThisMonth = 0;
+  {
+    let hasMore = true;
+    let startingAfter: string | null = null;
+    while (hasMore) {
+      const qs = `status=canceled&limit=100&created[gte]=${monthStartUnix}${startingAfter ? `&starting_after=${startingAfter}` : ""}`;
+      const page = await stripeGet(`/subscriptions?${qs}`);
+      canceledThisMonth += page.data?.length ?? 0;
+      hasMore = page.has_more;
+      if (page.data?.length) startingAfter = page.data[page.data.length - 1].id;
     }
-    hasMore = txns.has_more;
-    if (txns.data?.length) startingAfter = txns.data[txns.data.length - 1].id;
   }
 
-  return { activeSubscriptions, mrr, revenueThisMonth };
+  // Revenue this month — use balance transactions (net after Stripe fees)
+  let revenueThisMonth = 0;
+  {
+    let hasMore = true;
+    let startingAfter: string | null = null;
+    while (hasMore) {
+      const qs = `created[gte]=${monthStartUnix}&limit=100&type=charge${startingAfter ? `&starting_after=${startingAfter}` : ""}`;
+      const txns = await stripeGet(`/balance_transactions?${qs}`);
+      for (const t of txns.data ?? []) {
+        revenueThisMonth += t.net ?? 0;
+      }
+      hasMore = txns.has_more;
+      if (txns.data?.length) startingAfter = txns.data[txns.data.length - 1].id;
+    }
+  }
+
+  return {
+    activeSubscriptions,
+    trialingSubscriptions,
+    pastDueSubscriptions,
+    canceledThisMonth,
+    mrr,
+    revenueThisMonth,
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -78,20 +124,18 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(origin) });
 
   if (!STRIPE_SECRET_KEY) {
-    return json({ activeSubscriptions: 0, mrr: 0, revenueThisMonth: 0, error: "STRIPE_SECRET_KEY not configured" }, 200, origin);
+    return json({ error: "STRIPE_SECRET_KEY not configured" }, 503, origin);
   }
 
   // Verify caller is admin
   const auth = req.headers.get("authorization")?.replace("Bearer ", "") ?? "";
-  if (auth) {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { autoRefreshToken: false, persistSession: false } });
-    const { data: { user } } = await admin.auth.getUser(auth);
-    if (!user) return json({ error: "unauthorized" }, 401, origin);
-    const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    if (profile?.role !== "admin") return json({ error: "forbidden" }, 403, origin);
-  } else {
-    return json({ error: "unauthorized" }, 401, origin);
-  }
+  if (!auth) return json({ error: "unauthorized" }, 401, origin);
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { autoRefreshToken: false, persistSession: false } });
+  const { data: { user } } = await admin.auth.getUser(auth);
+  if (!user) return json({ error: "unauthorized" }, 401, origin);
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  if (profile?.role !== "admin") return json({ error: "forbidden" }, 403, origin);
 
   // Return cached if fresh
   if (cache && Date.now() - cache.ts < CACHE_TTL) {
@@ -103,6 +147,6 @@ Deno.serve(async (req: Request) => {
     cache = { data, ts: Date.now() };
     return json(data, 200, origin);
   } catch (e) {
-    return json({ activeSubscriptions: 0, mrr: 0, revenueThisMonth: 0, error: String(e) }, 200, origin);
+    return json({ error: String(e) }, 502, origin);
   }
 });

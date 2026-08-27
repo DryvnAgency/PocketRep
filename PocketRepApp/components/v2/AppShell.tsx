@@ -28,7 +28,7 @@ import NotificationsCenter from './NotificationsCenter';
 import RexCoach from './RexCoach';
 import SupportChat from './SupportChat';
 import AdminSupportDashboard from './AdminSupportDashboard';
-import AdminDashboard from './AdminDashboard';
+import OwnerControlCenter from './admin/OwnerControlCenter';
 import VehicleFinderModal from './VehicleFinderModal';
 import LockoutScreen from './LockoutScreen';
 import AuthScreen from './AuthScreen';
@@ -188,14 +188,19 @@ export default function AppShell() {
       await syncOnboardingFromProfile().catch(() => undefined);
       if (cancelled) return;
       setNeedsAuth(false);
-      setAuthReady(true);
       setAlwaysListen(getAlwaysListenEnabled());
-      // Check admin role for support inbox
-      checkIsAdmin().then(admin => {
+      // Resolve admin role BEFORE setting authReady so the admin shell
+      // renders on the very first frame — no flash of the rep CRM.
+      try {
+        const admin = await checkIsAdmin();
         if (cancelled) return;
         setIsAdmin(admin);
         if (admin) countOpenTickets().then(c => { if (!cancelled) setAdminOpenTicketCount(c); }).catch(() => {});
-      }).catch(() => {});
+      } catch {
+        // Non-fatal — default to rep view
+      }
+      if (cancelled) return;
+      setAuthReady(true);
       // Warm the ai-proxy brain on launch so the rep's first Rex call (coach or
       // voice) isn't a 30-60s cold start.
       warmBrain();
@@ -525,7 +530,7 @@ export default function AppShell() {
   if (isAdmin && authReady) {
     return (
       <View style={styles.root}>
-        <AdminDashboard onSignOut={() => signOutAndReset()} />
+        <OwnerControlCenter onSignOut={() => signOutAndReset()} />
       </View>
     );
   }
