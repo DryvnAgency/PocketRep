@@ -16,7 +16,6 @@ import {
   subscribeRepSettings,
   type RepSettingKey,
 } from '@/lib/v2/repSettings';
-import { sendTestPush } from '@/lib/v2/pushNotifications';
 import { isVehicleFinderEnabled } from '@/lib/v2/rexFeatureFlags';
 import { loadSendTime, setSendHour as persistSendHour, formatHour, DEFAULT_SEND_HOUR } from '@/lib/v2/sendTime';
 import { usePayPlan } from '@/lib/v2/payPlan';
@@ -289,21 +288,30 @@ export default function ProfileTab({
             thumbColor={alwaysListen ? colors.ink : colors.grey2}
           />
         </View>
-        <Row icon="🤖" label="Voice & tone" detail={getRepSetting('voiceTone')}
-          onPress={() => editSetting('voiceTone', 'Voice & tone', 'HOW SHOULD REX SOUND?')} />
-        <Row icon="🔐" label="Data sources" detail={getRepSetting('dataSources') || 'None'}
-          onPress={() => editSetting('dataSources', 'Data sources', 'CONNECTED SOURCES')} />
-        <Row icon="📝" label="Custom prompts" detail={getRepSetting('customPrompts') || 'None saved'}
-          onPress={() => editSetting('customPrompts', 'Custom prompts', 'YOUR SAVED PROMPTS', { multiline: true })} />
-        <Row icon="🧾" label="Rex activity" detail="Action log →" onPress={onOpenRexActivity} />
-        <Pressable
-          onPress={async () => {
-            const r = await sendTestPush();
-            flash(r.ok ? '✓ Test push sent' : `Couldn't send: ${r.reason ?? 'unknown'}`);
-          }}
-        >
-          <Row icon="🔔" label="Send a test push" detail="ping →" chevron={false} />
-        </Pressable>
+        <View style={styles.toneRow}>
+          <View style={[styles.rowIcon, { backgroundColor: colors.goldBg, borderColor: colors.goldBorder }]}>
+            <Text style={{ color: colors.gold, fontSize: 14 }}>🤖</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.rowLabel}>Voice & tone</Text>
+            <View style={styles.tonePills}>
+              {(['Steady', 'Sharp', 'Fire'] as const).map(t => {
+                const active = getRepSetting('voiceTone') === t;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => { setRepSetting('voiceTone', t); forceTick(); }}
+                    style={[styles.tonePill, active && styles.tonePillActive]}
+                  >
+                    <Text style={[styles.tonePillText, active && styles.tonePillTextActive]}>
+                      {t === 'Steady' ? '🧘 Steady' : t === 'Sharp' ? '🔪 Sharp' : '🔥 Fire'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
       </View>
 
       <SectionHead label="LEARN" color={colors.gold} />
@@ -640,4 +648,26 @@ const styles = StyleSheet.create({
   sendChipActive: { borderColor: colors.gold, backgroundColor: colors.goldBg },
   sendChipText: { fontSize: 12, fontWeight: '600', color: colors.grey2 },
   sendChipTextActive: { color: colors.gold },
+
+  toneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink4,
+  },
+  tonePills: { flexDirection: 'row', gap: 8, marginTop: 6 },
+  tonePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    backgroundColor: colors.surface2,
+  },
+  tonePillActive: { borderColor: colors.gold, backgroundColor: colors.goldBg },
+  tonePillText: { fontSize: 11, fontWeight: '700', color: colors.grey2 },
+  tonePillTextActive: { color: colors.gold },
 });

@@ -19,10 +19,9 @@ type DemoContact = {
 type Answers = { name: string; dealership: string; title: string; tone: string };
 const EMPTY: Answers = { name: '', dealership: '', title: '', tone: '' };
 const TONES = [
-  { value: 'Direct', hint: 'straight to the point' },
-  { value: 'Friendly', hint: 'warm, conversational' },
-  { value: 'Hype', hint: 'high energy' },
-  { value: 'Low-key', hint: 'calm, no pressure' },
+  { value: 'Steady', hint: 'calm, patient, trusted advisor' },
+  { value: 'Sharp', hint: 'direct, confident, no fluff' },
+  { value: 'Fire', hint: 'high energy, urgency, closer mode' },
 ];
 const DEMO_NAMES = new Set(['Marcus Holloway', 'Sarah Thompson', 'Mike Rodriguez']);
 

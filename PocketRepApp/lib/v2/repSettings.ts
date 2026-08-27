@@ -25,7 +25,7 @@ const EVENT = 'pocketrep:rep-settings-changed';
 const DEFAULTS: Record<RepSettingKey, string> = {
   dealership: '',
   title: '',
-  voiceTone: 'Direct',
+  voiceTone: 'Sharp',
   dataSources: '',
   customPrompts: '',
   phone: '',
