@@ -82,6 +82,8 @@ export default function HeatSheetTab({
   onOpenNurture?: () => void;
   onAnalyzeStalled?: () => void;
 }) {
+  const [hotOnly, setHotOnly] = useState(false);
+
   if (error && !contacts) {
     return (
       <View style={styles.center}>
@@ -134,8 +136,6 @@ export default function HeatSheetTab({
       </View>
     );
   }
-
-  const [hotOnly, setHotOnly] = useState(false);
 
   const groups: Record<TierKey, V2Contact[]> = { hot: [], warm: [], cold: [] };
   for (const c of contacts) groups[c.tier].push(c);
