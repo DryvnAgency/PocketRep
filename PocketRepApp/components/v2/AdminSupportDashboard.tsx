@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import {
-  loadAllTickets, loadMessages, sendMessage, resolveTicket,
+  loadAllTickets, loadMessages, sendMessage, resolveTicket, reopenTicket,
   type SupportTicket, type SupportMessage,
 } from '@/lib/v2/supportChat';
 
@@ -39,6 +39,7 @@ export default function AdminSupportDashboard({
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<FilterMode>('open');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [error, setError] = useState('');
   const scrollRef = useRef<ScrollView>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -59,8 +60,8 @@ export default function AdminSupportDashboard({
     if (!open) return;
     setLoading(true);
     loadAllTickets()
-      .then(setTickets)
-      .catch(() => {})
+      .then(t => { setTickets(t); setError(''); })
+      .catch(() => setError('Could not load tickets - try again'))
       .finally(() => setLoading(false));
   }, [open, refreshKey]);
 
@@ -110,9 +111,11 @@ export default function AdminSupportDashboard({
     setInput('');
     try {
       await sendMessage(selectedTicketId, text, 'admin');
+      setError('');
       setRefreshKey(k => k + 1);
     } catch {
       setInput(text);
+      setError('Could not send - try again');
     } finally {
       setSending(false);
     }
@@ -122,8 +125,22 @@ export default function AdminSupportDashboard({
     if (!selectedTicketId) return;
     try {
       await resolveTicket(selectedTicketId);
+      setError('');
       setRefreshKey(k => k + 1);
-    } catch {}
+    } catch {
+      setError('Could not resolve - try again');
+    }
+  };
+
+  const handleReopen = async () => {
+    if (!selectedTicketId) return;
+    try {
+      await reopenTicket(selectedTicketId);
+      setError('');
+      setRefreshKey(k => k + 1);
+    } catch {
+      setError('Could not reopen - try again');
+    }
   };
 
   if (!open) return null;
@@ -209,7 +226,12 @@ export default function AdminSupportDashboard({
             </Pressable>
           </>
         ) : (
-          <Text style={styles.resolvedNote}>Ticket resolved</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'center', gap: 12 }}>
+            <Text style={styles.resolvedNote}>Ticket resolved</Text>
+            <Pressable onPress={handleReopen}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.gold }}>Reopen</Text>
+            </Pressable>
+          </View>
         )}
       </View>
     </View>
@@ -291,10 +313,22 @@ export default function AdminSupportDashboard({
               <Text style={styles.resolveText}>Resolve</Text>
             </Pressable>
           ) : null}
+          {selectedTicketId && selectedTicket?.status === 'resolved' ? (
+            <Pressable style={styles.reopenBtn} onPress={handleReopen}>
+              <Text style={styles.reopenText}>Reopen</Text>
+            </Pressable>
+          ) : null}
           <Pressable style={styles.closeBtn} onPress={onClose}>
             <Text style={styles.closeText}>✕</Text>
           </Pressable>
         </View>
+
+        {/* Error banner */}
+        {error ? (
+          <Pressable style={styles.errorBanner} onPress={() => setError('')}>
+            <Text style={styles.errorText}>{error}</Text>
+          </Pressable>
+        ) : null}
 
         {selectedTicketId ? renderChatView() : renderListView()}
       </View>
@@ -350,6 +384,21 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.greenBorder,
   },
   resolveText: { fontSize: 11, fontWeight: '700', color: colors.green, letterSpacing: 0.3 },
+  reopenBtn: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: radius.full,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1, borderColor: colors.goldBorder,
+  },
+  reopenText: { fontSize: 11, fontWeight: '700', color: colors.gold, letterSpacing: 0.3 },
+  errorBanner: {
+    backgroundColor: 'rgba(255,80,80,0.12)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,80,80,0.25)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  errorText: { fontSize: 12, color: '#ff5050', textAlign: 'center' },
 
   // ── Filter tabs ──────────────────────────────────────────────────────────
   filterRow: {
@@ -388,7 +437,7 @@ const styles = StyleSheet.create({
   },
   ticketHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green },
-  ticketSubject: { fontSize: 14, fontWeight: '600', color: colors.white },
+  ticketSubject: { fontSize: 14, fontWeight: '600', color: colors.white, flex: 1 },
   repInfo: { fontSize: 11, color: colors.grey, marginLeft: 16 },
   ticketTime: { fontSize: 11, color: colors.grey, marginLeft: 8 },
   emptyWrap: { alignItems: 'center', marginTop: 60, gap: 8 },

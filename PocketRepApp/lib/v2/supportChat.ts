@@ -18,7 +18,6 @@ export type SupportTicket = {
   // Joined fields (admin view only)
   rep_name?: string;
   rep_email?: string;
-  last_message?: string;
 };
 
 export type SupportMessage = {

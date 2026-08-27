@@ -49,6 +49,7 @@ export default function SupportChat({
   const [newCategory, setNewCategory] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [error, setError] = useState('');
   const scrollRef = useRef<ScrollView>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -69,8 +70,8 @@ export default function SupportChat({
     if (!open) return;
     setLoading(true);
     loadMyTickets()
-      .then(setTickets)
-      .catch(() => {})
+      .then(t => { setTickets(t); setError(''); })
+      .catch(() => setError('Could not load tickets - pull down to retry'))
       .finally(() => setLoading(false));
   }, [open, refreshKey]);
 
@@ -125,9 +126,11 @@ export default function SupportChat({
     setInput('');
     try {
       await sendMessage(selectedTicketId, text, 'rep');
+      setError('');
       setRefreshKey(k => k + 1);
     } catch {
       setInput(text); // restore on failure
+      setError('Could not send - try again');
     } finally {
       setSending(false);
     }
@@ -145,6 +148,7 @@ export default function SupportChat({
       setSelectedTicketId(id);
       setRefreshKey(k => k + 1);
     } catch {
+      setError('Could not create ticket - try again');
     } finally {
       setSending(false);
     }
@@ -154,7 +158,9 @@ export default function SupportChat({
     try {
       await reopenTicket(ticketId);
       setRefreshKey(k => k + 1);
-    } catch {}
+    } catch {
+      setError('Could not reopen - try again');
+    }
   };
 
   if (!open) return null;
@@ -361,6 +367,13 @@ export default function SupportChat({
           </Pressable>
         </View>
 
+        {/* Error banner */}
+        {error ? (
+          <Pressable style={styles.errorBanner} onPress={() => setError('')}>
+            <Text style={styles.errorText}>{error}</Text>
+          </Pressable>
+        ) : null}
+
         {/* Body */}
         {creating ? renderCreateView()
           : selectedTicketId ? renderChatView()
@@ -411,6 +424,14 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   closeText: { color: colors.grey2, fontSize: 14 },
+  errorBanner: {
+    backgroundColor: 'rgba(255,80,80,0.12)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,80,80,0.25)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  errorText: { fontSize: 12, color: '#ff5050', textAlign: 'center' },
 
   // ── Ticket list ──────────────────────────────────────────────────────────
   listContent: { padding: 16, gap: 6 },
