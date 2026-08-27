@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import RadarLoader from './RadarLoader';
 import { colors, radius, spacing } from '@/constants/theme';
-import { HeatStripe, SectionHead, StatNumber } from './atoms';
+import { HeatStripe, SectionHead } from './atoms';
 import { TIERS, stalenessColor, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import WeeklyDigestCard from './WeeklyDigestCard';
@@ -9,8 +10,6 @@ import DailyCheckIn from './DailyCheckIn';
 import NurtureBanner from './NurtureBanner';
 import FollowUpQueue from './FollowUpQueue';
 import { heatReasons } from '@/lib/v2/heatReasons';
-
-const TODAY_LABEL = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
 
 function followUpLabel(c: V2Contact): { text: string; color: string } | null {
   if (!c.nextFollowupDate) return null;
@@ -136,29 +135,17 @@ export default function HeatSheetTab({
     );
   }
 
+  const [hotOnly, setHotOnly] = useState(false);
+
   const groups: Record<TierKey, V2Contact[]> = { hot: [], warm: [], cold: [] };
   for (const c of contacts) groups[c.tier].push(c);
-
-  const overdueCount = contacts.filter(c => c.days >= 4).length;
 
   return (
     <View style={styles.root}>
       {/* Weekly digest pops up only on Mondays (8am+ local time) */}
       {new Date().getDay() === 1 && new Date().getHours() >= 8 ? <WeeklyDigestCard /> : null}
 
-      <DailyCheckIn contacts={contacts} />
-
-      <View style={styles.banner}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.bannerLabel}>TODAY · {TODAY_LABEL}</Text>
-          <Text style={styles.bannerBody}>
-            {overdueCount > 0
-              ? `${overdueCount} follow-up${overdueCount === 1 ? '' : 's'} overdue`
-              : "You're caught up"}
-          </Text>
-        </View>
-        <StatNumber value={String(overdueCount)} size={32} color={colors.gold2} />
-      </View>
+      <DailyCheckIn contacts={contacts} onStartList={() => setHotOnly(true)} />
 
       {onOpenNurture ? (
         <NurtureBanner refetchKey={nurtureRefetchKey} onOpenReviewer={onOpenNurture} />
@@ -180,11 +167,19 @@ export default function HeatSheetTab({
       <SectionHead label="HOT" count={groups.hot.length} color={colors.red} icon="🔥" />
       {groups.hot.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}
 
-      <SectionHead label="WARM" count={groups.warm.length} color={colors.orange} icon="☀️" />
-      {groups.warm.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}
+      {hotOnly ? (
+        <Pressable onPress={() => setHotOnly(false)} style={styles.showAllBtn}>
+          <Text style={styles.showAllText}>Show all contacts ↓</Text>
+        </Pressable>
+      ) : (
+        <>
+          <SectionHead label="WARM" count={groups.warm.length} color={colors.orange} icon="☀️" />
+          {groups.warm.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}
 
-      <SectionHead label="COLD" count={groups.cold.length} color={colors.grey2} icon="🧊" />
-      {groups.cold.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}
+          <SectionHead label="COLD" count={groups.cold.length} color={colors.grey2} icon="🧊" />
+          {groups.cold.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}
+        </>
+      )}
     </View>
   );
 }
@@ -202,34 +197,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   retryText: { color: colors.gold, fontWeight: '700', fontSize: 13 },
-  banner: {
+  showAllBtn: {
     marginHorizontal: 14,
-    marginTop: 12,
-    marginBottom: 4,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: colors.goldBg,
-    borderWidth: 1,
-    borderColor: colors.goldBorder,
-    borderRadius: radius.lg,
-    flexDirection: 'row',
+    marginTop: 10,
+    paddingVertical: 11,
     alignItems: 'center',
-    gap: 14,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.md,
   },
-  bannerLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    color: colors.gold,
-    textTransform: 'uppercase',
-  },
-  bannerBody: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.white,
-    marginTop: 4,
-    letterSpacing: -0.2,
-  },
+  showAllText: { color: colors.gold, fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
   row: {
     position: 'relative',
     backgroundColor: colors.surface2,

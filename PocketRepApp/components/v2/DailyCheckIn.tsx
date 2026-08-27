@@ -19,7 +19,11 @@ function storageKey(): string {
   return `pocketrep:v2:daily-started:${localDayOffset(0)}`;
 }
 
-export default function DailyCheckIn({ contacts }: { contacts: V2Contact[] }) {
+export default function DailyCheckIn({ contacts, onStartList }: {
+  contacts: V2Contact[];
+  /** Called when "START TODAY'S LIST" is tapped — parent filters to hot leads. */
+  onStartList?: () => void;
+}) {
   const [counts, setCounts] = useState<Counts>({ yesterday: 0, today: 0 });
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -77,7 +81,7 @@ export default function DailyCheckIn({ contacts }: { contacts: V2Contact[] }) {
 
   const greeting = counts.yesterday > 0
     ? `Yesterday you logged ${counts.yesterday} interaction${counts.yesterday === 1 ? '' : 's'}. Let's build on it.`
-    : 'Fresh day. Let’s get your first customer conversation started.';
+    : "Fresh day. Let's get your first customer conversation started.";
 
   return (
     <View style={styles.card}>
@@ -93,16 +97,20 @@ export default function DailyCheckIn({ contacts }: { contacts: V2Contact[] }) {
         <View style={styles.stat}><Text style={styles.value}>{loading ? '—' : counts.yesterday}</Text><Text style={styles.label}>YESTERDAY</Text></View>
         <View style={styles.stat}><Text style={styles.value}>{loading ? '—' : counts.today}</Text><Text style={styles.label}>TODAY</Text></View>
         <View style={styles.stat}><Text style={styles.value}>{priorityCount}</Text><Text style={styles.label}>TO WORK</Text></View>
+        <View style={styles.stat}>
+          <Text style={[styles.value, overdueCount > 0 && styles.overdueValue]}>{overdueCount}</Text>
+          <Text style={styles.label}>OVERDUE</Text>
+        </View>
       </View>
 
       <Text style={styles.sub}>
         {overdueCount > 0
-          ? `${overdueCount} follow-up${overdueCount === 1 ? '' : 's'} are waiting. Start with your hottest people.`
+          ? `${overdueCount} follow-up${overdueCount === 1 ? '' : 's'} overdue. Start with your hottest people.`
           : 'Your Heat Sheet is your daily list. Work it, log it, and Rex will keep the next move in front of you.'}
       </Text>
 
-      <Pressable onPress={markStarted} style={({ pressed }) => [styles.cta, pressed && styles.pressed]}>
-        <Text style={styles.ctaText}>{started ? '✓ TODAY’S LIST STARTED' : 'START TODAY’S LIST →'}</Text>
+      <Pressable onPress={() => { markStarted(); onStartList?.(); }} style={({ pressed }) => [styles.cta, pressed && styles.pressed]}>
+        <Text style={styles.ctaText}>{started ? "✓ TODAY’S LIST STARTED" : "START TODAY’S LIST →"}</Text>
       </Pressable>
     </View>
   );
@@ -123,4 +131,5 @@ const styles = StyleSheet.create({
   cta: { marginTop: 13, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.full, backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder },
   ctaText: { color: colors.gold, fontSize: 10, fontWeight: '800', letterSpacing: .6 },
   pressed: { opacity: .75, transform: [{ scale: .98 }] },
+  overdueValue: { color: colors.red },
 });
