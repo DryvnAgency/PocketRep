@@ -143,7 +143,8 @@ export default function HeatSheetTab({
 
   return (
     <View style={styles.root}>
-      <WeeklyDigestCard />
+      {/* Weekly digest pops up only on Mondays (8am+ local time) */}
+      {new Date().getDay() === 1 && new Date().getHours() >= 8 ? <WeeklyDigestCard /> : null}
 
       <DailyCheckIn contacts={contacts} />
 

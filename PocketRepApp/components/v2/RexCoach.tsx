@@ -87,9 +87,8 @@ export default function RexCoach({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
-  // Cold-start UX: after ~5s of waiting we tell the rep the function is warming;
-  // on a transient failure we keep the text so a Retry button can re-send it.
-  const [warming, setWarming] = useState(false);
+  // On a transient failure we keep the text so a Retry button can re-send it.
+
   const [retry, setRetry] = useState<{ text: string; history: ChatMessage[] } | null>(null);
   const [mtd, setMtd] = useState<MtdSummary | null>(null);
   const [activity, setActivity] = useState('');           // recent-activity recall block
@@ -141,7 +140,6 @@ export default function RexCoach({
       setMessages(seeded);
       setInput('');
       setTyping(false);
-      setWarming(false);
       setRetry(null);
       setPending(null);
       setActing(false);
@@ -183,7 +181,7 @@ export default function RexCoach({
 
   // Append to the visible thread AND persist to today's coach log (NEW 6), so
   // the day's real turns/actions survive a reopen. Transient system bubbles
-  // (errors, warming, cancels) stay setMessages-only and aren't logged.
+  // (errors, cancels) stay setMessages-only and aren't logged.
   const pushUser = (text: string) => {
     setMessages(m => [...m, { from: 'user', text, time: stamp() }]);
     appendCoachEntry({ role: 'user', text, time: stamp() });
@@ -205,14 +203,11 @@ export default function RexCoach({
     await deliver(text, history);
   };
 
-  // Runs one coach turn with cold-start resilience: flips to a "warming up" hint
-  // after 5s, and on a transient (timeout/network) failure warms the function and
-  // retries once — the retry lands on the now-warm container. On final failure it
-  // stores the turn so the Retry button can re-send it.
+  // Runs one coach turn with cold-start resilience: on a transient (timeout/network)
+  // failure warms the function and retries once — the retry lands on the now-warm
+  // container. On final failure it stores the turn so the Retry button can re-send.
   const deliver = async (text: string, history: ChatMessage[]) => {
     setTyping(true);
-    setWarming(false);
-    const warmTimer = setTimeout(() => setWarming(true), 5_000);
     const repContext = serializeRepContext({ contacts, payPlan, mtd });
     let attempt = 0;
     // P3-A1: flips to false only if the planner returns an unusable plan, so this
@@ -299,8 +294,7 @@ export default function RexCoach({
           const transient = msg.includes('timeout') || msg.includes('network');
           if (attempt === 0 && transient) {
             attempt++;
-            setWarming(true);
-            setStreamText(null); // clear the frozen partial so the warming hint shows
+            setStreamText(null);
             await warmBrain();   // boot the container, then retry once
             continue;
           }
@@ -315,8 +309,6 @@ export default function RexCoach({
       }]);
       setRetry({ text, history });
     } finally {
-      clearTimeout(warmTimer);
-      setWarming(false);
       setTyping(false);
       setStreamText(null); // clear any partial stream on success OR failure
     }
@@ -370,8 +362,6 @@ export default function RexCoach({
     pushUser(`🎙 Parse this conversation (${transcript.length} chars)`);
     setParsing(true);
     setTyping(true);
-    setWarming(false);
-    const warmTimer = setTimeout(() => setWarming(true), 5_000);
     try {
       const result = await extractFromConversation(transcript, contacts.map(c => ({ id: c.id, name: c.name })));
       const who = result.is_new
@@ -382,8 +372,6 @@ export default function RexCoach({
     } catch (e: any) {
       setMessages(m => [...m, { from: 'rex', text: `Couldn't parse that one: ${e?.message ?? 'failed'}. Try again?`, time: stamp() }]);
     } finally {
-      clearTimeout(warmTimer);
-      setWarming(false);
       setParsing(false);
       setTyping(false);
     }
@@ -496,7 +484,7 @@ export default function RexCoach({
               <View style={[styles.bubble, styles.bubbleRex, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
                 <RadarLoader size={16} />
                 <Text style={styles.bubbleText}>
-                  {warming ? 'Warming up — first reply can take a few seconds…' : 'Rex is thinking…'}
+                  Rex is thinking…
                 </Text>
               </View>
             </View>
