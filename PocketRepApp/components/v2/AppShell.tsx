@@ -28,6 +28,7 @@ import NotificationsCenter from './NotificationsCenter';
 import RexCoach from './RexCoach';
 import SupportChat from './SupportChat';
 import AdminSupportDashboard from './AdminSupportDashboard';
+import AdminDashboard from './AdminDashboard';
 import VehicleFinderModal from './VehicleFinderModal';
 import LockoutScreen from './LockoutScreen';
 import AuthScreen from './AuthScreen';
@@ -519,17 +520,12 @@ export default function AppShell() {
   }
 
   // ── Admin shell: completely separate from the rep CRM ───────────────────
-  // When the authenticated user has role='admin', render ONLY the admin
-  // support dashboard — no Heat Sheet, Contacts, Metrics, Rex, or tab bar.
+  // When the authenticated user has role='admin', render the admin dashboard
+  // hub — no Heat Sheet, Contacts, Metrics, Rex, or tab bar.
   if (isAdmin && authReady) {
     return (
       <View style={styles.root}>
-        <AdminSupportDashboard
-          open={true}
-          onClose={() => {}}
-          embedded
-          onSignOut={() => signOutAndReset()}
-        />
+        <AdminDashboard onSignOut={() => signOutAndReset()} />
       </View>
     );
   }

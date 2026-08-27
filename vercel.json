@@ -1,6 +1,7 @@
 {
   "outputDirectory": "Pocketrep",
   "redirects": [
+    { "source": "/admin", "destination": "https://app.pocketrep.pro", "permanent": false },
     { "source": "/app", "destination": "https://app.pocketrep.pro", "permanent": false },
     { "source": "/app/(.*)", "destination": "https://app.pocketrep.pro/$1", "permanent": false }
   ],
