@@ -518,6 +518,22 @@ export default function AppShell() {
     );
   }
 
+  // ── Admin shell: completely separate from the rep CRM ───────────────────
+  // When the authenticated user has role='admin', render ONLY the admin
+  // support dashboard — no Heat Sheet, Contacts, Metrics, Rex, or tab bar.
+  if (isAdmin && authReady) {
+    return (
+      <View style={styles.root}>
+        <AdminSupportDashboard
+          open={true}
+          onClose={() => {}}
+          embedded
+          onSignOut={() => signOutAndReset()}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
       <CustomNavBar

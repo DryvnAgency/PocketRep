@@ -27,9 +27,15 @@ type FilterMode = 'open' | 'resolved' | 'all';
 export default function AdminSupportDashboard({
   open,
   onClose,
+  embedded,
+  onSignOut,
 }: {
   open: boolean;
   onClose: () => void;
+  /** When true, renders as a full-screen main view (no overlay/scrim). */
+  embedded?: boolean;
+  /** Sign-out handler shown in embedded (admin shell) mode. */
+  onSignOut?: () => void;
 }) {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
@@ -290,46 +296,68 @@ export default function AdminSupportDashboard({
   // ── Header ───────────────────────────────────────────────────────────────
   const headerTitle = selectedTicketId
     ? (selectedTicket?.subject ?? 'TICKET').toUpperCase()
-    : 'SUPPORT INBOX';
+    : embedded ? 'POCKETREP ADMIN' : 'SUPPORT INBOX';
 
+  const headerContent = (
+    <>
+      <View style={styles.header}>
+        {selectedTicketId ? (
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => { setSelectedTicketId(null); setRefreshKey(k => k + 1); }}
+          >
+            <Text style={styles.backText}>‹</Text>
+          </Pressable>
+        ) : null}
+        <View style={styles.live} />
+        <Text style={styles.headerLabel}>{headerTitle}</Text>
+        <View style={{ flex: 1 }} />
+        {selectedTicketId && selectedTicket?.status === 'open' ? (
+          <Pressable style={styles.resolveBtn} onPress={handleResolve}>
+            <Text style={styles.resolveText}>Resolve</Text>
+          </Pressable>
+        ) : null}
+        {selectedTicketId && selectedTicket?.status === 'resolved' ? (
+          <Pressable style={styles.reopenBtn} onPress={handleReopen}>
+            <Text style={styles.reopenText}>Reopen</Text>
+          </Pressable>
+        ) : null}
+        {embedded && onSignOut ? (
+          <Pressable style={styles.signOutBtn} onPress={onSignOut}>
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </Pressable>
+        ) : (
+          <Pressable style={styles.closeBtn} onPress={onClose}>
+            <Text style={styles.closeText}>✕</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* Error banner */}
+      {error ? (
+        <Pressable style={styles.errorBanner} onPress={() => setError('')}>
+          <Text style={styles.errorText}>{error}</Text>
+        </Pressable>
+      ) : null}
+    </>
+  );
+
+  // ── Embedded (admin shell) mode: full-screen, no overlay ────────────────
+  if (embedded) {
+    return (
+      <View style={styles.embeddedRoot}>
+        {headerContent}
+        {selectedTicketId ? renderChatView() : renderListView()}
+      </View>
+    );
+  }
+
+  // ── Overlay mode (rep profile → admin section) ──────────────────────────
   return (
     <View style={StyleSheet.absoluteFillObject}>
       <Pressable style={styles.scrim} onPress={onClose} />
       <View style={[styles.sheet, kbInset > 0 && { bottom: kbInset }]}>
-        <View style={styles.header}>
-          {selectedTicketId ? (
-            <Pressable
-              style={styles.backBtn}
-              onPress={() => { setSelectedTicketId(null); setRefreshKey(k => k + 1); }}
-            >
-              <Text style={styles.backText}>‹</Text>
-            </Pressable>
-          ) : null}
-          <View style={styles.live} />
-          <Text style={styles.headerLabel}>{headerTitle}</Text>
-          <View style={{ flex: 1 }} />
-          {selectedTicketId && selectedTicket?.status === 'open' ? (
-            <Pressable style={styles.resolveBtn} onPress={handleResolve}>
-              <Text style={styles.resolveText}>Resolve</Text>
-            </Pressable>
-          ) : null}
-          {selectedTicketId && selectedTicket?.status === 'resolved' ? (
-            <Pressable style={styles.reopenBtn} onPress={handleReopen}>
-              <Text style={styles.reopenText}>Reopen</Text>
-            </Pressable>
-          ) : null}
-          <Pressable style={styles.closeBtn} onPress={onClose}>
-            <Text style={styles.closeText}>✕</Text>
-          </Pressable>
-        </View>
-
-        {/* Error banner */}
-        {error ? (
-          <Pressable style={styles.errorBanner} onPress={() => setError('')}>
-            <Text style={styles.errorText}>{error}</Text>
-          </Pressable>
-        ) : null}
-
+        {headerContent}
         {selectedTicketId ? renderChatView() : renderListView()}
       </View>
     </View>
@@ -337,6 +365,10 @@ export default function AdminSupportDashboard({
 }
 
 const styles = StyleSheet.create({
+  embeddedRoot: {
+    flex: 1,
+    backgroundColor: colors.ink,
+  },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.8)' },
   sheet: {
     position: 'absolute',
@@ -391,6 +423,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.goldBorder,
   },
   reopenText: { fontSize: 11, fontWeight: '700', color: colors.gold, letterSpacing: 0.3 },
+  signOutBtn: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface2,
+    borderWidth: 1, borderColor: colors.ink4,
+  },
+  signOutText: { fontSize: 11, fontWeight: '700', color: colors.grey2, letterSpacing: 0.3 },
   errorBanner: {
     backgroundColor: 'rgba(255,80,80,0.12)',
     borderBottomWidth: 1,
