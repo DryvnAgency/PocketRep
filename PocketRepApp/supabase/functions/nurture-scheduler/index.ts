@@ -117,31 +117,39 @@ Deno.serve(async (req: Request) => {
 
   const results: any[] = [];
   for (const rep of repList) {
-    let nurtureCount = 0;
-    if (holidayRow) nurtureCount += await runBlast(admin, rep.id, 'holiday', holidayRow, 30);
-    if (runQuarterly) nurtureCount += await runBlast(admin, rep.id, 'quarterly_check_in', null, 10);
-    if (nurtureCount > 0) {
-      await firePush(admin, rep.id, {
-        title: holidayRow ? `${holidayRow.holiday_name} nurtures ready` : 'Quarterly check-ins ready',
-        body: `${nurtureCount} draft${nurtureCount === 1 ? '' : 's'} waiting in your queue.`,
-        data: { route: 'nurture' },
-      });
-    }
-
-    let referralCount = 0;
-    const dueReferrals = referralsByRep.get(rep.id);
-    if (dueReferrals && dueReferrals.length > 0) {
-      referralCount = await runReferralAsks(admin, rep.id, dueReferrals);
-      if (referralCount > 0) {
+    // One rep's failure (a bad contact record, an AI parse error, a DB write
+    // that throws) must never abort the run for every rep queued after them.
+    // Isolate per rep, log, and keep going.
+    try {
+      let nurtureCount = 0;
+      if (holidayRow) nurtureCount += await runBlast(admin, rep.id, 'holiday', holidayRow, 30);
+      if (runQuarterly) nurtureCount += await runBlast(admin, rep.id, 'quarterly_check_in', null, 10);
+      if (nurtureCount > 0) {
         await firePush(admin, rep.id, {
-          title: 'Referral asks ready',
-          body: `${referralCount} referral ask${referralCount === 1 ? '' : 's'} drafted and waiting for review.`,
+          title: holidayRow ? `${holidayRow.holiday_name} nurtures ready` : 'Quarterly check-ins ready',
+          body: `${nurtureCount} draft${nurtureCount === 1 ? '' : 's'} waiting in your queue.`,
           data: { route: 'nurture' },
         });
       }
-    }
 
-    results.push({ user_id: rep.id, nurtures: nurtureCount, referrals: referralCount });
+      let referralCount = 0;
+      const dueReferrals = referralsByRep.get(rep.id);
+      if (dueReferrals && dueReferrals.length > 0) {
+        referralCount = await runReferralAsks(admin, rep.id, dueReferrals);
+        if (referralCount > 0) {
+          await firePush(admin, rep.id, {
+            title: 'Referral asks ready',
+            body: `${referralCount} referral ask${referralCount === 1 ? '' : 's'} drafted and waiting for review.`,
+            data: { route: 'nurture' },
+          });
+        }
+      }
+
+      results.push({ user_id: rep.id, nurtures: nurtureCount, referrals: referralCount });
+    } catch (e) {
+      console.error('nurture-scheduler: rep failed', rep.id, e);
+      results.push({ user_id: rep.id, error: e instanceof Error ? e.message : 'unknown error' });
+    }
   }
 
   return json({ ok: true, today, holiday: holidayRow?.holiday_name ?? null, quarterly: runQuarterly, results });
@@ -396,28 +404,38 @@ async function firePush(
   userId: string,
   payload: { title: string; body: string; data?: Record<string, unknown> },
 ): Promise<void> {
-  const { data: tokens } = await admin
-    .from('user_push_tokens')
-    .select('expo_token')
-    .eq('user_id', userId);
-  const targets = (tokens ?? []).map((t: any) => t.expo_token).filter(Boolean);
-  if (targets.length === 0) return;
-  const messages = targets.map((to: string) => ({
-    to,
-    sound: 'default',
-    title: payload.title,
-    body: payload.body,
-    data: payload.data ?? {},
-  }));
-  await fetch(EXPO_PUSH_URL, {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/json',
-      'Accept-Encoding': 'gzip, deflate',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(messages),
-  });
+  // Never let a push-delivery failure (bad token, Expo outage, network error)
+  // propagate — it used to throw uncaught, aborting the daily run for every
+  // rep processed after this one. Isolate here, and again at each call site.
+  try {
+    const { data: tokens } = await admin
+      .from('user_push_tokens')
+      .select('expo_token')
+      .eq('user_id', userId);
+    const targets = (tokens ?? []).map((t: any) => t.expo_token).filter(Boolean);
+    if (targets.length === 0) return;
+    const messages = targets.map((to: string) => ({
+      to,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: payload.data ?? {},
+    }));
+    const res = await fetch(EXPO_PUSH_URL, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(messages),
+    });
+    if (!res.ok) {
+      console.error('firePush: Expo push API returned', res.status, await res.text().catch(() => ''));
+    }
+  } catch (e) {
+    console.error('firePush failed', userId, e);
+  }
 }
 
 function daysAgo(iso: string): number {
@@ -473,43 +491,50 @@ async function runHourlyMode(admin: ReturnType<typeof createClient>) {
     if (!local) continue; // unusable timezone — skip rather than misfire
     if (local.hour !== clampHour(rep.send_hour)) continue; // not this rep's send hour
 
-    // Holiday + quarterly are computed against the rep's LOCAL date / weekday.
-    if (!holidayByDate.has(local.date)) {
-      const { data } = await admin
-        .from('holiday_calendar')
-        .select('holiday_name,tone_guidance,pitch_intensity,applies_to_dead_leads,applies_to_past_customers')
-        .eq('holiday_date', local.date)
-        .maybeSingle();
-      holidayByDate.set(local.date, data ?? null);
-    }
-    const holidayRow = holidayByDate.get(local.date);
-    const runQuarterly = local.dow === 1; // local Monday
+    // One rep's failure must never abort the hourly pass for every rep
+    // still due to be processed in this same run.
+    try {
+      // Holiday + quarterly are computed against the rep's LOCAL date / weekday.
+      if (!holidayByDate.has(local.date)) {
+        const { data } = await admin
+          .from('holiday_calendar')
+          .select('holiday_name,tone_guidance,pitch_intensity,applies_to_dead_leads,applies_to_past_customers')
+          .eq('holiday_date', local.date)
+          .maybeSingle();
+        holidayByDate.set(local.date, data ?? null);
+      }
+      const holidayRow = holidayByDate.get(local.date);
+      const runQuarterly = local.dow === 1; // local Monday
 
-    let nurtureCount = 0;
-    if (holidayRow) nurtureCount += await runBlast(admin, rep.id, 'holiday', holidayRow, 30);
-    if (runQuarterly) nurtureCount += await runBlast(admin, rep.id, 'quarterly_check_in', null, 10);
-    if (nurtureCount > 0) {
-      await firePush(admin, rep.id, {
-        title: holidayRow ? `${holidayRow.holiday_name} nurtures ready` : 'Quarterly check-ins ready',
-        body: `${nurtureCount} draft${nurtureCount === 1 ? '' : 's'} waiting in your queue.`,
-        data: { route: 'nurture' },
-      });
-    }
-
-    let referralCount = 0;
-    const dueReferrals = referralsByRep.get(rep.id);
-    if (dueReferrals && dueReferrals.length > 0) {
-      referralCount = await runReferralAsks(admin, rep.id, dueReferrals);
-      if (referralCount > 0) {
+      let nurtureCount = 0;
+      if (holidayRow) nurtureCount += await runBlast(admin, rep.id, 'holiday', holidayRow, 30);
+      if (runQuarterly) nurtureCount += await runBlast(admin, rep.id, 'quarterly_check_in', null, 10);
+      if (nurtureCount > 0) {
         await firePush(admin, rep.id, {
-          title: 'Referral asks ready',
-          body: `${referralCount} referral ask${referralCount === 1 ? '' : 's'} drafted and waiting for review.`,
+          title: holidayRow ? `${holidayRow.holiday_name} nurtures ready` : 'Quarterly check-ins ready',
+          body: `${nurtureCount} draft${nurtureCount === 1 ? '' : 's'} waiting in your queue.`,
           data: { route: 'nurture' },
         });
       }
-    }
 
-    results.push({ user_id: rep.id, local_date: local.date, local_hour: local.hour, nurtures: nurtureCount, referrals: referralCount });
+      let referralCount = 0;
+      const dueReferrals = referralsByRep.get(rep.id);
+      if (dueReferrals && dueReferrals.length > 0) {
+        referralCount = await runReferralAsks(admin, rep.id, dueReferrals);
+        if (referralCount > 0) {
+          await firePush(admin, rep.id, {
+            title: 'Referral asks ready',
+            body: `${referralCount} referral ask${referralCount === 1 ? '' : 's'} drafted and waiting for review.`,
+            data: { route: 'nurture' },
+          });
+        }
+      }
+
+      results.push({ user_id: rep.id, local_date: local.date, local_hour: local.hour, nurtures: nurtureCount, referrals: referralCount });
+    } catch (e) {
+      console.error('nurture-scheduler(hourly): rep failed', rep.id, e);
+      results.push({ user_id: rep.id, local_date: local.date, local_hour: local.hour, error: e instanceof Error ? e.message : 'unknown error' });
+    }
   }
 
   return json({ ok: true, mode: 'hourly', processed: results.length, results });
