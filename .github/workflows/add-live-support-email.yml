@@ -1,0 +1,45 @@
+name: Add live public support email
+
+on:
+  push:
+    branches:
+      - marketing/public-support-email
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: marketing/public-support-email
+      - name: Add support contact to landing page
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('Pocketrep/index.html')
+          text = path.read_text()
+          consent = '''        <p class="sf-consent">You'll enter card details on Stripe's secure checkout. Card not charged until day 8. Cancel anytime before then. By continuing you agree to our <a href="/terms.html">Terms</a> and <a href="/privacy.html">Privacy Policy</a>.</p>'''
+          consent_new = consent + '''\n        <p class="sf-consent">Questions before you start? <a href="mailto:service@pocketrep.pro">service@pocketrep.pro</a></p>'''
+          footer = '''        <a href="/privacy.html">Privacy</a>\n        <a href="/terms.html">Terms</a>\n        <a href="/cancel.html">Cancel</a>'''
+          footer_new = '''        <a href="mailto:service@pocketrep.pro">Support</a>\n        <a href="/privacy.html">Privacy</a>\n        <a href="/terms.html">Terms</a>\n        <a href="/cancel.html">Cancel</a>'''
+          for old, new, label in [(consent, consent_new, 'signup support'), (footer, footer_new, 'footer support')]:
+              if old not in text:
+                  raise SystemExit(f'Missing expected {label} anchor')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+      - name: Commit landing support contact
+        run: |
+          if git diff --quiet -- Pocketrep/index.html; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Pocketrep/index.html
+          git commit -m "Add pre-signup support email to landing page"
+          git push origin HEAD:marketing/public-support-email
