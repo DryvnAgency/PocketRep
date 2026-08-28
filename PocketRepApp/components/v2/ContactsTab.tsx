@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, Alert, Platform, Linking } from 'react-native';
 import RadarLoader from './RadarLoader';
 import { colors, radius, spacing } from '@/constants/theme';
@@ -9,6 +9,7 @@ import type { V2Tag } from '@/lib/v2/useTags';
 import { logInteraction } from '@/lib/v2/interactions';
 import { logContactTouch, type CallOutcome } from '@/lib/v2/updateContact';
 import { launchSms } from '@/lib/v2/smsLauncher';
+import { supabase } from '@/lib/supabase';
 
 type FilterTag = null | { kind: 'tier'; tier: TierKey; name: string; color: string; icon: string } | { kind: 'custom'; name: string; color: string };
 const TIER_CHIPS: Extract<FilterTag, { kind: 'tier' }>[] = [
@@ -25,8 +26,27 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
   const [outcome, setOutcome] = useState<'answered' | 'no-answer' | 'voicemail' | 'wrong-number' | null>(null);
   const [textOpened, setTextOpened] = useState(false);
   const [copied, setCopied] = useState(false);
+  // The no-answer text signs off with the rep's own first name — never a
+  // hardcoded persona. Falls back to no self-ID (not a fabricated name) when
+  // the rep hasn't set one, same neutral-fallback rule as Rex's coach identity.
+  const [repFirstName, setRepFirstName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+        const { data } = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle();
+        const full = String(data?.full_name ?? '').trim();
+        if (full && !cancelled) setRepFirstName(full.split(/\s+/)[0]);
+      } catch { /* keep the no-self-ID fallback */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const current = queue[index] ?? null;
-  const textBody = current ? `Hey ${current.name.split(' ')[0]}, it’s Eddie. Just tried giving you a call. Wanted to catch up with you real quick. Give me a call or text when you get a chance.` : '';
+  const textBody = current
+    ? `Hey ${current.name.split(' ')[0]}, ${repFirstName ? `it’s ${repFirstName}. ` : ''}Just tried giving you a call. Wanted to catch up with you real quick. Give me a call or text when you get a chance.`
+    : '';
   const record = async (type: 'call' | 'text', notes: string, callOutcome?: CallOutcome) => {
     if (!current) return;
     try { await logContactTouch(current.id, type, notes, callOutcome); } catch (e) { console.warn('call queue touch', e); }

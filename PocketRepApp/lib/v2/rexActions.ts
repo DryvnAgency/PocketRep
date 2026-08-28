@@ -611,11 +611,15 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
     }
     case 'update_notes': {
       const p = action.payload;
-      const { data } = await supabase
+      const { data, error: readErr } = await supabase
         .from('contacts')
         .select('notes')
         .eq('id', p.contact_id)
         .maybeSingle();
+      // A failed read must never be treated as "no existing notes" — that
+      // silently overwrites the contact's entire note history with just the
+      // new fragment. Abort instead; the caller's catch surfaces this.
+      if (readErr) throw new Error(`Couldn't read existing notes: ${readErr.message}`);
       const existing = (data?.notes ?? '').trim();
       const joined = existing
         ? `${existing}\n\n${p.notes_append}`

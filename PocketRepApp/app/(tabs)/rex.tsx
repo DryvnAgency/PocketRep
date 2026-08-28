@@ -12,6 +12,7 @@ import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import { callBrain } from '@/lib/v2/aiProxy';
 import { buildCoachMessages } from '@/lib/v2/coachBrain';
 import { startDictation, isDictationAvailable, type Dictation } from '@/lib/v2/sttDictation';
+import { launchSms } from '@/lib/v2/smsLauncher';
 
 // ── Model: Gemini 2.5 Flash for speed + cost on every Rex call ──────────────
 const REX_MODEL = 'gemini-2.5-flash';
@@ -463,6 +464,7 @@ export default function RexScreen() {
     }
 
     if (action.type === 'mass_text' && action.message) {
+      const message = action.message;
       // Filter contacts based on action.filter
       let filtered = contacts;
       if (action.filter?.vehicle_make) {
@@ -472,14 +474,44 @@ export default function RexScreen() {
       if (action.filter?.stage) {
         filtered = filtered.filter(c => c.stage === action.filter!.stage);
       }
+      const recipients = filtered.filter(c => c.phone);
 
-      const confirmMsg: RexMessage = {
-        id: Date.now().toString() + 'a',
-        user_id: user.id, contact_id: null, role: 'assistant',
-        content: `✅ Mass text queued to ${filtered.length} contact${filtered.length !== 1 ? 's' : ''}${action.filter?.vehicle_make ? ` with a ${action.filter.vehicle_make}` : ''}.\n\nMessage: "${action.message?.replace('{{first_name}}', filtered[0]?.first_name ?? 'there')}"`,
-        created_at: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, confirmMsg]);
+      if (recipients.length === 0) {
+        setMessages(prev => [...prev, {
+          id: Date.now().toString() + 'a',
+          user_id: user.id, contact_id: null, role: 'assistant',
+          content: `No contacts with a phone number matched${action.filter?.vehicle_make ? ` "${action.filter.vehicle_make}"` : ''}.`,
+          created_at: new Date().toISOString(),
+        }]);
+      } else {
+        // Real send: open the composer per contact (same pattern as Smart
+        // Blast) — {{first_name}} is substituted per recipient, never sent
+        // literally. The rep already confirmed once on the pending-action
+        // card; launchSms asks "did you send it?" for each individual text.
+        setMessages(prev => [...prev, {
+          id: Date.now().toString() + 'a',
+          user_id: user.id, contact_id: null, role: 'assistant',
+          content: `Opening the text composer for ${recipients.length} contact${recipients.length !== 1 ? 's' : ''}, one at a time. Confirm each send as it opens.`,
+          created_at: new Date().toISOString(),
+        }]);
+        let sentCount = 0;
+        for (const c of recipients) {
+          const personalized = message.replace(/\{\{first_name\}\}/g, c.first_name || 'there');
+          const result = await launchSms({
+            contact_id: c.id,
+            contact_name: `${c.first_name} ${c.last_name}`.trim(),
+            phone: c.phone,
+            message: personalized,
+          });
+          if (result === 'opened') sentCount++;
+        }
+        setMessages(prev => [...prev, {
+          id: Date.now().toString() + 'b',
+          user_id: user.id, contact_id: null, role: 'assistant',
+          content: `✅ ${sentCount} of ${recipients.length} message${recipients.length !== 1 ? 's' : ''} confirmed sent.`,
+          created_at: new Date().toISOString(),
+        }]);
+      }
     }
 
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150);

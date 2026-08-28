@@ -440,12 +440,18 @@ export default function ContactDetail({
   };
   // Email mirrors Call/Text: web opens the compose modal (mailto: silently
   // no-ops when no desktop mail client is registered, which read as a dead
-  // button); native opens the mail client directly.
-  const openEmail = (body?: string) => {
+  // button); native opens the mail client directly. Only record the touch —
+  // clearing the follow-up date — once the mail app actually opened, same
+  // as openText's launchSms gate.
+  const openEmail = async (body?: string) => {
     if (!contact.email) { flash('No email on file'); return; }
     if (Platform.OS === 'web') { setCompose({ mode: 'email', body: body ?? '' }); return; }
-    Linking.openURL(channelUrl('email', body));
-    recordTouch('email', body);
+    try {
+      await Linking.openURL(channelUrl('email', body));
+      recordTouch('email', body);
+    } catch {
+      flash('Could not open mail app');
+    }
   };
 
   const runGamePlan = async () => {
@@ -1229,10 +1235,12 @@ export default function ContactDetail({
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => {
+                onPress={async () => {
                   const body = (compose.mode === 'text' || compose.mode === 'email') ? compose.body : undefined;
-                  try { Linking.openURL(channelUrl(compose.mode, body || undefined)); } catch { /* ignore */ }
-                  recordTouch(compose.mode, body);
+                  try {
+                    await Linking.openURL(channelUrl(compose.mode, body || undefined));
+                    recordTouch(compose.mode, body);
+                  } catch { /* app didn't open — don't record a touch that didn't happen */ }
                   setCompose(null);
                 }}
                 style={[styles.aiAction, styles.aiActionPrimary]}
