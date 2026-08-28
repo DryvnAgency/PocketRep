@@ -1,0 +1,141 @@
+# P2-R5 — Rex action-selection seed cases (~26). Each case asserts the brain picks
+# the expected `action` (see assertAction.js + defaultTest in promptfooconfig.yaml).
+# This is a SEED to grow toward the 150-utterance target — add rows here (and harder
+# payload-level asserts per row when needed). Keep BOOK STATE refs (Marcus, the two
+# Marias, Dave, Priya) consistent with rexPrompt.txt.
+
+# --- add_contact ---
+- description: new lead by name + vehicle
+  vars:
+    utterance: "Add a new lead, Jordan Price, looking at a 2022 Tahoe"
+    expected_action: add_contact
+- description: jot a walk-in
+  vars:
+    utterance: "New customer just walked in, Sarah Kim, wants a CR-V"
+    expected_action: add_contact
+
+# --- update_notes ---
+- description: append a note to an unambiguous contact
+  vars:
+    utterance: "Note on Marcus: he wants to keep his payment under six hundred"
+    expected_action: update_notes
+- description: log what a customer said
+  vars:
+    utterance: "Add a note to Dave Chen that he's deciding between the F-150 and the Ram"
+    expected_action: update_notes
+
+# --- delete_contact ---
+- description: remove a contact
+  vars:
+    utterance: "Delete Priya Shah, she bought somewhere else"
+    expected_action: delete_contact
+
+# --- log_deal ---
+- description: closed sale with grosses
+  vars:
+    utterance: "Log a deal for Marcus Bell, stock B1234, the M3, twenty eight hundred front and twelve hundred back"
+    expected_action: log_deal
+- description: cash deal
+  vars:
+    utterance: "I just sold Dave the F-150, stock F908, three grand front, eight hundred back"
+    expected_action: log_deal
+
+# --- schedule_followup ---
+- description: follow up in a week
+  vars:
+    utterance: "Remind me to follow up with Marcus in a week"
+    expected_action: schedule_followup
+- description: follow up tomorrow
+  vars:
+    utterance: "Set a follow-up on Dave Chen for three days from now"
+    expected_action: schedule_followup
+
+# --- show_contact ---
+- description: open a specific card
+  vars:
+    utterance: "Pull up Priya Shah"
+    expected_action: show_contact
+
+# --- filter_contacts ---
+- description: how many of a segment
+  vars:
+    utterance: "How many lease customers do I have?"
+    expected_action: filter_contacts
+- description: which customers match
+  vars:
+    utterance: "Which of my people are cold right now?"
+    expected_action: filter_contacts
+
+# --- book_summary ---
+- description: pipeline health
+  vars:
+    utterance: "How's my book looking?"
+    expected_action: book_summary
+- description: how are things
+  vars:
+    utterance: "Give me a snapshot of where things stand"
+    expected_action: book_summary
+
+# --- call_next ---
+- description: who should I call first
+  vars:
+    utterance: "Who should I call first today?"
+    expected_action: call_next
+- description: who first
+  vars:
+    utterance: "Who's my best call right now?"
+    expected_action: call_next
+
+# --- batch_action ---
+- description: tag several
+  vars:
+    utterance: "Tag all my hot customers as vip"
+    expected_action: batch_action
+- description: mark dead
+  vars:
+    utterance: "Mark all my cold leads as dead"
+    expected_action: batch_action
+
+# --- create_blast_sequence ---
+- description: text a group a promo
+  vars:
+    utterance: "Text all my lease customers about the September pull-ahead, zero down"
+    expected_action: create_blast_sequence
+
+# --- analyze_stalled_leads ---
+- description: who's gone quiet
+  vars:
+    utterance: "Who haven't I contacted in three weeks?"
+    expected_action: analyze_stalled_leads
+
+# --- schedule_nurture_blast ---
+- description: nurture past customers
+  vars:
+    utterance: "Queue up a check-in for all my past customers"
+    expected_action: schedule_nurture_blast
+
+# --- retier_contact ---
+- description: customer reviving
+  vars:
+    utterance: "Maria Gonzalez called back in, she wants numbers on the Camry"
+    expected_action: retier_contact
+- description: off the fence
+  vars:
+    utterance: "Priya's ready to move, she's hot again"
+    expected_action: retier_contact
+
+# --- clarify (ambiguous name → must ask, never guess) ---
+- description: a bare Maria matches two people
+  vars:
+    utterance: "Update Maria's notes, she wants a weekend test drive"
+    expected_action: clarify
+- description: ambiguous follow-up target
+  vars:
+    utterance: "Follow up with Maria next week"
+    expected_action: clarify
+
+# --- say (informational, no write) ---
+- description: a general question
+  vars:
+    utterance: "What's a good opener for a lease pull-ahead?"
+    expected_action: say

@@ -75,14 +75,15 @@ export async function savePayPlan(plan: PayPlan): Promise<void> {
   if (error) throw error;
 }
 
-export function usePayPlan(refetchKey: number = 0) {
+export function usePayPlan(refetchKey: number = 0, enabled: boolean = true) {
   const [plan, setPlan] = useState<PayPlan | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     loadPayPlan().then(p => { if (!cancelled) setPlan(p); });
     return () => { cancelled = true; };
-  }, [refetchKey]);
+  }, [refetchKey, enabled]);
 
   return plan;
 }
@@ -97,4 +98,29 @@ export function calcCommissionWithPlan(
   const base = Math.max(front + back, plan.flatMini);
   const splitMult = d.split ? 0.5 : 1;
   return Math.round((base + plan.manuBonus + plan.csiBonus) * splitMult);
+}
+
+// Unit-bonus tiers are a MONTHLY volume bonus (hit N units in a month → a flat
+// bonus), NOT a per-deal amount — so they are applied when units are tallied
+// (Metrics), never inside calcCommissionWithPlan (which is per-deal). Until now
+// the tier config was loaded/saved/edited but never actually applied anywhere.
+//
+// The earned bonus is the single highest tier whose unit threshold is met (it is
+// NOT cumulative): 12 units against [10→$500, 15→$1000, 20→$1500] earns $500.
+export function unitBonusFor(units: number, tiers: UnitBonusTier[]): number {
+  let bonus = 0;
+  for (const t of tiers) {
+    if (units >= t.units && t.bonus > bonus) bonus = t.bonus;
+  }
+  return bonus;
+}
+
+// The next tier the rep hasn't reached yet (lowest threshold strictly above
+// `units`), for a "3 more units → $1,000" nudge. Null at/above the top tier.
+export function nextUnitBonusTier(units: number, tiers: UnitBonusTier[]): UnitBonusTier | null {
+  let next: UnitBonusTier | null = null;
+  for (const t of tiers) {
+    if (t.units > units && (next === null || t.units < next.units)) next = t;
+  }
+  return next;
 }

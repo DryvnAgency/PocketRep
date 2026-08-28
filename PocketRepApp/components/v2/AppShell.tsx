@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, Platform } from 'react-native';
 import { colors } from '@/constants/theme';
 import CustomNavBar, { TabId } from './CustomNavBar';
 import TabBar from './TabBar';
@@ -13,16 +13,22 @@ import DealLogger, { type DealLoggerPrefill } from './DealLogger';
 import DealDetail from './DealDetail';
 import BulkTagFlow from './BulkTagFlow';
 import AddContactModal from './AddContactModal';
+import ImportContactsModal from './ImportContactsModal';
 import RexDisclosure from './RexDisclosure';
 import HeyRexSheet from './HeyRexSheet';
-import Onboarding from './Onboarding';
+import RexOnboarding from './RexOnboarding';
+import PWAInstallPrompt, { shouldAutoPrompt } from './PWAInstallPrompt';
 import GamePlanSheet from './GamePlanSheet';
+import RexActivityViewer from './RexActivityViewer';
 import BlastSequenceDrafter from './BlastSequenceDrafter';
 import StalledLeadsAnalysis from './StalledLeadsAnalysis';
 import NurtureReviewer from './NurtureReviewer';
 import PayPlanEditor from './PayPlanEditor';
 import NotificationsCenter from './NotificationsCenter';
 import RexCoach from './RexCoach';
+import VehicleFinderModal from './VehicleFinderModal';
+import LockoutScreen from './LockoutScreen';
+import AuthScreen from './AuthScreen';
 import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
 import { warmBrain } from '@/lib/v2/aiProxy';
 import { rolloverCoachLog } from '@/lib/v2/coachLog';
@@ -35,6 +41,9 @@ import {
 import { scheduleNurtureBlast } from '@/lib/v2/nurtureEngine';
 import { useNotifications } from '@/lib/v2/notifications';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
+import { clearLocalSessionState, signOutAndReset } from '@/lib/v2/localSessionClear';
+import { openMarketing } from '@/lib/v2/links';
+import { materializeDueResponses, clearDemoSim } from '@/lib/v2/demoBlastSim';
 import { registerForPush } from '@/lib/v2/pushNotifications';
 import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
@@ -51,11 +60,21 @@ import {
   syncOnboardingFromProfile,
 } from '@/lib/v2/rexSettings';
 import { useHeyRex } from '@/lib/v2/useHeyRex';
+import { isRexOnboardingEnabled, isContactImportEnabled, isVehicleFinderEnabled } from '@/lib/v2/rexFeatureFlags';
+import type { FindVehiclesPayload } from '@/lib/v2/rexActions';
+import { useAccessGate } from '@/lib/v2/accessGate';
+import { supabase } from '@/lib/supabase';
+import { captureTimezone } from '@/lib/v2/sendTime';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
   const [orbState, setOrbState] = useState<OrbState>('idle');
   const [authReady, setAuthReady] = useState(false);
+  // True once we've checked for a session and found none — renders AuthScreen
+  // instead of the app shell. Stays false (shell shows "Signing in…") while the
+  // initial session check is still in flight, so there's no AuthScreen flash for
+  // a returning signed-in visitor.
+  const [needsAuth, setNeedsAuth] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dealLoggerOpen, setDealLoggerOpen] = useState(false);
   const [dealLoggerPrefill, setDealLoggerPrefill] = useState<DealLoggerPrefill | undefined>();
@@ -64,10 +83,15 @@ export default function AppShell() {
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [tagsRefetchKey, setTagsRefetchKey] = useState(0);
   const [addContactOpen, setAddContactOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [vehicleFinderOpen, setVehicleFinderOpen] = useState(false);
+  const [vehicleFinderPrefill, setVehicleFinderPrefill] = useState<FindVehiclesPayload | null>(null);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
   const [alwaysListen, setAlwaysListen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [installPromptOpen, setInstallPromptOpen] = useState(false);
   const [gamePlanOpen, setGamePlanOpen] = useState(false);
+  const [rexActivityOpen, setRexActivityOpen] = useState(false);
   const [blastDraft, setBlastDraft] = useState<BlastDraft | null>(null);
   const [blastDrafting, setBlastDrafting] = useState(false);
   const [stalledOpen, setStalledOpen] = useState(false);
@@ -81,14 +105,37 @@ export default function AppShell() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [rexCoachOpen, setRexCoachOpen] = useState(false);
   const [rexActionError, setRexActionError] = useState<string | null>(null);
-  const payPlan = usePayPlan(payPlanRefetchKey);
+  const [refreshing, setRefreshing] = useState(false);
+  const payPlan = usePayPlan(payPlanRefetchKey, authReady);
+  // HARD LOCKOUT gate — inert until Eduardo wires the real subscription read in
+  // accessGate.ts (it returns 'allowed' today, so no behavior change). See the
+  // early return below + docs/MASTER_PLAN.md §"Gated P0 — Eduardo only".
+  const access = useAccessGate();
 
-  const { contacts, error, patchLocal, reload: reloadContacts } = useContacts();
-  const tags = useTags(tagsRefetchKey);
+  const { contacts, error, patchLocal, reload: reloadContacts } = useContacts(authReady);
+
+  // Demo-blast simulation: fire any due simulated replies (15/30/60s after a demo
+  // blast) on mount + a short timer, then refresh the book so they surface on the
+  // Heat Sheet / activity immediately. No-op when no demo blast is pending, and
+  // idempotent across refresh (see demoBlastSim.ts).
+  const reloadContactsRef = useRef(reloadContacts);
+  reloadContactsRef.current = reloadContacts;
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      const fired = await materializeDueResponses();
+      if (!cancelled && fired > 0) reloadContactsRef.current();
+    };
+    void tick();
+    const iv = setInterval(() => { void tick(); }, 5000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, []);
+  const tags = useTags(tagsRefetchKey, authReady);
   const tagNames = useMemo(() => tags.map(t => t.name), [tags]);
   const { items: notifItems, unread: notifUnread } = useNotifications(
     contacts,
     nurtureRefetchKey,
+    authReady,
   );
   // "active" = hot + warm leads (the rep's working pipeline).
   const activeCount = useMemo(
@@ -102,14 +149,37 @@ export default function AppShell() {
     contacts: contacts ?? [],
     tagNames,
     onOpenContact: setSelectedId,
+    // Vehicle Finder pivot — only wired when the flag is on, so find_vehicles is
+    // a no-op (nothing opens) with the flag off even if the action is emitted.
+    onFindVehicles: isVehicleFinderEnabled() ? (payload: FindVehiclesPayload) => openVehicleFinder(payload) : undefined,
+    activeScreen: active,
+    selectedContactId: selectedId,
   });
 
+  // P0-1: real sign-in. Every visitor used to be silently auto-signed into one
+  // shared demo account here; now we check for an actual session and, if there
+  // isn't one, render AuthScreen instead (the demo is still reachable, but only
+  // via an explicit "Try the demo" tap — see handleTryDemo). onAuthStateChange
+  // is the single source of truth for session presence, so a real sign-in/up
+  // (AuthScreen's own supabase calls), a demo sign-in (handleTryDemo below), and
+  // a sign-out (LockoutScreen's onSignOut) all flow through the same path.
   useEffect(() => {
-    ensureDemoSession().finally(async () => {
+    let cancelled = false;
+    // Audit finding (MED): Supabase's onAuthStateChange re-fires SIGNED_IN for
+    // the SAME user on every tab-visibility-change recovery, not just on a real
+    // sign-in — without this guard, finishBoot() (network calls: profile sync,
+    // warmBrain, timezone capture) would redundantly re-run on every alt-tab.
+    // Also closes the cold-boot race where getSession().then() and the listener
+    // can both resolve for the same session near-simultaneously.
+    const lastUserIdRef = { current: null as string | null };
+
+    const finishBoot = async () => {
       // Hydrate the localStorage cache from the canonical profile flag so a
       // fresh browser doesn't show the playbook again to a user who already
       // ran through it on another device.
       await syncOnboardingFromProfile().catch(() => undefined);
+      if (cancelled) return;
+      setNeedsAuth(false);
       setAuthReady(true);
       setAlwaysListen(getAlwaysListenEnabled());
       // Warm the ai-proxy brain on launch so the rep's first Rex call (coach or
@@ -125,9 +195,70 @@ export default function AppShell() {
       }
       // Fire-and-forget — push registration is silent on web/unsupported devices.
       registerForPush().catch(() => undefined);
+      // Best-effort: record the rep's device timezone on their profile (P2-A3) so
+      // the nurture scheduler can later deliver at their local send hour.
+      captureTimezone().catch(() => undefined);
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return;
+      if (session?.user) {
+        lastUserIdRef.current = session.user.id;
+        finishBoot();
+      } else {
+        setNeedsAuth(true);
+      }
     });
-    return subscribeAlwaysListen(setAlwaysListen);
+
+    const { data: authSub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (event === 'SIGNED_IN' && session?.user) {
+        if (lastUserIdRef.current === session.user.id) return; // redundant re-notify, not a real transition
+        lastUserIdRef.current = session.user.id;
+        finishBoot();
+      } else if (event === 'SIGNED_OUT') {
+        lastUserIdRef.current = null;
+        setNeedsAuth(true);
+        setAuthReady(false);
+        // Cross-account leak guard (audit finding, HIGH): AppShell never
+        // unmounts across a sign-out/sign-in transition, so useContacts/
+        // useTags/usePayPlan/useUserDeals/useNotifications all keep the
+        // PREVIOUS rep's data in memory until each independently refetches —
+        // a real risk on a shared/kiosk device (rep A signs out, rep B signs
+        // in on the same tab and briefly sees rep A's book). A full reload is
+        // the simplest guarantee that every hook's state — these five and any
+        // other in-memory cache — starts genuinely empty for whoever signs in
+        // next. Web only; on native there is no cheap reload equivalent, but
+        // native has no real distribution yet (this go-live is web-first).
+        //
+        // The reload alone isn't enough: several per-user PREFERENCES survive
+        // it in localStorage (always-listen mic consent + disclosure-seen,
+        // onboarding-seen, the coach chat log) — clearLocalSessionState()
+        // closes that (audit finding, HIGH — without it, the next sign-in on
+        // this device could inherit always-listening mic consent they never
+        // gave).
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          clearLocalSessionState();
+          window.location.reload();
+        }
+      }
+    });
+
+    const unsubAlwaysListen = subscribeAlwaysListen(setAlwaysListen);
+    return () => {
+      cancelled = true;
+      authSub.subscription.unsubscribe();
+      unsubAlwaysListen();
+    };
   }, []);
+
+  // The demo stays reachable, but only as an explicit tap on AuthScreen (not an
+  // automatic sign-in) — the resulting SIGNED_IN event is picked up by the
+  // listener above, so this just needs to trigger the sign-in and let a real
+  // failure propagate (AuthScreen shows it) instead of silently doing nothing.
+  const handleTryDemo = async () => {
+    await ensureDemoSession();
+  };
 
   // Map listener state to the orb visual
   useEffect(() => {
@@ -144,7 +275,7 @@ export default function AppShell() {
     if (rex.state === 'denied') {
       setRexActionError('Microphone access is blocked. Enable it in your browser settings to use Hey Rex.');
     } else if (rex.state === 'unsupported') {
-      setRexActionError("Voice isn't supported in this browser — try Chrome or Safari.");
+      setRexActionError("Voice isn't supported in this browser. On iPhone, tap the gold Rex orb to chat instead; on desktop, use Chrome.");
     }
   }, [rex.state]);
 
@@ -168,6 +299,11 @@ export default function AppShell() {
   const openDealLogger = (prefill?: DealLoggerPrefill) => {
     setDealLoggerPrefill(prefill);
     setDealLoggerOpen(true);
+  };
+
+  const openVehicleFinder = (prefill?: FindVehiclesPayload) => {
+    setVehicleFinderPrefill(prefill ?? null);
+    setVehicleFinderOpen(true);
   };
 
   // Opens the Stalled Leads analysis overlay and runs the analyzer. Reachable
@@ -197,6 +333,9 @@ export default function AppShell() {
     const blastPayload = rex.action?.type === 'create_blast_sequence' ? rex.action.payload : null;
     const stalledPayload = rex.action?.type === 'analyze_stalled_leads' ? rex.action.payload : null;
     const nurturePayload = rex.action?.type === 'schedule_nurture_blast' ? rex.action.payload : null;
+    // P2-R3: a chain bundles several writes — capture its steps before confirm()
+    // clears the action so we can refresh exactly the surfaces those steps touched.
+    const chainSteps = rex.action?.type === 'chain' ? (rex.action.payload.steps ?? []) : [];
     const result = await rex.confirm();
     // Refresh writers' downstream state
     if (actionType === 'log_deal') {
@@ -210,6 +349,22 @@ export default function AppShell() {
       || actionType === 'batch_action'
     ) {
       reloadContacts();
+    }
+    // A reminder (single action or inside a chain) needs the bell badge to refresh
+    // (useNotifications is keyed on nurtureRefetchKey — same as RexCoach.onActed).
+    if (actionType === 'create_reminder') setNurtureRefetchKey(k => k + 1);
+    // P2-R3: a chain can mix deal + contact + reminder writes — refresh each surface
+    // any of its steps actually touched.
+    if (actionType === 'chain') {
+      const stepTypes = new Set(chainSteps.map(s => s.type));
+      if (stepTypes.has('log_deal')) setDealsRefetchKey(k => k + 1);
+      if (stepTypes.has('create_reminder')) setNurtureRefetchKey(k => k + 1);
+      if (stepTypes.has('add_contact') || stepTypes.has('update_notes')
+        || stepTypes.has('delete_contact') || stepTypes.has('schedule_followup')
+        || stepTypes.has('retier_contact') || stepTypes.has('batch_action')
+      ) {
+        reloadContacts();
+      }
     }
     if (result?.openContactId) {
       setSelectedId(result.openContactId);
@@ -263,6 +418,90 @@ export default function AppShell() {
     }
   };
 
+  // Pull-to-refresh on the main scroll — reloads the active tab's data.
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (active === 'metrics') {
+        setDealsRefetchKey(k => k + 1);
+      } else if (active === 'profile') {
+        setPayPlanRefetchKey(k => k + 1);
+      } else {
+        await reloadContacts();
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [active, reloadContacts]);
+
+  // Web back button → peel the topmost overlay instead of leaving the app.
+  const closeTopOverlay = () => {
+    if (rexCoachOpen) { setRexCoachOpen(false); return; }
+    if (notifOpen) { setNotifOpen(false); return; }
+    if (stalledOpen) { setStalledOpen(false); setStalledReport(null); return; }
+    if (nurtureReviewerOpen) { setNurtureReviewerOpen(false); return; }
+    if (payPlanOpen) { setPayPlanOpen(false); return; }
+    if (blastDraft) { setBlastDraft(null); return; }
+    if (rexActivityOpen) { setRexActivityOpen(false); return; }
+    if (gamePlanOpen) { setGamePlanOpen(false); return; }
+    if (addContactOpen) { setAddContactOpen(false); return; }
+    if (importOpen) { setImportOpen(false); return; }
+    if (vehicleFinderOpen) { setVehicleFinderOpen(false); setVehicleFinderPrefill(null); return; }
+    if (bulkTagOpen) { setBulkTagOpen(false); return; }
+    if (selectedDeal) { setSelectedDeal(null); return; }
+    if (dealLoggerOpen) { setDealLoggerOpen(false); return; }
+    if (selectedId) { setSelectedId(null); return; }
+  };
+  const anyOverlayOpen =
+    rexCoachOpen || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
+    !!blastDraft || gamePlanOpen || rexActivityOpen || addContactOpen || importOpen || vehicleFinderOpen || bulkTagOpen || !!selectedDeal ||
+    dealLoggerOpen || !!selectedId;
+  const closeTopRef = useRef(closeTopOverlay);
+  closeTopRef.current = closeTopOverlay;
+  const anyOverlayOpenRef = useRef(anyOverlayOpen);
+  anyOverlayOpenRef.current = anyOverlayOpen;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onPop = () => {
+      if (anyOverlayOpenRef.current) {
+        closeTopRef.current();
+        // keep a trap state so the next Back peels the next overlay layer
+        window.history.pushState({ pocketrepOverlay: true }, '');
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    // One trap when the first overlay opens; onPop re-pushes for deeper layers.
+    if (anyOverlayOpen) window.history.pushState({ pocketrepOverlay: true }, '');
+  }, [anyOverlayOpen]);
+
+  // P0-1: no session -> real sign-in/up, with the demo as an explicit fallback
+  // (checked before the lockout gate below — an unauthenticated visitor should
+  // see "sign in", not "your subscription lapsed").
+  if (needsAuth) {
+    return (
+      <AuthScreen onTryDemo={Platform.OS === 'web' ? handleTryDemo : undefined} />
+    );
+  }
+
+  // HARD LOCKOUT: when the access gate reports a lapsed OR invalid/deleted
+  // account, block the whole app. The re-subscribe / re-entry CTA routes to the
+  // marketing landing page — the canonical acquisition + re-subscription funnel.
+  if (access.status === 'locked') {
+    return (
+      <LockoutScreen
+        reason={access.reason}
+        onResubscribe={() => openMarketing()}
+        onSignOut={() => { signOutAndReset(); }}
+      />
+    );
+  }
+
   return (
     <View style={styles.root}>
       <CustomNavBar
@@ -279,6 +518,14 @@ export default function AppShell() {
         style={styles.content}
         contentContainerStyle={styles.contentInner}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.gold}
+            colors={[colors.gold]}
+          />
+        }
       >
         {!authReady ? (
           <Text style={styles.placeholder}>Signing in…</Text>
@@ -286,7 +533,10 @@ export default function AppShell() {
           <HeatSheetTab
             contacts={contacts}
             error={error}
+            onRetry={reloadContacts}
             onSelect={c => setSelectedId(c.id)}
+            onAddContact={() => setAddContactOpen(true)}
+            onImportContacts={isContactImportEnabled() ? () => setImportOpen(true) : undefined}
             nurtureRefetchKey={nurtureRefetchKey}
             onOpenNurture={() => setNurtureReviewerOpen(true)}
             onAnalyzeStalled={() => openStalledAnalysis()}
@@ -295,10 +545,13 @@ export default function AppShell() {
           <ContactsTab
             contacts={contacts}
             error={error}
+            onRetry={reloadContacts}
             tags={tags}
             onSelect={c => setSelectedId(c.id)}
             onBulkTag={() => setBulkTagOpen(true)}
             onAddContact={() => setAddContactOpen(true)}
+            onImportContacts={isContactImportEnabled() ? () => setImportOpen(true) : undefined}
+            onFindVehicles={isVehicleFinderEnabled() ? () => openVehicleFinder() : undefined}
             onDeleteTag={async (name) => {
               try { await deleteTag(name); } catch (e) { console.warn('deleteTag failed', e); }
               setTagsRefetchKey(k => k + 1);
@@ -308,8 +561,10 @@ export default function AppShell() {
         ) : active === 'profile' ? (
           <ProfileTab
             onOpenGamePlan={() => setGamePlanOpen(true)}
+            onOpenRexActivity={() => setRexActivityOpen(true)}
             onReplayOnboarding={() => setOnboardingOpen(true)}
             onOpenPayPlan={() => setPayPlanOpen(true)}
+            onInstallApp={() => setInstallPromptOpen(true)}
             onNavigate={setActive}
             payPlanRefetchKey={payPlanRefetchKey}
           />
@@ -369,8 +624,23 @@ export default function AppShell() {
         open={addContactOpen}
         allContacts={contacts ?? []}
         onClose={() => setAddContactOpen(false)}
-        onCreated={() => { reloadContacts(); setActive('contacts'); }}
+        onCreated={() => { clearDemoSim(); reloadContacts(); setActive('contacts'); }}
       />
+
+      <ImportContactsModal
+        open={importOpen}
+        allContacts={contacts ?? []}
+        onClose={() => setImportOpen(false)}
+        onImported={() => { clearDemoSim(); reloadContacts(); setActive('contacts'); }}
+      />
+
+      {isVehicleFinderEnabled() ? (
+        <VehicleFinderModal
+          open={vehicleFinderOpen}
+          prefill={vehicleFinderPrefill}
+          onClose={() => { setVehicleFinderOpen(false); setVehicleFinderPrefill(null); }}
+        />
+      ) : null}
 
       <RexDisclosure
         open={disclosureOpen}
@@ -390,17 +660,36 @@ export default function AppShell() {
         }}
       />
 
-      <Onboarding
+      {/* First-run onboarding: the Rex interview. The old static-carousel
+          duplicate (components/v2/Onboarding.tsx) was removed in the onboarding
+          consolidation, so this is the single onboarding path. */}
+      <RexOnboarding
         open={onboardingOpen}
-        onClose={() => {
-          markOnboardingComplete();
+        onClose={(completed) => {
+          if (completed) markOnboardingComplete();
           setOnboardingOpen(false);
+          // After onboarding, prompt the user to install the PWA (once per device,
+          // browser-only — the check is inside shouldAutoPrompt).
+          if (completed && shouldAutoPrompt()) {
+            setTimeout(() => setInstallPromptOpen(true), 600);
+          }
         }}
+      />
+
+      <PWAInstallPrompt
+        open={installPromptOpen}
+        onClose={() => setInstallPromptOpen(false)}
       />
 
       <GamePlanSheet
         open={gamePlanOpen}
         onClose={() => setGamePlanOpen(false)}
+      />
+
+      <RexActivityViewer
+        open={rexActivityOpen}
+        contacts={contacts ?? []}
+        onClose={() => setRexActivityOpen(false)}
       />
 
       <HeyRexSheet
@@ -465,6 +754,12 @@ export default function AppShell() {
             reloadContacts();
           }
           if (t === 'create_reminder') setNurtureRefetchKey(k => k + 1); // refresh the bell
+          // Vehicle Finder pivot from chat: close the coach and open the finder
+          // pre-filled with the model's extracted requirements. Flag-gated.
+          if (t === 'find_vehicles' && isVehicleFinderEnabled()) {
+            setRexCoachOpen(false);
+            openVehicleFinder(action.payload);
+          }
         }}
       />
 

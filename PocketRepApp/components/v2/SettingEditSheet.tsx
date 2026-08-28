@@ -1,7 +1,7 @@
 // Generic single-field edit sheet, reused by every editable Profile row.
 import { useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, StyleSheet, KeyboardTypeOptions,
+  View, Text, TextInput, Pressable, StyleSheet, KeyboardTypeOptions, Platform,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 
@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.goldBorder,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingBottom: 28,
+    paddingBottom: Platform.OS === 'web' ? ('max(28px, env(safe-area-inset-bottom))' as any) : 28,
   } as any,
   handle: {
     alignSelf: 'center',

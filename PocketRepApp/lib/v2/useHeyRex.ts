@@ -15,10 +15,14 @@ import {
   executeAction,
   logRexAction,
   actionWritesData,
+  failureRecoveryLine,
   type RexAction,
+  type FindVehiclesPayload,
 } from './rexActions';
+import { isRexFailureHonestyEnabled } from './rexFeatureFlags';
 import { recordRexTurn } from './rexMemory';
 import {
+  speak,
   speakStreaming,
   finishStreaming,
   stopSpeaking,
@@ -33,6 +37,14 @@ export type UseHeyRexInput = {
   tagNames: string[];
   // Lets auto-run open a contact card directly (show_contact / call_next).
   onOpenContact?: (id: string) => void;
+  // Vehicle Finder pivot: auto-run hands the extracted requirements up so
+  // AppShell opens VehicleFinderModal. AppShell only passes this when
+  // EXPO_PUBLIC_VEHICLE_FINDER is on, so flag-off makes find_vehicles a no-op.
+  onFindVehicles?: (payload: FindVehiclesPayload) => void;
+  // P2-R2: screen/state awareness — the tab the rep is on + the contact they
+  // have open, so Rex can resolve "this one" / "log a deal on her" in context.
+  activeScreen?: string;
+  selectedContactId?: string | null;
 };
 
 export type UseHeyRexOutput = {
@@ -59,6 +71,25 @@ const NAV_DISMISS_MS = 2_200;     // show_contact / call_next — card is the re
 const INFO_DISMISS_MS = 9_000;    // book_summary / filter_contacts / say — readable
 const CLARIFY_DISMISS_MS = 15_000; // safety net if the rep never answers
 
+// P2-R8: surface a failed action honestly + log it with its reason. The failure
+// reason always goes to rex_action_log (invisible audit). When the failure-honesty
+// flag is on, Rex SPEAKS a specific recovery line — correcting the optimistic
+// pre-execution "done" the rep already heard — and shows it; when off, behavior is
+// unchanged (the raw error text, no extra speech). A chain that fails is logged
+// 'partial' (it may have applied some steps) rather than a flat 'failed'.
+function reportActionFailure(action: RexAction, e: any, setError: (s: string) => void, fallbackMsg: string): void {
+  const reason: string | undefined = e?.message;
+  if (isRexFailureHonestyEnabled()) {
+    const line = failureRecoveryLine(action);
+    setError(line);
+    speak(line); // verbally correct the optimistic confirmation
+  } else {
+    setError(reason ?? fallbackMsg);
+  }
+  const result = action.type === 'chain' ? 'partial' : 'failed';
+  logRexAction(action, result, reason ? { failure_reason: reason } : undefined).catch(() => undefined);
+}
+
 export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
   const [state, setState] = useState<RexListenerState>('idle');
   const [partial, setPartial] = useState('');
@@ -82,9 +113,15 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
   const contactsRef = useRef(input.contacts);
   const tagsRef = useRef(input.tagNames);
   const onOpenRef = useRef(input.onOpenContact);
+  const onFindVehiclesRef = useRef(input.onFindVehicles);
+  const activeScreenRef = useRef(input.activeScreen);
+  const selectedContactIdRef = useRef(input.selectedContactId);
   useEffect(() => { contactsRef.current = input.contacts; }, [input.contacts]);
   useEffect(() => { tagsRef.current = input.tagNames; }, [input.tagNames]);
   useEffect(() => { onOpenRef.current = input.onOpenContact; }, [input.onOpenContact]);
+  useEffect(() => { onFindVehiclesRef.current = input.onFindVehicles; }, [input.onFindVehicles]);
+  useEffect(() => { activeScreenRef.current = input.activeScreen; }, [input.activeScreen]);
+  useEffect(() => { selectedContactIdRef.current = input.selectedContactId; }, [input.selectedContactId]);
 
   const clearWatchdog = () => {
     if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null; }
@@ -129,7 +166,7 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
     // follow-up (silence falls back to idle wake-word scanning on its own).
     const scheduleAutoDismiss = (act: RexAction) => {
       clearDismiss();
-      const navigates = act.type === 'show_contact' || act.type === 'call_next';
+      const navigates = act.type === 'show_contact' || act.type === 'call_next' || act.type === 'find_vehicles';
       const ms = navigates ? NAV_DISMISS_MS : INFO_DISMISS_MS;
       dismissRef.current = setTimeout(() => {
         setAction(null);
@@ -145,14 +182,16 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
         const result = await executeAction(act, contactsRef.current);
         if (result.openContactId) onOpenRef.current?.(result.openContactId);
         if (result.filteredIds && result.filteredIds.length > 0) setFilteredIds(result.filteredIds);
+        // Vehicle-finder pivot: the modal is the result. onFindVehicles is only
+        // wired when EXPO_PUBLIC_VEHICLE_FINDER is on, so this is a no-op off.
+        if (act.type === 'find_vehicles') onFindVehiclesRef.current?.(act.payload);
         recordRexTurn(lastUtteranceRef.current, act.say || '(no spoken reply)', result.openContactId)
           .catch(() => undefined);
         logRexAction(act, 'success').catch(() => undefined);
       } catch (e: any) {
         // Even "safe" actions can fail (e.g. a Supabase read) — surface it
-        // instead of silently doing nothing.
-        setError(e?.message ?? 'Something went wrong');
-        logRexAction(act, 'failed').catch(() => undefined);
+        // honestly instead of silently doing nothing (P2-R8).
+        reportActionFailure(act, e, setError, 'Something went wrong');
       }
       scheduleAutoDismiss(act);
     };
@@ -203,6 +242,8 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
       rexInterpret(text, contactsRef.current, tagsRef.current, {
         recentTurns: convoRef.current.slice(-6),
         signal: ctrl.signal,
+        activeScreen: activeScreenRef.current,
+        selectedContactId: selectedContactIdRef.current,
         onSayDelta: (spoken) => {
           if (ctrl.signal.aborted) return; // don't voice a superseded turn
           setStreamingSay(spoken);
@@ -316,9 +357,10 @@ export function useHeyRex(input: UseHeyRexInput): UseHeyRexOutput {
       listenerRef.current?.resume({ awake: true });
       return (opened || filtered) ? { openContactId: opened, filteredIds: filtered } : null;
     } catch (e: any) {
-      setError(e?.message ?? 'Save failed');
+      // P2-R8: Rex already spoke its optimistic confirmation — correct it honestly
+      // (and log why it failed) rather than leaving a fabricated "done" standing.
+      reportActionFailure(action, e, setError, 'Save failed');
       setExecuting(false);
-      logRexAction(action, 'failed').catch(() => undefined);
       return null;
     }
   }, [action]);

@@ -34,10 +34,32 @@ export default function MarkReplyButton({
   };
 
   if (!open) {
+    // One tap for the common case (a positive reply → heat +20, rep_decision
+    // active). The ⋯ opens the full panel for neutral / negative / later, which
+    // need the reply-text / days inputs. All four still run the same cascade.
     return (
-      <Pressable onPress={() => setOpen(true)} style={styles.openBtn}>
-        <Text style={styles.openBtnText}>↩ Mark reply</Text>
-      </Pressable>
+      <View style={styles.quickRow}>
+        <Pressable
+          onPress={() => apply('positive')}
+          disabled={!!working}
+          style={[styles.quickPositive, working === 'positive' && { opacity: 0.6 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Mark a positive reply"
+        >
+          <Text style={styles.quickPositiveText}>
+            {working === 'positive' ? 'Marking…' : '👍 Positive'}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setOpen(true)}
+          disabled={!!working}
+          style={styles.quickMore}
+          accessibilityRole="button"
+          accessibilityLabel="More reply options"
+        >
+          <Text style={styles.quickMoreText}>⋯</Text>
+        </Pressable>
+      </View>
     );
   }
 
@@ -99,14 +121,21 @@ export default function MarkReplyButton({
 }
 
 const styles = StyleSheet.create({
-  openBtn: {
-    paddingHorizontal: 12, paddingVertical: 7,
+  quickRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
+  quickPositive: {
+    paddingHorizontal: 14, paddingVertical: 7,
     borderRadius: radius.full,
+    backgroundColor: colors.green,
+    borderWidth: 1, borderColor: colors.green,
+  },
+  quickPositiveText: { fontSize: 11, fontWeight: '800', color: colors.white, letterSpacing: 0.3 },
+  quickMore: {
+    width: 30, height: 30, borderRadius: radius.full,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
-    alignSelf: 'flex-start',
+    alignItems: 'center', justifyContent: 'center',
   },
-  openBtnText: { fontSize: 11, fontWeight: '700', color: colors.gold, letterSpacing: 0.3 },
+  quickMoreText: { fontSize: 14, fontWeight: '800', color: colors.gold, lineHeight: 16 },
 
   card: {
     padding: 12,

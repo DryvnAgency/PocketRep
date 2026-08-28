@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { V2Deal } from './useDeals';
 
@@ -28,8 +28,18 @@ function rowToDeal(r: any): V2DealRich {
   };
 }
 
-export function useUserDeals(refetchKey: number = 0): V2DealRich[] | null {
+export type UseUserDeals = {
+  // null = still loading OR a first-load error (check `error` to tell them apart);
+  // [] = loaded but genuinely empty.
+  deals: V2DealRich[] | null;
+  error: string | null;
+  reload: () => void;
+};
+
+export function useUserDeals(refetchKey: number = 0): UseUserDeals {
   const [deals, setDeals] = useState<V2DealRich[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,11 +48,14 @@ export function useUserDeals(refetchKey: number = 0): V2DealRich[] | null {
       .select('id,title,stock,vehicle,amount,front_gross,back_gross,closed_at,deal_type,funding,split,split_with')
       .order('closed_at', { ascending: false })
       .then(({ data, error }) => {
-        if (cancelled || error) return;
+        if (cancelled) return;
+        if (error) { setError(error.message); return; } // keep prior data; surface the error
+        setError(null);
         setDeals((data ?? []).map(rowToDeal));
       });
     return () => { cancelled = true; };
-  }, [refetchKey]);
+  }, [refetchKey, tick]);
 
-  return deals;
+  const reload = useCallback(() => setTick(t => t + 1), []);
+  return { deals, error, reload };
 }

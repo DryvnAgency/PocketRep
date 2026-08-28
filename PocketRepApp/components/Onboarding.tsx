@@ -1,181 +1,49 @@
-import { useState, useRef, useEffect } from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet, Modal,
-  Dimensions, Animated, Platform,
-} from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, radius } from '@/constants/theme';
+import { supabase } from '@/lib/supabase';
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
 
-const STORAGE_KEY = 'pocketrep_onboarded_v1';
-const { width: W } = Dimensions.get('window');
-
+const STORAGE_KEY = 'pocketrep_onboarded_v2';
+type DemoContact = { id: string; first_name: string; last_name: string; vehicle: string | null; heat_score: number | null; next_step: string | null; is_demo: boolean };
+const DEMO_NAMES = new Set(['Marcus Holloway', 'Sarah Thompson', 'Mike Rodriguez']);
 const STEPS = [
-  {
-    icon: '⚡',
-    title: 'Welcome to PocketRep',
-    body: 'Your AI-powered rep book. Rex learns your customers, scores your book, and tells you exactly who to call — before they go cold.',
-    cta: 'Let\'s go →',
-  },
-  {
-    icon: '🔥',
-    title: 'Your Heat Sheet',
-    body: 'Every contact gets a live score based on lease dates, mileage, purchase history, and buying signals Rex picks up from your voice notes. Hot = call today.',
-    cta: 'Got it →',
-  },
-  {
-    icon: '🎙',
-    title: 'Hey Rex',
-    body: 'Walk out of a meeting, tap the gold orb, and talk. "Marcus Webb, interested in the F-150, lease ends in April, call Friday." Rex logs it, sets the follow-up, and builds a sequence.',
-    cta: 'Nice →',
-  },
-  {
-    icon: '📖',
-    title: 'Build Your Book',
-    body: 'Add contacts one by one, import from your phone, or upload a CSV. The more Rex knows about your book, the sharper his calls get.',
-    cta: 'Add my first contact →',
-    final: true,
-  },
-];
+  ['⚡','WELCOME',"Let's find your next deal.",'You have 3 sample customers waiting. We will walk through the exact workflow you will use with your real book.'],
+  ['🔥','HEAT SHEET','Start with who matters most.','The Heat Sheet prioritizes your customers so you know who to contact first instead of scrolling through a giant CRM.'],
+  ['🎙','REX','Know what to say.','Open a customer, see the context, then ask Rex for the next message. No blank-screen texting.'],
+  ['📣','BLAST','Start with last month.','When your real book is loaded, work last month’s sold customers first. Review your message, send the blast, and put those customers into a sequence.'],
+  ['📚','BUILD BACKWARD','Then work older customers.','Move from 60–90 days to 3–6 months, then 6–12 months. Turn your sold book into a repeatable source of conversations.'],
+  ['🎯','DAILY RHYTHM','Come back tomorrow.','Each day PocketRep gives you a list to work. Log what happened, advance conversations, and let Rex help you finish the day.'],
+] as const;
 
 export default function Onboarding() {
-  const [visible, setVisible] = useState(false);
-  const [step, setStep] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  const router = useRouter();
-
-  useEffect(() => {
-    async function check() {
-      try {
-        const storage = AsyncStorage ?? (typeof localStorage !== 'undefined' ? {
-          getItem: (k: string) => Promise.resolve(localStorage.getItem(k)),
-          setItem: (k: string, v: string) => { localStorage.setItem(k, v); return Promise.resolve(); },
-        } : null);
-        if (!storage) { return; }
-        const done = await storage.getItem(STORAGE_KEY);
-        if (!done) setVisible(true);
-      } catch {}
-    }
-    check();
-  }, []);
-
-  useEffect(() => {
-    if (!visible) return;
-    fadeAnim.setValue(0);
-    slideAnim.setValue(24);
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
-    ]).start();
-  }, [step, visible]);
-
-  async function complete(goToContacts = false) {
-    try {
-      const storage = AsyncStorage ?? (typeof localStorage !== 'undefined' ? {
-        setItem: (k: string, v: string) => { localStorage.setItem(k, v); return Promise.resolve(); },
-      } : null);
-      await storage?.setItem(STORAGE_KEY, '1');
-    } catch {}
-    setVisible(false);
-    if (goToContacts) router.push('/(tabs)/contacts');
-  }
-
-  function next() {
-    const current = STEPS[step];
-    if (current.final) { complete(true); return; }
-    setStep(s => s + 1);
-  }
-
-  if (!visible) return null;
-
-  const current = STEPS[step];
-
-  return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={s.overlay}>
-        <Animated.View style={[s.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-
-          {/* Skip */}
-          <TouchableOpacity style={s.skipBtn} onPress={() => complete(false)}>
-            <Text style={s.skipText}>Skip</Text>
-          </TouchableOpacity>
-
-          {/* Icon */}
-          <Text style={s.icon}>{current.icon}</Text>
-
-          {/* Title */}
-          <Text style={s.title}>{current.title}</Text>
-
-          {/* Body */}
-          <Text style={s.body}>{current.body}</Text>
-
-          {/* Progress dots */}
-          <View style={s.dots}>
-            {STEPS.map((_, i) => (
-              <View key={i} style={[s.dot, i === step && s.dotActive]} />
-            ))}
-          </View>
-
-          {/* CTA */}
-          <TouchableOpacity style={s.cta} onPress={next} activeOpacity={0.85}>
-            <Text style={s.ctaText}>{current.cta}</Text>
-          </TouchableOpacity>
-
-        </Animated.View>
-      </View>
-    </Modal>
-  );
+  const [visible,setVisible]=useState(false), [step,setStep]=useState(0), [demos,setDemos]=useState<DemoContact[]>([]), [loading,setLoading]=useState(false), [practiceDone,setPracticeDone]=useState(false);
+  const router=useRouter();
+  useEffect(()=>{ let cancelled=false; (async()=>{ try { const storage=AsyncStorage ?? (typeof localStorage!=='undefined'?{getItem:(k:string)=>Promise.resolve(localStorage.getItem(k)),setItem:(k:string,v:string)=>{localStorage.setItem(k,v);return Promise.resolve()}}:null); if(await storage?.getItem(STORAGE_KEY)) return; setLoading(true); const {data}=await supabase.from('contacts').select('id,first_name,last_name,vehicle,heat_score,next_step,is_demo').eq('is_demo',true).order('heat_score',{ascending:false}); if(!cancelled){setDemos(((data??[]) as DemoContact[]).filter(c=>DEMO_NAMES.has(`${c.first_name} ${c.last_name}`)));setVisible(true);}} catch {if(!cancelled)setVisible(true)} finally {if(!cancelled)setLoading(false)}})(); return()=>{cancelled=true}},[]);
+  const hot=useMemo(()=>demos.filter(c=>(c.heat_score??0)>=75),[demos]), warm=useMemo(()=>demos.filter(c=>(c.heat_score??0)>=50&&(c.heat_score??0)<75),[demos]), referral=useMemo(()=>demos.filter(c=>(c.heat_score??0)<50),[demos]);
+  async function complete(go=false){try{const storage=AsyncStorage ?? (typeof localStorage!=='undefined'?{setItem:(k:string,v:string)=>{localStorage.setItem(k,v);return Promise.resolve()}}:null);await storage?.setItem(STORAGE_KEY,'1')}catch{} setVisible(false);if(go)router.push('/(tabs)/contacts')}
+  async function removeDemos(){const {data:{user}}=await supabase.auth.getUser();if(!user)return;await supabase.from('contacts').delete().eq('user_id',user.id).eq('is_demo',true);setDemos([]);await complete(true)}
+  function next(){if(step===3&&!practiceDone){setPracticeDone(true);return} if(step===5){complete(true);return}setStep(v=>v+1)}
+  if(!visible)return null; const [icon,label,title,body]=STEPS[step];
+  return <Modal visible={visible} transparent animationType="fade"><View style={s.overlay}><View style={s.card}>
+    <View style={s.top}><View style={s.progress}>{STEPS.map((_,i)=><View key={i} style={[s.bar,i<=step&&s.active]}/>)}</View><TouchableOpacity onPress={()=>complete(false)}><Text style={s.skip}>Skip</Text></TouchableOpacity></View>
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.content}><Text style={s.icon}>{icon}</Text><Text style={s.label}>{label}</Text><Text style={s.title}>{title}</Text><Text style={s.body}>{body}</Text>
+      {loading?<View style={s.panel}><ActivityIndicator color={colors.gold}/><Text style={s.muted}>Loading your sample customers…</Text></View>:null}
+      {!loading&&step===0?<View style={s.panel}><PanelHeader/><>{demos.map(c=><DemoRow key={c.id} c={c}/>)}</><Text style={s.note}>These 3 customers belong only to you and are never included in real messaging.</Text></View>:null}
+      {step===1?<View style={s.panel}><Text style={s.panelTitle}>WHO TO WORK FIRST</Text><Tier label="HOT" count={hot.length} color={colors.red} text="Call or text these first."/><Tier label="WARM" count={warm.length} color={colors.orange} text="Nurture these next."/><Tier label="REFERRAL" count={referral.length} color={colors.gold} text="Ask for the introduction."/></View>:null}
+      {step===2?<View style={s.panel}>{demos[0]?<DemoRow c={demos[0]}/>:null}<View style={s.actions}><View style={s.action}><Text style={s.actionText}>CALL</Text></View><View style={s.action}><Text style={s.actionText}>TEXT</Text></View><View style={[s.action,s.goldAction]}><Text style={[s.actionText,{color:colors.ink}]}>ASK REX</Text></View></View><Text style={s.note}>Rex drafts the follow-up. You review it before anything goes to a real customer.</Text></View>:null}
+      {step===3?<View style={s.panel}><View style={s.blast}><View><Text style={s.panelTitle}>LAST 30 DAYS</Text><Text style={s.muted}>{demos.length} sample sold customers</Text></View><Text style={s.count}>{demos.length}</Text></View>{!practiceDone?<TouchableOpacity style={s.primary} onPress={()=>setPracticeDone(true)}><Text style={s.primaryText}>PRACTICE THE BLAST</Text></TouchableOpacity>:<View style={s.success}><Text style={s.successTitle}>✓ You just learned the workflow</Text><Text style={s.successText}>With real customers: review → send → enroll in sequence → let PocketRep handle the next touch.</Text></View>}<Text style={s.sequence}>Today → 3 days → 7 days → 14 days → 30 days</Text></View>:null}
+      {step===4?<View style={s.panel}>{['Last month','60–90 days','3–6 months','6–12 months'].map((m,i)=><View key={m} style={s.month}><View style={[s.dot,i===0&&s.dotActive]}/><Text style={s.monthText}>{m}</Text><Text style={s.next}>{i===0?'START':'NEXT'}</Text></View>)}<Text style={s.note}>Build momentum month by month instead of dumping your entire database into one blast.</Text></View>:null}
+      {step===5?<View style={s.panel}><Daily label="MORNING" text="Open Heat Sheet and work HOT first."/><Daily label="MIDDAY" text="Check replies and advance conversations."/><Daily label="END DAY" text="Log your activity and see what is left."/>{demos.length>0?<TouchableOpacity style={s.secondary} onPress={removeDemos}><Text style={s.secondaryText}>REMOVE SAMPLE CUSTOMERS & IMPORT MINE</Text></TouchableOpacity>:<View style={s.success}><Text style={s.successTitle}>Sample customers removed.</Text><Text style={s.successText}>Your real book is ready for the Heat Sheet.</Text></View>}</View>:null}
+    </ScrollView>
+    <View style={s.bottom}><TouchableOpacity disabled={step===0} onPress={()=>setStep(v=>Math.max(0,v-1))} style={[s.back,step===0&&{opacity:.25}]}><Text style={s.backText}>‹</Text></TouchableOpacity><TouchableOpacity style={s.cta} onPress={next}><Text style={s.ctaText}>{step===5?'Import my customers →':step===3&&!practiceDone?'Practice blast →':`Next · ${step+2}/6`}</Text></TouchableOpacity></View>
+  </View></View></Modal>
 }
-
-const s = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.82)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xl,
-  },
-  card: {
-    backgroundColor: colors.ink2,
-    borderRadius: 24,
-    padding: spacing.xl,
-    width: '100%',
-    maxWidth: 380,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
-  },
-  skipBtn: {
-    alignSelf: 'flex-end',
-    marginBottom: spacing.md,
-    padding: 4,
-  },
-  skipText: { color: colors.grey2, fontSize: 13, fontWeight: '600' },
-  icon: { fontSize: 52, marginBottom: spacing.md },
-  title: {
-    fontSize: 22, fontWeight: '800', color: colors.white,
-    textAlign: 'center', letterSpacing: -0.4, marginBottom: spacing.md,
-  },
-  body: {
-    fontSize: 15, color: colors.grey3, textAlign: 'center', lineHeight: 22,
-    marginBottom: spacing.xl,
-  },
-  dots: {
-    flexDirection: 'row', gap: 6, marginBottom: spacing.xl,
-  },
-  dot: {
-    width: 6, height: 6, borderRadius: 3, backgroundColor: colors.ink4,
-  },
-  dotActive: {
-    backgroundColor: colors.gold, width: 18,
-  },
-  cta: {
-    backgroundColor: colors.gold, borderRadius: radius.lg,
-    paddingHorizontal: spacing.xl, paddingVertical: spacing.md + 2,
-    width: '100%', alignItems: 'center',
-  },
-  ctaText: { color: colors.ink, fontWeight: '800', fontSize: 15 },
-});
+function PanelHeader(){return <View style={s.panelHeader}><Text style={s.panelTitle}>YOUR SAMPLE BOOK</Text><Text style={s.badge}>3 DEMO</Text></View>}
+function DemoRow({c}:{c:DemoContact}){const score=c.heat_score??0,tier=score>=75?'HOT':score>=50?'WARM':'REFERRAL';return <View style={s.row}><View style={s.avatar}><Text style={s.avatarText}>{c.first_name[0]}{c.last_name[0]}</Text></View><View style={{flex:1}}><Text style={s.name}>{c.first_name} {c.last_name}</Text><Text style={s.vehicle}>{c.vehicle??'Sample customer'}</Text></View><View style={s.right}><Text style={s.tier}>{tier}</Text><Text style={s.demo}>DEMO</Text></View></View>}
+function Tier({label,count,color,text}:{label:string;count:number;color:string;text:string}){return <View style={s.tierRow}><View style={[s.tierDot,{backgroundColor:color}]}/><Text style={[s.tierLabel,{color}]}>{label}</Text><Text style={s.tierCount}>{count}</Text><Text style={s.tierDesc}>{text}</Text></View>}
+function Daily({label,text}:{label:string;text:string}){return <View style={s.daily}><Text style={s.dailyLabel}>{label}</Text><Text style={s.dailyText}>{text}</Text></View>}
+const s=StyleSheet.create({overlay:{flex:1,backgroundColor:'rgba(0,0,0,.86)',alignItems:'center',justifyContent:'center',padding:16},card:{backgroundColor:colors.ink2,borderRadius:24,width:'100%',maxWidth:460,maxHeight:'92%',borderWidth:1,borderColor:'rgba(255,255,255,.08)',overflow:'hidden'},top:{flexDirection:'row',alignItems:'center',gap:12,padding:16,paddingBottom:8},progress:{flex:1,flexDirection:'row',gap:4},bar:{flex:1,height:3,borderRadius:2,backgroundColor:colors.ink4},active:{backgroundColor:colors.gold},skip:{color:colors.grey2,fontSize:12,fontWeight:'700'},content:{padding:24,paddingTop:8,paddingBottom:16},icon:{fontSize:42,marginBottom:8},label:{color:colors.gold,fontSize:10,fontWeight:'800',letterSpacing:1.4},title:{color:colors.white,fontSize:28,fontWeight:'900',letterSpacing:-.8,lineHeight:33,marginTop:8},body:{color:colors.grey3,fontSize:14,lineHeight:21,marginTop:12},panel:{marginTop:20,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.goldBorder,borderRadius:radius.xl,padding:13},panelHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:8},panelTitle:{color:colors.gold,fontSize:9,fontWeight:'900',letterSpacing:1.2},badge:{color:colors.ink,backgroundColor:colors.gold,paddingHorizontal:7,paddingVertical:3,borderRadius:5,fontSize:8,fontWeight:'900'},row:{minHeight:56,flexDirection:'row',alignItems:'center',gap:9,backgroundColor:colors.ink2,borderWidth:1,borderColor:colors.ink4,borderRadius:10,padding:9,marginTop:7},avatar:{width:34,height:34,borderRadius:17,backgroundColor:colors.goldBg,borderWidth:1,borderColor:colors.goldBorder,alignItems:'center',justifyContent:'center'},avatarText:{color:colors.gold,fontSize:10,fontWeight:'900'},name:{color:colors.white,fontSize:12,fontWeight:'800'},vehicle:{color:colors.grey2,fontSize:10,marginTop:2},right:{alignItems:'flex-end'},tier:{color:colors.gold,fontSize:8,fontWeight:'900'},demo:{color:colors.grey2,fontSize:7,fontWeight:'800',marginTop:2},note:{color:colors.grey2,fontSize:10,lineHeight:16,marginTop:10},muted:{color:colors.grey2,fontSize:11,marginTop:4},tierRow:{flexDirection:'row',alignItems:'center',gap:8,paddingVertical:10,borderBottomWidth:1,borderBottomColor:colors.ink4},tierDot:{width:8,height:8,borderRadius:4},tierLabel:{width:62,fontSize:9,fontWeight:'900'},tierCount:{color:colors.white,fontSize:12,fontWeight:'900',width:18},tierDesc:{color:colors.grey3,fontSize:11,flex:1},actions:{flexDirection:'row',gap:7,marginTop:10},action:{flex:1,borderWidth:1,borderColor:colors.ink4,borderRadius:8,paddingVertical:9,alignItems:'center'},goldAction:{backgroundColor:colors.gold,borderColor:colors.gold},actionText:{color:colors.grey3,fontSize:9,fontWeight:'900'},blast:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},count:{color:colors.white,fontSize:30,fontWeight:'900'},primary:{backgroundColor:colors.gold,borderRadius:10,paddingVertical:12,alignItems:'center',marginTop:12},primaryText:{color:colors.ink,fontSize:10,fontWeight:'900',letterSpacing:.6},success:{marginTop:12,padding:12,borderRadius:10,backgroundColor:colors.goldBg,borderWidth:1,borderColor:colors.goldBorder},successTitle:{color:colors.gold,fontSize:11,fontWeight:'900'},successText:{color:colors.grey3,fontSize:10,lineHeight:16,marginTop:4},sequence:{color:colors.grey2,fontSize:10,textAlign:'center',marginTop:12},month:{flexDirection:'row',alignItems:'center',paddingVertical:10,borderBottomWidth:1,borderBottomColor:colors.ink4},dot:{width:8,height:8,borderRadius:4,backgroundColor:colors.ink4,marginRight:10},dotActive:{backgroundColor:colors.gold},monthText:{color:colors.white,fontSize:12,fontWeight:'700',flex:1},next:{color:colors.grey2,fontSize:8,fontWeight:'900'},daily:{flexDirection:'row',gap:12,paddingVertical:10,borderBottomWidth:1,borderBottomColor:colors.ink4},dailyLabel:{color:colors.gold,fontSize:8,fontWeight:'900',width:55},dailyText:{color:colors.grey3,fontSize:11,flex:1,lineHeight:16},secondary:{borderWidth:1,borderColor:colors.goldBorder,borderRadius:10,paddingVertical:11,alignItems:'center',marginTop:14},secondaryText:{color:colors.gold,fontSize:9,fontWeight:'900'},bottom:{flexDirection:'row',alignItems:'center',gap:10,padding:16,borderTopWidth:1,borderTopColor:colors.ink4},back:{width:42,height:48,borderRadius:12,backgroundColor:colors.surface2,alignItems:'center',justifyContent:'center'},backText:{color:colors.white,fontSize:28},cta:{flex:1,backgroundColor:colors.gold,borderRadius:12,paddingVertical:15,alignItems:'center'},ctaText:{color:colors.ink,fontSize:13,fontWeight:'900'}});

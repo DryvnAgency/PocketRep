@@ -81,6 +81,7 @@ export default function HeyRexSheet({
   const isSay = action?.type === 'say' || isClarify;
   const needsConfirm = action && actionWritesData(action.type);
   const sayText = action?.say || streamingSay;
+  const clarifyCandidates = action?.type === 'clarify' ? (action.payload.candidates ?? []) : [];
 
   const statusLabel =
     state === 'awake' ? 'LISTENING'
@@ -129,6 +130,15 @@ export default function HeyRexSheet({
             matchedCount={action.payload.matched_count ?? action.payload.contact_ids?.length}
             onTapContact={onOpenContact}
           />
+        ) : clarifyCandidates.length > 0 ? (
+          <View style={styles.candidates}>
+            {clarifyCandidates.map(c => (
+              <Pressable key={c.id} style={styles.candidate} onPress={() => onOpenContact?.(c.id)}>
+                <Text style={styles.candidateText} numberOfLines={1}>{c.label}</Text>
+                <Text style={styles.candidateChevron}>›</Text>
+              </Pressable>
+            ))}
+          </View>
         ) : summary && !isSay ? (
           <View style={styles.summary}>
             <Text style={styles.summaryLabel}>PROPOSED</Text>
@@ -221,4 +231,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmBtnText: { fontSize: 13, fontWeight: '800', color: colors.ink, letterSpacing: 0.2 },
+  candidates: { gap: 6 },
+  candidate: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 11, paddingHorizontal: 12,
+    backgroundColor: colors.surface2,
+    borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.md,
+  },
+  candidateText: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.white },
+  candidateChevron: { fontSize: 16, color: colors.gold },
 });

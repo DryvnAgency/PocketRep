@@ -4,249 +4,87 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
-<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTYiIGhlaWdodD0iOTYiIHZpZXdCb3g9IjAgMCA5NiA5NiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IlBvY2tldFJlcCI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InByVGlsZSIgeDE9IjEwIiB5MT0iNiIgeDI9Ijg2IiB5Mj0iOTIiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZjNkMjdlIj48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMC41IiBzdG9wLWNvbG9yPSIjZTJiNTUyIj48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2YwYzA2MCI+PC9zdG9wPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0icHJHbG9zcyIgY3g9IjAuMyIgY3k9IjAuMjIiIHI9IjAuOSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIgc3RvcC1vcGFjaXR5PSIwLjQ1Ij48L3N0b3A+CiAgICAgIDxzdG9wIG9mZnNldD0iMC41IiBzdG9wLWNvbG9yPSIjZmZmZmZmIiBzdG9wLW9wYWNpdHk9IjAiPjwvc3RvcD4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHg9IjYiIHk9IjYiIHdpZHRoPSI4NCIgaGVpZ2h0PSI4NCIgcng9IjI0IiBmaWxsPSJ1cmwoI3ByVGlsZSkiPjwvcmVjdD4KICA8cmVjdCB4PSI2IiB5PSI2IiB3aWR0aD0iODQiIGhlaWdodD0iODQiIHJ4PSIyNCIgZmlsbD0idXJsKCNwckdsb3NzKSI+PC9yZWN0PgogIDxyZWN0IHg9IjYuNzUiIHk9IjYuNzUiIHdpZHRoPSI4Mi41IiBoZWlnaHQ9IjgyLjUiIHJ4PSIyMy4yNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utb3BhY2l0eT0iMC4yMiIgc3Ryb2tlLXdpZHRoPSIxLjUiPjwvcmVjdD4KICAKICA8cGF0aCBkPSJNMzkgNzIgVjI3IEg1My41IEExMi41IDEyLjUgMCAwIDEgNTMuNSA1MiBIMzkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzBhMGMxMiIgc3Ryb2tlLW9wYWNpdHk9IjAuMjgiIHN0cm9rZS13aWR0aD0iOS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMS41KSI+PC9wYXRoPgogIDxwYXRoIGQ9Ik0zOSA3MiBWMjcgSDUzLjUgQTEyLjUgMTIuNSAwIDAgMSA1My41IDUyIEgzOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjguNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48L3BhdGg+CiAgCiAgPGNpcmNsZSBjeD0iNjIuNSIgY3k9IjY4IiByPSI1IiBmaWxsPSIjMGEwYzEyIiBmaWxsLW9wYWNpdHk9IjAuMjUiPjwvY2lyY2xlPgogIDxjaXJjbGUgY3g9IjYyIiBjeT0iNjciIHI9IjUiIGZpbGw9IiNmZjdhNDUiPjwvY2lyY2xlPgo8L3N2Zz4=" type="image/svg+xml">
-<title>PocketRep.pro — You're In. Welcome to the Book.</title>
-<script>
-/* PocketRep Team signups get the dedicated dealership thank-you. Redirect before
-   render to avoid a flash of the individual page. Driven by the existing ?plan= flow. */
-(function(){try{
-  var p=new URLSearchParams(location.search).get('plan');
-  if(!p){var r=sessionStorage.getItem('pr_signup');if(r){try{p=JSON.parse(r).plan}catch(e){}}}
-  if(p==='teams'){location.replace('thankyou-teams.html'+location.search);}
-}catch(e){}})();
-</script>
-<!-- ════ STRIPE WIRING — individual plan (Elite / Retail) ════
-     1) Paste your individual Stripe checkout link into  ELITE_STRIPE  in Pocketrep/index.html.
-     2) In that Stripe Payment Link's "After payment → Redirect to your website", set:
-            https://pocketrep.pro/thankyou.html?plan=elite
-     The customer's email/name flow from the landing's sessionStorage (pr_signup); this page
-     reads ?plan= and the email and pre-fills the intake. (No account is created here.)
-     ═══════════════════════════════════════════════════════════ -->
+<title>PocketRep — Finish Setup</title>
 <link rel="stylesheet" href="brand.css">
 <style>
-  /* page-specific layout only — design tokens/components come from brand.css */
-  .hero-pad { padding-top: 122px; }
-  .center { text-align: center; }
-  .center .eyebrow { justify-content: center; }
-  .ty-greet { font-family: var(--mono); font-size: 12.5px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
-  .plan-line { display: inline-block; margin-top: 20px; font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.4px; color: var(--muted); border: 1px solid var(--line-2); border-radius: 12px; padding: 9px 16px; }
-  .plan-line b { color: var(--cyan); }
-  .dl-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
-  .dl-btn { display: inline-flex; align-items: center; gap: 11px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; padding: 12px 20px; color: var(--ink); transition: border-color .15s, transform .15s; }
-  .dl-btn:hover { border-color: rgba(240,192,96,0.5); transform: translateY(-2px); }
-  .dl-btn svg { width: 24px; height: 24px; fill: currentColor; }
-  .dl-btn .s { font-size: 10.5px; color: var(--muted); }
-  .dl-btn .b { font-family: var(--display); font-weight: 700; font-size: 16px; line-height: 1; margin-top: 2px; }
-  .promise { max-width: 640px; margin: 0 auto; }
-  .promise p { color: var(--muted); margin-top: 8px; }
-  .promise p b { color: var(--ink); }
-  .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; max-width: 640px; margin: 0 auto; }
-  @media (max-width: 560px) { .stats { grid-template-columns: 1fr; } }
-  .stat { background: var(--surface); padding: 22px 16px; text-align: center; }
-  .stat .v { font-family: var(--display); font-weight: 700; font-size: 2.1rem; color: var(--cyan); letter-spacing: -0.03em; }
-  .stat .k { font-size: 12.5px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
-  .stat .k b { color: var(--ink); }
-  .steps { display: grid; gap: 12px; max-width: 620px; margin: 0 auto; }
-  .step { display: flex; gap: 15px; align-items: flex-start; }
-  .step .n { flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px; background: var(--signal-soft); border: 1px solid rgba(240,192,96,0.25); color: var(--cyan); font-family: var(--mono); font-size: 12px; display: flex; align-items: center; justify-content: center; }
-  .step h4 { font-family: var(--display); font-size: 1rem; margin-bottom: 2px; }
-  .step p { color: var(--muted); font-size: 14px; }
-  .head-c { text-align: center; max-width: 640px; margin: 0 auto 26px; }
-  .head-c .eyebrow { justify-content: center; }
-  .success { display: none; text-align: center; }
-  .success .big { font-family: var(--display); font-weight: 700; font-size: 1.5rem; color: var(--cyan); }
-  .final { text-align: center; max-width: 720px; margin: 0 auto; }
+  .hero-pad{padding-top:122px}.center{text-align:center}.setup{max-width:460px;margin:28px auto 0}
+  .state{display:none}.state.on{display:block}.spin{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.25);border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}@keyframes spin{to{transform:rotate(360deg)}}
+  .verified{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:12px;padding:12px 14px}.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);flex-shrink:0}.email{font-family:var(--mono);font-size:13.5px;word-break:break-all}
+  .note{max-width:460px;margin:15px auto 0;font-size:13px;color:var(--muted);text-align:center;line-height:1.6}.err{color:var(--red);font-size:13px;margin-top:10px;text-align:center}.success{font-family:var(--display);font-weight:700;font-size:1.4rem;color:var(--cyan)}
 </style>
 </head>
 <body class="js">
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <linearGradient id="mTile" x1="10" y1="6" x2="86" y2="92" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#f3d27e"></stop><stop offset="0.5" stop-color="#e2b552"></stop><stop offset="1" stop-color="#f0c060"></stop>
-    </linearGradient>
-    <radialGradient id="mGloss" cx="0.3" cy="0.22" r="0.9">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.45"></stop><stop offset="0.5" stop-color="#ffffff" stop-opacity="0"></stop>
-    </radialGradient>
-    <symbol id="prmark" viewBox="0 0 96 96">
-      <rect x="6" y="6" width="84" height="84" rx="24" fill="url(#mTile)"></rect>
-      <rect x="6" y="6" width="84" height="84" rx="24" fill="url(#mGloss)"></rect>
-      <rect x="6.75" y="6.75" width="82.5" height="82.5" rx="23.25" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.5"></rect>
-      <path d="M39 72 V27 H53.5 A12.5 12.5 0 0 1 53.5 52 H39" fill="none" stroke="#0a0c12" stroke-opacity="0.28" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,1.5)"></path>
-      <path d="M39 72 V27 H53.5 A12.5 12.5 0 0 1 53.5 52 H39" fill="none" stroke="#ffffff" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"></path>
-      <circle cx="62" cy="67" r="5" fill="#ff7a45"></circle>
-    </symbol>
-  </defs>
-</svg>
 <div class="bg-field"></div><div class="bg-grid"></div><div class="bg-grain"></div>
-
-<header class="nav scrolled" id="nav">
-  <div class="wrap nav-inner">
-    <a class="brand" href="/">
-      <svg class="brand-mark" aria-hidden="true"><use href="#prmark"></use></svg>
-      <span class="brand-name">PocketRep<span class="dot">.</span></span>
-    </a>
-    <div class="nav-cta">
-      <span class="nav-chip"><span class="pip"></span> <span id="nav-plan-label">Founding Member</span></span>
-      <a class="nav-login" href="https://app.pocketrep.pro">Log in</a>
-    </div>
-  </div>
-</header>
-
+<header class="nav scrolled"><div class="wrap nav-inner"><a class="brand" href="/"><span class="brand-name">PocketRep<span class="dot">.</span></span></a><div class="nav-cta"><a class="nav-login" href="https://app.pocketrep.pro">Log in</a></div></div></header>
 <main>
 <section class="wrap hero-pad center">
-  <span class="eyebrow center"><span class="pip" style="width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)"></span> <span id="hero-badge-text">Trial activated — you're in</span></span>
-  <div class="ty-greet" id="greeting" style="margin-top:18px">Welcome to the book.</div>
-  <h1 class="display" style="margin-top:8px">7 days free.<br><span class="grad-text">Make them count.</span></h1>
-  <p class="lead" style="max-width:560px;margin:16px auto 0">Your trial is live. Download the app, run your first Heat Sheet, and find the deal that pays for your next two years of PocketRep. Cancel before day 7 and you won't be charged — ever.</p>
-  <div class="plan-line">PocketRep · <b>$39/mo</b> founding rate · locked forever</div>
-</section>
-
-<!-- DOWNLOAD -->
-<section class="wrap section-sm center" style="padding-top:14px">
-  <div class="dl-btns">
-    <a href="#" class="dl-btn" id="app-store-btn">
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-      <div><div class="s">Download on the</div><div class="b">App Store</div></div>
-    </a>
-    <a href="#" class="dl-btn" id="google-play-btn">
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3.18 23.76c.3.16.64.21.99.14l13.2-7.62-2.9-2.9-11.29 10.38zm-1.05-20.1C2.05 3.9 2 4.17 2 4.47v15.06c0 .3.05.57.13.82l.06.06 8.44-8.44v-.2L2.19 3.6l-.06.06zM20.49 10.7l-2.78-1.61-3.19 3.19 3.19 3.2 2.81-1.62c.8-.46.8-1.7-.03-2.16zM4.17.24L17.37 7.9 14.47 10.8 3.18.42C3.54.3 3.93.21 4.17.24z"/></svg>
-      <div><div class="s">Get it on</div><div class="b">Google Play</div></div>
-    </a>
+  <span class="eyebrow center"><span class="pip" style="width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)"></span> Payment successful</span>
+  <h1 class="display" style="margin-top:16px">You're in! Welcome<br><span class="grad-text">to PocketRep 👊</span></h1>
+  <p class="lead" style="max-width:540px;margin:16px auto 0">Your payment went through. Create your password below, then we'll log you into PocketRep automatically.</p>
+  <div class="setup">
+    <div class="state on" id="loading"><div class="card center"><span class="spin"></span><p style="color:var(--muted);margin-top:12px;font-size:14px">Confirming your payment…</p></div></div>
+    <div class="state" id="error"><div class="card center"><div class="success" style="color:var(--ink)">Almost there.</div><p id="errorText" style="color:var(--muted);margin-top:8px;font-size:14px">We couldn't verify your purchase yet.</p><button class="btn btn-primary btn-full" id="retry" style="margin-top:16px">Try Again</button><p class="note">If you already created your account, <a href="https://app.pocketrep.pro">log in here</a>.</p></div></div>
+    <div class="state" id="formState"><form class="card" id="form" novalidate>
+      <div class="field"><span class="label">Your account email</span><div class="verified"><span class="dot"></span><span class="email" id="email">—</span></div></div>
+      <div class="field"><label class="label" for="password">Create your password <span class="req">*</span></label><input class="input" id="password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"></div>
+      <div class="field"><label class="label" for="confirm">Confirm your password <span class="req">*</span></label><input class="input" id="confirm" type="password" autocomplete="new-password" minlength="8" placeholder="Re-enter your password"><div class="field-err" id="pwError">Passwords must match and be at least 8 characters.</div></div>
+      <button type="submit" class="btn btn-primary btn-full" id="submit">Create My PocketRep Account <span class="arrow">→</span></button>
+    </form><p class="note"><b>PocketRep works in your browser.</b> After setup, we'll take you straight into the app.</p></div>
+    <div class="state" id="done"><div class="card center"><div class="success">Account created 🎉</div><p style="color:var(--muted);margin-top:8px;font-size:14px">Logging you into PocketRep…</p><a class="btn btn-primary btn-full" id="continue" href="https://app.pocketrep.pro" style="margin-top:16px">Open PocketRep <span class="arrow">→</span></a></div></div>
   </div>
 </section>
-
-<!-- REP SIGN-UP INTAKE — local confirmation only. No account is created here; the real
-     account + SMS/email magic-link is provisioned by a separate backend pass. -->
-<section class="wrap section-sm" style="padding-top:0">
-  <div style="max-width:480px;margin:0 auto">
-    <div class="head-c" style="margin-bottom:18px">
-      <span class="eyebrow center">Step 2 · Confirm your details</span>
-      <h2 class="h3" style="margin-top:12px;font-family:var(--display)">Where should we send your login?</h2>
-      <p class="muted" style="color:var(--muted);font-size:14.5px;margin-top:8px">Confirm your name and email. <b style="color:var(--ink)">Your account will be ready right after payment</b> — we'll text and email you a secure login link. Nothing else to set up.</p>
-    </div>
-    <div id="acct-form-wrap">
-      <form id="acct-form" class="card" novalidate>
-        <div class="field">
-          <label class="label" for="acct-name">Your name <span class="req">*</span></label>
-          <input class="input" type="text" id="acct-name" autocomplete="name" placeholder="Full name">
-          <div class="field-err" id="acct-err-name">Enter your name</div>
-        </div>
-        <div class="field">
-          <label class="label" for="acct-email">Email address <span class="req">*</span></label>
-          <input class="input" type="email" id="acct-email" autocomplete="email" placeholder="you@email.com" spellcheck="false">
-          <div class="field-err" id="acct-err-email">Enter a valid email</div>
-        </div>
-        <button type="submit" class="btn btn-primary btn-full" style="margin-top:18px">Confirm my details <span class="arrow">→</span></button>
-        <p style="font-size:11.5px;color:var(--faint);text-align:center;margin-top:10px">This just confirms where to send your login — no account is created on this page.</p>
-      </form>
-    </div>
-    <div class="success card" id="acct-success" style="margin-top:16px">
-      <div class="big">You're all set.</div>
-      <p class="muted" style="color:var(--muted);font-size:14px;margin-top:8px">Your account will be ready right after payment. <b style="color:var(--ink)">Check your texts and email for your login link</b> — then open the app and you're in.</p>
-    </div>
-  </div>
-</section>
-
-<!-- OWNERSHIP PROMISE -->
-<section class="wrap section-sm" style="padding-top:0">
-  <div class="promise card card-feat center">
-    <h3 class="h3">Your book is yours.</h3>
-    <p><b>Your account is yours, and you're never locked in.</b> Your contacts, notes, and deal history stay with your account, under your control. Add your own — referrals, repeat customers, people you've earned — and Rex enriches each one as you talk.</p>
-  </div>
-</section>
-
-<!-- THE MONEY IS IN THE FOLLOW-UP -->
-<section class="wrap section-sm">
-  <div class="head-c">
-    <span class="eyebrow center">Remember this</span>
-    <h2 class="h2" style="margin-top:12px">The money has always been<br><span class="grad-text">in the follow-up.</span></h2>
-    <p class="lead" style="margin-top:12px">You just gave yourself the tool to actually do it. The Heat Sheet tells you who, the AI rebuttals tell you what to say, and <b style="color:var(--ink)">Rex writes every follow-up — you review and send each one yourself.</b></p>
-  </div>
-  <div class="stats">
-    <div class="stat"><div class="v">80%</div><div class="k">of sales close <b>after follow-up #5</b></div></div>
-    <div class="stat"><div class="v">44%</div><div class="k">of reps quit after <b>just one attempt</b></div></div>
-    <div class="stat"><div class="v">Day 1</div><div class="k">your Heat Sheet is <b>already working for you</b></div></div>
-  </div>
-</section>
-
-<!-- 7-DAY ROADMAP -->
-<section class="wrap section-sm" style="padding-top:0">
-  <div class="head-c">
-    <span class="eyebrow center">Your 7-day trial roadmap</span>
-    <h2 class="h2" style="margin-top:12px">Make the most of your week</h2>
-  </div>
-  <div class="steps">
-    <div class="step"><div class="n">1</div><div><h4>Download &amp; log in</h4><p>Hit App Store or Google Play above. Sign in with your registration email — your trial account is live immediately.</p></div></div>
-    <div class="step"><div class="n">2</div><div><h4>Add your contacts</h4><p>Add the people you've sold in the last 90 days. Name, number, and purchase date is all it takes to activate the Heat Sheet.</p></div></div>
-    <div class="step"><div class="n">3</div><div><h4>Run your first Heat Sheet</h4><p>See the 5 people most likely to move right now. Make one call. That one call is the whole rep.</p></div></div>
-    <div class="step"><div class="n">7</div><div><h4>You'll get a reminder</h4><p>We'll email you 24 hours before your trial ends. Cancel in one tap — no charge, no questions. Or do nothing and your founding rate locks in forever.</p></div></div>
-  </div>
-</section>
-
-<!-- FINAL -->
-<section class="wrap section-sm">
-  <div class="final">
-    <h2 class="h2">Your trial is live.<br><span class="grad-text">The clock is ticking.</span></h2>
-    <p class="lead" style="margin:14px auto 24px">Download the app, add your first contact, and let the Heat Sheet find your first deal. You have 7 days — use them.</p>
-    <a href="#app-store-btn" class="btn btn-primary btn-lg" onclick="document.getElementById('app-store-btn').scrollIntoView({behavior:'smooth'});return false;">Download PocketRep <span class="arrow">→</span></a>
-  </div>
-</section>
+<section class="wrap section-sm" style="padding-top:10px"><div style="max-width:620px;margin:auto"><span class="eyebrow center" style="justify-content:center">What happens next</span><div style="display:grid;gap:12px;margin-top:16px"><div><b>1. Create your password</b><p style="color:var(--muted);font-size:14px;margin-top:3px">This becomes your PocketRep login.</p></div><div><b>2. Log in automatically</b><p style="color:var(--muted);font-size:14px;margin-top:3px">We'll securely hand you into the app after your account is created.</p></div><div><b>3. Start your onboarding</b><p style="color:var(--muted);font-size:14px;margin-top:3px">You'll see the example customers and Heat Sheet so you can start using PocketRep immediately.</p></div></div></div></section>
 </main>
-
-<footer class="footer">
-  <div class="wrap">
-    <div class="footer-inner">
-      <a class="brand" href="/">
-        <svg class="brand-mark" aria-hidden="true"><use href="#prmark"></use></svg>
-        <span class="brand-name">PocketRep<span class="dot">.</span></span>
-      </a>
-      <div class="footer-links">
-        <a href="/privacy.html">Privacy</a>
-        <a href="/terms.html">Terms</a>
-        <a href="/cancel.html">Cancel</a>
-        <a href="https://app.pocketrep.pro">Log in</a>
-      </div>
-      <div class="muted">© 2026 PocketRep — Built for closers</div>
-    </div>
-    <p class="disclaimer">PocketRep is an independent tool and is not affiliated with, endorsed by, or sponsored by any third-party CRM, DMS, or software provider. You are responsible for how you use PocketRep, including following your employer's policies and all applicable laws (such as the TCPA) when contacting customers. You send every message yourself — PocketRep never sends on your behalf.</p>
-  </div>
-</footer>
-
+<footer class="footer"><div class="wrap"><div class="footer-inner"><a class="brand" href="/"><span class="brand-name">PocketRep<span class="dot">.</span></span></a><div class="footer-links"><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="/cancel.html">Cancel</a><a href="https://app.pocketrep.pro">Log in</a></div><div class="muted">© 2026 PocketRep — Built for closers</div></div></div></footer>
 <script>
 (function(){
-  var nav=document.getElementById('nav');
-  function onScroll(){ if(window.scrollY>24) nav.classList.add('scrolled'); }
-  window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
-
-  // Read from URL params first (Stripe redirect), then fall back to sessionStorage.
-  // plan==='teams' is redirected to thankyou-teams.html by the head script, so this page
-  // only renders the individual (PocketRep) thank-you. rex_lens/pro/elite branching is retired.
-  var params=new URLSearchParams(location.search);
-  var email=params.get('email')||params.get('prefilled_email');
-  var firstName=null, fullName=null;
-  var raw; try{raw=sessionStorage.getItem('pr_signup')}catch(e){}
-  if(raw){ try{ var d=JSON.parse(raw);
-    if(!email&&d.email)email=d.email;
-    if(d.name){firstName=d.name.split(' ')[0];fullName=d.name;}
-  }catch(e){} }
-  if(firstName){var g=document.getElementById('greeting'); if(g)g.textContent='Welcome to the book, '+firstName+'.';}
-  if(email){var ev=document.getElementById('acct-email'); if(ev)ev.value=email;}
-  if(fullName){var nv=document.getElementById('acct-name'); if(nv)nv.value=fullName;}
-
-  // Rep sign-up intake — LOCAL confirmation only. No account is created here and nothing is
-  // sent or stored. The real account + SMS/email magic-link login is a separate backend pass.
-  document.getElementById('acct-form').addEventListener('submit',function(e){
+  var SUPABASE_URL="https://fwvrauqdoevwmwwqlfav.supabase.co";
+  var ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0";
+  var FN=SUPABASE_URL+"/functions/v1/checkout-account";
+  var sessionId=new URLSearchParams(location.search).get("session_id");
+  var states=["loading","error","formState","done"];
+  function show(id){states.forEach(function(x){document.getElementById(x).classList.toggle("on",x===id);});}
+  function api(payload){return fetch(FN,{method:"POST",headers:{apikey:ANON,Authorization:"Bearer "+ANON,"Content-Type":"application/json"},body:JSON.stringify(payload)}).then(function(r){return r.json().catch(function(){return {};}).then(function(body){return{status:r.status,body:body};});});}
+  function error(msg){document.getElementById("errorText").textContent=msg;show("error");}
+  function verify(){
+    if(!sessionId||!sessionId.startsWith("cs_")){error("This page is missing the Stripe checkout reference. Please return to your Stripe receipt and use the setup link again.");return;}
+    show("loading");
+    api({action:"verify",session_id:sessionId}).then(function(r){
+      if(r.status===200&&r.body&&r.body.ok){
+        if(r.body.alreadyProvisioned){
+          document.getElementById("email").textContent=r.body.email||"your account";
+          api({action:"provision",session_id:sessionId}).then(function(p){
+            var link=p.body&&p.body.action_link;
+            if(link){document.getElementById("continue").href=link;show("done");setTimeout(function(){location.href=link;},800);}
+            else{error("Your account already exists. Log in at app.pocketrep.pro");}
+          }).catch(function(){error("Your account already exists. Log in at app.pocketrep.pro");});
+          return;
+        }
+        document.getElementById("email").textContent=r.body.email||"your account";
+        show("formState");
+        return;
+      }
+      if(r.status===503){error("PocketRep is still connecting to Stripe. Wait a few seconds and tap Try Again.");return;}
+      if(r.status===402){error("Stripe hasn't marked this checkout as complete yet. Wait a moment and try again.");return;}
+      error("We couldn't verify your purchase yet. Please tap Try Again.");
+    }).catch(function(){error("We couldn't reach PocketRep. Check your connection and try again.");});
+  }
+  document.getElementById("retry").addEventListener("click",verify);
+  document.getElementById("form").addEventListener("submit",function(e){
     e.preventDefault();
-    var name=document.getElementById('acct-name').value.trim();
-    var em=document.getElementById('acct-email').value.trim();
-    var ok=true;
-    var en=document.getElementById('acct-err-name'), ee=document.getElementById('acct-err-email');
-    if(name.length<2){en.classList.add('show');ok=false;}else{en.classList.remove('show');}
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){ee.classList.add('show');ok=false;}else{ee.classList.remove('show');}
-    if(!ok)return;
-    document.getElementById('acct-form-wrap').style.display='none';
-    document.getElementById('acct-success').style.display='block';
+    var pw=document.getElementById("password").value, confirm=document.getElementById("confirm").value, err=document.getElementById("pwError"), btn=document.getElementById("submit");
+    if(pw.length<8||pw!==confirm){err.classList.add("show");return;} err.classList.remove("show");
+    btn.disabled=true;btn.innerHTML="Creating your account… <span class=\"spin\"></span>";
+    api({action:"provision",session_id:sessionId,password:pw}).then(function(r){
+      if(r.status===200&&r.body&&r.body.ok){
+        var link=r.body.action_link||"https://app.pocketrep.pro";
+        document.getElementById("continue").href=link;show("done");
+        setTimeout(function(){location.href=link;},800);return;
+      }
+      btn.disabled=false;btn.innerHTML="Create My PocketRep Account <span class=\"arrow\">→</span>";err.textContent="We couldn't finish creating your account. Please try again.";err.classList.add("show");
+    }).catch(function(){btn.disabled=false;btn.innerHTML="Create My PocketRep Account <span class=\"arrow\">→</span>";err.textContent="Connection error. Please try again.";err.classList.add("show");});
   });
+  verify();
 })();
 </script>
 </body>

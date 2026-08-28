@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { createContact, type NewContactDraft } from '@/lib/v2/updateContact';
 import { parseBirthdayInput } from '@/lib/v2/birthday';
+import { isRexFollowupEnabled, isContactImportEnabled } from '@/lib/v2/rexFeatureFlags';
+import { kickoffRecapForContact } from '@/lib/v2/followupSequence';
+import { pickOneFromDevice, isDeviceContactPickerSupported } from '@/lib/v2/contactImport';
 import type { V2Contact } from '@/lib/v2/useContacts';
 
 const PLAN_OPTIONS: Array<{ value: NewContactDraft['planLabel']; label: string }> = [
@@ -41,12 +45,30 @@ export default function AddContactModal({
 }) {
   const [d, setD] = useState<NewContactDraft>(blank());
   const [saving, setSaving] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Synchronous re-entrancy guard: the state-based `saving` updates async, so a
+  // same-tick double-tap can pass `canSave` twice and create two contacts (+ two
+  // recap kickoffs). This ref blocks the second call before the first's await.
+  const savingRef = useRef(false);
+  // Same synchronous guard for opening the picker — `picking` is async state, so
+  // a same-tick double-tap could otherwise present two pickers before re-render.
+  const pickingRef = useRef(false);
+
+  // "Add from phone" entry point: only when the import capability is on AND this
+  // runtime actually has a picker (native build with expo-contacts, or the web
+  // Contacts Picker on Android Chrome). Otherwise the button stays hidden and the
+  // card is manual-entry exactly as before. Platform/flag are constant per mount.
+  const canPickFromPhone = useMemo(
+    () => isContactImportEnabled() && isDeviceContactPickerSupported(),
+    [],
+  );
 
   useEffect(() => {
     if (open) {
       setD(blank());
       setSaving(false);
+      setPicking(false);
       setError(null);
     }
   }, [open]);
@@ -58,13 +80,42 @@ export default function AddContactModal({
 
   const canSave = d.firstName.trim().length > 0 && !saving;
 
+  // Open the device contact picker and prefill the form. The rep still reviews
+  // and taps Save — nothing is written from the pick alone. A picked field never
+  // wipes something already typed (|| keeps the existing value), and a cancel is
+  // a silent no-op. Errors surface inline via the same `error` line as Save.
+  const handlePickFromPhone = async () => {
+    if (picking || pickingRef.current) return;
+    pickingRef.current = true;
+    setError(null);
+    setPicking(true);
+    try {
+      const picked = await pickOneFromDevice();
+      if (!picked) return; // user cancelled — leave the form untouched
+      setD(s => ({
+        ...s,
+        firstName: picked.firstName || s.firstName,
+        lastName: picked.lastName || s.lastName,
+        phone: picked.phone || s.phone,
+        email: picked.email || s.email,
+      }));
+    } catch (e: any) {
+      const msg = String(e?.message ?? '');
+      if (!/cancel|abort/i.test(msg)) setError(msg || 'Could not open your contacts.');
+    } finally {
+      pickingRef.current = false;
+      setPicking(false);
+    }
+  };
+
   const handleSave = async () => {
-    if (!canSave) return;
+    if (!canSave || savingRef.current) return;
     const parsedBday = parseBirthdayInput(d.birthday ?? '');
     if (parsedBday === false) {
       setError('Birthday must be MM/DD/YYYY');
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -75,17 +126,27 @@ export default function AddContactModal({
       const matchedReferrer = typedReferrer
         ? allContacts.find(c => c.name.toLowerCase() === typedReferrer.toLowerCase())
         : undefined;
-      await createContact({
+      const newId = await createContact({
         ...d,
         birthday: parsedBday,
         referredByName: typedReferrer || null,
         referredByContactId: matchedReferrer?.id ?? null,
       });
+      // P2 follow-up feature (flag-gated): on save, Rex auto-drafts a recap into the
+      // contact's Next Step. Fire-and-forget so it never blocks or fails the save.
+      if (isRexFollowupEnabled()) {
+        kickoffRecapForContact(newId, {
+          name: [d.firstName, d.lastName].filter(Boolean).join(' ').trim(),
+          vehicle: d.vehicle,
+          note: d.notes,
+        }).catch(() => undefined);
+      }
       onCreated();
       onClose();
     } catch (e: any) {
       setError(e?.message ?? 'Save failed');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -93,7 +154,10 @@ export default function AddContactModal({
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
       <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.sheet}>
+      <KeyboardAvoidingView
+        style={styles.sheet}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.handle} />
         <View style={styles.header}>
           <Pressable onPress={onClose} style={styles.headerBtn}>
@@ -115,6 +179,23 @@ export default function AddContactModal({
         </View>
 
         <ScrollView contentContainerStyle={styles.body}>
+          {canPickFromPhone ? (
+            <Pressable
+              onPress={handlePickFromPhone}
+              disabled={picking}
+              style={styles.phoneBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Add from phone contacts"
+            >
+              <Text style={styles.phoneIcon}>📇</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.phoneTitle}>{picking ? 'Opening contacts…' : 'Add from phone'}</Text>
+                <Text style={styles.phoneSub}>Pull a name &amp; number from your contacts</Text>
+              </View>
+              <Text style={styles.phoneChevron}>›</Text>
+            </Pressable>
+          ) : null}
+
           <Field label="FIRST NAME *">
             <TextInput
               value={d.firstName}
@@ -293,7 +374,7 @@ export default function AddContactModal({
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <View style={{ height: 28 }} />
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -354,6 +435,22 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 14, fontWeight: '700', color: colors.white, marginTop: 2, letterSpacing: -0.2 },
 
   body: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14, gap: 16 },
+
+  phoneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    borderRadius: radius.lg,
+  },
+  phoneIcon: { fontSize: 20 },
+  phoneTitle: { fontSize: 14, fontWeight: '700', color: colors.white },
+  phoneSub: { fontSize: 11, color: colors.grey2, marginTop: 2 },
+  phoneChevron: { fontSize: 20, color: colors.gold },
 
   field: { gap: 6 },
   fieldLabel: { fontSize: 9, fontWeight: '700', color: colors.grey2, letterSpacing: 1.0 },

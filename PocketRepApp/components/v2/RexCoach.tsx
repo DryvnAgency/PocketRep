@@ -6,17 +6,21 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform,
 } from 'react-native';
 import RadarLoader from './RadarLoader';
 import ConversationComposer from './ConversationComposer';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
-import { callBrain, warmBrain } from '@/lib/v2/aiProxy';
+import { callBrain, callBrainStream, warmBrain } from '@/lib/v2/aiProxy';
 import { serializeRepContext, loadMtdSummary, loadRecentActivity, type MtdSummary } from '@/lib/v2/repContext';
-import { buildCoachMessages } from '@/lib/v2/coachBrain';
+import { buildCoachMessages, type RepIdentity } from '@/lib/v2/coachBrain';
+import { isRexChatEnabled, isVehicleFinderEnabled, isRexTriadEnabled } from '@/lib/v2/rexFeatureFlags';
+import { runTriadCoach } from '@/lib/v2/rexTriad';
+import { loadTodayServerThread, loadRepIdentity } from '@/lib/v2/coachThread';
+import { recordRexTurn } from '@/lib/v2/rexMemory';
 import {
-  parseCoachReply, executeAction, summarizeAction, type RexAction,
+  parseCoachReply, executeAction, summarizeAction, logRexAction, type RexAction,
 } from '@/lib/v2/rexActions';
 import { extractFromConversation, type ConversationParse } from '@/lib/v2/conversationParse';
 import { getTodayLog, getCarrySummary, appendCoachEntry } from '@/lib/v2/coachLog';
@@ -24,9 +28,23 @@ import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
 
 // The coach may emit these (write) actions; delete/batch stay voice/UI-only.
+// find_vehicles (read-only pivot) joins the list only when its flag is on — off
+// → the model isn't taught the action and the set is unchanged, so a stray
+// find_vehicles degrades to plain text like any non-allowed action.
 const COACH_ACTIONS = new Set<RexAction['type']>([
   'add_contact', 'update_notes', 'schedule_followup', 'retier_contact', 'log_deal', 'create_reminder',
+  ...(isVehicleFinderEnabled() ? (['find_vehicles'] as RexAction['type'][]) : []),
 ]);
+
+// Rex chat v2 (EXPO_PUBLIC_REX_CHAT): closer persona + token streaming + durable
+// cross-device thread. Build-time env, so this is constant for the app's life;
+// OFF → every path below behaves byte-identically to before.
+const REX_CHAT = isRexChatEnabled();
+
+// P3-A1: the two-pass planner→executor triad. Requires REX_CHAT (it upgrades the
+// same chat path) AND its own flag. Build-time constant → OFF makes deliver()
+// take the exact single-call path it takes today.
+const TRIAD = REX_CHAT && isRexTriadEnabled();
 
 type ChatMessage = { from: 'rex' | 'user'; text: string; time: string };
 
@@ -80,7 +98,29 @@ export default function RexCoach({
   const [parseOpen, setParseOpen] = useState(false);      // conversation composer (NEW 5)
   const [parsing, setParsing] = useState(false);          // extraction in flight
   const [parseResult, setParseResult] = useState<ConversationParse | null>(null);
+  // Rex chat v2: the in-flight streamed reply (null = not streaming), who Rex
+  // works for, and whether the rep has interacted since open (guards the async
+  // server-thread restore from clobbering a conversation already in progress).
+  const [streamText, setStreamText] = useState<string | null>(null);
+  const repIdent = useRef<RepIdentity>({});
+  const interactedRef = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
+
+  // Web keyboard-avoidance: iOS Safari doesn't shrink the layout viewport for
+  // the on-screen keyboard, so the bottom-pinned input gets covered. Track the
+  // keyboard height via visualViewport and lift the sheet's bottom by it. 0 on
+  // native and whenever the keyboard is closed.
+  const [kbInset, setKbInset] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const vv = (window as any).visualViewport;
+    if (!vv) return;
+    const update = () => setKbInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    update();
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+  }, []);
 
   // Seed a fresh greeting each time the sheet opens, and refresh month-to-date
   // numbers so coaching reflects the rep's current standing.
@@ -108,17 +148,36 @@ export default function RexCoach({
       setParseOpen(false);
       setParsing(false);
       setParseResult(null);
+      setStreamText(null);
+      interactedRef.current = false;
       // Warm the brain function while the rep reads the greeting + types, so the
       // first real send lands on a warm container instead of a cold start.
       warmBrain();
       loadMtdSummary().then(setMtd).catch(() => setMtd(null));
       loadRecentActivity().then(setActivity).catch(() => setActivity(''));
+      if (REX_CHAT) {
+        // Who Rex works for (best-effort; prompt falls back to demo defaults).
+        loadRepIdentity().then(r => { repIdent.current = r; }).catch(() => undefined);
+        // Durable thread: today's turns from rex_messages beat the local cache —
+        // but never clobber a conversation the rep has already started here.
+        loadTodayServerThread().then(rows => {
+          if (!rows || rows.length === 0 || interactedRef.current) return;
+          // Staleness guard: recordRexTurn is fire-and-forget, so a SELECT can
+          // beat the INSERT on a quick reopen. Only replace the local log when
+          // the server genuinely knows MORE than this device does.
+          if (rows.length <= today.length) return;
+          const restored: ChatMessage[] = [];
+          if (carry) restored.push({ from: 'rex', text: `↺ Yesterday — ${carry}`, time: stamp() });
+          for (const t of rows) restored.push({ from: t.from, text: t.text, time: t.time });
+          setMessages(restored);
+        }).catch(() => undefined);
+      }
     }
   }, [open]);
 
   useEffect(() => {
     if (open) requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
-  }, [messages, typing, open]);
+  }, [messages, typing, streamText, open]);
 
   if (!open) return null;
 
@@ -137,6 +196,7 @@ export default function RexCoach({
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
     if (!text || typing) return;
+    interactedRef.current = true; // a live conversation beats the async restore
     setRetry(null);
     setPending(null); // a new message supersedes any un-confirmed proposal
     const history = messages;
@@ -155,19 +215,71 @@ export default function RexCoach({
     const warmTimer = setTimeout(() => setWarming(true), 5_000);
     const repContext = serializeRepContext({ contacts, payPlan, mtd });
     let attempt = 0;
+    // P3-A1: flips to false only if the planner returns an unusable plan, so this
+    // turn falls back to the single call without a hard error. Transient failures
+    // keep TRIAD on and re-run the two-pass path on the warm retry.
+    let useTriad = TRIAD;
     try {
       for (;;) {
         try {
-          const reply = (await callBrain({
-            // 1200 (was 700) so a complete, structured coaching answer never gets
-            // cut off mid-sentence — the prompt still asks Rex to stay tight.
+          // P3-A1 triad: PLANNER (diagnose → JSON plan) then EXECUTOR (stream the
+          // words). Only a plan-parse miss falls through to the single call below;
+          // transient errors rethrow into the same warm-and-retry loop as always.
+          if (useTriad) {
+            try {
+              const { reply, action } = await runTriadCoach({
+                planner: {
+                  history, text, repContext,
+                  contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
+                  recentActivity: activity,
+                  rep: repIdent.current,
+                },
+                rep: repIdent.current,
+                onDelta: (full) => setStreamText(full),
+              });
+              const actionable = !!action && COACH_ACTIONS.has(action.type);
+              const line = reply || (actionable ? summarizeAction(action!) : '');
+              if (!line) throw new Error('empty');
+              setStreamText(null);
+              pushRex(line);
+              if (actionable) setPending(action!);
+              recordRexTurn(text, line).catch(() => undefined);
+              return;
+            } catch (e: any) {
+              // A bad/unparseable plan is not worth erroring on — quietly use the
+              // single-call path this same attempt. Anything else (timeout,
+              // network, empty) propagates to the transient handler below.
+              if (!String(e?.message ?? '').includes('triad plan')) throw e;
+              useTriad = false;
+              setStreamText(null);
+            }
+          }
+
+          // 1200 (was 700) so a complete, structured coaching answer never gets
+          // cut off mid-sentence — the prompt still asks Rex to stay tight.
+          const brainOpts = {
             maxTokens: 1200,
             messages: buildCoachMessages({
               history, text, repContext,
               contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
               recentActivity: activity,
+              rep: REX_CHAT ? repIdent.current : undefined,
             }),
-          })).trim();
+          };
+          // Rex chat v2 streams tokens into a live bubble; the visible stream
+          // stops at the first fenced block so a trailing action JSON never
+          // flashes on screen. Flag off → the original one-shot call, untouched.
+          const reply = REX_CHAT
+            ? (await callBrainStream({
+                ...brainOpts,
+                // Parity with callBrain's total budget: the stream path's idle
+                // timer resets per chunk, but the non-SSE JSON fallback needs
+                // the full 60s (cold starts run 30-60s).
+                timeoutMs: 60_000,
+                // Trim a partially-arrived fence so 1-2 backticks never flash.
+                onDelta: (full) => setStreamText(full.split('```')[0].replace(/`{1,2}\s*$/, '')),
+              })).trim()
+            : (await callBrain(brainOpts)).trim();
           if (!reply) throw new Error('empty');
           // The reply is coaching text, optionally followed by a structured
           // action when the rep asked Rex to DO something. Show the spoken line;
@@ -175,8 +287,12 @@ export default function RexCoach({
           const { spoken, action } = parseCoachReply(reply);
           const actionable = !!action && COACH_ACTIONS.has(action.type);
           const line = spoken || (actionable ? summarizeAction(action!) : reply);
+          setStreamText(null); // the final bubble replaces the stream
           pushRex(line);
           if (actionable) setPending(action!);
+          // Durable thread: mirror the exchange into rex_messages (fire-and-
+          // forget; also feeds the rolling rex_memory summary shared with voice).
+          if (REX_CHAT) recordRexTurn(text, line).catch(() => undefined);
           return;
         } catch (e: any) {
           const msg = String(e?.message ?? '');
@@ -184,6 +300,7 @@ export default function RexCoach({
           if (attempt === 0 && transient) {
             attempt++;
             setWarming(true);
+            setStreamText(null); // clear the frozen partial so the warming hint shows
             await warmBrain();   // boot the container, then retry once
             continue;
           }
@@ -201,6 +318,7 @@ export default function RexCoach({
       clearTimeout(warmTimer);
       setWarming(false);
       setTyping(false);
+      setStreamText(null); // clear any partial stream on success OR failure
     }
   };
 
@@ -219,11 +337,13 @@ export default function RexCoach({
     setActing(true);
     try {
       const result = await executeAction(action, contacts);
+      logRexAction(action, 'success').catch(() => undefined); // audit chat-taken writes too
       pushRex(`✓ Done — ${summarizeAction(action)}`);
       onActed?.(action);
       if (result.openContactId) onOpenContact?.(result.openContactId);
       setPending(null);
     } catch (e: any) {
+      logRexAction(action, 'failed', { failure_reason: e?.message }).catch(() => undefined);
       setMessages(m => [...m, {
         from: 'rex',
         text: `Couldn't do that: ${e?.message ?? 'save failed'}. Want to try again?`,
@@ -243,6 +363,7 @@ export default function RexCoach({
   // NEW 5 — parse a whole conversation into a proposed CRM update (extraction is
   // read-only; the write still waits for Confirm below).
   const runParse = async (transcript: string) => {
+    interactedRef.current = true; // a parse in progress beats the async restore
     setParseOpen(false);
     setPending(null);
     setParseResult(null);
@@ -292,6 +413,7 @@ export default function RexCoach({
           },
         };
         const res = await executeAction(add, contacts);
+        logRexAction(add, 'success').catch(() => undefined);
         contactId = res.openContactId ?? null;
         onActed?.(add);
       } else {
@@ -300,6 +422,7 @@ export default function RexCoach({
           payload: { contact_id: contactId, contact_name: name, notes_append: r.notes },
         };
         await executeAction(upd, contacts);
+        logRexAction(upd, 'success').catch(() => undefined);
         onActed?.(upd);
       }
       if (contactId && r.followup_days && r.followup_days > 0) {
@@ -308,6 +431,7 @@ export default function RexCoach({
           payload: { contact_id: contactId, contact_name: name, days_from_now: r.followup_days, note: r.plan },
         };
         await executeAction(fu, contacts);
+        logRexAction(fu, 'success').catch(() => undefined);
         onActed?.(fu);
       }
       pushRex(`✓ Saved. ${r.is_new ? 'Added' : 'Updated'} ${name}${r.followup_days ? ` · follow-up in ${r.followup_days}d` : ''}.`);
@@ -330,7 +454,7 @@ export default function RexCoach({
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
       <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, kbInset > 0 ? ({ bottom: kbInset } as any) : null]}>
         <View style={styles.header}>
           <View style={styles.live} />
           <Text style={styles.headerLabel}>REX · COACH</Text>
@@ -357,7 +481,17 @@ export default function RexCoach({
               </View>
             </View>
           ))}
-          {typing ? (
+          {streamText ? (
+            <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
+              <View style={{ maxWidth: '84%' }}>
+                <Label color={colors.gold}>REX · COACH</Label>
+                <View style={[styles.bubble, styles.bubbleRex]}>
+                  <Text style={styles.bubbleText}>{streamText}</Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
+          {typing && !streamText ? (
             <View style={styles.bubbleRow}>
               <View style={[styles.bubble, styles.bubbleRex, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
                 <RadarLoader size={16} />
@@ -583,7 +717,9 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 14,
     paddingTop: 10,
-    paddingBottom: 24,
+    // Home-indicator inset on installed web (keyboard-up reports inset 0, so no
+    // double gap when the sheet is already lifted by kbInset).
+    paddingBottom: Platform.OS === 'web' ? ('max(24px, env(safe-area-inset-bottom))' as any) : 24,
     backgroundColor: colors.ink2,
     borderTopWidth: 1,
     borderTopColor: colors.ink4,

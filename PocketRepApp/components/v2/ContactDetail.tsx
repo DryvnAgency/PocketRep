@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet, Linking, Platform,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet, Linking, Platform, Alert,
 } from 'react-native';
 import { colors, radius, spacing } from '@/constants/theme';
-import { Avatar, Label, Pill, SectionHead, rgbaTint } from './atoms';
+import { Avatar, Label, Pill, rgbaTint } from './atoms';
 import { TIERS, type TierKey } from './tokens';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import { useDeals, type V2Deal } from '@/lib/v2/useDeals';
 import { useTags } from '@/lib/v2/useTags';
+import { useSequences, enrollContactInSequence, type V2Sequence } from '@/lib/v2/useSequences';
 import {
   updateContactNotes,
   updateContactTags,
@@ -16,15 +17,22 @@ import {
   updateContactPreferredLanguage,
   updateContactBirthday,
   updateContactReferredBy,
+  updateContactName,
+  updateContactVehicleInfo,
   logContactTouch,
+  type CallOutcome,
 } from '@/lib/v2/updateContact';
+import { titleCase, normalizeVehicle } from '@/lib/v2/format';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 import { useContactNurtures } from '@/lib/v2/contactNurtures';
-import { logInteraction, useInteractions, type InteractionType } from '@/lib/v2/interactions';
+import { logInteraction, useInteractions, type InteractionType, type TimelineEventType } from '@/lib/v2/interactions';
+import { launchSms } from '@/lib/v2/smsLauncher';
 import { pickAndUploadContactPhoto } from '@/lib/v2/contactPhoto';
 import { formatBirthday, parseBirthdayInput } from '@/lib/v2/birthday';
 import LanguageToggle from './LanguageToggle';
 import MarkReplyButton from './MarkReplyButton';
+import FollowupCard from './FollowupCard';
+import { isRexFollowupEnabled } from '@/lib/v2/rexFeatureFlags';
 
 const MILESTONE_ICONS: Record<string, { icon: string; color: string }> = {
   'visit':       { icon: '👋', color: colors.gold },
@@ -35,11 +43,14 @@ const MILESTONE_ICONS: Record<string, { icon: string; color: string }> = {
   'no-response': { icon: '∅',  color: colors.red },
 };
 
-const INTERACTION_META: Record<InteractionType, { icon: string; color: string; label: string; verb: string }> = {
-  call:  { icon: '📞', color: colors.green, label: 'CALL',  verb: 'Logged a call' },
-  text:  { icon: '💬', color: colors.gold,  label: 'TEXT',  verb: 'Sent a text' },
-  email: { icon: '✉️', color: colors.gold2, label: 'EMAIL', verb: 'Sent an email' },
-  note:  { icon: '📝', color: colors.grey2, label: 'NOTE',  verb: 'Added a note' },
+const INTERACTION_META: Record<string, { icon: string; color: string; label: string; verb: string }> = {
+  call:         { icon: '📞', color: colors.green, label: 'CALL',    verb: 'Logged a call' },
+  text:         { icon: '💬', color: colors.gold,  label: 'TEXT',    verb: 'Sent a text' },
+  email:        { icon: '✉️', color: colors.gold2, label: 'EMAIL',   verb: 'Sent an email' },
+  note:         { icon: '📝', color: colors.grey2, label: 'NOTE',    verb: 'Added a note' },
+  nurture:      { icon: '🤖', color: colors.gold,  label: 'NURTURE', verb: 'Rex nurture sent' },
+  reply:        { icon: '↩️', color: colors.green, label: 'REPLY',   verb: 'Customer replied' },
+  referral_ask: { icon: '🤝', color: colors.gold2, label: 'REFERRAL', verb: 'Referral ask sent' },
 };
 
 function digitsOnly(s: string | null): string {
@@ -78,6 +89,7 @@ export default function ContactDetail({
 }) {
   const tier = TIERS[contact.tier];
   const allTags = useTags();
+  const { sequences, reload: reloadSequences } = useSequences();
   const deals = useDeals(contact.id, dealsRefetchKey);
   const [nurtureRefetchKey, setNurtureRefetchKey] = useState(0);
   const nurtures = useContactNurtures(contact.id, nurtureRefetchKey);
@@ -95,6 +107,8 @@ export default function ContactDetail({
   const [savingBday, setSavingBday] = useState(false);
   const [stepView, setStepView] = useState<'latest' | 'next'>('latest');
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const [seqPickerOpen, setSeqPickerOpen] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
 
   const [aiOpen, setAiOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -113,6 +127,18 @@ export default function ContactDetail({
   const [referralInput, setReferralInput] = useState('');
   const [savingReferral, setSavingReferral] = useState(false);
 
+  // Inline name editor (hero).
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  // Inline vehicle-interest editor (vehicle / trim / budget / trade-in).
+  const [editingVehicle, setEditingVehicle] = useState(false);
+  const [savingVehicle, setSavingVehicle] = useState(false);
+  const [vehInput, setVehInput] = useState('');
+  const [trimInput, setTrimInput] = useState('');
+  const [budgetInput, setBudgetInput] = useState('');
+  const [tradeInput, setTradeInput] = useState('');
+
   useEffect(() => {
     setNotes(contact.notes ?? '');
     setEditingNotes(false);
@@ -120,6 +146,8 @@ export default function ContactDetail({
     setEditingBday(false);
     setEditingReferral(false);
     setReferralInput('');
+    setEditingName(false);
+    setEditingVehicle(false);
     setAiOpen(false);
     setAiScript('');
     setAiError(null);
@@ -236,6 +264,53 @@ export default function ContactDetail({
     }
   };
 
+  const startEditName = () => { setNameInput(contact.name); setEditingName(true); };
+  const cancelName = () => { setEditingName(false); setNameInput(''); };
+  const saveName = async () => {
+    const full = nameInput.trim();
+    if (!full) return; // name is required — keep editing so the rep can fix it
+    const [first, ...rest] = full.split(/\s+/);
+    const last = rest.join(' ');
+    setSavingName(true);
+    try {
+      await updateContactName(contact.id, first, last);
+      onLocalUpdate({ ...contact, name: [titleCase(first), titleCase(last)].filter(Boolean).join(' ') });
+      setEditingName(false);
+    } catch (e) {
+      console.warn('saveName failed', e);
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const startEditVehicle = () => {
+    setVehInput(contact.vehicle ?? '');
+    setTrimInput(contact.trim ?? '');
+    setBudgetInput(contact.budget ?? '');
+    setTradeInput(contact.tradeIn ?? '');
+    setEditingVehicle(true);
+  };
+  const saveVehicle = async () => {
+    setSavingVehicle(true);
+    try {
+      await updateContactVehicleInfo(contact.id, {
+        vehicle: vehInput, trim: trimInput, budget: budgetInput, tradeIn: tradeInput,
+      });
+      onLocalUpdate({
+        ...contact,
+        vehicle: normalizeVehicle(vehInput) || null,
+        trim: normalizeVehicle(trimInput) || null,
+        budget: budgetInput.trim() || null,
+        tradeIn: tradeInput.trim() || null,
+      });
+      setEditingVehicle(false);
+    } catch (e) {
+      console.warn('saveVehicle failed', e);
+    } finally {
+      setSavingVehicle(false);
+    }
+  };
+
   const toggleTag = async (name: string) => {
     const has = contact.tags.includes(name);
     const next = has ? contact.tags.filter(t => t !== name) : [...contact.tags, name];
@@ -265,6 +340,21 @@ export default function ContactDetail({
   const flash = (msg: string) => {
     setTouchMsg(msg);
     setTimeout(() => setTouchMsg(null), 1700);
+  };
+
+  const handleEnroll = async (seq: V2Sequence) => {
+    if (enrolling) return;
+    setEnrolling(true);
+    try {
+      await enrollContactInSequence(contact.id, seq.id);
+      flash(`✓ Enrolled in ${seq.name}`);
+      setSeqPickerOpen(false);
+      reloadSequences();
+    } catch (e: any) {
+      flash(`Couldn't enroll: ${e?.message ?? 'try again'}`);
+    } finally {
+      setEnrolling(false);
+    }
   };
 
   // Record a touch: stamp last_contact_date + reset the follow-up clock, append
@@ -306,17 +396,47 @@ export default function ContactDetail({
 
   // Call/Text: native dials/opens Messages directly; web opens a compose modal
   // (tel:/sms: are no-ops in most desktop browsers, so the modal is the result).
-  const openCall = () => {
+  const openCall = async () => {
     if (!contact.phone) { flash('No number on file'); return; }
     if (Platform.OS === 'web') { setCompose({ mode: 'call', body: '' }); return; }
-    Linking.openURL(channelUrl('call'));
-    recordTouch('call');
+    await Linking.openURL(channelUrl('call')).catch(() => undefined);
+    // Prompt for structured call outcome after the rep returns from the dialer.
+    const outcome = await new Promise<CallOutcome | null>(resolve => {
+      Alert.alert(
+        'Call outcome',
+        `How did the call with ${contact.name.split(' ')[0]} go?`,
+        [
+          { text: 'Answered', onPress: () => resolve('answered') },
+          { text: 'No Answer', onPress: () => resolve('no-answer') },
+          { text: 'Left VM', onPress: () => resolve('voicemail') },
+          { text: 'Wrong #', onPress: () => resolve('wrong-number') },
+        ],
+        { cancelable: false },
+      );
+    });
+    if (outcome) {
+      const summary = `Call outcome: ${outcome.replace('-', ' ')}`;
+      logContactTouch(contact.id, 'call', summary, outcome).catch(e => console.warn('logContactTouch', e));
+      logInteraction(contact.id, 'call', summary, outcome)
+        .then(() => setInteractionsKey(k => k + 1))
+        .catch(e => console.warn('logInteraction', e));
+      onLocalUpdate({ ...contact, days: 0 });
+      flash('✓ Call logged');
+    }
   };
-  const openText = (body?: string) => {
+  const openText = async (body?: string) => {
     if (!contact.phone) { flash('No number on file'); return; }
     if (Platform.OS === 'web') { setCompose({ mode: 'text', body: body ?? '' }); return; }
-    Linking.openURL(channelUrl('text', body));
-    recordTouch('text', body);
+    const result = await launchSms({
+      contact_id: contact.id,
+      contact_name: contact.name,
+      phone: contact.phone,
+      message: body ?? '',
+      isDemo: contact.isDemo,
+    });
+    if (result === 'opened') {
+      recordTouch('text', body);
+    }
   };
   // Email mirrors Call/Text: web opens the compose modal (mailto: silently
   // no-ops when no desktop mail client is registered, which read as a dead
@@ -460,7 +580,30 @@ export default function ContactDetail({
             </View>
           </Pressable>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.heroName}>{contact.name}</Text>
+            {editingName ? (
+              <View style={styles.nameEditRow}>
+                <TextInput
+                  value={nameInput}
+                  onChangeText={setNameInput}
+                  autoFocus
+                  placeholder="Full name"
+                  placeholderTextColor={colors.grey}
+                  style={styles.nameInput}
+                  onSubmitEditing={saveName}
+                  returnKeyType="done"
+                />
+                <Pressable onPress={cancelName} hitSlop={6}>
+                  <Text style={styles.linkSecondary}>Cancel</Text>
+                </Pressable>
+                <Pressable onPress={saveName} hitSlop={6} disabled={savingName}>
+                  <Text style={styles.linkPrimary}>{savingName ? '…' : 'SAVE'}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable onPress={startEditName} hitSlop={4}>
+                <Text style={styles.heroName}>{contact.name}</Text>
+              </Pressable>
+            )}
             <View style={styles.heroPills}>
               <Pressable onPress={cycleTier} hitSlop={6}>
                 <Pill color={tier.color}>{tier.icon} {tier.label}</Pill>
@@ -518,21 +661,73 @@ export default function ContactDetail({
           </Pressable>
         </View>
 
-        <SectionHead label="VEHICLE INTEREST" />
-        <View style={styles.card}>
-          <Text style={styles.vehicleName}>{contact.vehicle ?? '—'}</Text>
-          {contact.trim ? <Text style={styles.vehicleTrim}>{contact.trim}</Text> : null}
-          <View style={styles.vehicleStats}>
-            <View style={{ flex: 1 }}>
-              <Label color={colors.grey2}>BUDGET</Label>
-              <Text style={styles.statValue}>{contact.budget ? `$${contact.budget}` : '—'}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Label color={colors.grey2}>TRADE-IN</Label>
-              <Text style={styles.statValueSmall}>{contact.tradeIn ?? 'None'}</Text>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionLabel}>VEHICLE INTEREST</Text>
+          <View style={{ flex: 1 }} />
+          {editingVehicle ? (
+            <>
+              <Pressable onPress={() => setEditingVehicle(false)} hitSlop={6}>
+                <Text style={styles.linkSecondary}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={saveVehicle} hitSlop={6} disabled={savingVehicle}>
+                <Text style={styles.linkPrimary}>{savingVehicle ? 'SAVING…' : 'SAVE'}</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable onPress={startEditVehicle} hitSlop={6}>
+              <Text style={styles.linkPrimary}>EDIT ›</Text>
+            </Pressable>
+          )}
+        </View>
+        {editingVehicle ? (
+          <View style={[styles.card, { borderColor: colors.gold }]}>
+            <Label color={colors.grey2}>VEHICLE</Label>
+            <TextInput
+              value={vehInput} onChangeText={setVehInput} autoFocus
+              placeholder="e.g. 2024 BMW M3" placeholderTextColor={colors.grey}
+              style={styles.vehEditInput}
+            />
+            <Label color={colors.grey2}>TRIM</Label>
+            <TextInput
+              value={trimInput} onChangeText={setTrimInput}
+              placeholder="e.g. Competition" placeholderTextColor={colors.grey}
+              style={styles.vehEditInput}
+            />
+            <View style={styles.vehicleStats}>
+              <View style={{ flex: 1 }}>
+                <Label color={colors.grey2}>BUDGET</Label>
+                <TextInput
+                  value={budgetInput} onChangeText={setBudgetInput}
+                  placeholder="e.g. 82,000" placeholderTextColor={colors.grey}
+                  style={styles.vehEditInput}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Label color={colors.grey2}>TRADE-IN</Label>
+                <TextInput
+                  value={tradeInput} onChangeText={setTradeInput}
+                  placeholder="e.g. 2019 M340i" placeholderTextColor={colors.grey}
+                  style={styles.vehEditInput}
+                />
+              </View>
             </View>
           </View>
-        </View>
+        ) : (
+          <Pressable onPress={startEditVehicle} style={styles.card}>
+            <Text style={styles.vehicleName}>{contact.vehicle ?? '—'}</Text>
+            {contact.trim ? <Text style={styles.vehicleTrim}>{contact.trim}</Text> : null}
+            <View style={styles.vehicleStats}>
+              <View style={{ flex: 1 }}>
+                <Label color={colors.grey2}>BUDGET</Label>
+                <Text style={styles.statValue}>{contact.budget ? `$${contact.budget}` : '—'}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Label color={colors.grey2}>TRADE-IN</Label>
+                <Text style={styles.statValueSmall}>{contact.tradeIn ?? 'None'}</Text>
+              </View>
+            </View>
+          </Pressable>
+        )}
 
         <View style={styles.sectionHead}>
           <Text style={styles.sectionLabel}>BIRTHDAY</Text>
@@ -761,6 +956,13 @@ export default function ContactDetail({
           </View>
         )}
 
+        {isRexFollowupEnabled() && (contact.phone || contact.email) ? (
+          <FollowupCard
+            contact={contact}
+            onSendMessage={(body) => { if (contact.phone) openText(body); else openEmail(body); }}
+          />
+        ) : null}
+
         <View style={styles.sectionHead}>
           <Text style={styles.sectionLabel}>NOTES</Text>
           <View style={{ flex: 1 }} />
@@ -815,6 +1017,17 @@ export default function ContactDetail({
             <Text style={styles.gamePlanHint}>
               {aiLoading ? '· thinking…' : '· Rex picks the move'}
             </Text>
+          </Pressable>
+        </View>
+
+        <View style={{ paddingHorizontal: 14, paddingTop: 10 }}>
+          <Pressable
+            onPress={() => setSeqPickerOpen(true)}
+            style={styles.enrollBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Enroll in a sequence"
+          >
+            <Text style={styles.enrollBtnText}>＋ Enroll in sequence</Text>
           </Pressable>
         </View>
 
@@ -958,6 +1171,16 @@ export default function ContactDetail({
           contactName={contact.name}
           onClose={() => setTagPickerOpen(false)}
           onToggle={toggleTag}
+        />
+      ) : null}
+
+      {seqPickerOpen ? (
+        <SequencePicker
+          sequences={sequences}
+          contactName={contact.name}
+          busy={enrolling}
+          onEnroll={handleEnroll}
+          onClose={() => setSeqPickerOpen(false)}
         />
       ) : null}
 
@@ -1106,6 +1329,57 @@ function TagPicker({
   );
 }
 
+function SequencePicker({
+  sequences, contactName, busy, onEnroll, onClose,
+}: {
+  sequences: V2Sequence[] | null;
+  contactName: string;
+  busy: boolean;
+  onEnroll: (s: V2Sequence) => void;
+  onClose: () => void;
+}) {
+  const active = (sequences ?? []).filter(s => !s.is_archived);
+  return (
+    <View style={StyleSheet.absoluteFillObject}>
+      <Pressable style={styles.scrim} onPress={onClose} />
+      <View style={styles.sheet}>
+        <View style={styles.sheetHandle} />
+        <View style={styles.sheetHead}>
+          <Label color={colors.gold}>ENROLL {contactName.toUpperCase()}</Label>
+          <Text style={styles.sheetSub}>Pick a sequence to start.</Text>
+        </View>
+        {sequences === null ? (
+          <Text style={styles.seqEmpty}>Loading sequences…</Text>
+        ) : active.length === 0 ? (
+          <Text style={styles.seqEmpty}>No sequences yet. Build one in Game Plan.</Text>
+        ) : (
+          <ScrollView contentContainerStyle={styles.sheetTags}>
+            {active.map(s => (
+              <Pressable
+                key={s.id}
+                onPress={() => onEnroll(s)}
+                disabled={busy}
+                style={[styles.seqRow, busy && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel={`Enroll in ${s.name}`}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.seqName} numberOfLines={1}>{s.name}</Text>
+                  <Text style={styles.seqMeta} numberOfLines={1}>
+                    {s.steps.length} step{s.steps.length === 1 ? '' : 's'}
+                    {s.sequence_type ? ` · ${s.sequence_type}` : ''}
+                  </Text>
+                </View>
+                <Text style={styles.seqAdd}>＋</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
@@ -1129,7 +1403,7 @@ const styles = StyleSheet.create({
   },
 
   topBar: {
-    paddingTop: Platform.OS === 'web' ? 16 : 52,
+    paddingTop: Platform.OS === 'web' ? ('max(16px, env(safe-area-inset-top))' as any) : 52,
     paddingHorizontal: 14,
     paddingBottom: 12,
     flexDirection: 'row',
@@ -1234,6 +1508,21 @@ const styles = StyleSheet.create({
   },
   heroName: { fontSize: 22, fontWeight: '700', color: colors.white, letterSpacing: -0.5 },
   heroPills: { flexDirection: 'row', gap: 6, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' },
+  nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  nameInput: {
+    flex: 1, minWidth: 0,
+    fontSize: 20, fontWeight: '700', color: colors.white, letterSpacing: -0.4,
+    borderBottomWidth: 1, borderBottomColor: colors.gold,
+    paddingVertical: 2,
+  } as any,
+  vehEditInput: {
+    color: colors.white, fontSize: 15,
+    backgroundColor: colors.ink2,
+    borderWidth: 1, borderColor: colors.ink4,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10, paddingVertical: 8,
+    marginTop: 4, marginBottom: 10,
+  } as any,
 
   quickRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingBottom: 12 },
   quickBtn: {
@@ -1406,6 +1695,34 @@ const styles = StyleSheet.create({
   },
   gamePlanText: { fontSize: 14, fontWeight: '800', color: colors.ink, letterSpacing: 0.2 },
   gamePlanHint: { fontSize: 10, fontWeight: '700', color: colors.ink, opacity: 0.6, letterSpacing: 0.3 },
+
+  enrollBtn: {
+    height: 44,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  enrollBtnText: { fontSize: 13, fontWeight: '700', color: colors.gold, letterSpacing: 0.2 },
+  seqEmpty: { color: colors.grey2, fontSize: 13, textAlign: 'center', paddingVertical: 24, paddingHorizontal: 16 },
+  seqRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.md,
+    marginBottom: 8,
+  },
+  seqName: { fontSize: 14, fontWeight: '700', color: colors.white, letterSpacing: -0.2 },
+  seqMeta: { fontSize: 11, color: colors.grey2, marginTop: 2 },
+  seqAdd: { fontSize: 18, fontWeight: '800', color: colors.gold },
 
   aiBox: {
     marginHorizontal: 14,
