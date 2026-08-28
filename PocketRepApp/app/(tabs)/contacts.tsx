@@ -383,9 +383,17 @@ export default function ContactsScreen() {
       // Preserve AI-generated fields that aren't in the manual edit form
       if ((editing as any).personal_events !== undefined) payload.personal_events = (editing as any).personal_events;
       if ((editing as any).buying_urgency !== undefined) payload.buying_urgency = (editing as any).buying_urgency;
-      await supabase.from('contacts').update(payload).eq('id', editing.id);
-    } else {
-      await supabase.from('contacts').insert(payload);
+    }
+
+    const { error } = editing
+      ? await supabase.from('contacts').update(payload).eq('id', editing.id)
+      : await supabase.from('contacts').insert(payload);
+
+    if (error) {
+      setSaving(false);
+      if (Platform.OS === 'web') (globalThis as any).alert?.(`Couldn't save contact: ${error.message}`);
+      else Alert.alert('Save failed', error.message);
+      return;
     }
 
     setSaving(false);
@@ -429,7 +437,19 @@ export default function ContactsScreen() {
     const phones = recipients.map(c => c.phone).join(',');
     const sep = Platform.OS === 'ios' ? '&' : '?';
     const smsUrl = `sms:${phones}${sep}body=${encodeURIComponent(massTextMsg)}`;
-    try { await Linking.openURL(smsUrl); } catch { Alert.alert('Could not open SMS app'); }
+    try { await Linking.openURL(smsUrl); } catch { Alert.alert('Could not open SMS app'); return; }
+    // Confirm the rep actually sent it before recording
+    const didSend = await new Promise<boolean>(resolve => {
+      if (Platform.OS === 'web') {
+        resolve(typeof window !== 'undefined' && window.confirm('Did you send the message?'));
+      } else {
+        Alert.alert('Confirm', 'Did you send the message?', [
+          { text: 'No', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Yes, sent', onPress: () => resolve(true) },
+        ]);
+      }
+    });
+    if (!didSend) { setShowMassText(false); setMassTextMsg(''); return; }
     const record = { id: Date.now().toString(), message: massTextMsg, recipient_count: recipients.length, sent_at: new Date().toISOString() };
     if (AsyncStorage) {
       try {
@@ -529,9 +549,14 @@ export default function ContactsScreen() {
       stage: row.stage || 'prospect',
     }));
     try {
-      await supabase.from('contacts').insert(payload);
-      await load();
-      Alert.alert('Import complete ✅', `${payload.length} contact${payload.length !== 1 ? 's' : ''} added to your book.`);
+      const { error } = await supabase.from('contacts').insert(payload);
+      if (error) {
+        if (Platform.OS === 'web') (globalThis as any).alert?.(`Import failed: ${error.message}`);
+        else Alert.alert('Import failed', error.message);
+      } else {
+        await load();
+        Alert.alert('Import complete ✅', `${payload.length} contact${payload.length !== 1 ? 's' : ''} added to your book.`);
+      }
     } catch {
       Alert.alert('Import failed', 'Some contacts may not have imported. Check for duplicate phone numbers.');
     }

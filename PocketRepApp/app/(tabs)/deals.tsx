@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, Modal, ScrollView, Alert, ActivityIndicator,
-  Animated,
+  Animated, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -102,10 +102,15 @@ export default function DealsScreen() {
       notes: form.notes.trim() || null,
     };
 
-    if (editing) {
-      await supabase.from('deals').update(payload).eq('id', editing.id);
-    } else {
-      await supabase.from('deals').insert(payload);
+    const { error } = editing
+      ? await supabase.from('deals').update(payload).eq('id', editing.id)
+      : await supabase.from('deals').insert(payload);
+
+    if (error) {
+      setSaving(false);
+      if (Platform.OS === 'web') (globalThis as any).alert?.(`Couldn't save deal: ${error.message}`);
+      else Alert.alert('Save failed', error.message);
+      return;
     }
 
     setSaving(false);
@@ -114,16 +119,25 @@ export default function DealsScreen() {
   }
 
   async function deleteDeal(d: Deal) {
-    Alert.alert('Delete deal', `Remove "${d.title}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          await supabase.from('deals').delete().eq('id', d.id);
-          load();
-        },
-      },
-    ]);
+    const msg = `Remove "${d.title}"? This can't be undone.`;
+    const proceed = async () => {
+      const { error } = await supabase.from('deals').delete().eq('id', d.id);
+      if (error) {
+        if (Platform.OS === 'web') (globalThis as any).alert?.(`Couldn't delete deal: ${error.message}`);
+        else Alert.alert('Delete failed', error.message);
+        return;
+      }
+      setDeals(prev => prev.filter(x => x.id !== d.id));
+      load();
+    };
+    if (Platform.OS === 'web') {
+      if (typeof window === 'undefined' || window.confirm(msg)) proceed();
+    } else {
+      Alert.alert('Delete deal', msg, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: proceed },
+      ]);
+    }
   }
 
   const selectedContact = contacts.find(c => c.id === form.contact_id);

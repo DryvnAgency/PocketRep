@@ -13,6 +13,7 @@ import {
   generateQueue, loadQueueState, saveQueueState, clearQueueState,
   markSentAndLog, type QueueItem,
 } from '@/lib/messageQueue';
+import { launchSms } from '@/lib/v2/smsLauncher';
 
 let AsyncStorage: any = null;
 try {
@@ -474,31 +475,51 @@ export default function SequencesScreen() {
 
   async function sendMassText() {
     if (!massMsg.trim() || selectedContactIds.size === 0) return;
-    const count = selectedContactIds.size;
+    const recipients = allContacts.filter(c => selectedContactIds.has(c.id) && c.phone);
+    if (!recipients.length) { Alert.alert('No phone numbers', 'Selected contacts have no phone numbers.'); return; }
+    const count = recipients.length;
 
-    Alert.alert('Send Mass Text', `Send to ${count} contact${count !== 1 ? 's' : ''}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Send',
-        onPress: async () => {
-          // Save record to AsyncStorage
-          if (AsyncStorage) {
-            const record: MassTextRecord = {
-              id: Date.now().toString(),
-              message: massMsg,
-              recipient_count: count,
-              sent_at: new Date().toISOString(),
-            };
-            const existing = massTexts;
-            const updated = [...existing, record];
-            await AsyncStorage.setItem(MASS_TEXT_KEY, JSON.stringify(updated));
-            setMassTexts(updated);
-          }
-          setShowMassTextModal(false);
-          Alert.alert('Queued!', `${count} messages queued for delivery.`);
-        },
-      },
-    ]);
+    const confirmed = await new Promise<boolean>(resolve => {
+      if (Platform.OS === 'web') {
+        resolve(typeof window !== 'undefined' && window.confirm(`Open SMS composer for ${count} contact${count !== 1 ? 's' : ''} one at a time?`));
+      } else {
+        Alert.alert('Send Mass Text', `Open SMS composer for ${count} contact${count !== 1 ? 's' : ''} one at a time?`, [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Start', onPress: () => resolve(true) },
+        ]);
+      }
+    });
+    if (!confirmed) return;
+
+    let sent = 0;
+    for (const c of recipients) {
+      const result = await launchSms({
+        contact_id: c.id,
+        contact_name: `${c.first_name} ${c.last_name}`.trim(),
+        phone: c.phone,
+        message: massMsg,
+        source: 'manual',
+      });
+      if (result === 'opened') sent++;
+    }
+
+    // Record to AsyncStorage for history
+    if (AsyncStorage && sent > 0) {
+      const record: MassTextRecord = {
+        id: Date.now().toString(),
+        message: massMsg,
+        recipient_count: sent,
+        sent_at: new Date().toISOString(),
+      };
+      const updated = [...massTexts, record];
+      await AsyncStorage.setItem(MASS_TEXT_KEY, JSON.stringify(updated)).catch(() => {});
+      setMassTexts(updated);
+    }
+
+    setShowMassTextModal(false);
+    setMassMsg('');
+    setSelectedContactIds(new Set());
+    Alert.alert('Done', `${sent} of ${count} message${count !== 1 ? 's' : ''} confirmed sent.`);
   }
 
   async function loadMassTexts() {
@@ -568,7 +589,8 @@ export default function SequencesScreen() {
         message_template: s.message_template,
         ai_personalize: s.ai_personalize,
       }));
-      await supabase.from('sequence_steps').insert(steps);
+      const { error: stepErr } = await supabase.from('sequence_steps').insert(steps);
+      if (stepErr) throw new Error(`Steps failed: ${stepErr.message}`);
 
       await loadMySequences();
       setView('list');
