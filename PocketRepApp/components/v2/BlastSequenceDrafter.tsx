@@ -137,7 +137,15 @@ export default function BlastSequenceDrafter({
 
   const handleCancel = async () => {
     if (draft.sequence_id) {
-      await markBlastCancelled(draft.sequence_id).catch(() => undefined);
+      try {
+        await markBlastCancelled(draft.sequence_id);
+      } catch (e: any) {
+        // Tapping Cancel always looked successful even when the row was
+        // still pending_review server-side. Surface the failure and keep
+        // the sheet open instead of closing as if it worked.
+        setError(e?.message ?? "Couldn't cancel — try again");
+        return;
+      }
     }
     onClose();
   };

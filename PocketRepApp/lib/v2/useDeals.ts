@@ -17,20 +17,30 @@ export type V2Deal = {
 
 export function useDeals(contactId: string | null, refetchKey: number = 0) {
   const [deals, setDeals] = useState<V2Deal[]>([]);
+  // Previously a load failure just returned early, leaving deals at [] —
+  // indistinguishable from "this contact genuinely has zero deals." Surface
+  // the failure so the UI can tell the two apart.
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!contactId) {
       setDeals([]);
+      setError(null);
       return;
     }
     let cancelled = false;
+    setError(null);
     supabase
       .from('deals')
       .select('id,stock,vehicle,amount,front_gross,back_gross,closed_at,deal_type,funding,split,split_with')
       .eq('contact_id', contactId)
       .order('closed_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (cancelled || error) return;
+      .then(({ data, error: loadError }) => {
+        if (cancelled) return;
+        if (loadError) {
+          setError(loadError.message);
+          return;
+        }
         setDeals((data ?? []).map((r: any) => ({
           id: r.id,
           stock: r.stock,
@@ -48,5 +58,5 @@ export function useDeals(contactId: string | null, refetchKey: number = 0) {
     return () => { cancelled = true; };
   }, [contactId, refetchKey]);
 
-  return deals;
+  return { deals, error };
 }

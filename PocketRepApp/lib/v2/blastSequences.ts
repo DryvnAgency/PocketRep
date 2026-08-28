@@ -378,11 +378,13 @@ export async function recordSentBlast({
 }
 
 export async function markBlastApproved(sequenceId: string): Promise<void> {
-  await supabase.from('sequences').update({ draft_status: 'sent' }).eq('id', sequenceId);
+  const { error } = await supabase.from('sequences').update({ draft_status: 'sent' }).eq('id', sequenceId);
+  if (error) throw new Error(`Couldn't mark blast approved: ${error.message}`);
 }
 
 export async function markBlastCancelled(sequenceId: string): Promise<void> {
-  await supabase.from('sequences').update({ draft_status: 'cancelled' }).eq('id', sequenceId);
+  const { error } = await supabase.from('sequences').update({ draft_status: 'cancelled' }).eq('id', sequenceId);
+  if (error) throw new Error(`Couldn't cancel blast: ${error.message}`);
 }
 
 export async function translateBlastMessage({

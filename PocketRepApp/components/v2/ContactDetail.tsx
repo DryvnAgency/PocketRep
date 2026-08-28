@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet, Linking, Platform, Alert,
 } from 'react-native';
@@ -90,7 +90,7 @@ export default function ContactDetail({
   const tier = TIERS[contact.tier];
   const allTags = useTags();
   const { sequences, reload: reloadSequences } = useSequences();
-  const deals = useDeals(contact.id, dealsRefetchKey);
+  const { deals, error: dealsError } = useDeals(contact.id, dealsRefetchKey);
   const [nurtureRefetchKey, setNurtureRefetchKey] = useState(0);
   const nurtures = useContactNurtures(contact.id, nurtureRefetchKey);
   const unmarkedNurtures = nurtures.filter(n => n.sent_at && !n.reply_received);
@@ -139,6 +139,17 @@ export default function ContactDetail({
   const [budgetInput, setBudgetInput] = useState('');
   const [tradeInput, setTradeInput] = useState('');
 
+  // Synchronous re-entrancy guards for the per-field saves below (mirrors
+  // AddContactModal.tsx's savingRef/pickingRef pattern) — the `saving*` state
+  // above updates asynchronously, so a same-tick double-tap could otherwise
+  // fire two overlapping writes to the same field.
+  const savingReferralRef = useRef(false);
+  const savingNotesRef = useRef(false);
+  const savingBdayRef = useRef(false);
+  const savingNameRef = useRef(false);
+  const savingVehicleRef = useRef(false);
+  const tagToggleRef = useRef(false);
+
   useEffect(() => {
     setNotes(contact.notes ?? '');
     setEditingNotes(false);
@@ -175,6 +186,7 @@ export default function ContactDetail({
   // Save the referral. A name that exactly matches a contact links the two; an
   // explicit pick (opts) always links; anything else stores free text.
   const saveReferral = async (opts?: { contactId: string; name: string }) => {
+    if (savingReferralRef.current) return;
     const next = opts ?? (() => {
       const typed = referralInput.trim();
       if (!typed) return { contactId: null as string | null, name: null as string | null };
@@ -185,6 +197,7 @@ export default function ContactDetail({
         ? { contactId: exact.id, name: exact.name }
         : { contactId: null as string | null, name: typed };
     })();
+    savingReferralRef.current = true;
     setSavingReferral(true);
     try {
       await updateContactReferredBy(contact.id, next);
@@ -192,12 +205,16 @@ export default function ContactDetail({
       setEditingReferral(false);
     } catch (e) {
       console.warn('saveReferral failed', e);
+      flash("Couldn't save referral");
     } finally {
+      savingReferralRef.current = false;
       setSavingReferral(false);
     }
   };
 
   const clearReferral = async () => {
+    if (savingReferralRef.current) return;
+    savingReferralRef.current = true;
     setSavingReferral(true);
     try {
       await updateContactReferredBy(contact.id, { contactId: null, name: null });
@@ -206,7 +223,9 @@ export default function ContactDetail({
       setReferralInput('');
     } catch (e) {
       console.warn('clearReferral failed', e);
+      flash("Couldn't clear referral");
     } finally {
+      savingReferralRef.current = false;
       setSavingReferral(false);
     }
   };
@@ -225,6 +244,8 @@ export default function ContactDetail({
   };
 
   const saveNotes = async () => {
+    if (savingNotesRef.current) return;
+    savingNotesRef.current = true;
     setSavingNotes(true);
     try {
       await updateContactNotes(contact.id, notes);
@@ -238,7 +259,9 @@ export default function ContactDetail({
       }
     } catch (e) {
       console.warn('saveNotes failed', e);
+      flash("Couldn't save notes");
     } finally {
+      savingNotesRef.current = false;
       setSavingNotes(false);
     }
   };
@@ -249,8 +272,10 @@ export default function ContactDetail({
   };
 
   const saveBday = async () => {
+    if (savingBdayRef.current) return;
     const parsed = parseBirthdayInput(bday);
     if (parsed === false) return; // unparseable — keep editing so the rep can fix it
+    savingBdayRef.current = true;
     setSavingBday(true);
     try {
       await updateContactBirthday(contact.id, parsed);
@@ -259,7 +284,9 @@ export default function ContactDetail({
       setEditingBday(false);
     } catch (e) {
       console.warn('saveBday failed', e);
+      flash("Couldn't save birthday");
     } finally {
+      savingBdayRef.current = false;
       setSavingBday(false);
     }
   };
@@ -267,10 +294,12 @@ export default function ContactDetail({
   const startEditName = () => { setNameInput(contact.name); setEditingName(true); };
   const cancelName = () => { setEditingName(false); setNameInput(''); };
   const saveName = async () => {
+    if (savingNameRef.current) return;
     const full = nameInput.trim();
     if (!full) return; // name is required — keep editing so the rep can fix it
     const [first, ...rest] = full.split(/\s+/);
     const last = rest.join(' ');
+    savingNameRef.current = true;
     setSavingName(true);
     try {
       await updateContactName(contact.id, first, last);
@@ -278,7 +307,9 @@ export default function ContactDetail({
       setEditingName(false);
     } catch (e) {
       console.warn('saveName failed', e);
+      flash("Couldn't save name");
     } finally {
+      savingNameRef.current = false;
       setSavingName(false);
     }
   };
@@ -291,6 +322,8 @@ export default function ContactDetail({
     setEditingVehicle(true);
   };
   const saveVehicle = async () => {
+    if (savingVehicleRef.current) return;
+    savingVehicleRef.current = true;
     setSavingVehicle(true);
     try {
       await updateContactVehicleInfo(contact.id, {
@@ -306,12 +339,20 @@ export default function ContactDetail({
       setEditingVehicle(false);
     } catch (e) {
       console.warn('saveVehicle failed', e);
+      flash("Couldn't save vehicle info");
     } finally {
+      savingVehicleRef.current = false;
       setSavingVehicle(false);
     }
   };
 
   const toggleTag = async (name: string) => {
+    // Guards the stale-closure race a rapid double-tap could otherwise hit:
+    // `contact` is a prop, so a second toggleTag firing before the first
+    // save's onLocalUpdate lands would compute `next` from the OLD tag list
+    // and silently drop the first tag change on write.
+    if (tagToggleRef.current) return;
+    tagToggleRef.current = true;
     const has = contact.tags.includes(name);
     const next = has ? contact.tags.filter(t => t !== name) : [...contact.tags, name];
     onLocalUpdate({ ...contact, tags: next });
@@ -320,6 +361,9 @@ export default function ContactDetail({
     } catch (e) {
       onLocalUpdate({ ...contact, tags: contact.tags });
       console.warn('toggleTag failed', e);
+      flash("Couldn't save tag change");
+    } finally {
+      tagToggleRef.current = false;
     }
   };
 
@@ -1145,7 +1189,12 @@ export default function ContactDetail({
           </Pressable>
         </View>
 
-        {deals.length === 0 ? (
+        {dealsError ? (
+          <View style={styles.dealEmpty}>
+            <Text style={[styles.dealEmptyTitle, { color: colors.red }]}>Couldn't load deals</Text>
+            <Text style={styles.dealEmptyHint}>{dealsError}</Text>
+          </View>
+        ) : deals.length === 0 ? (
           <Pressable onPress={onLogDeal} style={styles.dealEmpty}>
             <Text style={styles.dealEmptyTitle}>No deals yet — close them and log it here</Text>
             <Text style={styles.dealEmptyHint}>Flows straight into your Metrics</Text>

@@ -23,8 +23,15 @@ let ImagePicker: any = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
 
 // ── Action types Rex can execute ─────────────────────────────────────────────
+// 'log_customer' and 'start_sequence' were declared here and (log_customer
+// only) offered to the model in the prompt below, but executeAction() never
+// had a case for either — the rep would see a "confirm" card that silently
+// did nothing on tap. Removed rather than implemented: this V1 surface is
+// intentionally self-contained (mass_text / show_followups only); logging a
+// customer or starting a sequence from chat is real new functionality, not a
+// one-line fix, and already exists on the V2 side (lib/v2/rexActions.ts).
 interface RexAction {
-  type: 'mass_text' | 'show_followups' | 'log_customer' | 'start_sequence';
+  type: 'mass_text' | 'show_followups';
   filter?: { vehicle_make?: string; stage?: string; lease_months?: number };
   message?: string;
   contact_name?: string;
@@ -123,12 +130,13 @@ Follow-up Date: ${contact.follow_up_date ?? 'none set'}
 When the rep asks you to take action, end your message with:
 <action>{"type":"mass_text","filter":{"vehicle_make":"Malibu"},"message":"Hey {{first_name}}, ..."}</action>
 <action>{"type":"show_followups"}</action>
-<action>{"type":"log_customer","contact_name":"Marcus Webb"}</action>
 
 Action types:
 - mass_text: rep says "send a text to [group] about [offer]" — fill filter (vehicle_make, stage) and message
 - show_followups: rep says "who should I call today" or "who needs attention" — no filter needed
-- log_customer: rep describes a customer interaction in chat — extract and offer to log it
+These are the only two actions you can take here. If the rep asks to log a
+customer or start a sequence, tell them to do it from the Book or Sequences
+tab — don't emit an action tag for anything other than the two above.
 `.trim();
 
 // ── Rebuttals data ────────────────────────────────────────────────────────────
@@ -415,6 +423,9 @@ export default function RexScreen() {
         content: `Summarise key facts about this sales rep from their conversation with Rex. Focus on their style, common customers, recurring challenges. Be concise.\n\n${transcript}`,
       }],
     }).catch(() => '');
+    // A failed/empty AI summary must never overwrite the rep's existing saved
+    // understanding — bail out instead (matches lib/v2/rexMemory.ts's guard).
+    if (!summary || !summary.trim()) return;
     await supabase.from('rex_memory').upsert({ user_id: userId, summary, message_count: count });
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform,
   KeyboardAvoidingView,
@@ -40,6 +40,10 @@ export default function DealLogger({
   const [d, setD] = useState<DealDraft>(blank());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // `saving` state updates asynchronously, so a same-tick double-tap on Save
+  // could pass the `!canSave || saving` guard twice and insert two deals —
+  // AddContactModal.tsx's savingRef fixes the identical race there.
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -77,7 +81,8 @@ export default function DealLogger({
   const canSave = !!d.name.trim() && !!d.stock.trim() && !!d.vehicle.trim() && totalGross > 0;
 
   const handleSave = async () => {
-    if (!canSave || saving) return;
+    if (!canSave || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -93,6 +98,7 @@ export default function DealLogger({
     } catch (e: any) {
       setError(e?.message ?? 'Save failed');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
