@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Switch, Platform, Share } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Switch, Platform, Share, Linking } from 'react-native';
 import Constants from 'expo-constants';
 import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, Pill, SectionHead } from './atoms';
@@ -191,6 +191,33 @@ export default function ProfileTab({
     ? `https://pocketrep.pro/?ref=${encodeURIComponent(referralCode)}`
     : null;
 
+  const [openingBilling, setOpeningBilling] = useState(false);
+  // cancel.html promises "In-app: Go to Settings → Subscription → Cancel" —
+  // this is that path. Hands off to Stripe's own hosted portal (cancel, plan
+  // change, payment method) rather than building a second billing UI here.
+  const openBillingPortal = async () => {
+    if (openingBilling) return;
+    setOpeningBilling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('billing-portal');
+      if (error || !data?.url) {
+        flash(data?.error === 'no_stripe_customer'
+          ? "Billing isn't set up on this account yet"
+          : "Couldn't open billing — try again in a moment");
+        return;
+      }
+      if (Platform.OS === 'web') {
+        (globalThis as any).open?.(data.url, '_blank');
+      } else {
+        await Linking.openURL(data.url);
+      }
+    } catch {
+      flash("Couldn't open billing — try again in a moment");
+    } finally {
+      setOpeningBilling(false);
+    }
+  };
+
   const shareReferral = async () => {
     if (!referLink) { flash('Loading your referral code…'); return; }
     if (Platform.OS === 'web') {
@@ -363,6 +390,8 @@ export default function ProfileTab({
           onPress={() => editSetting('phone', 'Phone', 'PHONE NUMBER', { keyboardType: 'phone-pad' })} />
         <Row icon="🔒" label="Security" detail={getRepSetting('security') || 'Not set'}
           onPress={() => editSetting('security', 'Security', 'SIGN-IN METHOD')} />
+        <Row icon="💳" label="Billing" detail={openingBilling ? 'Opening…' : 'Manage subscription'}
+          onPress={openBillingPortal} />
         <Row icon="↗" label="Refer a rep" detail={referralCode ?? 'Loading…'}
           onPress={shareReferral} />
         {referralCount > 0 ? (
