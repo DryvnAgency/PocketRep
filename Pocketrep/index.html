@@ -24,9 +24,9 @@
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
 {"@type":"Question","name":"What is PocketRep?","acceptedAnswer":{"@type":"Answer","text":"PocketRep is the follow-up app for car salespeople. It helps organize your book, surfaces who needs attention, and lets Rex draft personalized follow-up from your notes and context. You review and send every message yourself from your phone or browser."}},
 {"@type":"Question","name":"How much does PocketRep cost?","acceptedAnswer":{"@type":"Answer","text":"PocketRep is 39 USD per month for the first 500 paying reps, 54 USD per month for new customers 501 through 1000, and 69 USD per month thereafter. The 39 USD founding rate stays with an active founding subscription. The individual app includes a 7-day free trial. PocketRep Team is not for sale yet."}},
-{"@type":"Question","name":"Is PocketRep a CRM for car salesmen?","acceptedAnswer":{"@type":"Answer","text":"Yes. PocketRep is a personal CRM and follow-up app built for car salespeople. Your customers stay yours and follow you between dealerships, unlike a dealership CRM."}},
+{"@type":"Question","name":"Is PocketRep a CRM for car salesmen?","acceptedAnswer":{"@type":"Answer","text":"PocketRep is a personal CRM and follow-up app built for car salespeople. Your PocketRep workspace stays with your account; only keep and use customer data you're authorized to use."}},
 {"@type":"Question","name":"Do my customers stay mine if I change dealerships?","acceptedAnswer":{"@type":"Answer","text":"Your PocketRep workspace stays with your account, including the contacts, notes, and history you are authorized to keep. You are responsible for following your employer's policies and applicable law when storing, moving, or contacting customer data."}},
-{"@type":"Question","name":"Will PocketRep text my customers automatically?","acceptedAnswer":{"@type":"Answer","text":"No, nothing sends until you review and tap send. PocketRep drafts the message in your voice and you send it yourself."}},
+{"@type":"Question","name":"Will PocketRep text my customers automatically?","acceptedAnswer":{"@type":"Answer","text":"No. Nothing sends until you review and take the send action. PocketRep drafts from the context you provide and you stay in control."}},
 {"@type":"Question","name":"Does PocketRep work in Spanish?","acceptedAnswer":{"@type":"Answer","text":"Yes. Rex writes follow-ups in English and in natural Mexican Spanish, so you can sell in both languages."}}
 ]}
 </script>
@@ -1343,7 +1343,7 @@
       </div>
       <p class="cta-sub reveal d2">$39/mo founding rate for the first 500 paying reps. Keep that rate while your founding subscription stays active.</p>
       <div class="hero-trust reveal d3">
-        <span><span class="ck">✓</span> Your book follows you</span>
+        <span><span class="ck">✓</span> Your PocketRep workspace stays with you</span>
         <span><span class="ck">✓</span> Nothing sends until you tap send</span>
         <span><span class="ck">✓</span> Built for phone + web</span>
       </div>
@@ -2067,7 +2067,7 @@
       paint();
       setTimeout(function () {
         rexLog.pop();
-        rexLog.push({ who: "rex", html: customReply || REX[text] || "On it. I'd keep it short, lowercase, and lead with one reason to reply, no \"just checking in.\" Want me to queue it to send?" });
+        rexLog.push({ who: "rex", html: customReply || REX[text] || "On it. I'd keep it short, lowercase, and lead with one reason to reply, no \"just checking in.\" Want me to open it for review?" });
         paint();
       }, 1000);
     }, 320);
@@ -2104,9 +2104,9 @@
     b += '<div class="dp-profile"><div class="pic">JC</div><div><div class="pn">Jordan Cole</div><div class="pr">BMW of West County · PocketRep</div></div></div>';
     b += '<div class="dp-card plan"><div class="ctitle">Your plan</div><div class="planname">PocketRep</div><div class="planmeta">Founding rate · $39/mo locked forever</div></div>';
     b += '<div class="dp-card"><div class="ctitle">Settings</div>' +
-      toggleRow("Auto-extract from voice notes", "Rex pulls contacts + follow-ups when you dictate", true) +
-      toggleRow("Morning Heat Sheet push", "7:30am, before your coffee", true) +
-      toggleRow("Weekly pipeline digest", "Mondays from Rex", true) + '</div>';
+      toggleRow("Follow-up reminders", "Keep promised callbacks visible", true) +
+      toggleRow("Heat Sheet focus", "Start with overdue and high-priority follow-up", true) +
+      toggleRow("Weekly recap", "Review activity and what needs attention next", true) + '</div>';
     b += '<button class="dp-btn-ghost" id="dpReplay">↺  Replay onboarding</button>';
     return { head: header("You", "Profile & plan"), body: b };
   }
@@ -2216,7 +2216,7 @@
       var cid = el.getAttribute("data-draft");
       var c = CONTACTS.find(function (x) { return x.id === cid; });
       closeSheet();
-      var reply = "Here's your follow-up for " + c.name.split(" ")[0] + ":<span class=\"quote\">\"" + draftFor(c) + "\"</span>Want me to queue it to send?";
+      var reply = "Here's your follow-up for " + c.name.split(" ")[0] + ":<span class=\"quote\">\"" + draftFor(c) + "\"</span>Want me to open it for review?";
       setTimeout(function () { askRex("Draft a text for " + c.name.split(" ")[0], reply); }, 280);
       return;
     }
