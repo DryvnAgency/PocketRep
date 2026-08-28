@@ -39,27 +39,50 @@ export default function RevenueTab() {
 
   return (
     <View style={st.content}>
-      <SectionHeader label="MONTHLY RECURRING REVENUE" />
-      <View style={st.mrrCard}>
-        <Text style={st.mrrValue}>{cents(stripe.mrr)}</Text>
-        <Text style={st.mrrLabel}>MRR</Text>
-      </View>
-
-      <SectionHeader label="REVENUE THIS MONTH" />
+      {/* Three separate numbers, by design — never combined into one figure. */}
+      <SectionHeader label="STRIPE ECONOMICS" />
       <KpiRow>
-        <KpiCard label="Net revenue" value={cents(stripe.revenueThisMonth)} sub="after Stripe fees" />
+        <KpiCard label="MRR" value={cents(stripe.mrr)} sub="from live Stripe prices" />
+        <KpiCard label="Cash collected MTD" value={cents(stripe.revenueThisMonth)} sub="net, after fees" />
+        <KpiCard label="Referral credit value" value={cents(stripe.referralCreditValue)} sub={`${stripe.appliedRewardCount} applied`} accent={colors.gold} />
       </KpiRow>
+
+      <SectionHeader label="REVENUE BREAKDOWN" />
+      <View style={st.breakdownCard}>
+        <View style={st.breakdownRow}>
+          <Text style={st.breakdownLabel}>Gross revenue MTD</Text>
+          <Text style={st.breakdownValue}>{cents(stripe.grossRevenueThisMonth)}</Text>
+        </View>
+        <View style={st.breakdownRow}>
+          <Text style={st.breakdownLabel}>Stripe fees</Text>
+          <Text style={[st.breakdownValue, { color: colors.red }]}>−{cents(stripe.stripeFeesThisMonth)}</Text>
+        </View>
+        <View style={[st.breakdownRow, st.breakdownTotal]}>
+          <Text style={st.breakdownLabel}>Net cash collected</Text>
+          <Text style={[st.breakdownValue, { color: colors.green }]}>{cents(stripe.revenueThisMonth)}</Text>
+        </View>
+        <View style={st.breakdownDivider} />
+        <View style={st.breakdownRow}>
+          <Text style={st.breakdownLabel}>Referral credits outstanding</Text>
+          <Text style={[st.breakdownValue, { color: colors.gold }]}>{cents(stripe.referralCreditValue)}</Text>
+        </View>
+        <Text style={st.breakdownNote}>
+          Shown separately — never subtracted from revenue. Credits are Stripe coupons applied to referrer/referred subscriptions, not cash paid out.
+        </Text>
+      </View>
 
       <SectionHeader label="SUBSCRIPTIONS" />
       <KpiRow>
         <KpiCard label="Active" value={String(stripe.activeSubscriptions)} accent={colors.green} />
         <KpiCard label="Trialing" value={String(stripe.trialingSubscriptions)} accent={colors.gold} />
         <KpiCard label="Past due" value={String(stripe.pastDueSubscriptions)} accent={stripe.pastDueSubscriptions > 0 ? colors.red : undefined} />
+        <KpiCard label="New paid this month" value={String(stripe.newPaidThisMonth)} />
       </KpiRow>
 
       <SectionHeader label="CHURN" />
       <KpiRow>
         <KpiCard label="Canceled this month" value={String(stripe.canceledThisMonth)} accent={stripe.canceledThisMonth > 0 ? colors.red : undefined} />
+        <KpiCard label="Pending credits" value={String(stripe.pendingRewardCount)} />
       </KpiRow>
 
       {total > 0 ? (
@@ -98,16 +121,6 @@ export default function RevenueTab() {
 
 const st = StyleSheet.create({
   content: { padding: 14 },
-  mrrCard: {
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.goldBorder,
-    borderRadius: radius.lg,
-    padding: 24,
-    alignItems: 'center',
-  },
-  mrrValue: { fontSize: 36, fontWeight: '900', color: colors.gold, fontVariant: ['tabular-nums'] },
-  mrrLabel: { fontSize: 11, fontWeight: '700', color: colors.grey, letterSpacing: 1.5, marginTop: 4 },
   errorCard: {
     padding: 16,
     backgroundColor: colors.surface2,
@@ -118,6 +131,26 @@ const st = StyleSheet.create({
   errorTitle: { fontSize: 14, fontWeight: '700', color: colors.red },
   errorBody: { fontSize: 12, color: colors.grey2, marginTop: 6 },
   hint: { fontSize: 11, color: colors.grey, marginTop: 8, fontStyle: 'italic' },
+
+  breakdownCard: {
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.md,
+    padding: 14,
+  },
+  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
+  breakdownTotal: {
+    borderTopWidth: 1,
+    borderTopColor: colors.ink4,
+    marginTop: 4,
+    paddingTop: 10,
+  },
+  breakdownDivider: { height: 1, backgroundColor: colors.ink4, marginVertical: 10 },
+  breakdownLabel: { fontSize: 13, color: colors.grey2 },
+  breakdownValue: { fontSize: 14, fontWeight: '700', color: colors.white, fontVariant: ['tabular-nums'] },
+  breakdownNote: { fontSize: 11, color: colors.grey, marginTop: 8, lineHeight: 16, fontStyle: 'italic' },
+
   barOuter: {
     flexDirection: 'row',
     height: 12,

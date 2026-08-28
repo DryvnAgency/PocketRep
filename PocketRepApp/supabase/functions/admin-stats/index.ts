@@ -53,8 +53,11 @@ async function listAllSubscriptions(status: string): Promise<any[]> {
   return all;
 }
 
-async function fetchStats() {
-  // Active subscriptions + MRR (paginated — handles >100 subs)
+async function fetchStats(admin: ReturnType<typeof createClient>) {
+  // Active subscriptions + MRR (paginated — handles >100 subs).
+  // MRR is derived entirely from each subscription's live Stripe price —
+  // never hard-coded — so founder pricing, discounts, grandfathered plans,
+  // and annual billing are all reflected automatically.
   const activeSubs = await listAllSubscriptions("active");
   const activeSubscriptions = activeSubs.length;
   let mrr = 0;
@@ -67,6 +70,9 @@ async function fetchStats() {
       else if (price.recurring?.interval === "year") mrr += Math.round(amount / 12);
     }
   }
+  // Average monthly price per active sub — used below to value referral
+  // credits without an extra round-trip to Stripe's coupon API.
+  const avgMonthlyPriceCents = activeSubscriptions > 0 ? Math.round(mrr / activeSubscriptions) : 0;
 
   // Trialing subscriptions
   const trialingSubs = await listAllSubscriptions("trialing");
@@ -93,8 +99,11 @@ async function fetchStats() {
     }
   }
 
-  // Revenue this month — use balance transactions (net after Stripe fees)
-  let revenueThisMonth = 0;
+  // Revenue this month — use balance transactions. Track BOTH gross (amount)
+  // and net (after Stripe fees) so the dashboard can show them as separate
+  // numbers — cash collected is net; gross/fees are shown as a breakdown.
+  let revenueThisMonth = 0;      // net — cash actually collected
+  let grossRevenueThisMonth = 0; // gross — before Stripe's processing fees
   {
     let hasMore = true;
     let startingAfter: string | null = null;
@@ -103,11 +112,44 @@ async function fetchStats() {
       const txns = await stripeGet(`/balance_transactions?${qs}`);
       for (const t of txns.data ?? []) {
         revenueThisMonth += t.net ?? 0;
+        grossRevenueThisMonth += t.amount ?? 0;
       }
       hasMore = txns.has_more;
       if (txns.data?.length) startingAfter = txns.data[txns.data.length - 1].id;
     }
   }
+  const stripeFeesThisMonth = Math.max(0, grossRevenueThisMonth - revenueThisMonth);
+
+  // New paid this month — subscriptions created this month that are currently active.
+  let newPaidThisMonth = 0;
+  for (const sub of activeSubs) {
+    if ((sub.created ?? 0) >= monthStartUnix) newPaidThisMonth++;
+  }
+
+  // Referral credit value — referral rewards are Stripe coupons (100% off,
+  // one billing cycle), NOT an internal credit balance. We value them at the
+  // average active subscription price rather than re-querying Stripe's coupon
+  // API, since that price already reflects real, current, per-customer rates.
+  // This is a SEPARATE number from MRR and from cash collected — never summed
+  // into either on the dashboard.
+  let appliedRewardCount = 0;
+  let pendingRewardCount = 0;
+  try {
+    const { count: applied } = await admin
+      .from("referral_rewards")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "applied");
+    const { count: pending } = await admin
+      .from("referral_rewards")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
+    appliedRewardCount = applied ?? 0;
+    pendingRewardCount = pending ?? 0;
+  } catch {
+    // referral_rewards read is best-effort — a failure here must never break
+    // the rest of the Stripe stats payload.
+  }
+  const referralCreditValue = appliedRewardCount * avgMonthlyPriceCents;
 
   return {
     activeSubscriptions,
@@ -116,6 +158,12 @@ async function fetchStats() {
     canceledThisMonth,
     mrr,
     revenueThisMonth,
+    grossRevenueThisMonth,
+    stripeFeesThisMonth,
+    referralCreditValue,
+    appliedRewardCount,
+    pendingRewardCount,
+    newPaidThisMonth,
   };
 }
 
@@ -143,7 +191,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const data = await fetchStats();
+    const data = await fetchStats(admin);
     cache = { data, ts: Date.now() };
     return json(data, 200, origin);
   } catch (e) {

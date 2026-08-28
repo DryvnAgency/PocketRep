@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, radius } from '@/constants/theme';
-import { KpiCard, KpiRow, SectionHeader, LoadingState, ErrorState } from './atoms';
-import { fetchOverviewStats, fetchStripeStats, cents, compact } from '@/lib/v2/admin/adminData';
-import type { OverviewStats, StripeStats } from '@/lib/v2/admin/adminTypes';
+import { KpiCard, KpiRow, SectionHeader, LoadingState, ErrorState, MilestoneBar, AlertsList } from './atoms';
+import {
+  fetchOverviewStats, fetchStripeStats, fetchReferralEconomics, fetchAiDetail,
+  cents, computeAlerts, nextMilestone,
+} from '@/lib/v2/admin/adminData';
+import type { OverviewStats, StripeStats, ReferralEconomics, FirstWeekUser } from '@/lib/v2/admin/adminTypes';
 
 export default function OverviewTab() {
   const [stats, setStats] = useState<OverviewStats | null>(null);
   const [stripe, setStripe] = useState<StripeStats | null>(null);
+  const [referralEcon, setReferralEcon] = useState<ReferralEconomics | null>(null);
+  const [firstWeek, setFirstWeek] = useState<FirstWeekUser[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
@@ -15,6 +20,8 @@ export default function OverviewTab() {
     Promise.all([
       fetchOverviewStats().then(setStats),
       fetchStripeStats().then(setStripe),
+      fetchReferralEconomics().then(setReferralEcon),
+      fetchAiDetail().then(d => setFirstWeek(d.firstWeekUsers)),
     ]).catch(e => setError(String(e)));
   };
 
@@ -23,40 +30,54 @@ export default function OverviewTab() {
   if (error && !stats) return <ErrorState message={error} onRetry={load} />;
   if (!stats) return <LoadingState />;
 
+  const referralPct = stats.totalUsers > 0 ? (stats.referralCustomers / stats.totalUsers) * 100 : 0;
+  const milestone = nextMilestone(stats.activeSubscriptions);
+  const alerts = referralEcon ? computeAlerts(stats, stripe ?? ({} as StripeStats), referralEcon, firstWeek) : [];
+
   return (
     <View style={st.content}>
-      <SectionHeader label="CUSTOMERS" />
-      <KpiRow>
-        <KpiCard label="Total customers" value={String(stats.totalUsers)} />
-        <KpiCard label="Active" value={String(stats.activeSubscriptions)} accent={colors.green} />
-        <KpiCard label="Trialing" value={String(stats.trialingUsers)} accent={colors.gold} />
-      </KpiRow>
+      {alerts.length > 0 ? (
+        <>
+          <SectionHeader label="ALERTS" count={alerts.length} />
+          <AlertsList alerts={alerts} />
+        </>
+      ) : null}
 
-      <SectionHeader label="REVENUE" />
+      <SectionHeader label="GROWTH" />
       <KpiRow>
+        <KpiCard label="Total reps" value={String(stats.totalUsers)} />
+        <KpiCard label="Paying reps" value={String(stats.activeSubscriptions)} accent={colors.green} />
         <KpiCard label="MRR" value={stripe ? cents(stripe.mrr) : '…'} />
-        <KpiCard label="Revenue MTD" value={stripe ? cents(stripe.revenueThisMonth) : '…'} />
-        <KpiCard label="Past due" value={stripe ? String(stripe.pastDueSubscriptions) : '…'} accent={stripe?.pastDueSubscriptions ? colors.red : undefined} />
+        <KpiCard label="New paid this month" value={String(stats.newPaidThisMonth)} accent={colors.gold} />
       </KpiRow>
-      {stripe?.error ? <Text style={st.hint}>Stripe: {stripe.error}</Text> : null}
 
-      <SectionHeader label="OPERATIONS" />
+      <SectionHeader label="REFERRALS" />
       <KpiRow>
+        <KpiCard label="Referral customers" value={String(stats.referralCustomers)} />
+        <KpiCard label="Referral %" value={`${referralPct.toFixed(1)}%`} />
         <KpiCard label="AI cost (all time)" value={cents(stats.totalAiCost)} />
         <KpiCard label="Open tickets" value={String(stats.openTickets)} accent={stats.openTickets > 0 ? colors.orange : undefined} />
-        <KpiCard label="Referrals" value={String(stats.totalReferrals)} sub={`${stats.rewardedReferrals} rewarded`} />
       </KpiRow>
+
+      {milestone ? (
+        <>
+          <SectionHeader label="NEXT MILESTONE" />
+          <MilestoneBar current={stats.activeSubscriptions} target={milestone.target} label="Paying reps" />
+        </>
+      ) : null}
+
+      {stripe?.error ? <Text style={st.hint}>Stripe: {stripe.error}</Text> : null}
 
       {stripe ? (
         <>
           <SectionHeader label="AI GROSS MARGIN" />
           <View style={st.marginCard}>
             <View style={st.marginRow}>
-              <Text style={st.marginLabel}>Revenue MTD</Text>
+              <Text style={st.marginLabel}>Cash collected MTD</Text>
               <Text style={st.marginValue}>{cents(stripe.revenueThisMonth)}</Text>
             </View>
             <View style={st.marginRow}>
-              <Text style={st.marginLabel}>AI cost MTD</Text>
+              <Text style={st.marginLabel}>AI cost (all time)</Text>
               <Text style={[st.marginValue, { color: colors.red }]}>−{cents(stats.totalAiCost)}</Text>
             </View>
             <View style={[st.marginRow, st.marginTotal]}>

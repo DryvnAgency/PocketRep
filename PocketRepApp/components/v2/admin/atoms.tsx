@@ -1,8 +1,9 @@
 // Owner Control Center — shared UI atoms
 // KPI cards, status pills, section headers, mini tables.
 
-import { View, Text, Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, type ViewStyle } from 'react-native';
 import { colors, radius, spacing } from '@/constants/theme';
+import type { Alert, DateRange, DateRangeKey } from '@/lib/v2/admin/adminTypes';
 
 // ── KPI Card ────────────────────────────────────────────────────────────────
 
@@ -151,6 +152,84 @@ export function EmptyState({
   );
 }
 
+// ── Date Range Selector ──────────────────────────────────────────────────────
+
+export function DateRangeSelector({
+  ranges,
+  selected,
+  onSelect,
+}: {
+  ranges: DateRange[];
+  selected: DateRangeKey;
+  onSelect: (r: DateRange) => void;
+}) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={a.rangeScroll}>
+      {ranges.map(r => {
+        const active = r.key === selected;
+        return (
+          <Pressable
+            key={r.key}
+            onPress={() => onSelect(r)}
+            style={[a.rangePill, active && a.rangePillActive]}
+          >
+            <Text style={[a.rangePillText, active && a.rangePillTextActive]}>{r.label}</Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+// ── Milestone Bar ────────────────────────────────────────────────────────────
+
+export function MilestoneBar({
+  current,
+  target,
+  label,
+}: {
+  current: number;
+  target: number;
+  label: string;
+}) {
+  const pct = Math.min(1, target > 0 ? current / target : 0);
+  return (
+    <View style={a.milestoneWrap}>
+      <View style={a.milestoneHeader}>
+        <Text style={a.milestoneLabel}>{label}</Text>
+        <Text style={a.milestoneCount}>{current} / {target}</Text>
+      </View>
+      <View style={a.milestoneTrack}>
+        <View style={[a.milestoneFill, { width: `${pct * 100}%` }]} />
+      </View>
+      <Text style={a.milestonePct}>{Math.round(pct * 100)}% to next milestone</Text>
+    </View>
+  );
+}
+
+// ── Alerts List ──────────────────────────────────────────────────────────────
+
+export function AlertsList({ alerts }: { alerts: Alert[] }) {
+  if (alerts.length === 0) return null;
+  return (
+    <View style={{ gap: 6 }}>
+      {alerts.map((alert, i) => {
+        const color = alert.level === 'warning' ? colors.orange : alert.level === 'success' ? colors.green : colors.gold;
+        const icon = alert.level === 'warning' ? '⚠️' : alert.level === 'success' ? '✅' : 'ℹ️';
+        return (
+          <View key={i} style={[a.alertRow, { borderLeftColor: color }]}>
+            <Text style={a.alertIcon}>{icon}</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[a.alertCategory, { color }]}>{alert.category}</Text>
+              <Text style={a.alertMessage}>{alert.message}</Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // ── Health Indicator ────────────────────────────────────────────────────────
 
 export function HealthDot({ status }: { status: 'ok' | 'warn' | 'error' | 'unknown' }) {
@@ -266,4 +345,54 @@ const a = StyleSheet.create({
   },
 
   healthDot: { fontSize: 12 },
+
+  rangeScroll: { flexGrow: 0, marginBottom: 4 },
+  rangePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    marginRight: 6,
+  },
+  rangePillActive: {
+    backgroundColor: colors.goldBg,
+    borderColor: colors.goldBorderStrong,
+  },
+  rangePillText: { fontSize: 11, fontWeight: '700', color: colors.grey2 },
+  rangePillTextActive: { color: colors.gold },
+
+  milestoneWrap: {
+    padding: 14,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.md,
+  },
+  milestoneHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  milestoneLabel: { fontSize: 12, fontWeight: '700', color: colors.white },
+  milestoneCount: { fontSize: 12, fontWeight: '700', color: colors.gold, fontVariant: ['tabular-nums'] },
+  milestoneTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.ink4,
+    overflow: 'hidden',
+  },
+  milestoneFill: { height: 8, backgroundColor: colors.gold, borderRadius: 4 },
+  milestonePct: { fontSize: 10, color: colors.grey2, marginTop: 6 },
+
+  alertRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderLeftWidth: 3,
+    borderRadius: radius.md,
+  },
+  alertIcon: { fontSize: 14 },
+  alertCategory: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
+  alertMessage: { fontSize: 12, color: colors.grey3, marginTop: 2, lineHeight: 17 },
 });

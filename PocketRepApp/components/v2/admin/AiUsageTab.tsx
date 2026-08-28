@@ -2,16 +2,30 @@ import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '@/constants/theme';
 import { KpiCard, KpiRow, SectionHeader, ListRow, LoadingState, ErrorState, EmptyState } from './atoms';
-import { fetchAiUsage, cents, compact } from '@/lib/v2/admin/adminData';
-import type { AiUsageRow } from '@/lib/v2/admin/adminTypes';
+import { fetchAiUsage, fetchAiDetail, cents, compact, firstWeekSeverity } from '@/lib/v2/admin/adminData';
+import { FIRST_WEEK_CEILING_CENTS } from '@/lib/v2/admin/adminTypes';
+import type { AiUsageRow, AiModelBreakdown, FirstWeekUser } from '@/lib/v2/admin/adminTypes';
+
+const SEVERITY_COLOR: Record<string, string> = {
+  green: colors.green,
+  yellow: colors.gold,
+  orange: colors.orange,
+  red: colors.red,
+  deepRed: colors.red,
+};
 
 export default function AiUsageTab() {
   const [rows, setRows] = useState<AiUsageRow[] | null>(null);
+  const [byModel, setByModel] = useState<AiModelBreakdown[]>([]);
+  const [firstWeek, setFirstWeek] = useState<FirstWeekUser[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
     setError(null);
-    fetchAiUsage().then(setRows).catch(e => setError(String(e)));
+    Promise.all([
+      fetchAiUsage().then(setRows),
+      fetchAiDetail().then(d => { setByModel(d.byModel); setFirstWeek(d.firstWeekUsers); }),
+    ]).catch(e => setError(String(e)));
   };
 
   useEffect(() => { load(); }, []);
@@ -53,6 +67,44 @@ export default function AiUsageTab() {
         <KpiCard label="Users with usage" value={String(rows.length)} />
       </KpiRow>
 
+      {byModel.length > 0 ? (
+        <>
+          <SectionHeader label="BY MODEL" count={byModel.length} />
+          {byModel.map(m => (
+            <ListRow key={m.model}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={st.name} numberOfLines={1}>{m.model}</Text>
+                <Text style={st.sub}>
+                  {compact(m.totalRequests)} requests · {compact(m.totalInput)} in / {compact(m.totalOutput)} out
+                </Text>
+              </View>
+              <Text style={st.cost}>{cents(m.totalCost)}</Text>
+            </ListRow>
+          ))}
+        </>
+      ) : null}
+
+      <SectionHeader label="FIRST-WEEK AI SAFETY" count={firstWeek.length} />
+      <Text style={st.note}>New users, spend since signup. Ceiling: {cents(FIRST_WEEK_CEILING_CENTS)}.</Text>
+      {firstWeek.length === 0 ? (
+        <Text style={st.note}>No users in their first week right now.</Text>
+      ) : (
+        firstWeek.map(u => {
+          const sev = firstWeekSeverity(u.costCents);
+          const color = SEVERITY_COLOR[sev];
+          return (
+            <ListRow key={u.userId}>
+              <View style={[st.severityDot, { backgroundColor: color }]} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={st.name} numberOfLines={1}>{u.fullName || u.email}</Text>
+                <Text style={st.sub}>{u.requestCount} requests since {new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</Text>
+              </View>
+              <Text style={[st.cost, { color }]}>{cents(u.costCents)}</Text>
+            </ListRow>
+          );
+        })
+      )}
+
       <SectionHeader label="BY USER" count={rows.length} />
       {rows.map(r => (
         <ListRow key={r.user_id}>
@@ -76,4 +128,6 @@ const st = StyleSheet.create({
   name: { fontSize: 14, fontWeight: '600', color: colors.white, letterSpacing: -0.2 },
   sub: { fontSize: 11, color: colors.grey2, marginTop: 2 },
   cost: { fontSize: 14, fontWeight: '800', color: colors.gold },
+  note: { fontSize: 11, color: colors.grey, marginBottom: 6, fontStyle: 'italic' },
+  severityDot: { width: 8, height: 8, borderRadius: 4 },
 });
