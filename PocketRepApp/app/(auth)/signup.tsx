@@ -2,18 +2,17 @@ import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ScrollView,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 import type { Plan, IndustryKey } from '@/lib/types';
 import { INDUSTRY_CONFIG, INDUSTRY_KEYS } from '@/lib/industryConfig';
 
-// Supabase requires email — derived from username, never shown to user
-function usernameToEmail(username: string) {
-  return `${username.trim().toLowerCase()}@pocketrep.pro`;
-}
+// The one live, paid checkout — same Stripe Payment Link the marketing site
+// uses. There is currently only this single purchasable product; all three
+// plan cards below route here until/unless separate prices exist for them.
+const CHECKOUT_URL = 'https://buy.stripe.com/cNi4gAbMn4kg9Ax5AucbC06';
 
 const PLANS: { id: Plan; name: string; price: string; features: string[] }[] = [
   {
@@ -56,62 +55,41 @@ export default function SignupScreen() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [industry, setIndustry] = useState<IndustryKey>('auto');
   const [name, setName] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [plan, setPlan] = useState<Plan>('elite');
   const [loading, setLoading] = useState(false);
 
+  // Hands off to the same Stripe-paid checkout every PocketRep customer goes
+  // through — this screen never creates a Supabase account or grants access
+  // itself. Payment happens on Stripe's hosted page; thankyou.html then
+  // completes account provisioning (checkout-account edge function) and
+  // emails a magic link back in. Previously this called supabase.auth.signUp()
+  // directly with the picked plan in metadata — a fully working, any-tier
+  // account for zero payment, with no gate anywhere in the native app to
+  // catch it after the fact.
   async function handleSignup() {
-    if (!name || !username || !password) {
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+    if (!trimmedName || !trimmedEmail) {
       Alert.alert('Fill in all fields');
       return;
     }
-    if (username.trim().length < 3) {
-      Alert.alert('Username must be at least 3 characters');
-      return;
-    }
-    if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) {
-      Alert.alert('Username can only contain letters, numbers, and underscores');
-      return;
-    }
-    if (password.length < 8) {
-      Alert.alert('Password must be at least 8 characters');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      Alert.alert('Enter a valid email');
       return;
     }
 
     setLoading(true);
-    const email = usernameToEmail(username);
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: name, plan, username: username.trim(), industry } },
-    });
-
-    if (error) {
+    const clientRef = `${trimmedName.replace(/\s+/g, '_')}_${industry}`;
+    const url = `${CHECKOUT_URL}?prefilled_email=${encodeURIComponent(trimmedEmail)}&client_reference_id=${encodeURIComponent(clientRef)}`;
+    try {
+      await Linking.openURL(url);
+      router.back(); // back to login — the rep returns here via the emailed magic link
+    } catch {
+      Alert.alert("Couldn't open checkout", 'Please try again.');
+    } finally {
       setLoading(false);
-      if (error.message.toLowerCase().includes('already')) {
-        Alert.alert('Username taken', 'That username is already in use. Try a different one.');
-      } else {
-        Alert.alert('Signup failed', error.message);
-      }
-      return;
     }
-
-    if (data.user) {
-      // `plan` is intentionally NOT written here — it's a server-managed billing
-      // column. handle_new_user() sets it from the signUp() metadata above
-      // (options.data.plan), and the profile-billing lock blocks client writes
-      // to it. Only the user's own display/profile fields are written here.
-      await supabase.from('profiles').update({
-        full_name: name,
-        industry,
-        username: username.trim(),
-      }).eq('id', data.user.id);
-    }
-
-    setLoading(false);
-    // Auth state change in _layout.tsx will redirect to (tabs)
   }
 
   // ── Step 1: Industry selection ────────────────────────────────────────────
@@ -225,7 +203,7 @@ export default function SignupScreen() {
         </TouchableOpacity>
 
         <Text style={s.headline}>Almost there.</Text>
-        <Text style={s.sub}>Create your account to start your 7-day free trial.</Text>
+        <Text style={s.sub}>We'll take you to secure checkout to start your 7-day free trial. You'll set your password after.</Text>
 
         {/* Industry + plan summary */}
         <View style={s.summaryRow}>
@@ -250,33 +228,23 @@ export default function SignupScreen() {
             autoComplete="name"
           />
 
-          <Text style={s.label}>Username</Text>
+          <Text style={s.label}>Email</Text>
           <TextInput
             style={s.input}
-            value={username}
-            onChangeText={setUsername}
-            placeholder="marcuswebb"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="marcus@yourdealership.com"
             placeholderTextColor={colors.grey}
             autoCapitalize="none"
             autoCorrect={false}
-            autoComplete="username-new"
-          />
-
-          <Text style={s.label}>Password</Text>
-          <TextInput
-            style={s.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="8+ characters"
-            placeholderTextColor={colors.grey}
-            secureTextEntry
-            autoComplete="new-password"
+            keyboardType="email-address"
+            autoComplete="email"
           />
 
           <TouchableOpacity style={s.btn} onPress={handleSignup} disabled={loading} activeOpacity={0.85}>
             {loading
               ? <ActivityIndicator color={colors.ink} />
-              : <Text style={s.btnText}>Start 7-Day Free Trial →</Text>
+              : <Text style={s.btnText}>Continue to Checkout →</Text>
             }
           </TouchableOpacity>
 
