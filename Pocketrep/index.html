@@ -2448,6 +2448,19 @@ select.sf-input { appearance: none; cursor: pointer; }
 (function () {
   "use strict";
 
+  // Referral attribution: a referred visitor arrives via ?ref=PR-XXXXXXXXXX
+  // (the app's Refer a Rep share link points HERE, at the marketing site, not
+  // app.pocketrep.pro — a non-customer needs this checkout flow, not a login
+  // screen). Capture once on load; validated against the exact format
+  // checkout-account's verifySession() requires, so a malformed or unrelated
+  // query value never gets forwarded to Stripe as client_reference_id.
+  var REFERRAL_CODE = (function () {
+    try {
+      var v = new URLSearchParams(window.location.search).get("ref");
+      return v && /^PR-[A-Z0-9]{10}$/.test(v) ? v : null;
+    } catch (ex) { return null; }
+  })();
+
   // ── Stripe checkout links ────────────────────────────────────────────────
   // ELITE is the live individual $39 founding checkout. TEAMS stays a placeholder
   // on purpose: the Team plan is "coming soon" and non-purchasing (waitlist only),
@@ -2534,9 +2547,14 @@ select.sf-input { appearance: none; cursor: pointer; }
       return;
     }
 
-    // Pre-fill email so the customer doesn't type it twice on Stripe.
+    // Pre-fill email so the customer doesn't type it twice on Stripe. A valid
+    // referral code takes priority as client_reference_id — that's the only
+    // value checkout-account's verifySession() recognizes as a referral, and
+    // without it here the referrer/referred reward never gets created no
+    // matter what ProfileTab or the app side of the flow do correctly.
+    var clientRef = REFERRAL_CODE || (name.replace(/\s+/g, "_") + "_" + industry);
     var url = stripeLink + "?prefilled_email=" + encodeURIComponent(email)
-            + "&client_reference_id=" + encodeURIComponent(name.replace(/\s+/g, "_") + "_" + industry);
+            + "&client_reference_id=" + encodeURIComponent(clientRef);
     window.location.href = url;
   });
 })();

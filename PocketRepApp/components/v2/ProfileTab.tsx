@@ -184,8 +184,11 @@ export default function ProfileTab({
   const dealership = getRepSetting('dealership');
   const title = getRepSetting('title');
   const heroSub = [dealership, title].filter(Boolean).join(' · ') || 'Tap to set up your profile';
+  // Points at the marketing site (checkout lives there), not app.pocketrep.pro —
+  // a referred visitor isn't a customer yet, so a link to the app subdomain
+  // would only ever show them a login screen with no way to sign up.
   const referLink = referralCode
-    ? `https://app.pocketrep.pro/?ref=${encodeURIComponent(referralCode)}`
+    ? `https://pocketrep.pro/?ref=${encodeURIComponent(referralCode)}`
     : null;
 
   const shareReferral = async () => {

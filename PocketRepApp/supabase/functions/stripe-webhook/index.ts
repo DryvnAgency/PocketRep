@@ -46,6 +46,12 @@ async function profileIdForCustomer(admin: any, customerId: string) {
   return null;
 }
 
+// Lifetime cap on stacked "give a month, get a month" rewards per recipient.
+// Without this, a referrer with enough referrals could accumulate unbounded
+// free months — unbounded revenue leakage, not a feature. 24 months (2 years)
+// caps the exposure per account while still rewarding heavy referrers.
+const REFERRAL_REWARD_CAP_MONTHS = 24;
+
 async function reward(admin: any, referral: any) {
   if (!referral?.id || !referral.referrer_user_id || !referral.referred_user_id || referral.referrer_user_id === referral.referred_user_id || referral.status === "rewarded") return;
   const recipients = [referral.referrer_user_id, referral.referred_user_id];
@@ -55,6 +61,11 @@ async function reward(admin: any, referral: any) {
     if (!p?.stripe_customer_id || !["active", "trialing"].includes(p.subscription_status ?? "")) continue;
     const { data: existing } = await admin.from("referral_rewards").select("id,status,stripe_credit_id").eq("referral_id", referral.id).eq("recipient_user_id", recipient).eq("reward_type", "one_month_free").maybeSingle();
     if (existing?.status === "applied") { applied++; continue; }
+    if (!existing) {
+      const { data: totalRows } = await admin.from("referral_rewards").select("reward_months").eq("recipient_user_id", recipient).eq("status", "applied");
+      const totalApplied = (totalRows ?? []).reduce((sum: number, r: any) => sum + Number(r.reward_months ?? 0), 0);
+      if (totalApplied >= REFERRAL_REWARD_CAP_MONTHS) continue; // lifetime cap reached for this account
+    }
     const subs = await stripe(`subscriptions?customer=${encodeURIComponent(p.stripe_customer_id)}&status=all&limit=10`, "GET");
     const sub = (subs.data ?? []).find((s: any) => ["active", "trialing"].includes(s.status));
     if (!sub?.id) continue;
