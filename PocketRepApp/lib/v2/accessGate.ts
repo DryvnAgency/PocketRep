@@ -2,7 +2,8 @@
 // A newly provisioned checkout can be pending briefly while Stripe/webhook
 // synchronization completes. Pending access is intentionally time-limited.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 
 export type LockReason = 'trial_expired' | 'subscription_canceled' | 'payment_failed' | 'no_subscription' | 'invalid_account' | 'entitlement_unverified';
@@ -52,21 +53,27 @@ export function decideAccess(input: {
   return { status: 'locked', reason: 'no_subscription' };
 }
 
+// Re-check cadence for the periodic fallback below. Independent of the
+// visibility/foreground listener — catches a `pending` window expiring (or a
+// webhook resolving a subscription) while the tab stays open and focused.
+const RECHECK_INTERVAL_MS = 60_000;
+
 export function useAccessGate(): AccessState {
   const [state, setState] = useState<AccessState>({ status: 'loading' });
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
+    cancelledRef.current = false;
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { if (!cancelled) setState({ status: 'locked', reason: 'invalid_account' }); return; }
+      if (!user) { if (!cancelledRef.current) setState({ status: 'locked', reason: 'invalid_account' }); return; }
 
       const { data, error } = await supabase
         .from('profiles')
         .select('subscription_status, trial_ends_at, entitlement_status, entitlement_pending_until')
         .eq('id', user.id)
         .maybeSingle();
-      if (cancelled) return;
+      if (cancelledRef.current) return;
       if (error || !data) { setState({ status: 'locked', reason: 'no_subscription' }); return; }
 
       setState(decideAccess({
@@ -76,8 +83,31 @@ export function useAccessGate(): AccessState {
         pendingUntil: data.entitlement_pending_until,
       }));
     };
-    load().catch(() => { if (!cancelled) setState({ status: 'locked', reason: 'no_subscription' }); });
-    return () => { cancelled = true; };
+    const safeLoad = () => load().catch(() => { if (!cancelledRef.current) setState({ status: 'locked', reason: 'no_subscription' }); });
+
+    safeLoad();
+
+    // Previously this ran once on mount and never again — a subscription
+    // restored or expired while the tab stayed open left the gate stale
+    // until a full page reload. Re-check when the app/tab regains focus,
+    // and on a fixed interval as a fallback for a `pending` window that
+    // expires without any focus change at all.
+    let removeVisibility: (() => void) | undefined;
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const onVisible = () => { if (document.visibilityState === 'visible') safeLoad(); };
+      document.addEventListener('visibilitychange', onVisible);
+      removeVisibility = () => document.removeEventListener('visibilitychange', onVisible);
+    } else {
+      const sub = AppState.addEventListener('change', (next) => { if (next === 'active') safeLoad(); });
+      removeVisibility = () => sub.remove();
+    }
+    const interval = setInterval(safeLoad, RECHECK_INTERVAL_MS);
+
+    return () => {
+      cancelledRef.current = true;
+      removeVisibility?.();
+      clearInterval(interval);
+    };
   }, []);
 
   return state;
