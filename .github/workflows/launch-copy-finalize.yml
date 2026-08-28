@@ -1,0 +1,575 @@
+name: Finalize launch funnel copy
+
+on:
+  push:
+    branches:
+      - claude/quirky-babbage-f0s519
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/quirky-babbage-f0s519
+          fetch-depth: 0
+
+      - name: Apply audited launch copy
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          root = Path('Pocketrep')
+          index_path = root / 'index.html'
+          thankyou_path = root / 'thankyou.html'
+          cancel_path = root / 'cancel.html'
+          privacy_path = root / 'privacy.html'
+          terms_path = root / 'terms.html'
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, found {count}')
+              return text.replace(old, new, 1)
+
+          def replace_section(text, start_marker, end_marker, replacement, label):
+              start = text.find(start_marker)
+              if start < 0:
+                  raise SystemExit(f'{label}: start marker not found')
+              end = text.find(end_marker, start)
+              if end < 0:
+                  raise SystemExit(f'{label}: end marker not found')
+              return text[:start] + replacement.rstrip() + '\n\n' + text[end:]
+
+          # ------------------------------------------------------------------
+          # LANDING PAGE — V1-accurate promise, automotive-only funnel.
+          # ------------------------------------------------------------------
+          s = index_path.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  "PocketRep helps car salespeople automate follow-up, ask for referrals, and stay top of mind with every customer they've sold. Your book, in your pocket.",
+                  "PocketRep helps car salespeople work their book, know who needs attention, and draft personalized follow-up they review and send themselves. Your book, in your pocket.",
+                  'meta description'
+              ),
+              (
+                  "Automate your follow-up, ask for referrals, and stay top of mind with every customer you've sold. Your book follows you, not the dealership.",
+                  "Work your book, stay consistent with follow-up, and know who needs attention next. Rex helps draft the message; you review and send it yourself.",
+                  'og description'
+              ),
+              (
+                  "Automate your follow-up, ask for referrals, and stay top of mind with every customer you've sold.",
+                  "Work your book, stay consistent with follow-up, and know who needs attention next.",
+                  'twitter description'
+              ),
+              (
+                  '"operatingSystem":"iOS, Android, Web"',
+                  '"operatingSystem":"Web"',
+                  'structured operating system'
+              ),
+              (
+                  "AI-powered follow-up app and personal CRM for car salespeople. Ranks customers by who is most likely to buy next, drafts follow-up texts in your voice, reminds you to ask for referrals, and keeps you top of mind with everyone you've sold. Your book of customers follows you between dealerships.",
+                  "AI-powered follow-up app and personal CRM for car salespeople. Helps reps organize their book, surface customers who need attention, and draft personalized follow-up from notes and context. Reps review and send every message themselves.",
+                  'structured app description'
+              ),
+              (
+                  "Founding price, locked for life for the first 500 reps. Standard price 69.00 USD per month. Includes a 7-day free trial.",
+                  "Founding price is 39.00 USD per month for the first 500 paying reps and stays with an active founding subscription. New-customer pricing is planned at 54.00 USD for reps 501 through 1000 and 69.00 USD thereafter. Includes a 7-day free trial.",
+                  'structured offer description'
+              ),
+              (
+                  "PocketRep is the follow-up app for car salespeople. It ranks the customers you've sold by who is ready to buy next, drafts your follow-ups in your voice, reminds you to ask for referrals, and keeps you top of mind with your whole book. It works on iPhone, Android, and the web.",
+                  "PocketRep is the follow-up app for car salespeople. It helps organize your book, surfaces who needs attention, and lets Rex draft personalized follow-up from your notes and context. You review and send every message yourself from your phone or browser.",
+                  'structured FAQ what is PocketRep'
+              ),
+              (
+                  "PocketRep is 39 USD per month as a founding price locked for life for the first 500 reps, then 69 USD per month. Every feature is included and there is a 7-day free trial. The Team plan is 49 USD per seat per month plus a one-time setup fee.",
+                  "PocketRep is 39 USD per month for the first 500 paying reps, 54 USD per month for new customers 501 through 1000, and 69 USD per month thereafter. The 39 USD founding rate stays with an active founding subscription. The individual app includes a 7-day free trial. PocketRep Team is not for sale yet.",
+                  'structured FAQ pricing'
+              ),
+              (
+                  "Yes. Your book of customers is yours and goes where you go. If you switch stores, your contacts, notes, and history come with you.",
+                  "Your PocketRep workspace stays with your account, including the contacts, notes, and history you are authorized to keep. You are responsible for following your employer's policies and applicable law when storing, moving, or contacting customer data.",
+                  'structured FAQ data portability'
+              ),
+              (
+                  "Automated follow-up, referral asks, and top-of-mind outreach to every customer you've ever sold. Rex tells you who to text and writes it in your voice. You just tap send.",
+                  "PocketRep turns the book you've already built into a daily follow-up system. Rex shows you who needs attention and drafts the next move from your notes and context. You review it. You send it. You stay in control.",
+                  'hero lead'
+              ),
+              (
+                  "Founding price $39/mo, locked for life. First 500 reps only.",
+                  "$39/mo founding rate for the first 500 paying reps. Keep that rate while your founding subscription stays active.",
+                  'hero founding line'
+              ),
+              (
+                  "<span><span class=\"ck\">✓</span> iPhone · Android · Web</span>",
+                  "<span><span class=\"ck\">✓</span> Built for phone + web</span>",
+                  'hero device claim'
+              ),
+              (
+                  "PocketRep makes sure you never forget again.",
+                  "PocketRep gives those follow-ups a place to live so they don't depend on memory.",
+                  'problem absolute claim'
+              ),
+              (
+                  "Ranked by lease windows, mileage, and timing, not a random reminder list.",
+                  "Ranked by the timing and follow-up signals already in your book, not a random reminder list.",
+                  'demo heat explanation'
+              ),
+              (
+                  "7 days free. One repeat or referral deal pays for the whole year.",
+                  "7 days free. One repeat or referral deal can pay for the whole year.",
+                  'demo ROI line'
+              ),
+              (
+                  "<p class=\"value-closer reveal\"><span class=\"grad-text\">One repeat or one referral deal pays for the whole year.</span></p>",
+                  "<p class=\"value-closer reveal\"><span class=\"grad-text\">One repeat or referral deal can pay for the whole year.</span></p>",
+                  'value ROI line'
+              ),
+              (
+                  "<p>Rex writes follow-ups in English and real Mexican slang, not stiff textbook translation.</p>",
+                  "<p>Rex can write follow-ups in English and natural Mexican Spanish, not stiff textbook translation.</p>",
+                  'bilingual claim'
+              ),
+              (
+                  "<p class=\"cta-sub\">$39/mo founding, locked for life. First 500 reps only.</p>",
+                  "<p class=\"cta-sub\">$39/mo founding rate for the first 500 paying reps. Keep it while your founding subscription stays active.</p>",
+                  'final CTA price line'
+              ),
+          ]
+          for old, new, label in replacements:
+              s = replace_once(s, old, new, label)
+
+          value_section = '''<!-- ============ HOW IT PAYS FOR ITSELF ============ -->
+          <section class="section-sm wrap" id="value">
+            <div class="head center">
+              <span class="eyebrow center reveal">How it earns its spot</span>
+              <h2 class="h2 reveal d1">Work the book you already built. <span class="grad-text">Every day.</span></h2>
+            </div>
+            <div class="value-grid">
+              <div class="value-item reveal"><div class="vnum">1</div><p>Turns your book into a daily follow-up plan so the right customers don't disappear into your phone.</p></div>
+              <div class="value-item reveal d1"><div class="vnum">2</div><p>Shows you who needs attention and gives you a reason to reach out, not another random reminder.</p></div>
+              <div class="value-item reveal d2"><div class="vnum">3</div><p>Uses your notes and customer context so Rex can draft a follow-up that actually fits the conversation.</p></div>
+              <div class="value-item reveal"><div class="vnum">4</div><p>Keeps past customers organized and in play without relying on your memory.</p></div>
+              <div class="value-item reveal d1"><div class="vnum">5</div><p>Logs sold deals and keeps your units, gross, and commission in view.</p></div>
+              <div class="value-item reveal d2"><div class="vnum">6</div><p>Builds personalized outreach for multiple customers while you stay in control of every send.</p></div>
+            </div>
+            <p class="value-closer reveal"><span class="grad-text">One repeat or referral deal can pay for the whole year.</span></p>
+          </section>'''
+          s = replace_section(s,
+              '<!-- ============ HOW IT PAYS FOR ITSELF ============ -->',
+              '<!-- ============ FEATURES ============ -->',
+              value_section,
+              'value section')
+
+          features_section = '''<!-- ============ FEATURES ============ -->
+          <section class="section-sm wrap" id="features">
+            <div class="head center">
+              <span class="eyebrow center reveal">What ships in V1</span>
+              <h2 class="h2 reveal d1">A daily sales execution system <span class="grad-text">for your book.</span></h2>
+              <p class="lead reveal d2">PocketRep doesn't replace the relationship. It helps you remember the context, choose the next move, and follow through.</p>
+            </div>
+            <div class="fgrid">
+              <div class="fcard reveal" role="group" aria-label="PocketRep Heat Sheet prioritizing contacts that need attention">
+                <div class="ficon" aria-hidden="true">🔥</div><div class="fname">Heat Sheet</div>
+                <h3>Open the app. Know where to start.</h3>
+                <p>HOT, WARM, and WATCH groupings combine your contact timing and follow-up signals with days-since-contact and overdue status so you can work the right list first.</p>
+              </div>
+              <div class="fcard reveal d1" role="group" aria-label="Rex coaching and supported Hey Rex actions">
+                <div class="ficon" aria-hidden="true">🎯</div><div class="fname">Rex · AI Coach</div>
+                <h3>Give Rex the situation. Get the next move.</h3>
+                <p>Ask for a follow-up, rebuttal, call angle, or daily priority. Supported Hey Rex actions show a confirmation step before PocketRep changes data or launches outreach.</p>
+              </div>
+              <div class="fcard reveal d2" role="group" aria-label="PocketRep contacts with notes, history, language preference, and deal context">
+                <div class="ficon" aria-hidden="true">📓</div><div class="fname">Your Book</div>
+                <h3>Keep the customer context in one place.</h3>
+                <p>Searchable contacts, tags, notes, language preference, milestones, and deal history give you the context you need before the next call or text.</p>
+              </div>
+              <div class="fcard reveal d2" role="group" aria-label="Deal Logger and Metrics tracking units, gross, and commission">
+                <div class="ficon" aria-hidden="true">📊</div><div class="fname">Deal Logger + Metrics</div>
+                <h3>Log the sale. Keep score.</h3>
+                <p>Log deals quickly, preview commission from your configured pay plan, and track units, gross, and commission over time.</p>
+              </div>
+              <div class="fcard reveal" role="group" aria-label="Smart Blast drafts personalized messages for the rep to review and send individually">
+                <div class="ficon" aria-hidden="true">📨</div><div class="fname">Smart Blast</div>
+                <h3>Personalized outreach without surrendering the send button.</h3>
+                <p>Rex drafts a different message for each selected customer. You review it and send each message yourself, so the relationship stays yours.</p>
+              </div>
+              <div class="fcard reveal d1" role="group" aria-label="Sequences and nurture drafts for planned follow-up">
+                <div class="ficon" aria-hidden="true">🌱</div><div class="fname">Sequences + Nurture</div>
+                <h3>Give follow-up a system.</h3>
+                <p>Build planned follow-up and review queued nurture drafts instead of trusting yourself to remember every future touch.</p>
+              </div>
+            </div>
+            <details class="more-features">
+              <summary>See 6 more V1 tools</summary>
+              <div class="fgrid">
+                <div class="fcard reveal"><div class="ficon" aria-hidden="true">✍️</div><div class="fname">Rex Reads Your Notes</div><h3>Give Rex the context that matters.</h3><p>Add the details you don't want to forget. Rex can use that context when drafting future follow-up.</p></div>
+                <div class="fcard reveal d1"><div class="ficon" aria-hidden="true">🧭</div><div class="fname">Game Plan</div><h3>Know what to do next.</h3><p>Open a customer and get a suggested move, timing, and message angle based on the context in PocketRep.</p></div>
+                <div class="fcard reveal"><div class="ficon" aria-hidden="true">🚦</div><div class="fname">Stalled Lead Triage</div><h3>Separate dead weight from real opportunity.</h3><p>Use Rex to sort stale leads into who to push, who to fence for later, and who to stop spending time on.</p></div>
+                <div class="fcard reveal d1"><div class="ficon" aria-hidden="true">🛡️</div><div class="fname">Objection Prep</div><h3>Walk in with another angle.</h3><p>Ask Rex for natural responses to payment, price, trade, spouse, timing, and other common objections.</p></div>
+                <div class="fcard reveal d2"><div class="ficon" aria-hidden="true">🗓️</div><div class="fname">Weekly Recap</div><h3>See what moved and what didn't.</h3><p>Review your recent activity, deals, and follow-up priorities without rebuilding the week from memory.</p></div>
+                <div class="fcard reveal"><div class="ficon" aria-hidden="true">🌎</div><div class="fname">English + Spanish</div><h3>Write naturally in both languages.</h3><p>Rex can draft follow-up in English or natural Mexican Spanish based on the customer and your direction.</p></div>
+              </div>
+            </details>
+          </section>'''
+          s = replace_section(s,
+              '<!-- ============ FEATURES ============ -->',
+              '<!-- ============ PRICING ============ -->',
+              features_section,
+              'features section')
+
+          pricing_section = '''<!-- ============ PRICING ============ -->
+          <section class="section wrap" id="pricing">
+            <div class="head center">
+              <span class="eyebrow center reveal">Launch pricing</span>
+              <h2 class="h2 reveal d1">One individual plan. <span class="grad-text">Everything in V1.</span></h2>
+              <p class="lead reveal d2">Start with 7 days free. The first 500 paying reps get the $39 monthly founding rate while that founding subscription stays active.</p>
+            </div>
+            <div class="price-grid two">
+              <div class="price feat reveal">
+                <div class="kind">For automotive sales reps</div>
+                <div class="name">PocketRep</div>
+                <div class="desc">Your personal follow-up workspace for working the customers and opportunities already in your book.</div>
+                <div class="cost"><span class="now">$39</span><span class="per">/mo</span></div>
+                <div class="was">Next new-customer cohort: $54/mo after the first 500</div>
+                <div class="lock">◆ Founding $39 rate stays with your active founding subscription</div>
+                <div class="spots"><span class="pip"></span> First 500 paying reps</div>
+                <hr>
+                <ul>
+                  <li><span class="tick">✦</span> Heat Sheet, Rex coaching, and Game Plan</li>
+                  <li><span class="tick">✦</span> Contacts, notes, deal history, and reminders</li>
+                  <li><span class="tick">✦</span> Smart Blast, sequences, and nurture drafts</li>
+                  <li><span class="tick">✦</span> Deal logger, metrics, and weekly recap</li>
+                  <li><span class="tick">✦</span> English and Spanish follow-up drafts</li>
+                  <li><span class="tick">✦</span> 7-day free trial</li>
+                </ul>
+                <a class="btn btn-primary" href="#signup" onclick="prScrollSignup(event)">Start the 7-day trial <span class="arrow">→</span></a>
+              </div>
+              <div class="price reveal">
+                <div class="soon"><span class="pip"></span> Coming later</div>
+                <div class="kind">For dealerships and teams</div>
+                <div class="name">PocketRep Team</div>
+                <div class="desc">We're launching the individual rep product first. Team workflows, manager controls, communications, and pricing are still post-launch work.</div>
+                <div class="cost"><span class="now" style="font-size:34px">Waitlist</span></div>
+                <div class="was">No charge. No commitment.</div>
+                <hr>
+                <ul>
+                  <li><span class="tick">✦</span> Individual V1 ships first</li>
+                  <li><span class="tick">✦</span> Team scope will be shaped by real rep usage</li>
+                  <li><span class="tick">✦</span> Waitlist members get launch updates first</li>
+                </ul>
+                <button type="button" class="btn btn-ghost" onclick="prOpenWaitlist(event)">Join the Team waitlist</button>
+              </div>
+            </div>
+          </section>'''
+          s = replace_section(s,
+              '<!-- ============ PRICING ============ -->',
+              '<!-- ============ SIGNUP ============ -->',
+              pricing_section,
+              'pricing section')
+
+          signup_section = '''<!-- ============ SIGNUP ============ -->
+          <section class="section wrap" id="signup">
+            <div class="head center">
+              <span class="eyebrow center reveal">Start your 7-day trial</span>
+              <h2 class="h2 reveal d1">Try the real workflow. <span class="grad-text">No subscription charge until day 8.</span></h2>
+              <p class="lead reveal d2">Stripe collects your email and card securely. If you cancel before the first charge, you won't be billed. If you keep PocketRep, the $39 founding subscription begins on day 8.</p>
+            </div>
+            <div class="price feat reveal" style="max-width:680px;margin:36px auto 0">
+              <div class="name">Your first mission</div>
+              <div class="desc">Create the account, open the Heat Sheet, and work your first five customers. PocketRep helps choose the next move; you stay in control of every outreach action.</div>
+              <hr>
+              <ul>
+                <li><span class="tick">✦</span> Today — full V1 access starts</li>
+                <li><span class="tick">✦</span> Days 1–7 — work your book with no subscription charge</li>
+                <li><span class="tick">✦</span> Before day 8 — cancel from Billing if you don't want to continue</li>
+                <li><span class="tick">✦</span> Day 8 — $39/mo begins if the subscription is still active</li>
+              </ul>
+              <button type="button" class="btn btn-primary btn-full" onclick="prStartCheckout(event)">Start my free 7-day trial <span class="arrow">→</span></button>
+              <p class="sf-consent" style="margin-top:14px">Secure checkout by Stripe. By continuing you agree to our <a href="/terms.html">Terms</a>, <a href="/privacy.html">Privacy Policy</a>, and <a href="/cancel.html">Cancellation Policy</a>.</p>
+              <p class="sf-consent">Questions? <a href="mailto:service@pocketrep.pro">service@pocketrep.pro</a></p>
+            </div>
+          </section>'''
+          s = replace_section(s,
+              '<!-- ============ SIGNUP ============ -->',
+              '<!-- ============ FOUNDER ============ -->',
+              signup_section,
+              'signup section')
+
+          faq_section = '''<!-- ============ FAQ ============ -->
+          <section class="section-sm wrap">
+            <div class="head center">
+              <span class="eyebrow center reveal">Common questions</span>
+              <h2 class="h2 reveal d1">Straight answers.</h2>
+            </div>
+            <div class="faq" id="faq">
+              <div class="faq-item"><button class="faq-q">Is it really worth $39 a month?<span class="pm">＋</span></button><div class="faq-a"><p>A single repeat or referral deal can cover a lot more than a year of PocketRep. The point is simpler: work the book you already earned consistently enough to create more conversations and opportunities.</p></div></div>
+              <div class="faq-item"><button class="faq-q">What happens to my PocketRep data if I change dealerships?<span class="pm">＋</span></button><div class="faq-a"><p>Your PocketRep workspace stays with your account. Only store, move, or contact customer data you're authorized to use, and follow your employer's policies and applicable law.</p></div></div>
+              <div class="faq-item"><button class="faq-q">Do I need a new phone number?<span class="pm">＋</span></button><div class="faq-a"><p>No. V1 keeps the rep in control of outreach using the phone's normal communication flow. PocketRep does not silently send customer messages on your behalf.</p></div></div>
+              <div class="faq-item"><button class="faq-q">Is this going to spam my customers?<span class="pm">＋</span></button><div class="faq-a"><p>No. Rex drafts; you review. PocketRep requires the rep to take the send action and respects opt-out/compliance controls in the product.</p></div></div>
+              <div class="faq-item"><button class="faq-q">Does it work on my phone?<span class="pm">＋</span></button><div class="faq-a"><p>Yes. PocketRep V1 is built to work from a modern phone or desktop browser, so you can keep it with you on the floor without waiting for a native-app launch.</p></div></div>
+            </div>
+          </section>'''
+          s = replace_section(s,
+              '<!-- ============ FAQ ============ -->',
+              '<!-- ============ FOR SALES MANAGERS AND GMs (TEAMS) ============ -->',
+              faq_section,
+              'FAQ section')
+
+          teams_section = '''<!-- ============ FOR SALES MANAGERS AND GMs (TEAMS) ============ -->
+          <section class="section wrap" id="teams">
+            <div class="teams-band reveal">
+              <span class="soon"><span class="pip"></span> Coming later</span>
+              <span class="eyebrow center" style="margin-top:14px">PocketRep Team</span>
+              <h2 class="h2">Individual reps first. <span class="grad-text">Dealership tools after we prove the workflow.</span></h2>
+              <p class="tbody">We're launching PocketRep for individual automotive sales reps first. Team features are not for sale yet, and we're not asking stores to buy a roadmap.</p>
+              <p class="tbody">If you run a floor and want updates as the Team product takes shape, join the waitlist.</p>
+              <div class="hero-actions"><button type="button" class="btn btn-primary btn-lg" onclick="prOpenWaitlist(event)">Join the Team waitlist <span class="arrow">→</span></button></div>
+              <p class="cta-sub">No charge. No commitment. Just launch updates.</p>
+            </div>
+          </section>'''
+          s = replace_section(s,
+              '<!-- ============ FOR SALES MANAGERS AND GMs (TEAMS) ============ -->',
+              '<!-- Testimonials intentionally omitted:',
+              teams_section,
+              'teams section')
+
+          # Replace the old form-driven Stripe block with direct, referral-safe checkout.
+          signup_script_start = '<script>\n/* ============================================================\n   PocketRep, signup form → Stripe checkout'
+          teams_script_start = '<script>\n/* ============================================================\n   PocketRep, Teams waitlist modal'
+          a = s.find(signup_script_start)
+          b = s.find(teams_script_start, a)
+          if a < 0 or b < 0:
+              raise SystemExit('signup script markers not found')
+          checkout_script = '''<script>
+          /* PocketRep V1 checkout — direct Stripe handoff with referral attribution. */
+          (function () {
+            "use strict";
+            var ELITE_STRIPE = "https://buy.stripe.com/cNi4gAbMn4kg9Ax5AucbC06";
+            var REFERRAL_CODE = (function () {
+              try {
+                var v = new URLSearchParams(window.location.search).get("ref");
+                return v && /^PR-[A-Z0-9]{10}$/.test(v) ? v : null;
+              } catch (ex) { return null; }
+            })();
+
+            window.prScrollSignup = function (e) {
+              if (e) e.preventDefault();
+              var el = document.getElementById("signup");
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            };
+
+            window.prStartCheckout = function (e) {
+              if (e) e.preventDefault();
+              var url = ELITE_STRIPE;
+              if (REFERRAL_CODE) {
+                url += "?client_reference_id=" + encodeURIComponent(REFERRAL_CODE);
+              }
+              window.location.href = url;
+            };
+          })();
+          </script>
+
+          '''
+          s = s[:a] + checkout_script + s[b:]
+
+          # Regression rails: checkout/referral/support and V1 positioning must survive.
+          required = [
+              'https://buy.stripe.com/cNi4gAbMn4kg9Ax5AucbC06',
+              'REFERRAL_CODE',
+              'client_reference_id',
+              'service@pocketrep.pro',
+              'PocketRep Team is not for sale yet',
+              'No subscription charge until day 8',
+          ]
+          for needle in required:
+              if needle not in s:
+                  raise SystemExit(f'landing regression rail missing: {needle}')
+          forbidden = [
+              'Automated follow-up, referral asks',
+              'without lifting a finger',
+              'A 30-year sales veteran in your pocket',
+              '<div class="fname">Referral Asks</div>',
+              'Mortgage / Lending',
+              'Other High-Ticket Sales',
+              'Standard <s>$69/mo</s> after founding',
+          ]
+          for needle in forbidden:
+              if needle in s:
+                  raise SystemExit(f'landing stale/overclaim copy remains: {needle}')
+
+          index_path.write_text(s, encoding='utf-8')
+
+          # ------------------------------------------------------------------
+          # THANK-YOU — trial language, no false payment-success claim.
+          # ------------------------------------------------------------------
+          t = thankyou_path.read_text(encoding='utf-8')
+          thankyou_replacements = [
+              ('<title>PocketRep — Finish Setup</title>', '<title>PocketRep — Your Trial Is Live</title>', 'thankyou title'),
+              ('Payment successful', '7-day trial activated', 'thankyou eyebrow'),
+              ('You\'re in! Welcome<br><span class="grad-text">to PocketRep 👊</span>', 'Welcome to<br><span class="grad-text">PocketRep.</span>', 'thankyou heading'),
+              ('Your payment went through. Create your password below, then we\'ll log you into PocketRep automatically.', 'Your trial is live. Your card is securely on file and won\'t be charged until day 8. Create your password and step into PocketRep.', 'thankyou lead'),
+              ('Confirming your payment…', 'Confirming your trial…', 'thankyou loading'),
+              ("We couldn't verify your purchase yet.", "We couldn't verify your checkout yet.", 'thankyou error state'),
+              ('Create My PocketRep Account <span class="arrow">→</span>', 'Enter PocketRep <span class="arrow">→</span>', 'thankyou submit'),
+              ('<b>PocketRep works in your browser.</b> After setup, we\'ll take you straight into the app.', '<b>Your number. Your relationships. Your approval.</b> PocketRep helps you work the book you already built.', 'thankyou note'),
+              ('<div class="success">Account created 🎉</div><p style="color:var(--muted);margin-top:8px;font-size:14px">Logging you into PocketRep…</p>', '<div class="success">Your workspace is ready.</div><p style="color:var(--muted);margin-top:8px;font-size:14px">Opening PocketRep…</p>', 'thankyou done state'),
+              ('<span class="eyebrow center" style="justify-content:center">What happens next</span><div style="display:grid;gap:12px;margin-top:16px"><div><b>1. Create your password</b><p style="color:var(--muted);font-size:14px;margin-top:3px">This becomes your PocketRep login.</p></div><div><b>2. Log in automatically</b><p style="color:var(--muted);font-size:14px;margin-top:3px">We\'ll securely hand you into the app after your account is created.</p></div><div><b>3. Start your onboarding</b><p style="color:var(--muted);font-size:14px;margin-top:3px">You\'ll see the example customers and Heat Sheet so you can start using PocketRep immediately.</p></div></div>', '<span class="eyebrow center" style="justify-content:center">Your first move</span><div style="display:grid;gap:12px;margin-top:16px"><div><b>1. Secure your account</b><p style="color:var(--muted);font-size:14px;margin-top:3px">Create your password and enter your private PocketRep workspace.</p></div><div><b>2. Meet your Heat Sheet</b><p style="color:var(--muted);font-size:14px;margin-top:3px">PocketRep starts with example customers so you can see the daily workflow before adding your own book.</p></div><div><b>3. Work your first five</b><p style="color:var(--muted);font-size:14px;margin-top:3px">See who needs attention, let Rex draft the next move, and approve what gets sent.</p></div></div>', 'thankyou onboarding'),
+          ]
+          for old, new, label in thankyou_replacements:
+              t = replace_once(t, old, new, label)
+          t = t.replace("We couldn't verify your purchase yet. Please tap Try Again.", "We couldn't verify your checkout yet. Please tap Try Again.")
+          t = t.replace('btn.innerHTML="Create My PocketRep Account <span class=\\"arrow\\">→</span>"', 'btn.innerHTML="Enter PocketRep <span class=\\"arrow\\">→</span>"')
+          if 'Payment successful' in t or 'Your payment went through' in t:
+              raise SystemExit('thankyou stale payment-success copy remains')
+          thankyou_path.write_text(t, encoding='utf-8')
+
+          # ------------------------------------------------------------------
+          # CANCELLATION — align with actual no-refund + Stripe portal policy.
+          # ------------------------------------------------------------------
+          c = cancel_path.read_text(encoding='utf-8')
+          c = c.replace('Last updated: April 1, 2026', 'Last updated: August 28, 2026')
+          start = c.index('<div class="page-wrap">')
+          end = c.index('\n\n<footer>', start)
+          cancel_body = '''<div class="page-wrap">
+            <a href="/" class="back-link">&larr; Back to PocketRep.pro</a>
+            <h1>Cancellation Policy</h1>
+            <p class="updated">Last updated: August 28, 2026</p>
+
+            <p>You can stop future renewal at any time. The fastest way is the Billing option inside PocketRep, which opens Stripe's secure customer portal.</p>
+
+            <div class="highlight"><p>Cancel before the first trial charge and you will not be billed for a paid subscription.</p></div>
+
+            <h2>1. Free Trial</h2>
+            <p>New individual subscriptions include a 7-day free trial when shown at checkout. If you cancel before the first subscription charge, no paid subscription fee is charged. Access may remain available through the end of the trial.</p>
+
+            <h2>2. Paid Subscription Cancellation</h2>
+            <ul>
+              <li>You may cancel future renewal at any time.</li>
+              <li>After cancellation, paid access remains available through the end of the current paid billing period unless Stripe shows otherwise.</li>
+              <li>You will not be charged for the next billing cycle after cancellation takes effect.</li>
+            </ul>
+
+            <h2>3. How to Cancel</h2>
+            <ul>
+              <li><strong>In PocketRep:</strong> Open Profile / Settings and choose <strong>Billing</strong> to open the Stripe Customer Portal.</li>
+              <li><strong>Support:</strong> If you cannot access Billing, email <a href="mailto:service@pocketrep.pro">service@pocketrep.pro</a> from the email on your account.</li>
+            </ul>
+
+            <h2>4. Refund Policy</h2>
+            <p>Subscription charges are non-refundable except where a refund is required by applicable law. We do not provide partial or prorated refunds for unused time in a billing period. Cancelling stops future renewal; it does not reverse a charge that has already been collected.</p>
+
+            <h2>5. Account Data</h2>
+            <p>Cancelling a subscription does not automatically mean that all account data is immediately deleted. To request deletion of personal data, email <a href="mailto:privacy@pocketrep.pro">privacy@pocketrep.pro</a>. Deletion requests are handled subject to applicable legal, security, fraud-prevention, and backup-retention requirements.</p>
+
+            <h2>6. Resubscribing</h2>
+            <p>If you return after cancelling, the price available at the time you resubscribe may apply. Availability of prior account data depends on whether the account or data was deleted.</p>
+
+            <h2>7. Contact</h2>
+            <p>Questions about cancellation? Email <a href="mailto:service@pocketrep.pro">service@pocketrep.pro</a>.</p>
+          </div>'''
+          c = c[:start] + cancel_body + c[end:]
+          cancel_path.write_text(c, encoding='utf-8')
+
+          # ------------------------------------------------------------------
+          # PRIVACY — reflect actual customer data + provider-agnostic AI path.
+          # ------------------------------------------------------------------
+          p = privacy_path.read_text(encoding='utf-8')
+          p = p.replace('Last updated: April 1, 2026', 'Last updated: August 28, 2026')
+          start = p.index('<div class="page-wrap">')
+          end = p.index('\n\n<footer>', start)
+          privacy_body = '''<div class="page-wrap">
+            <a href="/" class="back-link">&larr; Back to PocketRep.pro</a>
+            <h1>Privacy Policy</h1>
+            <p class="updated">Last updated: August 28, 2026</p>
+
+            <p>PocketRep.pro ("we," "us," or "our") operates the PocketRep website and application. This Privacy Policy explains the information processed by PocketRep and how we use it.</p>
+
+            <h2>1. Information We Process</h2>
+            <ul>
+              <li><strong>Account information:</strong> information such as your name, email address, account settings, and authentication records.</li>
+              <li><strong>Customer and sales data you add:</strong> contact names, phone numbers, email addresses, notes, vehicle or deal information, follow-up history, photos you choose to upload, and related sales context.</li>
+              <li><strong>AI interaction data:</strong> prompts, notes, conversation context, drafts, and feedback used to provide Rex features.</li>
+              <li><strong>Subscription information:</strong> customer/subscription identifiers and status used to manage access. Card details are processed by Stripe; PocketRep does not store full payment-card numbers.</li>
+              <li><strong>Technical and usage data:</strong> device/browser information, logs, feature usage, errors, and security signals needed to operate and improve the service.</li>
+            </ul>
+
+            <h2>2. How We Use Information</h2>
+            <ul>
+              <li>Provide, secure, maintain, and improve PocketRep.</li>
+              <li>Organize your contacts, notes, follow-up workflow, deals, reminders, and account settings.</li>
+              <li>Generate AI-assisted drafts, summaries, coaching, prioritization, and other Rex outputs you request.</li>
+              <li>Process subscriptions, enforce entitlements, prevent abuse, and provide support.</li>
+              <li>Send service-related communications such as account, billing, security, and support messages.</li>
+            </ul>
+
+            <h2>3. AI Processing</h2>
+            <p>PocketRep uses third-party AI gateways and model providers to generate requested AI features. The specific provider or model may change as we improve the service. We aim to send only the context needed for the requested feature and to avoid sending payment-card data or other unnecessary sensitive information to AI providers. PocketRep does not sell your customer content.</p>
+
+            <h2>4. Your Responsibility for Customer Data</h2>
+            <p>You are responsible for having the right to store and use customer information you put into PocketRep and for complying with your employer's policies and applicable privacy, marketing, and communications laws when contacting customers.</p>
+
+            <h2>5. Data Retention and Deletion</h2>
+            <p>We retain information for as long as reasonably necessary to provide the service, maintain security and billing records, comply with law, resolve disputes, and enforce agreements. To request access, correction, or deletion of personal data, email <a href="mailto:privacy@pocketrep.pro">privacy@pocketrep.pro</a>. Some information may remain in backups or records when legally or operationally required.</p>
+
+            <h2>6. Cookies and Local Storage</h2>
+            <p>PocketRep uses cookies, local storage, and similar technologies where needed for authentication, sessions, preferences, security, and core product functionality.</p>
+
+            <h2>7. Service Providers</h2>
+            <p>We use service providers to operate PocketRep, including infrastructure for database/authentication, hosting, payments, communications, and AI processing. Current core providers include Supabase, Stripe, Vercel, and third-party AI gateways/model providers. Providers may change as the service evolves.</p>
+
+            <h2>8. Security</h2>
+            <p>We use technical and organizational safeguards intended to protect data, including access controls and tenant-level authorization. No internet service can guarantee absolute security.</p>
+
+            <h2>9. Children's Privacy</h2>
+            <p>PocketRep is intended for users 18 years of age and older. We do not knowingly offer the service to children.</p>
+
+            <h2>10. Changes to This Policy</h2>
+            <p>We may update this Privacy Policy as the product or our legal obligations change. The current version will be posted here with its updated date.</p>
+
+            <h2>11. Contact</h2>
+            <p>Privacy questions or requests: <a href="mailto:privacy@pocketrep.pro">privacy@pocketrep.pro</a>.</p>
+          </div>'''
+          p = p[:start] + privacy_body + p[end:]
+          privacy_path.write_text(p, encoding='utf-8')
+
+          # ------------------------------------------------------------------
+          # TERMS — factual consistency only; do not change governing-law clause.
+          # ------------------------------------------------------------------
+          q = terms_path.read_text(encoding='utf-8')
+          q = q.replace('Last updated: April 1, 2026', 'Last updated: August 28, 2026')
+          q = replace_once(q,
+              'PocketRep provides an AI-powered mobile application that helps sales professionals generate follow-up messages, objection responses, and call summaries using artificial intelligence. The Service is provided on a subscription basis.',
+              'PocketRep provides a web-based sales follow-up application with contact organization, reminders, deal tracking, and AI-assisted drafts, coaching, summaries, and related sales workflow tools. The Service is provided on a subscription basis.',
+              'terms service description')
+          q = replace_once(q,
+              '<li>Subscription fees are charged in advance on a monthly or annual basis as selected at signup.</li>',
+              '<li>Subscription fees are charged on the billing schedule and at the price shown at checkout. The current individual launch offer is monthly.</li>',
+              'terms billing cadence')
+          q = replace_once(q,
+              '<li>Use AI-generated outputs in ways that deceive, defraud, or harm others.</li>',
+              '<li>Use AI-generated outputs in ways that deceive, defraud, or harm others.</li>\n    <li>Upload, retain, export, or contact customer data that you are not authorized to use, or use PocketRep in violation of your employer\'s policies or applicable privacy and communications laws.</li>',
+              'terms customer-data responsibility')
+          q = q.replace('Questions? Email us at legal@pocketrep.pro', 'Questions? Email us at service@pocketrep.pro')
+          terms_path.write_text(q, encoding='utf-8')
+
+          print('Launch funnel audit patch applied successfully.')
+          PY
+
+      - name: Commit audited funnel
+        shell: bash
+        run: |
+          git config user.name "PocketRep Launch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/launch-copy-finalize.yml
+          git add Pocketrep/index.html Pocketrep/thankyou.html Pocketrep/cancel.html Pocketrep/privacy.html Pocketrep/terms.html
+          git diff --cached --check
+          git commit -m "Finalize V1 launch funnel copy and policies"
+          git push origin HEAD:claude/quirky-babbage-f0s519
