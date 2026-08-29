@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, TextInput, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { setRepSetting } from '@/lib/v2/repSettings';
-import { speak, stopSpeaking } from '@/lib/v2/speech';
 
 type DemoContact = {
   id: string;
@@ -32,15 +31,13 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
   const [practiceDone, setPracticeDone] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
-  const startedRef = useRef(false);
 
   const current = demos[0];
-  const first = answers.name.trim().split(/\s+/)[0] ?? '';
   const hot = useMemo(() => demos.filter(d => (d.heat_score ?? 0) >= 75), [demos]);
 
   useEffect(() => {
     if (!open) return;
-    setStep(0); setAnswers(EMPTY); setPracticeDone(false); startedRef.current = false;
+    setStep(0); setAnswers(EMPTY); setPracticeDone(false);
     let cancelled = false;
     setLoading(true);
     supabase
@@ -53,14 +50,8 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
         setDemos(((data ?? []) as DemoContact[]).filter(c => DEMO_NAMES.has(`${c.first_name} ${c.last_name}`)));
         setLoading(false);
       }, () => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; stopSpeaking(); };
+    return () => { cancelled = true; };
   }, [open]);
-
-  useEffect(() => {
-    if (!open || !startedRef.current) return;
-    speak(stepLine(step, first));
-    return () => stopSpeaking();
-  }, [step, open]);
 
   if (!open) return null;
 
@@ -76,13 +67,13 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
       if (answers.tone) setRepSetting('voiceTone', answers.tone);
     } catch { /* profile setup is best effort; do not trap the rep */ }
     finally {
-      stopSpeaking(); setSaving(false); onClose(true);
+      setSaving(false); onClose(true);
       setTimeout(() => { setStep(0); setAnswers(EMPTY); }, 200);
     }
   };
 
-  const skip = () => { stopSpeaking(); onClose(false); };
-  const start = () => { startedRef.current = true; setStep(1); };
+  const skip = () => { onClose(false); };
+  const start = () => { setStep(1); };
   const next = () => setStep(s => Math.min(s + 1, 6));
 
   const progress = step / 6;
@@ -108,7 +99,7 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
         {step === 1 ? (
           <>
             <Text style={styles.eyebrow}>01 · YOUR SAMPLE BOOK</Text>
-            <Text style={styles.title}>These 3 customers are your practice reps.</Text>
+            <Text style={styles.title}>These 3 customers are your practice customers.</Text>
             <Text style={styles.body}>They belong only to your account and are marked DEMO. Nothing is sent to them.</Text>
             {loading ? <View style={styles.panel}><ActivityIndicator color={colors.gold} /></View> : <View style={styles.panel}>{demos.map(d => <DemoRow key={d.id} contact={d} />)}</View>}
           </>
@@ -167,7 +158,7 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
               <Text style={styles.inputLabel}>YOUR NAME</Text><TextInput value={answers.name} onChangeText={v => setAnswers(a => ({ ...a, name: v }))} placeholder="Jake Morales" placeholderTextColor={colors.grey2} style={styles.input} />
               <Text style={styles.inputLabel}>DEALERSHIP</Text><TextInput value={answers.dealership} onChangeText={v => setAnswers(a => ({ ...a, dealership: v }))} placeholder="Bay Ridge Motors" placeholderTextColor={colors.grey2} style={styles.input} />
               <Text style={styles.inputLabel}>YOUR ROLE</Text><TextInput value={answers.title} onChangeText={v => setAnswers(a => ({ ...a, title: v }))} placeholder="Sales Consultant" placeholderTextColor={colors.grey2} style={styles.input} />
-              <Text style={styles.inputLabel}>HOW SHOULD REX SOUND?</Text>
+              <Text style={styles.inputLabel}>REX STYLE</Text>
               <View style={styles.tones}>{TONES.map(t => <Pressable key={t.value} onPress={() => setAnswers(a => ({ ...a, tone: t.value }))} style={[styles.tone, answers.tone === t.value && styles.toneSelected]}><Text style={styles.toneValue}>{t.value}</Text><Text style={styles.toneHint}>{t.hint}</Text></Pressable>)}</View>
             </View>
           </>
@@ -179,19 +170,6 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
       </View>
     </View>
   );
-}
-
-function stepLine(step: number, first: string) {
-  const name = first || 'there';
-  return [
-    "Hey, I'm Rex. Let's find your next deal.",
-    "I've added three sample customers. Let's see how your book works.",
-    "This is the Heat Sheet. Start here every morning.",
-    `Let's work ${name}'s first practice customer and figure out the next move.`,
-    "Now let's practice the blast workflow.",
-    "Work backward through your sold book and make follow-up a daily habit.",
-    `Last step, ${name}. Let's make Rex sound like you.`,
-  ][step];
 }
 
 function DemoRow({ contact }: { contact: DemoContact }) {
