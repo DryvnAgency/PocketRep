@@ -121,10 +121,8 @@ export default function ProfileTab({
       if (data && !cancelled) setProfile(data as ProfileRow);
       const st = await loadSendTime();
       if (!cancelled) { setSendHourState(st.send_hour); setTimezone(st.timezone); }
-      // Fetch referral code (ensures row exists in referral_codes table)
       const { data: code } = await supabase.rpc('ensure_my_referral_code');
       if (code && !cancelled) setReferralCode(code);
-      // Fetch referral count
       const { count } = await supabase
         .from('referrals')
         .select('id', { count: 'exact', head: true })
@@ -184,17 +182,11 @@ export default function ProfileTab({
   const dealership = getRepSetting('dealership');
   const title = getRepSetting('title');
   const heroSub = [dealership, title].filter(Boolean).join(' · ') || 'Tap to set up your profile';
-  // Points at the marketing site (checkout lives there), not app.pocketrep.pro —
-  // a referred visitor isn't a customer yet, so a link to the app subdomain
-  // would only ever show them a login screen with no way to sign up.
   const referLink = referralCode
     ? `https://pocketrep.pro/?ref=${encodeURIComponent(referralCode)}`
     : null;
 
   const [openingBilling, setOpeningBilling] = useState(false);
-  // cancel.html promises "In-app: Go to Settings → Subscription → Cancel" —
-  // this is that path. Hands off to Stripe's own hosted portal (cancel, plan
-  // change, payment method) rather than building a second billing UI here.
   const openBillingPortal = async () => {
     if (openingBilling) return;
     setOpeningBilling(true);
@@ -230,7 +222,7 @@ export default function ProfileTab({
       });
     } catch { /* user cancelled share sheet */ }
   };
-  // Real build identity from the Expo config (app.json) — no hardcoded version.
+
   const appVersion = Constants.expoConfig?.version ?? null;
   const buildNo =
     Constants.expoConfig?.ios?.buildNumber ??
@@ -243,8 +235,6 @@ export default function ProfileTab({
   const doSignOut = async () => {
     setSigningOut(true);
     try {
-      // Robust local-scope sign-out: never hangs on a network revoke, and
-      // force-clears local state + reloads (web) so logout can't get stuck.
       await signOutAndReset();
     } catch (e) {
       console.warn('sign out failed', e);
@@ -388,27 +378,25 @@ export default function ProfileTab({
           onPress={() => profile?.email && copy(profile.email, 'Email copied')} />
         <Row icon="📱" label="Phone" detail={getRepSetting('phone') || 'Add'}
           onPress={() => editSetting('phone', 'Phone', 'PHONE NUMBER', { keyboardType: 'phone-pad' })} />
-        <Row icon="🔒" label="Security" detail={getRepSetting('security') || 'Not set'}
-          onPress={() => editSetting('security', 'Security', 'SIGN-IN METHOD')} />
         <Row icon="💳" label="Billing" detail={openingBilling ? 'Opening…' : 'Manage subscription'}
           onPress={openBillingPortal} />
-        <Row icon="↗" label="Refer a rep" detail={referralCode ?? 'Loading…'}
-          onPress={shareReferral} />
-        {referralCount > 0 ? (
-          <Row icon="🎁" label="Give a Month. Get a Month." detail={`${referralCount} referred`} chevron={false} />
-        ) : (
-          <Row icon="🎁" label="Give a Month. Get a Month." detail="Share & earn" chevron={false} />
-        )}
+        <Row
+          icon="🎁"
+          label="Give a Month. Get a Month."
+          detail={referralCount > 0 ? `${referralCount} referred · tap to copy` : 'Tap to copy referral link'}
+          onPress={shareReferral}
+        />
       </View>
 
-      <Pressable
-        onPress={() => setConfirmSignOut(true)}
-        style={styles.signOut}
-        accessibilityRole="button"
-        accessibilityLabel="Sign out"
-      >
-        <Row icon="↩" label="Sign out" danger chevron={false} />
-      </Pressable>
+      <View style={styles.signOut}>
+        <Row
+          icon="↩"
+          label="Sign out"
+          danger
+          chevron={false}
+          onPress={() => setConfirmSignOut(true)}
+        />
+      </View>
 
       <Text style={styles.footer}>{versionLine}</Text>
 
