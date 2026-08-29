@@ -11,7 +11,7 @@ import type { Sequence, SequenceStep } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import {
   generateQueue, loadQueueState, saveQueueState, clearQueueState,
-  markSentAndLog, type QueueItem,
+  markSentAndLog, markSkipped, type QueueItem,
 } from '@/lib/messageQueue';
 import { launchSms } from '@/lib/v2/smsLauncher';
 
@@ -403,9 +403,27 @@ export default function SequencesScreen() {
       const url = `sms:${item.phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(editingMessage ?? item.message)}`;
       await Linking.openURL(url).catch(() => {});
       // AppState listener fires when rep returns to app → shows "Did you send it?" banner
-    } else {
-      // Call/email: confirm immediately (no SMS app transition)
-      await confirmSent(item);
+      return;
+    }
+
+    const destination = item.channel === 'call'
+      ? item.phone
+      : item.email;
+    if (!destination) {
+      pendingSendRef.current = null;
+      Alert.alert('Missing contact detail', `Add a ${item.channel === 'call' ? 'phone number' : 'email address'} before working this step.`);
+      return;
+    }
+
+    const url = item.channel === 'call'
+      ? `tel:${item.phone.replace(/[^\d+]/g, '')}`
+      : `mailto:${item.email.trim()}?subject=${encodeURIComponent(`Follow-up with ${item.contact_name}`)}&body=${encodeURIComponent(editingMessage ?? item.message)}`;
+    try {
+      await Linking.openURL(url);
+      setShowConfirmSent(true);
+    } catch {
+      pendingSendRef.current = null;
+      Alert.alert('Could not open app', `Check the contact's ${item.channel === 'call' ? 'phone number' : 'email address'} and try again.`);
     }
   }
 
@@ -429,7 +447,14 @@ export default function SequencesScreen() {
     }
   }
 
-  async function handleSkipItem() {
+  async function handleSkipItem(item: QueueItem) {
+    if (!userId) return;
+    try {
+      await markSkipped(item, userId);
+    } catch (error: any) {
+      Alert.alert('Could not skip follow-up', error?.message ?? 'Refresh the queue and try again.');
+      return;
+    }
     const updatedItems = queueItems.map((q, i) =>
       i === queuePos ? { ...q, status: 'skipped' as const } : q
     );
@@ -903,7 +928,7 @@ export default function SequencesScreen() {
                   <View style={sq.avatar}><Text style={sq.avatarText}>{initials}</Text></View>
                   <View>
                     <Text style={sq.contactName}>{item.contact_name}</Text>
-                    <Text style={sq.contactPhone}>{item.phone || 'No phone'}</Text>
+                    <Text style={sq.contactPhone}>{item.channel === 'email' ? (item.email || 'No email') : (item.phone || 'No phone')}</Text>
                     <Text style={sq.dueDate}>Due: {item.due_date} · {CHANNEL_ICON[item.channel]}</Text>
                   </View>
                 </View>
@@ -929,8 +954,13 @@ export default function SequencesScreen() {
                     <Text style={sq.openSmsBtnText}>📱 Open in Messages →</Text>
                   </TouchableOpacity>
                 ) : (
-                  <TouchableOpacity style={sq.openSmsBtn} onPress={() => handleSendItem(item)} activeOpacity={0.85}>
-                    <Text style={sq.openSmsBtnText}>{item.channel === 'call' ? '📞 Mark Call Done →' : '📧 Mark Email Done →'}</Text>
+                  <TouchableOpacity
+                    style={[sq.openSmsBtn, !(item.channel === 'call' ? item.phone : item.email) && { opacity: 0.4 }]}
+                    onPress={() => handleSendItem(item)}
+                    disabled={!(item.channel === 'call' ? item.phone : item.email)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={sq.openSmsBtnText}>{item.channel === 'call' ? '📞 Open Dialer →' : '📧 Open Email →'}</Text>
                   </TouchableOpacity>
                 )}
 
@@ -938,7 +968,7 @@ export default function SequencesScreen() {
                   <TouchableOpacity style={sq.editBtn} onPress={() => setEditingMessage(editingMessage === null ? item.message : null)} activeOpacity={0.8}>
                     <Text style={sq.editBtnText}>{editingMessage !== null ? '↩ Reset' : '✏️ Edit'}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={sq.skipBtn} onPress={handleSkipItem} activeOpacity={0.8}>
+                  <TouchableOpacity style={sq.skipBtn} onPress={() => handleSkipItem(item)} activeOpacity={0.8}>
                     <Text style={sq.skipBtnText}>⏭ Skip</Text>
                   </TouchableOpacity>
                 </View>

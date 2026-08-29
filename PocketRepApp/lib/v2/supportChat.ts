@@ -58,20 +58,9 @@ export async function createTicket(subject: string, firstMessage: string): Promi
     .insert({ ticket_id: ticketId, sender_role: 'rep', content: firstMessage });
   if (msgErr) throw msgErr;
 
-  // Fetch rep profile for the notification
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name,email')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  // Fire Pushover notification (fire-and-forget)
-  notifyAdmin({
-    ticketId,
-    preview: firstMessage.slice(0, 200),
-    repName: (profile as any)?.full_name ?? 'Rep',
-    repEmail: (profile as any)?.email ?? '',
-  }).catch(() => undefined);
+  // The edge function derives the rep and message from stored, tenant-checked
+  // rows; none of the notification display data is trusted from the client.
+  notifyAdmin(ticketId).catch(() => undefined);
 
   return ticketId;
 }
@@ -102,20 +91,7 @@ export async function sendMessage(
 
   // Pushover notification only for rep messages (admin doesn't notify themselves)
   if (senderRole === 'rep') {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name,email')
-        .eq('id', user.id)
-        .maybeSingle();
-      notifyAdmin({
-        ticketId,
-        preview: content.slice(0, 200),
-        repName: (profile as any)?.full_name ?? 'Rep',
-        repEmail: (profile as any)?.email ?? '',
-      }).catch(() => undefined);
-    }
+    notifyAdmin(ticketId).catch(() => undefined);
   }
 }
 
@@ -190,14 +166,7 @@ export async function countOpenTickets(): Promise<number> {
 
 // ── Pushover notification ────────────────────────────────────────────────────
 
-async function notifyAdmin({
-  ticketId, preview, repName, repEmail,
-}: {
-  ticketId: string;
-  preview: string;
-  repName: string;
-  repEmail: string;
-}): Promise<void> {
+async function notifyAdmin(ticketId: string): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) return;
 
@@ -207,11 +176,6 @@ async function notifyAdmin({
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({
-      ticket_id: ticketId,
-      message_preview: preview,
-      rep_name: repName,
-      rep_email: repEmail,
-    }),
+    body: JSON.stringify({ ticket_id: ticketId }),
   });
 }

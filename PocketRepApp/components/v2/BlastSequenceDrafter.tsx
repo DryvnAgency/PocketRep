@@ -10,6 +10,7 @@ import type { V2Contact } from '@/lib/v2/useContacts';
 import type { BlastDraft, DraftedStep } from '@/lib/v2/blastSequences';
 import {
   copyRuleViolations,
+  enforceUniqueness,
   markBlastApproved,
   markBlastCancelled,
   recordSentBlast,
@@ -87,6 +88,17 @@ export default function BlastSequenceDrafter({
 
   const handleSendAll = async () => {
     if (sending) return;
+    const uniqueness = enforceUniqueness(toSend);
+    const copyIssues = toSend.flatMap(step =>
+      copyRuleViolations(step.message).map(issue => `${step.contact_name}: ${issue}`)
+    );
+    if (!uniqueness.passed || copyIssues.length > 0) {
+      setError([
+        ...uniqueness.violations,
+        ...copyIssues,
+      ].join(' · '));
+      return;
+    }
     setSending(true);
     setError(null);
     try {

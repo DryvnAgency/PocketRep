@@ -209,8 +209,9 @@ export type CoachContact = { id: string; name: string; days: number };
 // voice path uses (rexActions executeAction); this block teaches the coach to
 // EMIT one — but only on a clear, explicit request about the rep's own book.
 // Everything else (coaching, questions, off-topic, disallowed) stays plain text,
-// so the existing refusals/guardrails are untouched. delete/batch are
-// intentionally excluded — those stay voice/UI-only.
+// so the existing refusals/guardrails are untouched. Destructive delete/batch
+// actions remain excluded. Smart Blast is included because text-only V1 no
+// longer has a voice runtime to open its review-first drafter.
 // Exported so the Rex triad planner (lib/v2/rexTriad.ts) reuses the identical
 // action manifest + contact-id list; pure, no behavior change for existing callers.
 export function actionsBlock(contacts: CoachContact[], recentActivity: string): string {
@@ -224,7 +225,7 @@ export function actionsBlock(contacts: CoachContact[], recentActivity: string): 
   // Vehicle Finder (default-off): teach the coach find_vehicles only when the
   // flag is on. Off → empty string → this block is byte-identical to before.
   const vehicleBlock = isVehicleFinderEnabled()
-    ? `\n7. find_vehicles — the rep wants inventory matches for what a customer wants (payment, type, seats, features, colors, credit, down payment). Extract into the payload; the app opens the vehicle finder (nothing is written). payload: { raw_notes: string, requirements: { monthly_budget?, down_payment?, credit_score?, vehicle_type? ("suv"|"truck"|"sedan"|"minivan"|"coupe"|"hatchback"|"convertible"|"wagon"), min_seats?, features?: string[] (remote_start, heated_seats, sunroof, leather, awd, third_row, backup_camera, carplay, android_auto, navigation, tow_package, blind_spot), color_pref? ("dark"|"light"), colors?: string[], max_mileage?, max_price?, condition? ("new"|"used") } }`
+    ? `\n8. find_vehicles — the rep wants inventory matches for what a customer wants (payment, type, seats, features, colors, credit, down payment). Extract into the payload; the app opens the vehicle finder (nothing is written). payload: { raw_notes: string, requirements: { monthly_budget?, down_payment?, credit_score?, vehicle_type? ("suv"|"truck"|"sedan"|"minivan"|"coupe"|"hatchback"|"convertible"|"wagon"), min_seats?, features?: string[] (remote_start, heated_seats, sunroof, leather, awd, third_row, backup_camera, carplay, android_auto, navigation, tow_package, blind_spot), color_pref? ("dark"|"light"), colors?: string[], max_mileage?, max_price?, condition? ("new"|"used") } }`
     : '';
   return `TAKING ACTIONS — only when the rep CLEARLY asks you to DO one of these for their own book:
 Respond with your short natural spoken line FIRST, then ONE \`\`\`json fenced block on the next line: { "action": "<name>", "payload": { ... } }. Nothing after the closing fence. For ANY other message — coaching, "what do I say", role-play, recall questions, small talk, or anything off-topic or disallowed — reply with normal text and NO json block, and keep coaching or declining exactly as you do now. Adding the ability to act NEVER widens what you'll talk about.
@@ -236,7 +237,9 @@ Actions:
 3. schedule_followup — set a follow-up N days out. payload: { contact_id (req), contact_name (req), days_from_now (req number), note? }
 4. retier_contact — move an existing contact UP a tier when they're heating up/reviving. payload: { contact_id (req), contact_name (req), tier ("hot"|"warm"|"cold"), reason? }
 5. log_deal — record a closed sale. payload: { customer_name (req), contact_id?, stock (req), vehicle (req), front_gross (req number), back_gross (req number), type? ("NEW"|"CPO"|"USED"), funding? ("finance"|"lease"|"cash") }
-6. create_reminder — set a reminder/notification for the rep. payload: { title (req, short), due_at (req, ISO 8601 — resolve "this afternoon at 4" / "tomorrow morning" / "in 2 hours" from CURRENT DATE & TIME below), contact_id? (if about a specific person), contact_name?, body? }${vehicleBlock}
+6. create_reminder — set a reminder/notification for the rep. payload: { title (req, short), due_at (req, ISO 8601 — resolve "this afternoon at 4" / "tomorrow morning" / "in 2 hours" from CURRENT DATE & TIME below), contact_id? (if about a specific person), contact_name?, body? }
+7. create_blast_sequence — open the review-first Smart Blast drafter only when the rep clearly asks to message a group from their book. Nothing auto-sends. payload: { intent (req), filter_criteria (req), filter_summary (req), contact_ids (req, real ids from CONTACT IDS), promotion: { vehicle?, payment?, down?, term?, details? } }
+${vehicleBlock}
 
 CURRENT DATE & TIME: ${now.toString()} (ISO ${now.toISOString()}).
 

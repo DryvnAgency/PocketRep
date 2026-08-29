@@ -32,7 +32,8 @@ function enforceUniqueness(steps) {
   const strippedBodies = steps.map(s => {
     const firstName = s.contact_name.split(/\s+/)[0];
     if (!firstName) return { name: s.contact_name, stripped: normalizeBody(s.message) };
-    const re = new RegExp(firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const escaped = firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\b${escaped}\\b`, 'gi');
     return { name: s.contact_name, stripped: normalizeBody(s.message.replace(re, '')) };
   });
   const strippedMap = new Map();
@@ -50,21 +51,7 @@ function enforceUniqueness(steps) {
     }
   }
 
-  // 3. Hook diversity check
-  const hookMap = new Map();
-  for (const s of steps) {
-    const hook = s.hook_used.toLowerCase();
-    const existing = hookMap.get(hook);
-    if (existing) existing.push(s.contact_name);
-    else hookMap.set(hook, [s.contact_name]);
-  }
-  for (const [hook, names] of hookMap) {
-    if (names.length > 1) {
-      violations.push(`Hook "${hook}" reused across: ${names.join(', ')}`);
-    }
-  }
-
-  // 4. Opener similarity check
+  // 3. Opener similarity check
   const openerRe = /^(?:hey|hola|qu[eé]\s+(?:tal|onda))\s+\S+[,!]?\s*/i;
   const openers = steps.map(s => {
     const afterGreeting = s.message.replace(openerRe, '').toLowerCase().trim();
@@ -167,22 +154,13 @@ test('detects first-name-only template substitution', () => {
   assert.ok(r.violations.some(v => v.includes('Template substitution') || v.includes('Exact duplicate')));
 });
 
-test('detects hook reuse', () => {
+test('allows a reused broad hook when the actual messages differ', () => {
   const r = enforceUniqueness([
     makeStep({ contact_name: 'Alice', message: 'hey alice, your lease wraps up soon', hook_used: 'calendar_event' }),
     makeStep({ contact_name: 'Bob', message: 'hey bob, saw that tundra you liked is here', hook_used: 'calendar_event' }),
   ]);
-  assert.equal(r.passed, false);
-  assert.ok(r.violations.some(v => v.includes('Hook "calendar_event" reused')));
-});
-
-test('hook check is case-insensitive', () => {
-  const r = enforceUniqueness([
-    makeStep({ contact_name: 'Alice', message: 'hey alice, your lease', hook_used: 'Calendar_Event' }),
-    makeStep({ contact_name: 'Bob', message: 'hey bob, the tundra', hook_used: 'calendar_event' }),
-  ]);
-  assert.equal(r.passed, false);
-  assert.ok(r.violations.some(v => v.includes('calendar_event')));
+  assert.equal(r.passed, true);
+  assert.equal(r.violations.length, 0);
 });
 
 test('detects opener similarity when >80% share same opener', () => {
@@ -222,12 +200,11 @@ test('Spanish messages work correctly', () => {
 
 test('multiple violations reported together', () => {
   const r = enforceUniqueness([
-    makeStep({ contact_name: 'Alice', message: 'hey Alice, check out this deal', hook_used: 'pricing' }),
-    makeStep({ contact_name: 'Bob', message: 'hey Bob, check out this deal', hook_used: 'pricing' }),
+    makeStep({ contact_name: 'Alice', message: 'hey Alice, wanted to reach out about this deal', hook_used: 'pricing' }),
+    makeStep({ contact_name: 'Bob', message: 'hey Bob, wanted to reach out about this deal', hook_used: 'pricing' }),
   ]);
   assert.equal(r.passed, false);
-  // Should have both template substitution and hook reuse
-  assert.ok(r.violations.length >= 2, `Expected ≥2 violations, got ${r.violations.length}: ${r.violations.join('; ')}`);
+  assert.ok(r.violations.some(v => v.includes('Template substitution')));
 });
 
 test('case differences in message bodies still caught', () => {

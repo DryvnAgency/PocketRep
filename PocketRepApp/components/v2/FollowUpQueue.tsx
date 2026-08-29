@@ -21,10 +21,21 @@ async function launchChannel(item: QueueItem): Promise<boolean> {
     isDemo: item.isDemo,
   })) === 'opened';
 
+  if (item.channel === 'email') {
+    const email = (item.email ?? '').trim();
+    if (!email) return false;
+    try {
+      await Linking.openURL(`mailto:${email}?subject=${encodeURIComponent(`Follow-up with ${item.contact_name}`)}&body=${encodeURIComponent(item.message)}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   const digits = (item.phone ?? '').replace(/[^\d+]/g, '');
   if (!digits) return false;
   try {
-    await Linking.openURL(item.channel === 'call' ? `tel:${digits}` : `mailto:?subject=${encodeURIComponent(`Follow-up with ${item.contact_name}`)}&body=${encodeURIComponent(item.message)}`);
+    await Linking.openURL(`tel:${digits}`);
     return true;
   } catch {
     return false;

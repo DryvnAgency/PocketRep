@@ -29,7 +29,7 @@ import OwnerControlCenter from './admin/OwnerControlCenter';
 import VehicleFinderModal from './VehicleFinderModal';
 import LockoutScreen from './LockoutScreen';
 import AuthScreen from './AuthScreen';
-import type { BlastDraft } from '@/lib/v2/blastSequences';
+import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
 import { warmBrain } from '@/lib/v2/aiProxy';
 import { rolloverCoachLog } from '@/lib/v2/coachLog';
 import { usePayPlan } from '@/lib/v2/payPlan';
@@ -54,7 +54,7 @@ import {
   syncOnboardingFromProfile,
 } from '@/lib/v2/rexSettings';
 import { isRexOnboardingEnabled, isContactImportEnabled, isVehicleFinderEnabled } from '@/lib/v2/rexFeatureFlags';
-import type { FindVehiclesPayload } from '@/lib/v2/rexActions';
+import type { CreateBlastSequencePayload, FindVehiclesPayload } from '@/lib/v2/rexActions';
 import { useAccessGate } from '@/lib/v2/accessGate';
 import { supabase } from '@/lib/supabase';
 import { captureTimezone } from '@/lib/v2/sendTime';
@@ -291,6 +291,27 @@ export default function AppShell() {
       setRexActionError('Could not analyze stalled leads. Try again.');
     } finally {
       setStalledLoading(false);
+    }
+  };
+
+  // Text-only V1 still needs a real Smart Blast entry point. Rex Coach proposes
+  // the segment, the rep confirms, then this creates a per-contact draft and
+  // opens the existing review sheet. Nothing sends without the rep's next tap.
+  const openBlastFromRex = async (payload: CreateBlastSequencePayload) => {
+    const selected = (contacts ?? []).filter(contact => payload.contact_ids.includes(contact.id));
+    if (selected.length === 0) throw new Error('No matching contacts were found for that blast.');
+    try {
+      const draft = await createBlastDraft({
+        intent: payload.intent,
+        filterSummary: payload.filter_summary,
+        promotion: payload.promotion ?? {},
+        contacts: selected,
+      });
+      setBlastDraft(draft);
+      setRexCoachOpen(false);
+    } catch (error: any) {
+      setRexActionError(error?.message ?? 'Could not draft the blast. Try again.');
+      throw error;
     }
   };
 
@@ -622,9 +643,13 @@ export default function AppShell() {
         contacts={contacts ?? []}
         payPlan={payPlan}
         onOpenContact={(id) => setSelectedId(id)}
-        onActed={(action) => {
+        onActed={async (action) => {
           // Refresh whichever surface a text-confirmed Rex action touched.
           const t = action.type;
+          if (t === 'create_blast_sequence') {
+            await openBlastFromRex(action.payload);
+            return;
+          }
           if (t === 'log_deal') setDealsRefetchKey(k => k + 1);
           if (t === 'add_contact' || t === 'update_notes' || t === 'schedule_followup' || t === 'retier_contact') {
             reloadContacts();

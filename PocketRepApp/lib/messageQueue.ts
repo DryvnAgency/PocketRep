@@ -36,6 +36,7 @@ export interface QueueItem {
   contact_id: string;
   contact_name: string;
   phone: string;
+  email: string;
   message: string;
   due_date: string;
   channel: 'text' | 'call' | 'email';
@@ -84,7 +85,7 @@ export async function clearQueueState(): Promise<void> {
  * kept the sent state only in one device's local storage, which caused duplicate
  * sends and broke across devices.
  */
-export async function markSentAndLog(item: QueueItem, userId: string): Promise<void> {
+async function advanceEnrollment(item: QueueItem, userId: string): Promise<void> {
   const now = new Date().toISOString();
 
   const { data: enrollment, error: enrollmentError } = await supabase
@@ -95,34 +96,48 @@ export async function markSentAndLog(item: QueueItem, userId: string): Promise<v
     .eq('sequence_id', item.sequence_id)
     .maybeSingle();
   if (enrollmentError) throw enrollmentError;
-
-  if (enrollment && enrollment.status === 'active' && enrollment.current_step === item.step_number) {
-    const { data: nextStep } = await supabase
-      .from('sequence_steps')
-      .select('step_number,delay_days')
-      .eq('sequence_id', item.sequence_id)
-      .eq('step_number', item.step_number + 1)
-      .maybeSingle();
-
-    if (nextStep) {
-      const nextAt = addDays(enrollment.started_at ?? now, Number(nextStep.delay_days ?? 0)).toISOString();
-      // Optimistic lock: another device may have already advanced this step.
-      // If current_step no longer matches, 0 rows are updated — that's fine.
-      const { error } = await supabase
-        .from('contact_sequences')
-        .update({ current_step: nextStep.step_number, next_step_at: nextAt })
-        .eq('id', enrollment.id)
-        .eq('current_step', item.step_number);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase
-        .from('contact_sequences')
-        .update({ current_step: item.step_number, next_step_at: null, status: 'completed', completed_at: now })
-        .eq('id', enrollment.id)
-        .eq('current_step', item.step_number);
-      if (error) throw error;
-    }
+  if (!enrollment || enrollment.status !== 'active' || enrollment.current_step !== item.step_number) {
+    throw new Error('This follow-up was already worked on another device. Refresh the queue.');
   }
+
+  const { data: nextStep, error: nextStepError } = await supabase
+    .from('sequence_steps')
+    .select('step_number,delay_days')
+    .eq('sequence_id', item.sequence_id)
+    .eq('step_number', item.step_number + 1)
+    .maybeSingle();
+  if (nextStepError) throw nextStepError;
+
+  const patch = nextStep
+    ? {
+        current_step: nextStep.step_number,
+        next_step_at: addDays(enrollment.started_at ?? now, Number(nextStep.delay_days ?? 0)).toISOString(),
+      }
+    : {
+        current_step: item.step_number,
+        next_step_at: null,
+        status: 'completed',
+        completed_at: now,
+      };
+
+  // Optimistic lock: if another device already advanced this exact step,
+  // surface the stale queue instead of logging the same action twice.
+  const { data: advanced, error: advanceError } = await supabase
+    .from('contact_sequences')
+    .update(patch)
+    .eq('id', enrollment.id)
+    .eq('status', 'active')
+    .eq('current_step', item.step_number)
+    .select('id')
+    .maybeSingle();
+  if (advanceError) throw advanceError;
+  if (!advanced) {
+    throw new Error('This follow-up was already worked on another device. Refresh the queue.');
+  }
+}
+
+export async function markSentAndLog(item: QueueItem, userId: string): Promise<void> {
+  await advanceEnrollment(item, userId);
 
   const { error: logError } = await supabase.from('contact_interactions').insert({
     user_id: userId,
@@ -138,7 +153,7 @@ export async function markSentAndLog(item: QueueItem, userId: string): Promise<v
 
 /** Mark the current step skipped and advance exactly like a sent step. */
 export async function markSkipped(item: QueueItem, userId: string): Promise<void> {
-  await markSentAndLog({ ...item, status: 'skipped' }, userId);
+  await advanceEnrollment(item, userId);
 }
 
 /**
@@ -168,7 +183,7 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
   const contactIds = [...new Set(enrollments.map((e: any) => e.contact_id))];
   const { data: contacts, error: contactError } = await supabase
     .from('contacts')
-    .select('id,first_name,last_name,phone,vehicle_year,vehicle_make,vehicle_model,is_deleted,is_demo')
+    .select('id,first_name,last_name,phone,email,vehicle_year,vehicle_make,vehicle_model,is_deleted,is_demo')
     .in('id', contactIds);
   if (contactError) throw contactError;
 
@@ -193,6 +208,7 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
       contact_id: contact.id,
       contact_name: `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim(),
       phone: contact.phone ?? '',
+      email: contact.email ?? '',
       message: personalizeMessage(step.message_template, contact),
       due_date: dueAt.split('T')[0],
       channel: step.channel,

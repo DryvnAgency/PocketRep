@@ -22,11 +22,43 @@ const sms = read('lib/v2/smsLauncher.ts');
 const smsActions = read('lib/v2/smsActions.ts');
 const webhook = read('supabase/functions/stripe-webhook/index.ts');
 const migration = read('../supabase/migrations/20260821_production_retry_and_sms_dedupe.sql');
+const blastLogic = read('lib/v2/blastSequences.ts');
+const rexCoach = read('components/v2/RexCoach.tsx');
+const coachBrain = read('lib/v2/coachBrain.ts');
+const appShell = read('components/v2/AppShell.tsx');
+const queue = read('lib/messageQueue.ts');
+const followUpQueue = read('components/v2/FollowUpQueue.tsx');
+const legacySequences = read('app/(tabs)/sequences.tsx');
+const supportClient = read('lib/v2/supportChat.ts');
+const supportNotify = read('supabase/functions/support-notify/index.ts');
+const supportGrants = read('supabase/migrations/20260829204520_support_chat_least_privilege.sql');
 
 ok(blast.includes("source: 'blast'"), 'blast sends identify SMS source as blast');
 ok(blast.includes('Do not create a second SMS'), 'real blast path documents single authoritative SMS action');
 ok(!blast.includes("recordSentBlast({\n              contactId: s.contact_id,\n              message: s.message,\n              language: s.language,\n              hookUsed: s.hook_used,\n            }).catch(() => undefined);"), 'real blast path does not create a duplicate history action');
 ok(blast.includes('✓ SENT'), 'confirmed blast UI says SENT rather than OPENED');
+ok(blast.includes('enforceUniqueness(toSend)'), 'blast send path blocks a duplicate or template-only active batch');
+ok(blastLogic.includes('const uniqueness = enforceUniqueness(drafted);'), 'generated blast is validated before sequence persistence');
+ok(blastLogic.includes('drafted.length !== contacts.length'), 'generated blast must cover every selected contact exactly once');
+
+ok(rexCoach.includes("'create_blast_sequence'"), 'text Rex permits the Smart Blast action');
+ok(coachBrain.includes('create_blast_sequence'), 'text Rex is taught how to propose Smart Blast');
+ok(appShell.includes('await openBlastFromRex(action.payload)'), 'confirmed text Rex Smart Blast opens a validated draft before claiming success');
+
+ok(queue.includes('phone,email,vehicle_year'), 'follow-up queue loads the real email recipient');
+ok(queue.includes('async function advanceEnrollment'), 'sent and skipped follow-ups share one guarded enrollment advance');
+ok(queue.includes('await advanceEnrollment(item, userId);'), 'skip advances without creating a fake sent interaction');
+ok(followUpQueue.includes('`mailto:${email}?subject='), 'V2 email follow-up targets the contact email');
+ok(legacySequences.includes('await markSkipped(item, userId)'), 'legacy queue skip also advances the enrollment');
+ok(legacySequences.includes('`mailto:${item.email.trim()}?subject='), 'legacy email follow-up targets the contact email');
+
+ok(supportClient.includes('body: JSON.stringify({ ticket_id: ticketId })'), 'support client sends no forged notification display data');
+ok(supportNotify.includes(".from('support_tickets')"), 'support notification reloads the ticket from storage');
+ok(supportNotify.includes('ticket.user_id !== user.id'), 'support notification verifies ticket ownership');
+ok(supportNotify.includes(".from('support_messages')"), 'support notification reloads message content from storage');
+ok(supportGrants.includes('revoke all on table public.support_tickets from anon, authenticated'), 'support migration removes inherited broad grants');
+ok(supportGrants.includes('alter policy support_messages_insert_own on public.support_messages to authenticated'), 'support policies are scoped to authenticated users');
+ok(supportGrants.includes('alter policy referrals_select_admin on public.referrals to authenticated'), 'remaining public admin policies are scoped before anonymous helper access is removed');
 
 ok(sms.includes("return sent ? 'opened' : 'not_sent';"), 'SMS launcher only returns opened after confirmation');
 ok(smsActions.includes("status: 'opened'"), 'SMS composer-open state is recorded separately');

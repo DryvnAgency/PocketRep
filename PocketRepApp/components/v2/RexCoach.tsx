@@ -1,8 +1,6 @@
-// Rex Coach — the tap-to-open text coaching chat (ported from
-// design/extracted/tab-rex.jsx "Coach Mode"). This is the ONLY thing the gold
-// orb opens. It's conversational coaching only: ask for scripts, rebuttals,
-// objection role-play, next-move ideas. It never writes to the database —
-// taking actions (add contact, log deal, etc.) is reserved for "Hey Rex" voice.
+// Rex Coach — the tap-to-open text coaching chat. This is the only thing the
+// gold orb opens in text-only V1. It coaches by default and may propose a small
+// allow-list of app actions; every action still requires an explicit Confirm.
 
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -27,12 +25,14 @@ import { getTodayLog, getCarrySummary, appendCoachEntry } from '@/lib/v2/coachLo
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
 
-// The coach may emit these (write) actions; delete/batch stay voice/UI-only.
+// The coach may emit this narrow action allow-list; destructive batch/delete
+// operations stay voice/UI-only and every listed action still needs Confirm.
 // find_vehicles (read-only pivot) joins the list only when its flag is on — off
 // → the model isn't taught the action and the set is unchanged, so a stray
 // find_vehicles degrades to plain text like any non-allowed action.
 const COACH_ACTIONS = new Set<RexAction['type']>([
   'add_contact', 'update_notes', 'schedule_followup', 'retier_contact', 'log_deal', 'create_reminder',
+  'create_blast_sequence',
   ...(isVehicleFinderEnabled() ? (['find_vehicles'] as RexAction['type'][]) : []),
 ]);
 
@@ -80,7 +80,7 @@ export default function RexCoach({
   payPlan: PayPlan | null;
   // Fired after a confirmed action executes so AppShell can refresh the right
   // surface (contacts / deals / notifications) — mirrors handleRexConfirm.
-  onActed?: (action: RexAction) => void;
+  onActed?: (action: RexAction) => void | Promise<void>;
   onOpenContact?: (id: string) => void;
 }) {
   const greeting = useRef(COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)]);
@@ -329,9 +329,11 @@ export default function RexCoach({
     setActing(true);
     try {
       const result = await executeAction(action, contacts);
+      // UI-backed actions such as Smart Blast finish their real work in
+      // AppShell. Await that work so the success log and Done message are true.
+      await onActed?.(action);
       logRexAction(action, 'success').catch(() => undefined); // audit chat-taken writes too
       pushRex(`✓ Done — ${summarizeAction(action)}`);
-      onActed?.(action);
       if (result.openContactId) onOpenContact?.(result.openContactId);
       setPending(null);
     } catch (e: any) {

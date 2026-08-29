@@ -82,8 +82,9 @@ You drafted to ${contacts.length} contact${contacts.length === 1 ? '' : 's'}. Fo
 6. If mileage or lease_end is missing, do NOT invent numbers. Soften: "if you're getting close to your cap" / "your lease should be wrapping up around [month]".
 
 VARIETY RULE within this batch:
-- No two messages may share the same hook_used.
+- Vary hooks when the contact context supports it, but never invent context just to force a different hook.
 - No two messages may share the same opener structure beyond "hey {first_name}" / "hola {first_name}".
+- Reusing a broad hook category is allowed only when the actual message and contact-specific reason are different.
 
 ${REX_COPY_RULES}
 
@@ -173,8 +174,11 @@ function normalizeBody(msg: string): string {
  * Checks:
  * 1. Exact-duplicate bodies (normalized)
  * 2. First-name-only substitution (bodies identical after removing the contact's first name)
- * 3. Hook reuse (same hook_used on multiple contacts)
- * 4. Opener similarity (>80% of messages share the same first 40 chars after the greeting)
+ * 3. Opener similarity (>80% of messages share the same first 40 chars after the greeting)
+ *
+ * A hook label is intentionally not a uniqueness boundary. Batches can contain
+ * more contacts than the finite hook taxonomy, and two customers can have a
+ * legitimate inventory angle while still receiving genuinely different copy.
  */
 export function enforceUniqueness(steps: DraftedStep[]): UniquenessResult {
   const violations: string[] = [];
@@ -203,7 +207,8 @@ export function enforceUniqueness(steps: DraftedStep[]): UniquenessResult {
   const strippedBodies = steps.map(s => {
     const firstName = s.contact_name.split(/\s+/)[0];
     if (!firstName) return { name: s.contact_name, stripped: normalizeBody(s.message) };
-    const re = new RegExp(firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const escaped = firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\b${escaped}\\b`, 'gi');
     return { name: s.contact_name, stripped: normalizeBody(s.message.replace(re, '')) };
   });
   const strippedMap = new Map<string, string[]>();
@@ -225,24 +230,7 @@ export function enforceUniqueness(steps: DraftedStep[]): UniquenessResult {
     }
   }
 
-  // 3. Hook diversity check
-  const hookMap = new Map<string, string[]>();
-  for (const s of steps) {
-    const hook = s.hook_used.toLowerCase();
-    const existing = hookMap.get(hook);
-    if (existing) {
-      existing.push(s.contact_name);
-    } else {
-      hookMap.set(hook, [s.contact_name]);
-    }
-  }
-  for (const [hook, names] of hookMap) {
-    if (names.length > 1) {
-      violations.push(`Hook "${hook}" reused across: ${names.join(', ')}`);
-    }
-  }
-
-  // 4. Opener similarity check
+  // 3. Opener similarity check
   // Extract the opener after the greeting (hey/hola + name), compare first 40 chars.
   const openerRe = /^(?:hey|hola|qu[eé]\s+(?:tal|onda))\s+\S+[,!]?\s*/i;
   const openers = steps.map(s => {
@@ -281,7 +269,30 @@ export async function createBlastDraft({
     maxTokens: 2000,
     messages: [{ role: 'user', content: buildBlastPrompt({ intent, promotion, contacts }) }],
   });
-  const drafted = parseDraftedSteps(raw);
+  const parsed = parseDraftedSteps(raw);
+
+  // The model may omit, duplicate, or hallucinate contact ids. Rebuild the
+  // batch against the actual selected book before any sequence row is written.
+  const contactById = new Map(contacts.map(contact => [contact.id, contact]));
+  const seen = new Set<string>();
+  const drafted = parsed.flatMap(step => {
+    const contact = contactById.get(step.contact_id);
+    if (!contact || seen.has(step.contact_id)) return [];
+    seen.add(step.contact_id);
+    return [{
+      ...step,
+      contact_name: contact.name,
+      char_count: step.message.length,
+    }];
+  });
+  if (drafted.length !== contacts.length) {
+    throw new Error(`Rex drafted ${drafted.length} of ${contacts.length} messages. Try the batch again.`);
+  }
+
+  const uniqueness = enforceUniqueness(drafted);
+  if (!uniqueness.passed) {
+    throw new Error(`Rex drafted messages that were too similar: ${uniqueness.violations.join('; ')}`);
+  }
 
   const inferredLanguage = (() => {
     const langs = new Set(drafted.map(d => d.language));
