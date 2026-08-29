@@ -1,56 +1,71 @@
-// Local-only settings for the always-listening Hey Rex feature.
-// Stored under window.localStorage so each browser remembers independently;
-// native paths fall through to in-memory state until we wire SecureStore.
+// V1 Rex settings.
+//
+// VOICE IS HARD-DISABLED IN V1. PocketRep ships text-only until V2 implements
+// speech-to-text and text-to-speech as one deliberate experience. Keeping the
+// old storage key here lets us actively clear stale browser state from earlier
+// previews so an existing user cannot accidentally re-enable the old robotic
+// browser voice.
 
 import { Platform } from 'react-native';
+import { supabase } from '@/lib/supabase';
 
 const KEY = 'pocketrep:v2:hey-rex-always-on';
 const DISCLOSURE_KEY = 'pocketrep:v2:hey-rex-disclosure-seen';
 const EVENT_NAME = 'pocketrep:hey-rex-changed';
 
 let mem = false;
-let memDisclosure = false;
 
+function clearLegacyVoiceState(): void {
+  mem = false;
+  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+    try { localStorage.removeItem(KEY); } catch { /* ignore */ }
+  }
+}
+
+/** V1 invariant: Hey Rex listening is never enabled. */
 export function getAlwaysListenEnabled(): boolean {
-  if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return mem;
-  return localStorage.getItem(KEY) === '1';
+  clearLegacyVoiceState();
+  return false;
 }
 
-export function setAlwaysListenEnabled(enabled: boolean): void {
-  mem = enabled;
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-    if (enabled) localStorage.setItem(KEY, '1');
-    else localStorage.removeItem(KEY);
-  }
+/**
+ * Retained for compatibility with existing callers, but V1 never accepts an
+ * enable request. V2 can replace this hard lock when STT + TTS ship together.
+ */
+export function setAlwaysListenEnabled(_enabled: boolean): void {
+  clearLegacyVoiceState();
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: { enabled } }));
+    window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: { enabled: false } }));
   }
 }
 
+/** V1 invariant: subscribers can only observe voice as disabled. */
 export function subscribeAlwaysListen(cb: (enabled: boolean) => void): () => void {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return () => undefined;
-  const handler = (e: Event) => cb((e as CustomEvent).detail?.enabled === true);
-  window.addEventListener(EVENT_NAME, handler);
-  return () => window.removeEventListener(EVENT_NAME, handler);
+  clearLegacyVoiceState();
+  cb(false);
+  return () => undefined;
 }
 
+/**
+ * The disclosure is exclusively for the deferred always-listening microphone
+ * feature, so V1 treats it as already handled and never renders it.
+ */
 export function hasSeenDisclosure(): boolean {
-  if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return memDisclosure;
-  return localStorage.getItem(DISCLOSURE_KEY) === '1';
+  clearLegacyVoiceState();
+  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+    try { localStorage.removeItem(DISCLOSURE_KEY); } catch { /* ignore */ }
+  }
+  return true;
 }
 
+/** Compatibility no-op while voice is unavailable in V1. */
 export function markDisclosureSeen(): void {
-  memDisclosure = true;
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-    localStorage.setItem(DISCLOSURE_KEY, '1');
-  }
+  clearLegacyVoiceState();
 }
 
 // Onboarding completion — primary source of truth is profiles.onboarding_complete
 // (follows the user across devices); localStorage is just a fast read-through
-// cache so the disclosure modal doesn't flash on every load.
-import { supabase } from '@/lib/supabase';
-
+// cache so onboarding does not flash again after completion.
 const ONBOARDING_KEY = 'pocketrep:v2:onboarding-complete';
 let memOnboarding = false;
 
