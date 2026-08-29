@@ -4,27 +4,30 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 
-function usernameToEmail(username: string) { return `${username.trim().toLowerCase()}@pocketrep.pro`; }
+function loginToEmail(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.includes('@') ? normalized : `${normalized}@pocketrep.pro`;
+}
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   async function handleLogin() {
-    if (!username || !password) { Alert.alert('Fill in both fields'); return; }
+    if (!login || !password) { Alert.alert('Fill in both fields'); return; }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: usernameToEmail(username), password });
+    const { error } = await supabase.auth.signInWithPassword({ email: loginToEmail(login), password });
     setLoading(false);
-    if (error) Alert.alert('Login failed', 'Username or password is incorrect.');
+    if (error) Alert.alert('Login failed', 'Email/username or password is incorrect.');
   }
   return <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" style={s.scrollBg}>
       <View style={s.logoWrap}><View style={s.logoMark}><Text style={s.logoMarkText}>P</Text></View><Text style={s.logoText}>Pocket<Text style={{color:colors.gold}}>Rep</Text></Text></View>
       <Text style={s.headline}>Welcome back, closer.</Text><Text style={s.sub}>Sign in to your book.</Text>
       <View style={s.form}>
-        <Text style={s.label}>Username</Text>
-        <TextInput style={s.input} value={username} onChangeText={setUsername} placeholder="your username" placeholderTextColor={colors.grey} autoCapitalize="none" autoCorrect={false} autoComplete="username" />
+        <Text style={s.label}>Email or username</Text>
+        <TextInput style={s.input} value={login} onChangeText={setLogin} placeholder="you@example.com" placeholderTextColor={colors.grey} autoCapitalize="none" autoCorrect={false} autoComplete="username" />
         <Text style={s.label}>Password</Text>
         <TextInput style={s.input} value={password} onChangeText={setPassword} placeholder="••••••••" placeholderTextColor={colors.grey} secureTextEntry autoComplete="password" />
         <TouchableOpacity style={s.btn} onPress={handleLogin} disabled={loading} activeOpacity={0.85}>{loading ? <ActivityIndicator color={colors.ink}/> : <Text style={s.btnText}>Sign In →</Text>}</TouchableOpacity>
