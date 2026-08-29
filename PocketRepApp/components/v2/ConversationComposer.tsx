@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Platform } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 
-// NEW 5 capture surface: paste OR dictate a whole customer conversation, then
-// hand the raw transcript to Rex to parse into a contact + notes + plan. Web
-// dictation uses the browser SpeechRecognition (continuous); native users
-// paste/type. Pure capture — the parse + confirm-before-write lives in RexCoach.
+// NEW 5 capture surface: paste a whole customer conversation, then hand the
+// raw transcript to Rex to parse into a contact + notes + plan. V1 is
+// text-only (no dictation, no mic permission) — paste/type only. Pure
+// capture — the parse + confirm-before-write lives in RexCoach.
 export default function ConversationComposer({
   open,
   busy,
@@ -18,58 +18,16 @@ export default function ConversationComposer({
   onSubmit: (transcript: string) => void;
 }) {
   const [text, setText] = useState('');
-  const [listening, setListening] = useState(false);
-  const recRef = useRef<any>(null);
 
   useEffect(() => {
-    if (open) { setText(''); setListening(false); }
-    return () => {
-      try { recRef.current?.stop?.(); } catch { /* ignore */ }
-      recRef.current = null;
-    };
+    if (open) { setText(''); }
   }, [open]);
 
   if (!open) return null;
 
-  const speechAvailable =
-    Platform.OS === 'web' &&
-    typeof window !== 'undefined' &&
-    !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-
-  const toggleMic = () => {
-    if (!speechAvailable) return;
-    if (listening) {
-      try { recRef.current?.stop?.(); } catch { /* ignore */ }
-      setListening(false);
-      return;
-    }
-    try {
-      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const rec = new SR();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = 'en-US';
-      rec.onresult = (e: any) => {
-        let finals = '';
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) finals += e.results[i][0].transcript + ' ';
-        }
-        if (finals) setText(prev => (prev ? prev.trimEnd() + ' ' : '') + finals.trim());
-      };
-      rec.onend = () => setListening(false);
-      rec.onerror = () => setListening(false);
-      recRef.current = rec;
-      rec.start();
-      setListening(true);
-    } catch {
-      setListening(false);
-    }
-  };
-
   const submit = () => {
     const t = text.trim();
     if (!t || busy) return;
-    try { recRef.current?.stop?.(); } catch { /* ignore */ }
     onSubmit(t);
   };
 
@@ -81,7 +39,7 @@ export default function ConversationComposer({
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.kicker}>PARSE A CONVERSATION</Text>
-            <Text style={styles.title}>Paste or dictate what was said</Text>
+            <Text style={styles.title}>Paste what was said</Text>
           </View>
           <Pressable onPress={onClose} disabled={busy} style={styles.closeBtn} hitSlop={6}>
             <Text style={styles.closeText}>✕</Text>
@@ -94,19 +52,12 @@ export default function ConversationComposer({
           multiline
           autoFocus
           editable={!busy}
-          placeholder="Paste the conversation, or tap the mic and talk it through. Rex pulls out the contact, notes, and your next move."
+          placeholder="Paste the conversation here. Rex will pull out the contact, notes, and your next move."
           placeholderTextColor={colors.grey}
           style={styles.input}
         />
 
         <View style={styles.actions}>
-          {speechAvailable ? (
-            <Pressable onPress={toggleMic} disabled={busy} style={[styles.micBtn, listening && styles.micBtnOn]}>
-              <Text style={[styles.micText, listening && { color: colors.ink }]}>
-                {listening ? '● Listening — tap to stop' : '🎙 Dictate'}
-              </Text>
-            </Pressable>
-          ) : <View style={{ flex: 1 }} />}
           <Pressable
             onPress={submit}
             disabled={busy || !text.trim()}
@@ -153,13 +104,6 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top' as any,
   },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
-  micBtn: {
-    flex: 1,
-    paddingVertical: 12, borderRadius: radius.md, alignItems: 'center',
-    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.goldBorder,
-  },
-  micBtnOn: { backgroundColor: colors.gold, borderColor: colors.gold },
-  micText: { fontSize: 13, fontWeight: '700', color: colors.gold, letterSpacing: 0.2 },
   parseBtn: {
     flex: 1,
     paddingVertical: 12, borderRadius: radius.md, alignItems: 'center',
