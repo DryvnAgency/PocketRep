@@ -146,22 +146,22 @@ Deno.serve(async (req: Request) => {
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const s = event.data.object, profileId = await profileIdForCustomer(admin, s.customer);
-        if (profileId) await admin.from("profiles").update(Object.assign({ plan: "pocketrep", subscription_status: s.status, trial_ends_at: s.status === "trialing" && s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null }, ["active","trialing"].includes(s.status) ? { entitlement_status: null, entitlement_pending_until: null } : {})).eq("id", profileId);
+        if (profileId) { const entitlementStatus = s.status === "trialing" ? "trialing" : s.status === "active" ? "active" : s.status === "past_due" ? "past_due" : s.status === "canceled" ? "canceled" : "locked"; await admin.from("profiles").update({ plan: "pocketrep", subscription_status: s.status, trial_ends_at: s.status === "trialing" && s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null, entitlement_status: entitlementStatus, entitlement_pending_until: null }).eq("id", profileId); }
         break;
       }
       case "customer.subscription.deleted": {
         const s = event.data.object, profileId = await profileIdForCustomer(admin, s.customer);
-        if (profileId) await admin.from("profiles").update({ subscription_status: "canceled" }).eq("id", profileId);
+        if (profileId) await admin.from("profiles").update({ subscription_status: "canceled", entitlement_status: "canceled", entitlement_pending_until: null }).eq("id", profileId);
         break;
       }
       case "invoice.payment_failed": {
         const i = event.data.object, profileId = await profileIdForCustomer(admin, i.customer);
-        if (profileId) await admin.from("profiles").update({ subscription_status: "past_due" }).eq("id", profileId);
+        if (profileId) await admin.from("profiles").update({ subscription_status: "past_due", entitlement_status: "past_due", entitlement_pending_until: null }).eq("id", profileId);
         break;
       }
       case "invoice.payment_succeeded": {
         const i = event.data.object, profileId = await profileIdForCustomer(admin, i.customer);
-        if (profileId) await admin.from("profiles").update({ subscription_status: "active", entitlement_status: null, entitlement_pending_until: null }).eq("id", profileId);
+        if (profileId) await admin.from("profiles").update({ subscription_status: "active", entitlement_status: "active", entitlement_pending_until: null }).eq("id", profileId);
         // Referral qualification is intentionally tied to a successful subscription invoice.
         const subscriptionId = typeof i.subscription === "string" ? i.subscription : i.subscription?.id ?? null;
         const { data: ref } = await admin.from("referrals").select("*").eq("stripe_customer_id", i.customer).maybeSingle();
