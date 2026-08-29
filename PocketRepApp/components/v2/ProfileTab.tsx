@@ -1,15 +1,11 @@
 import { useEffect, useReducer, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Switch, Platform, Share, Linking } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform, Share, Linking } from 'react-native';
 import Constants from 'expo-constants';
 import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, Pill, SectionHead } from './atoms';
 import { supabase } from '@/lib/supabase';
 import { signOutAndReset } from '@/lib/v2/localSessionClear';
 import { shouldShowInstallRow } from './PWAInstallPrompt';
-import {
-  getAlwaysListenEnabled,
-  setAlwaysListenEnabled,
-} from '@/lib/v2/rexSettings';
 import {
   getRepSetting,
   setRepSetting,
@@ -93,7 +89,6 @@ export default function ProfileTab({
 } = {}) {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [alwaysListen, setAlwaysListen] = useState<boolean>(false);
   const [editTarget, setEditTarget] = useState<{ key: EditKey; config: SettingEditConfig } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
@@ -108,7 +103,6 @@ export default function ProfileTab({
 
   useEffect(() => {
     let cancelled = false;
-    setAlwaysListen(getAlwaysListenEnabled());
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || cancelled) return;
@@ -132,11 +126,6 @@ export default function ProfileTab({
     const unsub = subscribeRepSettings(forceTick);
     return () => { cancelled = true; unsub(); };
   }, []);
-
-  const toggleListen = (next: boolean) => {
-    setAlwaysListen(next);
-    setAlwaysListenEnabled(next);
-  };
 
   const editSetting = (key: RepSettingKey, title: string, label: string, extra?: Partial<SettingEditConfig>) => {
     setEditTarget({ key, config: { title, label, value: getRepSetting(key), ...extra } });
@@ -293,27 +282,12 @@ export default function ProfileTab({
 
       <SectionHead label="REX" color={colors.gold} />
       <View style={styles.group}>
-        <View style={styles.row}>
-          <View style={[styles.rowIcon, { backgroundColor: colors.goldBg, borderColor: colors.goldBorder }]}>
-            <Text style={{ color: colors.gold, fontSize: 14 }}>🎙</Text>
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.rowLabel}>Always listen for “Hey Rex”</Text>
-            <Text style={styles.rowSub}>Wake word + 4s silence trigger</Text>
-          </View>
-          <Switch
-            value={alwaysListen}
-            onValueChange={toggleListen}
-            trackColor={{ false: colors.ink4, true: colors.gold }}
-            thumbColor={alwaysListen ? colors.ink : colors.grey2}
-          />
-        </View>
         <View style={styles.toneRow}>
           <View style={[styles.rowIcon, { backgroundColor: colors.goldBg, borderColor: colors.goldBorder }]}>
             <Text style={{ color: colors.gold, fontSize: 14 }}>🤖</Text>
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.rowLabel}>Voice & tone</Text>
+            <Text style={styles.rowLabel}>Rex style</Text>
             <View style={styles.tonePills}>
               {(['Steady', 'Sharp', 'Fire'] as const).map(t => {
                 const active = getRepSetting('voiceTone') === t;
