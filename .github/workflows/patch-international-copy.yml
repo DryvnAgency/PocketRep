@@ -1,0 +1,56 @@
+name: Patch international FAQ copy
+
+on:
+  push:
+    branches:
+      - claude/quirky-babbage-f0s519
+    paths:
+      - .github/workflows/patch-international-copy.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/quirky-babbage-f0s519
+          fetch-depth: 0
+
+      - name: Patch landing FAQ
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('Pocketrep/index.html')
+          text = path.read_text()
+
+          schema_old = '''{\"@type\":\"Question\",\"name\":\"Does PocketRep work in Spanish?\",\"acceptedAnswer\":{\"@type\":\"Answer\",\"text\":\"Yes. Rex writes follow-ups in English and in natural Mexican Spanish, so you can sell in both languages.\"}}\n]}'''
+          schema_new = '''{\"@type\":\"Question\",\"name\":\"Does PocketRep work in Spanish?\",\"acceptedAnswer\":{\"@type\":\"Answer\",\"text\":\"Yes. Rex writes follow-ups in English and in natural Mexican Spanish, so you can sell in both languages.\"}},\n{\"@type\":\"Question\",\"name\":\"Where can I use PocketRep?\",\"acceptedAnswer\":{\"@type\":\"Answer\",\"text\":\"PocketRep is built for sales professionals and can be accessed online from supported locations. Our initial launch and support are focused on the United States, with broader international availability planned as we expand. Features, billing options, and availability may vary by country or region.\"}}\n]}'''
+
+          if text.count(schema_old) != 1:
+              raise SystemExit(f'Expected structured FAQ anchor once, found {text.count(schema_old)}')
+          text = text.replace(schema_old, schema_new, 1)
+
+          visible_old = '''    <div class=\"faq-item\"><button class=\"faq-q\">Does it work on my phone?<span class=\"pm\">＋</span></button><div class=\"faq-a\"><p>Yes. PocketRep V1 is built to work from a modern phone or desktop browser, so you can keep it with you on the floor without waiting for a native-app launch.</p></div></div>'''
+          visible_new = visible_old + '''\n    <div class=\"faq-item\"><button class=\"faq-q\">Where can I use PocketRep?<span class=\"pm\">＋</span></button><div class=\"faq-a\"><p>PocketRep is built for sales professionals and can be accessed online from supported locations. Our initial launch and support are focused on the United States, with broader international availability planned as we expand. Features, billing options, and availability may vary by country or region.</p></div></div>'''
+
+          if text.count(visible_old) != 1:
+              raise SystemExit(f'Expected visible FAQ anchor once, found {text.count(visible_old)}')
+          text = text.replace(visible_old, visible_new, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Commit patch and remove workflow
+        shell: bash
+        run: |
+          git config user.name "PocketRep Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git rm -f .github/workflows/patch-international-copy.yml
+          git add Pocketrep/index.html
+          git commit -m "copy: clarify international availability in FAQ"
+          git push origin HEAD:claude/quirky-babbage-f0s519
