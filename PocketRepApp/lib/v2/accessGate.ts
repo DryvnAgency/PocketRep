@@ -58,12 +58,32 @@ export function decideAccess(input: {
 // webhook resolving a subscription) while the tab stays open and focused.
 const RECHECK_INTERVAL_MS = 60_000;
 
-export function useAccessGate(): AccessState {
+// `enabled` gates the whole check on auth being resolved. AppShell passes its
+// `authReady`, which is only true once a real session exists. Without this the
+// hook ran once on mount — before sign-in — got no user from getUser(), and
+// latched `locked / invalid_account`. AppShell hides that behind AuthScreen
+// while logged out, so the stale lock only surfaced the moment a SUCCESSFUL
+// sign-in flipped `needsAuth` false: a valid paid/trialing rep landed on
+// "Account not found" until the visibility listener or the 60s interval
+// happened to re-run the check. Defaults to true so any future caller that
+// already knows it has a session keeps the old behavior.
+export function useAccessGate(enabled = true): AccessState {
   const [state, setState] = useState<AccessState>({ status: 'loading' });
   const cancelledRef = useRef(false);
 
   useEffect(() => {
     cancelledRef.current = false;
+
+    // Auth hasn't resolved yet (or we just signed out). Stay inert: no
+    // getUser(), no profile billing read, and no locked state that could leak
+    // into the post-sign-in render. Listing `enabled` in the deps below is what
+    // makes the false -> true transition re-run this effect and evaluate access
+    // immediately, instead of waiting for a focus change or the interval.
+    if (!enabled) {
+      setState(prev => (prev.status === 'loading' ? prev : { status: 'loading' }));
+      return () => { cancelledRef.current = true; };
+    }
+
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { if (!cancelledRef.current) setState({ status: 'locked', reason: 'invalid_account' }); return; }
@@ -108,7 +128,7 @@ export function useAccessGate(): AccessState {
       removeVisibility?.();
       clearInterval(interval);
     };
-  }, []);
+  }, [enabled]);
 
   return state;
 }

@@ -103,7 +103,7 @@ export default function AppShell() {
   // HARD LOCKOUT gate — inert until Eduardo wires the real subscription read in
   // accessGate.ts (it returns 'allowed' today, so no behavior change). See the
   // early return below + docs/MASTER_PLAN.md §"Gated P0 — Eduardo only".
-  const access = useAccessGate();
+  const access = useAccessGate(authReady);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts(authReady);
 
