@@ -30,7 +30,8 @@
     "test:uiaudit": "node scripts/test-ui-audit.mjs",
     "test:contactlifecycle": "node scripts/test-contact-lifecycle.mjs",
     "test:dealentry": "node scripts/test-deal-entry.mjs",
-    "test:all": "node scripts/test-followup-drafts.mjs && node scripts/test-chainguard.mjs && node scripts/test-contactpick.mjs && node scripts/test-rexchat.mjs && node scripts/test-demoblast.mjs && node scripts/test-authflow.mjs && node scripts/test-vehiclefinder.mjs && node scripts/test-rextriad.mjs && node scripts/test-accessgate.mjs && node scripts/test-sms-status.mjs && node scripts/test-followup-logic.mjs && node scripts/test-sequence-race.mjs && node scripts/test-referral.mjs && node scripts/test-production-hardening.mjs && node scripts/test-checkout-provision.mjs && node scripts/test-blast-uniqueness.mjs && node scripts/test-ui-audit.mjs && node scripts/test-contact-lifecycle.mjs && node scripts/test-deal-entry.mjs"
+    "test:mobile": "node scripts/test-mobile-readiness.mjs",
+    "test:all": "node scripts/test-followup-drafts.mjs && node scripts/test-chainguard.mjs && node scripts/test-contactpick.mjs && node scripts/test-rexchat.mjs && node scripts/test-demoblast.mjs && node scripts/test-authflow.mjs && node scripts/test-vehiclefinder.mjs && node scripts/test-rextriad.mjs && node scripts/test-accessgate.mjs && node scripts/test-sms-status.mjs && node scripts/test-followup-logic.mjs && node scripts/test-sequence-race.mjs && node scripts/test-referral.mjs && node scripts/test-production-hardening.mjs && node scripts/test-checkout-provision.mjs && node scripts/test-blast-uniqueness.mjs && node scripts/test-ui-audit.mjs && node scripts/test-contact-lifecycle.mjs && node scripts/test-deal-entry.mjs && node scripts/test-mobile-readiness.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.1",

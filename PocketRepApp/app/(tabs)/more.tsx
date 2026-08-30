@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Modal, Pressable,
-  StyleSheet, Alert, ActivityIndicator, Linking, Platform,
+  StyleSheet, Alert, ActivityIndicator, Linking,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -307,13 +307,13 @@ export default function MoreScreen() {
       <Text style={s.section}>Support</Text>
       <TouchableOpacity
         style={s.row}
-        onPress={() => Linking.openURL(`sms:+1XXXXXXXXXX${Platform.OS === 'ios' ? '&' : '?'}body=Hi PocketRep Support — I need help with...`)}
+        onPress={() => Linking.openURL('mailto:service@pocketrep.pro?subject=PocketRep%20support')}
         activeOpacity={0.8}
       >
         <View style={s.rowLeft}>
           <Text style={s.rowIcon}>💬</Text>
           <View>
-            <Text style={s.rowTitle}>Text PocketRep Support</Text>
+            <Text style={s.rowTitle}>Email PocketRep Support</Text>
             <Text style={s.rowSub}>We'll reply within a few hours</Text>
           </View>
         </View>

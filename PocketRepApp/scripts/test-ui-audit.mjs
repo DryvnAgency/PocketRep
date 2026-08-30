@@ -28,6 +28,9 @@ const dealDetail = read('components/v2/DealDetail.tsx');
 const notifications = read('components/v2/NotificationsCenter.tsx');
 const rex = read('app/(tabs)/rex.tsx');
 const sequences = read('app/(tabs)/sequences.tsx');
+const legacyDeals = read('app/(tabs)/deals.tsx');
+const legacyContacts = read('app/(tabs)/contacts.tsx');
+const legacyMore = read('app/(tabs)/more.tsx');
 
 ok(profile.includes('window.location.assign(data.url)'), 'billing uses a reliable same-tab Stripe handoff');
 ok(!profile.includes("open?.(data.url, '_blank')"), 'billing does not rely on a delayed popup');
@@ -52,6 +55,13 @@ ok(followUps.includes("result === 'unsupported'"), 'sequence follow-up keeps uns
 ok(contactSms.includes("compose.mode === 'text' && !isCurrentWebRuntimeSmsCapable()"), 'contact composer also blocks unsupported desktop SMS handoffs');
 ok(rex.includes("result === 'unsupported'"), 'Rex bulk text stops safely when desktop SMS is unsupported');
 ok(sequences.includes("result === 'unsupported'"), 'sequence mass text preserves the draft when desktop SMS is unsupported');
+ok(legacyDeals.includes('parseGrossInput(form.front_gross)'), 'native legacy deal entry validates decimal gross with the shared parser');
+ok(legacyDeals.includes('savingRef.current'), 'native legacy deal entry blocks duplicate rapid saves');
+ok(!legacyContacts.includes('recipients.map(c => c.phone).join'), 'native legacy mass text no longer opens an exposed group-message composer');
+ok(legacyContacts.includes('await launchSms({'), 'native legacy mass text records each confirmed send honestly');
+ok(legacyContacts.includes("replace(/\\{\\{first_name\\}\\}/g"), 'native legacy mass text resolves the first-name template per recipient');
+ok(legacyContacts.includes('massTextSendingRef.current'), 'native legacy mass text blocks duplicate rapid starts');
+ok(!legacyMore.includes('sms:+1XXXXXXXXXX'), 'native legacy support action no longer targets a placeholder phone number');
 
 ok(dealLogger.includes('parseGrossInput(text)'), 'deal gross uses the decimal-safe parser');
 ok(dealLogger.includes('validateDealDraft(d)'), 'deal Save exposes deterministic validation');

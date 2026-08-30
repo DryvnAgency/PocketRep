@@ -2,12 +2,13 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, Modal, ScrollView, Alert, ActivityIndicator,
-  Animated, PanResponder, Dimensions, Linking, Platform,
+  Animated, PanResponder, Dimensions, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing, heatConfig } from '@/constants/theme';
 import type { Contact, Stage } from '@/lib/types';
+import { launchSms } from '@/lib/v2/smsLauncher';
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
@@ -235,6 +236,8 @@ export default function ContactsScreen() {
   const [showMassText, setShowMassText] = useState(false);
   const [massTextMsg, setMassTextMsg] = useState('');
   const [massTextCount, setMassTextCount] = useState(0);
+  const [massTextSending, setMassTextSending] = useState(false);
+  const massTextSendingRef = useRef(false);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
@@ -431,35 +434,51 @@ export default function ContactsScreen() {
   }
 
   async function sendMassText() {
+    if (massTextSendingRef.current) return;
     if (!massTextMsg.trim()) { Alert.alert('Enter a message'); return; }
     const recipients = filtered.slice(0, MASS_TEXT_LIMIT).filter(c => c.phone);
     if (recipients.length === 0) { Alert.alert('No recipients with phone numbers.'); return; }
-    const phones = recipients.map(c => c.phone).join(',');
-    const sep = Platform.OS === 'ios' ? '&' : '?';
-    const smsUrl = `sms:${phones}${sep}body=${encodeURIComponent(massTextMsg)}`;
-    try { await Linking.openURL(smsUrl); } catch { Alert.alert('Could not open SMS app'); return; }
-    // Confirm the rep actually sent it before recording
-    const didSend = await new Promise<boolean>(resolve => {
-      if (Platform.OS === 'web') {
-        resolve(typeof window !== 'undefined' && window.confirm('Did you send the message?'));
-      } else {
-        Alert.alert('Confirm', 'Did you send the message?', [
-          { text: 'No', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Yes, sent', onPress: () => resolve(true) },
-        ]);
+    massTextSendingRef.current = true;
+    setMassTextSending(true);
+    try {
+      let sent = 0;
+      for (const contact of recipients) {
+        const personalized = massTextMsg.replace(/\{\{first_name\}\}/g, contact.first_name || 'there');
+        const result = await launchSms({
+          contact_id: contact.id,
+          contact_name: `${contact.first_name} ${contact.last_name}`.trim(),
+          phone: contact.phone,
+          message: personalized,
+          source: 'manual',
+        });
+        if (result === 'unsupported') {
+          const message = 'Open PocketRep on your phone to launch Messages. Your draft remains available.';
+          if (Platform.OS === 'web') (globalThis as any).alert?.(message);
+          else Alert.alert('Phone required', message);
+          return;
+        }
+        if (result === 'opened') sent++;
       }
-    });
-    if (!didSend) { setShowMassText(false); setMassTextMsg(''); return; }
-    const record = { id: Date.now().toString(), message: massTextMsg, recipient_count: recipients.length, sent_at: new Date().toISOString() };
-    if (AsyncStorage) {
-      try {
-        const raw = await AsyncStorage.getItem(MASS_TEXT_KEY);
-        const existing = raw ? JSON.parse(raw) : [];
-        await AsyncStorage.setItem(MASS_TEXT_KEY, JSON.stringify([...existing, record]));
-      } catch {}
+      if (sent === 0) {
+        const message = 'Your draft remains available so you can try again.';
+        if (Platform.OS === 'web') (globalThis as any).alert?.(`Nothing marked sent\n\n${message}`);
+        else Alert.alert('Nothing marked sent', message);
+        return;
+      }
+      const record = { id: Date.now().toString(), message: massTextMsg, recipient_count: sent, sent_at: new Date().toISOString() };
+      if (AsyncStorage) {
+        try {
+          const raw = await AsyncStorage.getItem(MASS_TEXT_KEY);
+          const existing = raw ? JSON.parse(raw) : [];
+          await AsyncStorage.setItem(MASS_TEXT_KEY, JSON.stringify([...existing, record]));
+        } catch {}
+      }
+      setShowMassText(false);
+      setMassTextMsg('');
+    } finally {
+      massTextSendingRef.current = false;
+      setMassTextSending(false);
     }
-    setShowMassText(false);
-    setMassTextMsg('');
   }
 
   async function requestPhoneImport() {
@@ -741,12 +760,15 @@ export default function ContactsScreen() {
             />
             <Text style={mt.tip}>Use {'{{first_name}}'} to personalize each message.</Text>
             <TouchableOpacity
-              style={[m.saveBtn, !massTextMsg.trim() && { opacity: 0.4 }]}
-              disabled={!massTextMsg.trim()}
+              style={[m.saveBtn, (!massTextMsg.trim() || massTextSending) && { opacity: 0.4 }]}
+              disabled={!massTextMsg.trim() || massTextSending}
               onPress={sendMassText}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={`Send text draft to ${massTextCount} contacts`}
+              accessibilityState={{ disabled: !massTextMsg.trim() || massTextSending }}
             >
-              <Text style={m.saveBtnText}>Send to {massTextCount} contacts →</Text>
+              <Text style={m.saveBtnText}>{massTextSending ? 'Opening Messages…' : `Send to ${massTextCount} contacts →`}</Text>
             </TouchableOpacity>
             <View style={{ height: 32 }} />
           </View>

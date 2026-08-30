@@ -400,9 +400,26 @@ export default function SequencesScreen() {
   async function handleSendItem(item: QueueItem) {
     pendingSendRef.current = item;
     if (item.channel === 'text' && item.phone) {
-      const url = `sms:${item.phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(editingMessage ?? item.message)}`;
-      await Linking.openURL(url).catch(() => {});
-      // AppState listener fires when rep returns to app → shows "Did you send it?" banner
+      // launchSms owns the composer-return confirmation. Clear the legacy
+      // AppState marker first so the listener cannot show a second prompt.
+      pendingSendRef.current = null;
+      const result = await launchSms({
+        contact_id: item.contact_id,
+        contact_name: item.contact_name,
+        phone: item.phone,
+        message: editingMessage ?? item.message,
+        isDemo: item.isDemo,
+        source: 'sequence',
+      });
+      if (result === 'opened') {
+        await confirmSent(item);
+      } else if (result === 'unsupported') {
+        const message = 'Open PocketRep on your phone to launch Messages. This follow-up is still waiting.';
+        if (Platform.OS === 'web') (globalThis as any).alert?.(message);
+        else Alert.alert('Phone required', message);
+      } else if (result !== 'not_sent') {
+        Alert.alert('Could not open Messages', 'Check the contact phone number and try again.');
+      }
       return;
     }
 
