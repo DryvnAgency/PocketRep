@@ -152,7 +152,7 @@ export default function DailyCheckIn({ contacts, onStartList }: {
           : 'Your Heat Sheet is your daily list. Work it, log it, and Rex will keep the next move in front of you.'}
       </Text>
 
-      <Pressable onPress={() => { markStarted(); onStartList?.(); }} style={({ pressed }) => [styles.cta, pressed && styles.pressed]}>
+      <Pressable onPress={() => { markStarted(); onStartList?.(); }} style={({ pressed }) => [styles.cta, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Start today's priority list">
         <Text style={styles.ctaText}>{started ? "✓ TODAY’S LIST STARTED" : "START TODAY’S LIST →"}</Text>
       </Pressable>
     </View>

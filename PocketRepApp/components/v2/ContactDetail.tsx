@@ -97,7 +97,7 @@ export default function ContactDetail({
   const [interactionsKey, setInteractionsKey] = useState(0);
   const interactions = useInteractions(contact.id, interactionsKey);
   // Web compose modal (Call/Text/Email). Native goes straight to Linking.openURL.
-  const [compose, setCompose] = useState<{ mode: 'call' | 'text' | 'email'; body: string } | null>(null);
+  const [compose, setCompose] = useState<{ mode: 'call' | 'text' | 'email'; body: string; opened?: boolean } | null>(null);
 
   const [notes, setNotes] = useState(contact.notes ?? '');
   const [editingNotes, setEditingNotes] = useState(false);
@@ -122,6 +122,7 @@ export default function ContactDetail({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [editingReferral, setEditingReferral] = useState(false);
   const [referralInput, setReferralInput] = useState('');
@@ -404,26 +405,32 @@ export default function ContactDetail({
   // Record a touch: stamp last_contact_date + reset the follow-up clock, append
   // an entry to the activity timeline (interactions), and optimistically zero
   // the days-since counter. Working a lead is logging it.
-  const recordTouch = (method: InteractionType, summary?: string) => {
-    if (method !== 'note') {
-      logContactTouch(contact.id, method, summary).catch(e => console.warn('logContactTouch', e));
+  const recordTouch = async (method: InteractionType, summary?: string) => {
+    try {
+      if (method !== 'note') await logContactTouch(contact.id, method, summary);
+      await logInteraction(contact.id, method, summary);
+      setInteractionsKey(k => k + 1);
+      onLocalUpdate({ ...contact, days: 0 });
+      const labels: Record<InteractionType, string> = {
+        call: '✓ Call logged', text: '✓ Text logged', email: '✓ Email logged', note: '✓ Note logged',
+      };
+      flash(labels[method]);
+      return true;
+    } catch (e) {
+      console.warn('recordTouch failed', e);
+      flash("Couldn't log that touch — try again");
+      return false;
     }
-    logInteraction(contact.id, method, summary)
-      .then(() => setInteractionsKey(k => k + 1))
-      .catch(e => console.warn('logInteraction', e));
-    onLocalUpdate({ ...contact, days: 0 });
-    const labels: Record<InteractionType, string> = {
-      call: '✓ Call logged', text: '✓ Text logged', email: '✓ Email logged', note: '✓ Note logged',
-    };
-    flash(labels[method]);
   };
 
   const webCopy = async (text: string) => {
     try {
       if (typeof navigator !== 'undefined' && (navigator as any).clipboard) {
         await (navigator as any).clipboard.writeText(text);
+        return true;
       }
-    } catch { /* ignore */ }
+    } catch { /* handled by caller */ }
+    return false;
   };
 
   // Platform URL for a channel. sms/tel use digits only; mailto carries a subject.
@@ -460,12 +467,16 @@ export default function ContactDetail({
     });
     if (outcome) {
       const summary = `Call outcome: ${outcome.replace('-', ' ')}`;
-      logContactTouch(contact.id, 'call', summary, outcome).catch(e => console.warn('logContactTouch', e));
-      logInteraction(contact.id, 'call', summary, outcome)
-        .then(() => setInteractionsKey(k => k + 1))
-        .catch(e => console.warn('logInteraction', e));
-      onLocalUpdate({ ...contact, days: 0 });
-      flash('✓ Call logged');
+      try {
+        await logContactTouch(contact.id, 'call', summary, outcome);
+        await logInteraction(contact.id, 'call', summary, outcome);
+        setInteractionsKey(k => k + 1);
+        onLocalUpdate({ ...contact, days: 0 });
+        flash('✓ Call logged');
+      } catch (e) {
+        console.warn('call outcome save failed', e);
+        flash("Couldn't log that call — try again");
+      }
     }
   };
   const openText = async (body?: string) => {
@@ -479,7 +490,7 @@ export default function ContactDetail({
       isDemo: contact.isDemo,
     });
     if (result === 'opened') {
-      recordTouch('text', body);
+      await recordTouch('text', body);
     }
   };
   // Email mirrors Call/Text: web opens the compose modal (mailto: silently
@@ -492,7 +503,18 @@ export default function ContactDetail({
     if (Platform.OS === 'web') { setCompose({ mode: 'email', body: body ?? '' }); return; }
     try {
       await Linking.openURL(channelUrl('email', body));
-      recordTouch('email', body);
+      const sent = await new Promise<boolean>(resolve => {
+        Alert.alert(
+          'Email confirmation',
+          `Did you send the email to ${contact.name.split(' ')[0]}?`,
+          [
+            { text: 'Not Sent', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Yes, I Sent It', onPress: () => resolve(true) },
+          ],
+          { cancelable: false },
+        );
+      });
+      if (sent) await recordTouch('email', body);
     } catch {
       flash('Could not open mail app');
     }
@@ -521,14 +543,15 @@ export default function ContactDetail({
   const handleDelete = async () => {
     if (deleting) return;
     setDeleting(true);
+    setDeleteError(null);
     try {
       await deleteContact(contact.id);
       onDeleted?.(contact.id);
       onClose();
-    } catch (e) {
+    } catch (e: any) {
       console.warn('deleteContact failed', e);
+      setDeleteError(e?.message ?? 'Could not delete this contact. Try again.');
       setDeleting(false);
-      setConfirmDelete(false);
     }
   };
 
@@ -571,8 +594,10 @@ export default function ContactDetail({
           />
           <View style={styles.menuCard}>
             <Pressable
-              onPress={() => { setMenuOpen(false); setConfirmDelete(true); }}
+              onPress={() => { setMenuOpen(false); setDeleteError(null); setConfirmDelete(true); }}
               style={styles.menuRow}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${contact.name}`}
             >
               <Text style={[styles.menuRowText, { color: colors.red }]}>Delete contact</Text>
             </Pressable>
@@ -589,13 +614,16 @@ export default function ContactDetail({
           <View style={styles.confirmCard}>
             <Text style={styles.confirmTitle}>Delete {contact.name}?</Text>
             <Text style={styles.confirmBody}>
-              This permanently removes {contact.name} from your book. It can't be undone.
+              This removes {contact.name} from your active book. Their history stays protected.
             </Text>
+            {deleteError ? <Text style={styles.confirmError} accessibilityLiveRegion="polite">{deleteError}</Text> : null}
             <View style={styles.confirmActions}>
               <Pressable
                 onPress={() => setConfirmDelete(false)}
                 disabled={deleting}
                 style={styles.confirmCancel}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel delete"
               >
                 <Text style={styles.confirmCancelText}>Cancel</Text>
               </Pressable>
@@ -603,6 +631,8 @@ export default function ContactDetail({
                 onPress={handleDelete}
                 disabled={deleting}
                 style={styles.confirmDelete}
+                accessibilityRole="button"
+                accessibilityLabel={`Confirm delete ${contact.name}`}
               >
                 <Text style={styles.confirmDeleteText}>
                   {deleting ? 'Deleting…' : 'Delete'}
@@ -1269,15 +1299,15 @@ export default function ContactDetail({
               <Pressable
                 onPress={async () => {
                   const hasBody = compose.mode === 'text' || compose.mode === 'email';
-                  const body = hasBody ? compose.body : undefined;
                   const copyText = hasBody && compose.body
                     ? compose.body
                     : compose.mode === 'email' ? (contact.email ?? '') : (contact.phone ?? '');
-                  await webCopy(copyText);
-                  recordTouch(compose.mode, body);
-                  setCompose(null);
+                  const didCopy = await webCopy(copyText);
+                  flash(didCopy ? '✓ Copied' : "Couldn't copy — try again");
                 }}
                 style={styles.aiAction}
+                accessibilityRole="button"
+                accessibilityLabel={compose.mode === 'call' ? 'Copy phone number' : 'Copy message'}
               >
                 <Text style={styles.aiActionText}>
                   {compose.mode === 'call' ? '⧉ COPY NUMBER' : '⧉ COPY MESSAGE'}
@@ -1286,16 +1316,26 @@ export default function ContactDetail({
               <Pressable
                 onPress={async () => {
                   const body = (compose.mode === 'text' || compose.mode === 'email') ? compose.body : undefined;
+                  if (compose.opened) {
+                    const saved = await recordTouch(compose.mode, body);
+                    if (saved) setCompose(null);
+                    return;
+                  }
                   try {
                     await Linking.openURL(channelUrl(compose.mode, body || undefined));
-                    recordTouch(compose.mode, body);
-                  } catch { /* app didn't open — don't record a touch that didn't happen */ }
-                  setCompose(null);
+                    setCompose(c => c ? { ...c, opened: true } : c);
+                  } catch {
+                    flash(`Couldn't open ${compose.mode === 'call' ? 'the dialer' : compose.mode === 'email' ? 'mail' : 'messages'}`);
+                  }
                 }}
                 style={[styles.aiAction, styles.aiActionPrimary]}
+                accessibilityRole="button"
+                accessibilityLabel={compose.opened ? `Mark ${compose.mode} complete` : `Open ${compose.mode}`}
               >
                 <Text style={styles.aiActionPrimaryText}>
-                  {compose.mode === 'call' ? '📞 OPEN DIALER' : compose.mode === 'email' ? '✉️ OPEN MAIL' : '💬 OPEN SMS'}
+                  {compose.opened
+                    ? compose.mode === 'call' ? '✓ MARK CALLED' : '✓ MARK SENT'
+                    : compose.mode === 'call' ? '📞 OPEN DIALER' : compose.mode === 'email' ? '✉️ OPEN MAIL' : '💬 OPEN SMS'}
                 </Text>
               </Pressable>
             </View>
@@ -1536,6 +1576,7 @@ const styles = StyleSheet.create({
   } as any,
   confirmTitle: { fontSize: 16, fontWeight: '700', color: colors.white, letterSpacing: -0.2 },
   confirmBody: { fontSize: 13, color: colors.grey2, marginTop: 8, lineHeight: 18 },
+  confirmError: { fontSize: 12, color: colors.red, marginTop: 10, lineHeight: 17 },
   confirmActions: { flexDirection: 'row', gap: 8, marginTop: 16 },
   confirmCancel: {
     flex: 1,

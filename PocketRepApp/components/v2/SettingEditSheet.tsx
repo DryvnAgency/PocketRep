@@ -1,5 +1,5 @@
 // Generic single-field edit sheet, reused by every editable Profile row.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, KeyboardTypeOptions, Platform,
 } from 'react-native';
@@ -20,24 +20,47 @@ export default function SettingEditSheet({
   onClose,
 }: {
   config: SettingEditConfig | null;
-  onSave: (value: string) => void;
+  onSave: (value: string) => void | Promise<void>;
   onClose: () => void;
 }) {
   const [value, setValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const savingRef = useRef(false);
 
   useEffect(() => {
-    if (config) setValue(config.value);
+    if (config) {
+      setValue(config.value);
+      setSaving(false);
+      savingRef.current = false;
+      setError(null);
+    }
   }, [config]);
 
   if (!config) return null;
 
+  const handleSave = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(value.trim());
+      onClose();
+    } catch (e: any) {
+      setError(e?.message ?? "Couldn't save this setting");
+      setSaving(false);
+      savingRef.current = false;
+    }
+  };
+
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
-      <Pressable style={styles.scrim} onPress={onClose} />
+      <Pressable style={styles.scrim} onPress={() => !saving && onClose()} accessibilityRole="button" accessibilityLabel="Close editor" />
       <View style={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Pressable onPress={onClose} style={styles.headerBtn}>
+          <Pressable onPress={onClose} disabled={saving} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Cancel editing">
             <Text style={styles.headerBtnText}>Cancel</Text>
           </Pressable>
           <View style={{ flex: 1, alignItems: 'center' }}>
@@ -45,10 +68,13 @@ export default function SettingEditSheet({
             <Text style={styles.headerTitle} numberOfLines={1}>{config.title}</Text>
           </View>
           <Pressable
-            onPress={() => { onSave(value.trim()); onClose(); }}
+            onPress={handleSave}
+            disabled={saving}
             style={[styles.headerBtn, styles.headerBtnPrimary]}
+            accessibilityRole="button"
+            accessibilityLabel={`Save ${config.title}`}
           >
-            <Text style={[styles.headerBtnText, { color: colors.ink }]}>Save</Text>
+            <Text style={[styles.headerBtnText, { color: colors.ink }]}>{saving ? 'Saving…' : 'Save'}</Text>
           </Pressable>
         </View>
 
@@ -64,6 +90,7 @@ export default function SettingEditSheet({
             placeholderTextColor={colors.grey}
             style={[styles.input, config.multiline && { minHeight: 110, textAlignVertical: 'top' as any }]}
           />
+          {error ? <Text style={styles.error}>{error}</Text> : null}
         </View>
       </View>
     </View>
@@ -118,4 +145,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 12,
     color: colors.white, fontSize: 14, fontWeight: '600',
   },
+  error: { color: colors.red, fontSize: 12, lineHeight: 17 },
 });

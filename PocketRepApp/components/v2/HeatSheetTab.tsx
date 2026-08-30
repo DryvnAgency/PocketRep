@@ -33,6 +33,8 @@ function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
     <Pressable
       onPress={onTap}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${c.name}${c.vehicle ? `, ${c.vehicle}` : ''}`}
     >
       <HeatStripe color={tier.color} style={styles.stripe} />
       <View style={styles.rowText}>
@@ -154,7 +156,7 @@ export default function HeatSheetTab({
       <FollowUpQueue />
 
       {onAnalyzeStalled ? (
-        <Pressable onPress={onAnalyzeStalled} style={styles.stalledBtn}>
+        <Pressable onPress={onAnalyzeStalled} style={styles.stalledBtn} accessibilityRole="button" accessibilityLabel="Review stalled leads with Rex">
           <Text style={styles.stalledIcon}>🧭</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.stalledTitle}>Review stalled leads</Text>
@@ -168,7 +170,7 @@ export default function HeatSheetTab({
       {groups.hot.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}
 
       {hotOnly ? (
-        <Pressable onPress={() => setHotOnly(false)} style={styles.showAllBtn}>
+        <Pressable onPress={() => setHotOnly(false)} style={styles.showAllBtn} accessibilityRole="button" accessibilityLabel="Show all contacts">
           <Text style={styles.showAllText}>Show all contacts ↓</Text>
         </Pressable>
       ) : (

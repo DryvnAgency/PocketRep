@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform, Share, Linking } from 'react-native';
 import Constants from 'expo-constants';
 import { colors, radius } from '@/constants/theme';
@@ -40,6 +40,10 @@ function Row({
   return (
     <Pressable
       onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? `${label}${detail ? `, ${detail}` : ''}` : undefined}
+      accessibilityState={{ disabled: !onPress }}
       style={({ pressed }) => [
         styles.row,
         pressed && onPress && { backgroundColor: colors.goldBg },
@@ -138,16 +142,17 @@ export default function ProfileTab({
     });
   };
 
-  const handleSettingSave = (value: string) => {
+  const handleSettingSave = async (value: string) => {
     if (!editTarget) return;
     if (editTarget.key === 'name') {
+      if (!userId) throw new Error('Your session is still loading. Try again.');
+      const { error } = await supabase.from('profiles').update({ full_name: value }).eq('id', userId);
+      if (error) throw new Error("Couldn't save your name. Try again.");
       setProfile(p => (p ? { ...p, full_name: value } : p));
-      if (userId) {
-        supabase.from('profiles').update({ full_name: value }).eq('id', userId)
-          .then(undefined, (e: any) => console.warn('save name failed', e));
-      }
+      flash('✓ Name updated');
     } else {
       setRepSetting(editTarget.key, value);
+      flash('✓ Setting updated');
     }
   };
 
@@ -160,9 +165,12 @@ export default function ProfileTab({
     try {
       if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
         await navigator.clipboard.writeText(text);
+        flash(`✓ ${label}`);
+        return true;
       }
-    } catch { /* ignore */ }
-    flash(`✓ ${label}`);
+    } catch { /* handled below */ }
+    flash("Couldn't copy — try again");
+    return false;
   };
 
   const fullName = profile?.full_name?.trim() ?? '';
@@ -176,8 +184,10 @@ export default function ProfileTab({
     : null;
 
   const [openingBilling, setOpeningBilling] = useState(false);
+  const openingBillingRef = useRef(false);
   const openBillingPortal = async () => {
-    if (openingBilling) return;
+    if (openingBillingRef.current) return;
+    openingBillingRef.current = true;
     setOpeningBilling(true);
     try {
       const { data, error } = await supabase.functions.invoke('billing-portal');
@@ -188,13 +198,15 @@ export default function ProfileTab({
         return;
       }
       if (Platform.OS === 'web') {
-        (globalThis as any).open?.(data.url, '_blank');
+        if (typeof window === 'undefined') throw new Error('Browser unavailable');
+        window.location.assign(data.url);
       } else {
         await Linking.openURL(data.url);
       }
     } catch {
       flash("Couldn't open billing — try again in a moment");
     } finally {
+      openingBillingRef.current = false;
       setOpeningBilling(false);
     }
   };
@@ -234,7 +246,7 @@ export default function ProfileTab({
 
   return (
     <View style={styles.root}>
-      <Pressable onPress={editName} style={styles.heroCard}>
+      <Pressable onPress={editName} style={styles.heroCard} accessibilityRole="button" accessibilityLabel="Edit your name and profile">
         <Avatar name={fullName || profile?.email || 'You'} size={56} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.heroName}>{displayName}</Text>
@@ -248,10 +260,10 @@ export default function ProfileTab({
 
       <View style={styles.planCard}>
         <View style={{ flex: 1 }}>
-          <Label color={colors.grey2}>PLAN · {planLabel}</Label>
-          <Text style={styles.planRenews}>Tap MANAGE to edit your pay plan</Text>
+          <Label color={colors.grey2}>COMPENSATION PLAN</Label>
+          <Text style={styles.planRenews}>Set how your dealership pays you</Text>
         </View>
-        <Pressable onPress={() => onOpenPayPlan?.()} style={styles.manageBtn}>
+        <Pressable onPress={() => onOpenPayPlan?.()} style={styles.manageBtn} accessibilityRole="button" accessibilityLabel="Manage compensation plan">
           <Text style={styles.manageText}>MANAGE</Text>
         </Pressable>
       </View>
@@ -275,7 +287,7 @@ export default function ProfileTab({
           onPress={() => isVehicleFinderEnabled()
             ? editSetting('inventoryFeed', 'Dealership website', 'INVENTORY URL (https)', { placeholder: 'https://www.yourdealership.com', keyboardType: 'url' })
             : editSetting('inventoryFeed', 'Inventory feed', 'FEED STATUS / SOURCE')} />
-        <Row icon="🔔" label="Weekly digest" detail="View →" onPress={() => onNavigate?.('heat')} />
+        <Row icon="🔔" label="Weekly digest" detail="Mondays after 8 AM" chevron={false} />
         <Row icon="⏰" label="Daily send time" detail={formatHour(sendHour)} onPress={() => setShowSendPicker(true)} />
         <Row icon="📊" label="Goals & quota" detail="View →" onPress={() => onNavigate?.('metrics')} />
       </View>
@@ -296,6 +308,9 @@ export default function ProfileTab({
                     key={t}
                     onPress={() => { setRepSetting('voiceTone', t); forceTick(); }}
                     style={[styles.tonePill, active && styles.tonePillActive]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Set Rex style to ${t}`}
+                    accessibilityState={{ selected: active }}
                   >
                     <Text style={[styles.tonePillText, active && styles.tonePillTextActive]}>
                       {t === 'Steady' ? '🧘 Steady' : t === 'Sharp' ? '🔪 Sharp' : '🔥 Fire'}
@@ -309,7 +324,7 @@ export default function ProfileTab({
       </View>
 
       <SectionHead label="LEARN" color={colors.gold} />
-      <Pressable onPress={onReplayOnboarding} style={styles.learnCard}>
+      <Pressable onPress={onReplayOnboarding} style={styles.learnCard} accessibilityRole="button" accessibilityLabel="Open sales rep playbook">
         <View style={styles.learnPlay}>
           <Text style={styles.learnPlayIcon}>▶</Text>
         </View>
@@ -321,7 +336,7 @@ export default function ProfileTab({
       </Pressable>
 
       {shouldShowInstallRow() ? (
-        <Pressable onPress={onInstallApp} style={styles.learnCard}>
+        <Pressable onPress={onInstallApp} style={styles.learnCard} accessibilityRole="button" accessibilityLabel="Install PocketRep app">
           <View style={styles.learnPlay}>
             <Text style={styles.learnPlayIcon}>📲</Text>
           </View>
@@ -348,8 +363,7 @@ export default function ProfileTab({
       <View style={styles.group}>
         <Row icon="💬" label="Support" detail="Chat with PocketRep"
           onPress={onOpenSupport} />
-        <Row icon="✉" label="Email" detail={profile?.email ?? '—'}
-          onPress={() => profile?.email && copy(profile.email, 'Email copied')} />
+        <Row icon="✉" label="Email" detail={profile?.email ?? '—'} chevron={false} />
         <Row icon="📱" label="Phone" detail={getRepSetting('phone') || 'Add'}
           onPress={() => editSetting('phone', 'Phone', 'PHONE NUMBER', { keyboardType: 'phone-pad' })} />
         <Row icon="💳" label="Billing" detail={openingBilling ? 'Opening…' : 'Manage subscription'}
@@ -429,10 +443,11 @@ export default function ProfileTab({
                     key={h}
                     style={[styles.sendChip, isActive && styles.sendChipActive]}
                     onPress={async () => {
+                      const previous = sendHour;
                       setSendHourState(h);
                       setShowSendPicker(false);
                       try { await persistSendHour(h); flash('✓ Send time updated'); }
-                      catch { flash("Couldn't save send time"); }
+                      catch { setSendHourState(previous); flash("Couldn't save send time"); }
                     }}
                     accessibilityRole="button"
                     accessibilityLabel={`Set daily send time to ${formatHour(h)}`}

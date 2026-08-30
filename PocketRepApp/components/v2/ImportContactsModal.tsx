@@ -5,7 +5,7 @@
 // against the existing book, and a confirm-before-import step. Additive + gated
 // (see isContactImportEnabled); when off, the entry point never renders.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, TextInput, Platform,
 } from 'react-native';
@@ -44,11 +44,13 @@ export default function ImportContactsModal({
   const [pasteText, setPasteText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const busyRef = useRef(false);
 
   useEffect(() => {
     if (open) {
       setPhase('source'); setRows([]); setSelected(new Set());
       setPasteMode(false); setPasteText(''); setBusy(false); setError(null);
+      busyRef.current = false;
     }
   }, [open]);
 
@@ -86,6 +88,8 @@ export default function ImportContactsModal({
   };
 
   const fromDevice = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setError(null); setBusy(true);
     try {
       toReview(await pickFromDevice());
@@ -95,6 +99,7 @@ export default function ImportContactsModal({
         setError(e?.message ?? 'Could not open the contact picker.');
       }
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -136,16 +141,23 @@ export default function ImportContactsModal({
     });
 
   const doImport = async () => {
+    if (busyRef.current) return;
     const chosen = rows.filter(r => selected.has(r.id));
     if (chosen.length === 0) return;
+    busyRef.current = true;
     setBusy(true); setError(null);
     try {
       const n = await importSelected(chosen);
+      if (n === 0) {
+        setError('No new contacts were imported. They may already be in your book.');
+        return;
+      }
       onImported(n);
       onClose();
     } catch (e: any) {
       setError(e?.message ?? 'Import failed. Try again.');
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -154,11 +166,16 @@ export default function ImportContactsModal({
 
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
-      <Pressable style={styles.scrim} onPress={onClose} />
+      <Pressable style={styles.scrim} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close contact import" />
       <View style={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Pressable onPress={phase === 'review' ? () => setPhase('source') : onClose} style={styles.headerBtn}>
+          <Pressable
+            onPress={phase === 'review' ? () => setPhase('source') : onClose}
+            style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={phase === 'review' ? 'Back to import source' : 'Cancel contact import'}
+          >
             <Text style={styles.headerBtnText}>{phase === 'review' ? 'Back' : 'Cancel'}</Text>
           </Pressable>
           <View style={{ flex: 1, alignItems: 'center' }}>
@@ -172,6 +189,8 @@ export default function ImportContactsModal({
               onPress={doImport}
               disabled={busy || selected.size === 0}
               style={[styles.headerBtn, selected.size > 0 && !busy ? styles.headerBtnPrimary : styles.headerBtnDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel={`Import ${selected.size} selected contact${selected.size === 1 ? '' : 's'}`}
             >
               <Text style={[styles.headerBtnText, selected.size > 0 && !busy ? { color: colors.ink } : { color: colors.grey }]}>
                 {busy ? 'Importing…' : 'Import'}
@@ -185,7 +204,7 @@ export default function ImportContactsModal({
         {phase === 'source' ? (
           <ScrollView contentContainerStyle={styles.body}>
             {deviceSupported ? (
-              <Pressable onPress={fromDevice} disabled={busy} style={styles.sourceBtn}>
+              <Pressable onPress={fromDevice} disabled={busy} style={styles.sourceBtn} accessibilityRole="button" accessibilityLabel="Import contacts from this device">
                 <Text style={styles.sourceIcon}>📇</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sourceTitle}>From this device</Text>
@@ -195,7 +214,7 @@ export default function ImportContactsModal({
               </Pressable>
             ) : null}
 
-            <Pressable onPress={fromFile} disabled={busy} style={styles.sourceBtn}>
+            <Pressable onPress={fromFile} disabled={busy} style={styles.sourceBtn} accessibilityRole="button" accessibilityLabel="Upload a contacts file">
               <Text style={styles.sourceIcon}>📄</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.sourceTitle}>Upload a file</Text>
@@ -204,7 +223,7 @@ export default function ImportContactsModal({
               <Text style={styles.sourceChevron}>›</Text>
             </Pressable>
 
-            <Pressable onPress={() => setPasteMode(m => !m)} style={styles.pasteToggle}>
+            <Pressable onPress={() => setPasteMode(m => !m)} style={styles.pasteToggle} accessibilityRole="button" accessibilityLabel="Paste vCard or CSV text">
               <Text style={styles.pasteToggleText}>{pasteMode ? '▾ Paste vCard or CSV text' : '▸ Paste vCard or CSV text'}</Text>
             </Pressable>
             {pasteMode ? (
@@ -216,8 +235,9 @@ export default function ImportContactsModal({
                   placeholderTextColor={colors.grey}
                   multiline
                   style={styles.pasteInput}
+                  accessibilityLabel="Pasted contact data"
                 />
-                <Pressable onPress={fromPaste} disabled={!pasteText.trim()} style={[styles.parseBtn, !pasteText.trim() && { opacity: 0.4 }]}>
+                <Pressable onPress={fromPaste} disabled={!pasteText.trim()} style={[styles.parseBtn, !pasteText.trim() && { opacity: 0.4 }]} accessibilityRole="button" accessibilityLabel="Parse pasted contacts">
                   <Text style={styles.parseBtnText}>Parse contacts</Text>
                 </Pressable>
               </View>
@@ -233,7 +253,7 @@ export default function ImportContactsModal({
         ) : (
           <>
             <View style={styles.reviewBar}>
-              <Pressable onPress={toggleAll} style={styles.selectAll}>
+              <Pressable onPress={toggleAll} style={styles.selectAll} accessibilityRole="checkbox" accessibilityState={{ checked: allSelected }} accessibilityLabel="Select all contacts">
                 <View style={[styles.checkbox, allSelected && styles.checkboxOn]}>
                   {allSelected ? <Text style={styles.checkmark}>✓</Text> : null}
                 </View>
@@ -248,7 +268,7 @@ export default function ImportContactsModal({
                 const on = selected.has(r.id);
                 const sub = [r.phone, r.email].filter(Boolean).join(' · ');
                 return (
-                  <Pressable key={r.id} onPress={() => toggleOne(r.id)} style={styles.reviewRow}>
+                  <Pressable key={r.id} onPress={() => toggleOne(r.id)} style={styles.reviewRow} accessibilityRole="checkbox" accessibilityState={{ checked: on }} accessibilityLabel={`${on ? 'Selected' : 'Not selected'}: ${[r.firstName, r.lastName].filter(Boolean).join(' ')}`}>
                     <View style={[styles.checkbox, on && styles.checkboxOn]}>
                       {on ? <Text style={styles.checkmark}>✓</Text> : null}
                     </View>

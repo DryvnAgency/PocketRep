@@ -234,11 +234,19 @@ export async function bulkCreateContacts(rows: ImportContactRow[]): Promise<numb
 }
 
 export async function deleteContact(id: string): Promise<void> {
-  const { error } = await supabase
+  // "Delete" removes the contact from the active book without erasing the
+  // activity/deal history that hangs off the row. Request the changed row back:
+  // PostgREST otherwise reports a policy-filtered zero-row update as a successful
+  // request, which would let the UI claim a contact disappeared when it did not.
+  const { data, error } = await supabase
     .from('contacts')
-    .delete()
-    .eq('id', id);
+    .update({ is_deleted: true, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('is_deleted', false)
+    .select('id')
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error('Contact was not deleted. Refresh and try again.');
 }
 
 export async function updateContactTier(id: string, tier: 'hot' | 'warm' | 'cold'): Promise<void> {

@@ -62,6 +62,7 @@ import { checkIsAdmin, countOpenTickets } from '@/lib/v2/supportChat';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
+  const [searchFocusKey, setSearchFocusKey] = useState(0);
   const [authReady, setAuthReady] = useState(false);
   // True once we've checked for a session and found none — renders AuthScreen
   // instead of the app shell. Stays false (shell shows "Signing in…") while the
@@ -98,6 +99,7 @@ export default function AppShell() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminOpenTicketCount, setAdminOpenTicketCount] = useState(0);
   const [rexActionError, setRexActionError] = useState<string | null>(null);
+  const [contactActionNotice, setContactActionNotice] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const payPlan = usePayPlan(payPlanRefetchKey, authReady);
   // HARD LOCKOUT gate — inert until Eduardo wires the real subscription read in
@@ -252,6 +254,12 @@ export default function AppShell() {
     const id = setTimeout(() => setRexActionError(null), 6000);
     return () => clearTimeout(id);
   }, [rexActionError]);
+
+  useEffect(() => {
+    if (!contactActionNotice) return;
+    const id = setTimeout(() => setContactActionNotice(null), 3500);
+    return () => clearTimeout(id);
+  }, [contactActionNotice]);
 
   // V1 is text-only: tapping the gold Rex orb just opens the Rex Coach text
   // chat. No voice/listening path exists in V1 (see AppShell's voice-runtime
@@ -421,7 +429,10 @@ export default function AppShell() {
         activeCount={activeCount}
         totalCount={totalCount}
         onNotifications={() => setNotifOpen(true)}
-        onSearch={() => setActive('contacts')}
+        onSearch={() => {
+          setActive('contacts');
+          setSearchFocusKey(k => k + 1);
+        }}
         onUpgrade={() => setActive('profile')}
       />
 
@@ -468,6 +479,7 @@ export default function AppShell() {
               setTagsRefetchKey(k => k + 1);
               reloadContacts();
             }}
+            searchFocusKey={searchFocusKey}
           />
         ) : active === 'profile' ? (
           <ProfileTab
@@ -505,7 +517,11 @@ export default function AppShell() {
           onOpenContact={(id) => setSelectedId(id)}
           onClose={() => setSelectedId(null)}
           onLocalUpdate={(next: V2Contact) => patchLocal(next.id, next)}
-          onDeleted={() => { reloadContacts(); setSelectedId(null); }}
+          onDeleted={() => {
+            reloadContacts();
+            setSelectedId(null);
+            setContactActionNotice('Contact removed from your book');
+          }}
           dealsRefetchKey={dealsRefetchKey}
           onLogDeal={() => openDealLogger({
             name: selected.name,
@@ -550,7 +566,12 @@ export default function AppShell() {
         open={importOpen}
         allContacts={contacts ?? []}
         onClose={() => setImportOpen(false)}
-        onImported={() => { clearDemoSim(); reloadContacts(); setActive('contacts'); }}
+        onImported={(count) => {
+          clearDemoSim();
+          reloadContacts();
+          setActive('contacts');
+          setContactActionNotice(`${count} contact${count === 1 ? '' : 's'} imported`);
+        }}
       />
 
       {isVehicleFinderEnabled() ? (
@@ -710,6 +731,11 @@ export default function AppShell() {
           <Text style={styles.errorBannerText}>{rexActionError}</Text>
         </View>
       ) : null}
+      {contactActionNotice ? (
+        <View style={styles.noticeBanner} pointerEvents="none" accessibilityLiveRegion="polite">
+          <Text style={styles.noticeBannerText}>✓ {contactActionNotice}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -744,4 +770,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   errorBannerText: { color: colors.red, fontSize: 13, fontWeight: '600' },
+  noticeBanner: {
+    position: 'absolute',
+    left: 12, right: 12, bottom: 168,
+    backgroundColor: colors.ink2,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  noticeBannerText: { color: colors.gold, fontSize: 13, fontWeight: '700' },
 });
