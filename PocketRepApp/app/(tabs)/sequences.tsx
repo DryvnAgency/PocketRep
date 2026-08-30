@@ -517,6 +517,7 @@ export default function SequencesScreen() {
     if (!confirmed) return;
 
     let sent = 0;
+    let unsupported = false;
     for (const c of recipients) {
       const result = await launchSms({
         contact_id: c.id,
@@ -525,7 +526,16 @@ export default function SequencesScreen() {
         message: massMsg,
         source: 'manual',
       });
+      if (result === 'unsupported') {
+        unsupported = true;
+        break;
+      }
       if (result === 'opened') sent++;
+    }
+
+    if (unsupported) {
+      Alert.alert('Phone required', 'Open PocketRep on your phone to launch Messages. Your message and recipient selection are still here.');
+      return;
     }
 
     // Record to AsyncStorage for history

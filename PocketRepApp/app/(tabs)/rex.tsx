@@ -506,6 +506,7 @@ export default function RexScreen() {
           created_at: new Date().toISOString(),
         }]);
         let sentCount = 0;
+        let unsupported = false;
         for (const c of recipients) {
           const personalized = message.replace(/\{\{first_name\}\}/g, c.first_name || 'there');
           const result = await launchSms({
@@ -514,12 +515,18 @@ export default function RexScreen() {
             phone: c.phone,
             message: personalized,
           });
+          if (result === 'unsupported') {
+            unsupported = true;
+            break;
+          }
           if (result === 'opened') sentCount++;
         }
         setMessages(prev => [...prev, {
           id: Date.now().toString() + 'b',
           user_id: user.id, contact_id: null, role: 'assistant',
-          content: `✅ ${sentCount} of ${recipients.length} message${recipients.length !== 1 ? 's' : ''} confirmed sent.`,
+          content: unsupported
+            ? '📱 Open PocketRep on your phone to launch Messages. No remaining texts were marked sent.'
+            : `✅ ${sentCount} of ${recipients.length} message${recipients.length !== 1 ? 's' : ''} confirmed sent.`,
           created_at: new Date().toISOString(),
         }]);
       }

@@ -27,6 +27,7 @@ import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 import { useContactNurtures } from '@/lib/v2/contactNurtures';
 import { logInteraction, useInteractions, type InteractionType, type TimelineEventType } from '@/lib/v2/interactions';
 import { launchSms } from '@/lib/v2/smsLauncher';
+import { isCurrentWebRuntimeSmsCapable } from '@/lib/v2/smsCapability';
 import { pickAndUploadContactPhoto } from '@/lib/v2/contactPhoto';
 import { formatBirthday, parseBirthdayInput } from '@/lib/v2/birthday';
 import LanguageToggle from './LanguageToggle';
@@ -1321,6 +1322,10 @@ export default function ContactDetail({
                     if (saved) setCompose(null);
                     return;
                   }
+                  if (compose.mode === 'text' && !isCurrentWebRuntimeSmsCapable()) {
+                    flash('Open PocketRep on your phone to launch Messages. You can copy the draft here.');
+                    return;
+                  }
                   try {
                     await Linking.openURL(channelUrl(compose.mode, body || undefined));
                     setCompose(c => c ? { ...c, opened: true } : c);
@@ -1339,7 +1344,7 @@ export default function ContactDetail({
                 </Text>
               </Pressable>
             </View>
-            <Pressable onPress={() => setCompose(null)} style={{ alignSelf: 'center', paddingVertical: 8 }}>
+            <Pressable onPress={() => setCompose(null)} style={{ alignSelf: 'center', paddingVertical: 8 }} accessibilityRole="button" accessibilityLabel="Cancel contact action">
               <Text style={styles.linkSecondary}>Cancel</Text>
             </Pressable>
           </View>

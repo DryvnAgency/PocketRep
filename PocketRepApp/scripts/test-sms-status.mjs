@@ -4,11 +4,16 @@
 //
 //   npm run test:smsstatus    (from PocketRepApp/)
 
+import fs from 'node:fs';
+import path from 'node:path';
+import ts from 'typescript';
+
 let failures = 0;
-const ok = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failures++; };
+let checks = 0;
+const ok = (name, cond) => { checks++; console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failures++; };
 
 // ---- SmsLaunchResult values ----
-const RESULTS = ['opened', 'no_phone', 'failed'];
+const RESULTS = ['opened', 'not_sent', 'no_phone', 'unsupported', 'failed'];
 
 ok('all values are truthy strings', RESULTS.every(v => typeof v === 'string' && !!v));
 ok('opened is the only success', RESULTS.filter(v => v === 'opened').length === 1);
@@ -19,7 +24,25 @@ for (const val of RESULTS) {
 }
 ok('must use === "opened" for success', RESULTS.filter(v => v === 'opened').length === 1);
 ok('"no_phone" !== "opened"', 'no_phone' !== 'opened');
+ok('"not_sent" !== "opened"', 'not_sent' !== 'opened');
+ok('"unsupported" !== "opened"', 'unsupported' !== 'opened');
 ok('"failed" !== "opened"', 'failed' !== 'opened');
+
+// ---- web SMS capability gate ----
+const root = path.resolve(new URL('..', import.meta.url).pathname);
+const capabilitySource = fs.readFileSync(path.join(root, 'lib/v2/smsCapability.ts'), 'utf8');
+const capabilityOutput = ts.transpileModule(capabilitySource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+});
+const capabilityModule = { exports: {} };
+new Function('module', 'exports', capabilityOutput.outputText)(capabilityModule, capabilityModule.exports);
+const { isSmsCapableWebRuntime } = capabilityModule.exports;
+
+ok('iPhone web can launch SMS', isSmsCapableWebRuntime({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile/15E148' }));
+ok('Android web can launch SMS', isSmsCapableWebRuntime({ userAgent: 'Mozilla/5.0 (Linux; Android 15) Chrome/140 Mobile Safari/537.36' }));
+ok('iPad desktop mode can launch SMS', isSmsCapableWebRuntime({ userAgent: 'Mozilla/5.0 (Macintosh)', platform: 'MacIntel', maxTouchPoints: 5 }));
+ok('desktop Chrome is blocked from SMS protocol handoff', !isSmsCapableWebRuntime({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Chrome/140 Safari/537.36', platform: 'Linux x86_64' }));
+ok('desktop Safari is blocked from SMS protocol handoff', !isSmsCapableWebRuntime({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15', platform: 'MacIntel', maxTouchPoints: 0 }));
 
 // ---- blast status logic ----
 function blastStatusFromResults(results) {
@@ -37,5 +60,5 @@ ok('single opened → sent', blastStatusFromResults(['opened']) === 'sent');
 ok('single failed → pending_review', blastStatusFromResults(['failed']) === 'pending_review');
 ok('empty → pending_review', blastStatusFromResults([]) === 'pending_review');
 
-console.log(`\n${failures === 0 ? '✅ ALL PASSED' : `❌ ${failures} FAILED`} (${13} checks)`);
+console.log(`\n${failures === 0 ? '✅ ALL PASSED' : `❌ ${failures} FAILED`} (${checks} checks)`);
 process.exit(failures ? 1 : 0);

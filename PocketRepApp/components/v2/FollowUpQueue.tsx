@@ -11,17 +11,23 @@ function channelLabel(channel: QueueItem['channel']) {
   return 'EMAIL';
 }
 
-type LaunchResult = 'confirmed' | 'opened' | 'failed';
+type LaunchResult = 'confirmed' | 'opened' | 'not_sent' | 'unsupported' | 'failed';
 
 async function launchChannel(item: QueueItem): Promise<LaunchResult> {
   if (item.isDemo) return 'confirmed';
-  if (item.channel === 'text') return (await launchSms({
-    contact_id: item.contact_id,
-    contact_name: item.contact_name,
-    phone: item.phone,
-    message: item.message,
-    isDemo: item.isDemo,
-  })) === 'opened' ? 'confirmed' : 'failed';
+  if (item.channel === 'text') {
+    const result = await launchSms({
+      contact_id: item.contact_id,
+      contact_name: item.contact_name,
+      phone: item.phone,
+      message: item.message,
+      isDemo: item.isDemo,
+      source: 'sequence',
+    });
+    if (result === 'unsupported') return 'unsupported';
+    if (result === 'not_sent') return 'not_sent';
+    return result === 'opened' ? 'confirmed' : 'failed';
+  }
 
   if (item.channel === 'email') {
     const email = (item.email ?? '').trim();
@@ -77,6 +83,12 @@ export default function FollowUpQueue() {
     try {
       if (action === 'work') {
         const result = await launchChannel(item);
+        if (result === 'unsupported') {
+          throw new Error('Open PocketRep on your phone to launch Messages. This follow-up is still waiting.');
+        }
+        if (result === 'not_sent') {
+          throw new Error('Text was not marked sent. This follow-up is still waiting.');
+        }
         if (result === 'failed') throw new Error(`Couldn't open ${item.channel}. Check the contact's ${item.channel === 'email' ? 'email address' : 'phone number'}.`);
         // Texts return confirmed only after the rep says they tapped Send.
         // Calls and emails have no reliable OS send/completion callback, so
@@ -114,7 +126,7 @@ export default function FollowUpQueue() {
         </Pressable>
       </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
 
       {items.length === 0 ? (
         <Text style={styles.empty}>Enroll customers in a sequence and their due steps will appear here.</Text>

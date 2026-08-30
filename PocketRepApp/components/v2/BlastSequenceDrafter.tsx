@@ -119,6 +119,9 @@ export default function BlastSequenceDrafter({
         // changes that same row to sent/not_sent. Do not create a second SMS
         // action in recordSentBlast for a real contact.
         const result = await launchSms(sendable);
+        if (result === 'unsupported') {
+          throw new Error('Open PocketRep on your phone to launch Messages. Unsent drafts remain available.');
+        }
         if (result === 'opened') {
           confirmedCount++;
           if (c?.isDemo) {

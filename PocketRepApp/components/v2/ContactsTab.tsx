@@ -76,17 +76,28 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
     finally { actionBusyRef.current = false; }
   };
   const openText = async () => {
-    if (!current) return;
-    setTextOpened(true);
-    const result = await launchSms({
-      contact_id: current.id,
-      contact_name: current.name,
-      phone: current.phone,
-      message: textBody,
-      isDemo: current.isDemo,
-    });
-    if (result === 'opened') {
-      await record('text', 'Text sent after no answer');
+    if (!current || actionBusyRef.current) return;
+    actionBusyRef.current = true;
+    setQueueError(null);
+    try {
+      const result = await launchSms({
+        contact_id: current.id,
+        contact_name: current.name,
+        phone: current.phone,
+        message: textBody,
+        isDemo: current.isDemo,
+        source: 'manual',
+      });
+      if (result === 'opened') {
+        await record('text', 'Text sent after no answer');
+        setTextOpened(true);
+      } else if (result === 'unsupported') {
+        setQueueError('Open PocketRep on your phone to launch Messages. The text was not marked sent.');
+      } else if (result !== 'not_sent') {
+        setQueueError("Couldn't open Messages. Check this customer's phone number.");
+      }
+    } finally {
+      actionBusyRef.current = false;
     }
   };
   const copyText = async () => { try { if (typeof navigator !== 'undefined' && navigator.clipboard) { await navigator.clipboard.writeText(textBody); setCopied(true); setTimeout(() => setCopied(false), 1400); } } catch {} };
@@ -96,7 +107,7 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
     <View style={styles.queueCard}>
       <View style={styles.queueTop}><View><Text style={styles.queueEyebrow}>CALL QUEUE</Text><Text style={styles.queueCount}>{index + 1} of {queue.length}</Text></View><Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close call queue"><Text style={styles.queueClose}>✕</Text></Pressable></View>
       <View style={styles.queuePerson}><Avatar name={current.name} size={68} photoUrl={current.photoUrl}/><Text style={styles.queueName}>{current.name}</Text><Text style={styles.queuePhone}>{current.phone}</Text>{current.vehicle ? <Text style={styles.queueVehicle}>{current.vehicle}</Text> : null}</View>
-      {queueError ? <Text style={styles.error}>{queueError}</Text> : null}
+      {queueError ? <Text style={styles.error} accessibilityLiveRegion="polite">{queueError}</Text> : null}
       {!called ? <Pressable onPress={openCall} style={styles.queueCall} accessibilityRole="button" accessibilityLabel={`Call ${current.name}`}><Text style={styles.queueCallIcon}>📞</Text><Text style={styles.queueCallText}>CALL {current.name.split(' ')[0].toUpperCase()}</Text></Pressable> : <>
         <Text style={styles.queueQuestion}>What happened?</Text>
         <View style={styles.outcomeGrid}>
@@ -106,8 +117,8 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
           <Pressable onPress={() => chooseOutcome('wrong-number')} style={styles.outcomeBtn} accessibilityRole="button" accessibilityLabel="Wrong number"><Text style={styles.outcomeIcon}>×</Text><Text style={styles.outcomeText}>WRONG #</Text></Pressable>
         </View>
       </>}
-      {outcome === 'no-answer' && !textOpened ? <View style={styles.textCard}><Text style={styles.textLabel}>NO ANSWER → TEXT</Text><Text style={styles.textBody}>{textBody}</Text><View style={styles.textActions}><Pressable onPress={copyText} style={styles.textSecondary}><Text style={styles.textSecondaryText}>{copied ? 'COPIED ✓' : 'COPY'}</Text></Pressable><Pressable onPress={openText} style={styles.textPrimary}><Text style={styles.textPrimaryText}>OPEN TEXT ↗</Text></Pressable></View></View> : null}
-      {outcome && (outcome !== 'no-answer' || textOpened) ? <Pressable onPress={next} style={styles.nextBtn}><Text style={styles.nextText}>NEXT CUSTOMER →</Text></Pressable> : null}
+      {outcome === 'no-answer' && !textOpened ? <View style={styles.textCard}><Text style={styles.textLabel}>NO ANSWER → TEXT</Text><Text style={styles.textBody}>{textBody}</Text><View style={styles.textActions}><Pressable onPress={copyText} style={styles.textSecondary} accessibilityRole="button" accessibilityLabel="Copy follow-up text"><Text style={styles.textSecondaryText}>{copied ? 'COPIED ✓' : 'COPY'}</Text></Pressable><Pressable onPress={openText} style={styles.textPrimary} accessibilityRole="button" accessibilityLabel="Open follow-up text"><Text style={styles.textPrimaryText}>OPEN TEXT ↗</Text></Pressable></View></View> : null}
+      {outcome && (outcome !== 'no-answer' || textOpened) ? <Pressable onPress={next} style={styles.nextBtn} accessibilityRole="button" accessibilityLabel="Next customer"><Text style={styles.nextText}>NEXT CUSTOMER →</Text></Pressable> : null}
     </View>
   </View>;
 }

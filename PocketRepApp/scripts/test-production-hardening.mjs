@@ -65,6 +65,8 @@ ok(smsActions.includes("status: 'opened'"), 'SMS composer-open state is recorded
 ok(sms.includes('markSmsSent'), 'confirmed SMS transitions to sent state');
 ok(sms.includes('markSmsNotSent'), 'negative confirmation transitions to not_sent state');
 ok(sms.includes('const returnPromise = waitForComposerReturn();'), 'SMS return listener is installed before opening native Messages');
+ok(sms.includes("Platform.OS === 'web' && !isCurrentWebRuntimeSmsCapable()"), 'desktop web never opens a blocking SMS protocol handoff');
+ok(sms.includes('Promise.race(['), 'mobile web SMS handoff cannot leave the launcher promise pending forever');
 
 ok(webhook.includes('status: "processing"'), 'Stripe webhook claims events in processing state');
 ok(webhook.includes('existing?.status === "processed"'), 'processed Stripe events are ignored on redelivery');

@@ -83,7 +83,7 @@ export default function DealDetail({
       <View style={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Pressable onPress={onClose} style={styles.headerBtn}>
+          <Pressable onPress={onClose} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Close deal details">
             <Text style={styles.headerBtnText}>Close</Text>
           </Pressable>
           <View style={{ flex: 1, alignItems: 'center' }}>
@@ -119,6 +119,9 @@ export default function DealDetail({
           <Pressable
             onPress={confirmDelete}
             disabled={deleting}
+            accessibilityRole="button"
+            accessibilityLabel="Delete deal"
+            accessibilityState={{ disabled: deleting }}
             style={[styles.deleteBtn, deleting && { opacity: 0.6 }]}
           >
             <Text style={styles.deleteText}>{deleting ? 'Deleting…' : 'Delete deal'}</Text>

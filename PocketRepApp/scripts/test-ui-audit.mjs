@@ -21,6 +21,13 @@ const contacts = read('components/v2/ContactsTab.tsx');
 const contactDetail = read('components/v2/ContactDetail.tsx');
 const followUps = read('components/v2/FollowUpQueue.tsx');
 const appShell = read('components/v2/AppShell.tsx');
+const sms = read('lib/v2/smsLauncher.ts');
+const contactSms = read('components/v2/ContactDetail.tsx');
+const dealLogger = read('components/v2/DealLogger.tsx');
+const dealDetail = read('components/v2/DealDetail.tsx');
+const notifications = read('components/v2/NotificationsCenter.tsx');
+const rex = read('app/(tabs)/rex.tsx');
+const sequences = read('app/(tabs)/sequences.tsx');
 
 ok(profile.includes('window.location.assign(data.url)'), 'billing uses a reliable same-tab Stripe handoff');
 ok(!profile.includes("open?.(data.url, '_blank')"), 'billing does not rely on a delayed popup');
@@ -40,6 +47,19 @@ ok(contactDetail.includes("compose.opened"), 'web contact actions require explic
 ok(followUps.includes("'work' | 'complete' | 'skip'"), 'follow-up queue has an explicit completion action');
 ok(followUps.includes("setOpenedKey(key)"), 'opened call/email stays pending');
 ok(followUps.includes('MARK COMPLETE ✓'), 'rep sees a clear completion control');
+ok(sms.includes("Platform.OS === 'web' && !isCurrentWebRuntimeSmsCapable()"), 'desktop web is blocked before an SMS protocol handoff can strand the UI');
+ok(followUps.includes("result === 'unsupported'"), 'sequence follow-up keeps unsupported SMS work pending with an explicit error');
+ok(contactSms.includes("compose.mode === 'text' && !isCurrentWebRuntimeSmsCapable()"), 'contact composer also blocks unsupported desktop SMS handoffs');
+ok(rex.includes("result === 'unsupported'"), 'Rex bulk text stops safely when desktop SMS is unsupported');
+ok(sequences.includes("result === 'unsupported'"), 'sequence mass text preserves the draft when desktop SMS is unsupported');
+
+ok(dealLogger.includes('parseGrossInput(text)'), 'deal gross uses the decimal-safe parser');
+ok(dealLogger.includes('validateDealDraft(d)'), 'deal Save exposes deterministic validation');
+ok(dealLogger.includes('keyboardType="decimal-pad"'), 'gross fields offer a decimal keypad');
+ok(dealLogger.includes('accessibilityLabel="Save deal"'), 'deal Save is exposed as a labeled button');
+ok(dealDetail.includes('accessibilityLabel="Delete deal"'), 'deal Delete is exposed as a labeled button');
+ok(notifications.includes('accessibilityLabel="Close notifications"'), 'notification close is exposed as a labeled button');
+ok(notifications.includes('accessibilityLabel={`${n.read ? \'Mark unread\' : \'Mark read\'}: ${n.title}`}'), 'notification read controls are labeled buttons');
 
 console.log();
 if (failed) {

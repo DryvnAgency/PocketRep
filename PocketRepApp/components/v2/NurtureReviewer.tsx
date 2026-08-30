@@ -52,6 +52,7 @@ export default function NurtureReviewer({
   const send = async (d: PendingNurture) => {
     if (workingId) return;
     setWorkingId(d.id);
+    setError(null);
     try {
       const opened = await launchSms({
         contact_id: d.contact_id,
@@ -64,6 +65,10 @@ export default function NurtureReviewer({
         await markNurtureSent(d.id);
         dropDraft(d.id);
         onChanged();
+      } else if (opened === 'unsupported') {
+        setError('Open PocketRep on your phone to launch Messages. This draft is still pending.');
+      } else if (opened !== 'not_sent') {
+        setError("Couldn't open Messages. This draft is still pending.");
       }
     } finally {
       setWorkingId(null);
@@ -102,7 +107,7 @@ export default function NurtureReviewer({
 
         <ScrollView contentContainerStyle={styles.body}>
           {error ? (
-            <Text style={styles.error}>{error}</Text>
+            <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>
           ) : !drafts ? (
             <View style={styles.center}>
               <RadarLoader size={32} />

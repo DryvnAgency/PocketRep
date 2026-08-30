@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { loadPayPlan, calcCommissionWithPlan, type PayPlan as RealPayPlan } from './payPlan';
+import { roundCurrency, validateDealDraft } from './dealValidation';
 
 // Kept for back-compat with existing imports — re-exported from lib/v2/payPlan.ts.
 // Use loadPayPlan() to get the user's actual saved plan.
@@ -52,6 +53,11 @@ export async function deleteDeal(id: string): Promise<void> {
 }
 
 export async function insertDeal(draft: DealDraft, payPlan?: PayPlan): Promise<void> {
+  const frontGross = roundCurrency(draft.frontGross);
+  const backGross = roundCurrency(draft.backGross);
+  const validationError = validateDealDraft({ ...draft, frontGross, backGross });
+  if (validationError) throw new Error(validationError);
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not signed in');
 
@@ -60,7 +66,7 @@ export async function insertDeal(draft: DealDraft, payPlan?: PayPlan): Promise<v
     ? { ...await loadPayPlan(), ...mapLegacyPlan(payPlan) }
     : await loadPayPlan();
   const amount = calcCommissionWithPlan(
-    { frontGross: draft.frontGross, backGross: draft.backGross, split: draft.split },
+    { frontGross, backGross, split: draft.split },
     real,
   );
 
@@ -75,8 +81,8 @@ export async function insertDeal(draft: DealDraft, payPlan?: PayPlan): Promise<v
     funding: draft.funding,
     split: draft.split,
     split_with: draft.split ? draft.splitWith : null,
-    front_gross: draft.frontGross,
-    back_gross: draft.backGross,
+    front_gross: frontGross,
+    back_gross: backGross,
     amount,
   });
   if (error) throw error;
