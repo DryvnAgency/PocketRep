@@ -1,8 +1,6 @@
-// Rex Coach — the tap-to-open text coaching chat (ported from
-// design/extracted/tab-rex.jsx "Coach Mode"). This is the ONLY thing the gold
-// orb opens. It's conversational coaching only: ask for scripts, rebuttals,
-// objection role-play, next-move ideas. It never writes to the database —
-// taking actions (add contact, log deal, etc.) is reserved for "Hey Rex" voice.
+// Rex Coach — the tap-to-open text coaching chat. This is the only thing the
+// gold orb opens in text-only V1. It coaches by default and may propose a small
+// allow-list of app actions; every action still requires an explicit Confirm.
 
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -27,12 +25,14 @@ import { getTodayLog, getCarrySummary, appendCoachEntry } from '@/lib/v2/coachLo
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
 
-// The coach may emit these (write) actions; delete/batch stay voice/UI-only.
+// The coach may emit this narrow action allow-list; destructive batch/delete
+// operations stay voice/UI-only and every listed action still needs Confirm.
 // find_vehicles (read-only pivot) joins the list only when its flag is on — off
 // → the model isn't taught the action and the set is unchanged, so a stray
 // find_vehicles degrades to plain text like any non-allowed action.
 const COACH_ACTIONS = new Set<RexAction['type']>([
   'add_contact', 'update_notes', 'schedule_followup', 'retier_contact', 'log_deal', 'create_reminder',
+  'create_blast_sequence',
   ...(isVehicleFinderEnabled() ? (['find_vehicles'] as RexAction['type'][]) : []),
 ]);
 
@@ -80,16 +80,15 @@ export default function RexCoach({
   payPlan: PayPlan | null;
   // Fired after a confirmed action executes so AppShell can refresh the right
   // surface (contacts / deals / notifications) — mirrors handleRexConfirm.
-  onActed?: (action: RexAction) => void;
+  onActed?: (action: RexAction) => void | Promise<void>;
   onOpenContact?: (id: string) => void;
 }) {
   const greeting = useRef(COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
-  // Cold-start UX: after ~5s of waiting we tell the rep the function is warming;
-  // on a transient failure we keep the text so a Retry button can re-send it.
-  const [warming, setWarming] = useState(false);
+  // On a transient failure we keep the text so a Retry button can re-send it.
+
   const [retry, setRetry] = useState<{ text: string; history: ChatMessage[] } | null>(null);
   const [mtd, setMtd] = useState<MtdSummary | null>(null);
   const [activity, setActivity] = useState('');           // recent-activity recall block
@@ -141,7 +140,6 @@ export default function RexCoach({
       setMessages(seeded);
       setInput('');
       setTyping(false);
-      setWarming(false);
       setRetry(null);
       setPending(null);
       setActing(false);
@@ -183,7 +181,7 @@ export default function RexCoach({
 
   // Append to the visible thread AND persist to today's coach log (NEW 6), so
   // the day's real turns/actions survive a reopen. Transient system bubbles
-  // (errors, warming, cancels) stay setMessages-only and aren't logged.
+  // (errors, cancels) stay setMessages-only and aren't logged.
   const pushUser = (text: string) => {
     setMessages(m => [...m, { from: 'user', text, time: stamp() }]);
     appendCoachEntry({ role: 'user', text, time: stamp() });
@@ -205,14 +203,11 @@ export default function RexCoach({
     await deliver(text, history);
   };
 
-  // Runs one coach turn with cold-start resilience: flips to a "warming up" hint
-  // after 5s, and on a transient (timeout/network) failure warms the function and
-  // retries once — the retry lands on the now-warm container. On final failure it
-  // stores the turn so the Retry button can re-send it.
+  // Runs one coach turn with cold-start resilience: on a transient (timeout/network)
+  // failure warms the function and retries once — the retry lands on the now-warm
+  // container. On final failure it stores the turn so the Retry button can re-send.
   const deliver = async (text: string, history: ChatMessage[]) => {
     setTyping(true);
-    setWarming(false);
-    const warmTimer = setTimeout(() => setWarming(true), 5_000);
     const repContext = serializeRepContext({ contacts, payPlan, mtd });
     let attempt = 0;
     // P3-A1: flips to false only if the planner returns an unusable plan, so this
@@ -299,8 +294,7 @@ export default function RexCoach({
           const transient = msg.includes('timeout') || msg.includes('network');
           if (attempt === 0 && transient) {
             attempt++;
-            setWarming(true);
-            setStreamText(null); // clear the frozen partial so the warming hint shows
+            setStreamText(null);
             await warmBrain();   // boot the container, then retry once
             continue;
           }
@@ -315,8 +309,6 @@ export default function RexCoach({
       }]);
       setRetry({ text, history });
     } finally {
-      clearTimeout(warmTimer);
-      setWarming(false);
       setTyping(false);
       setStreamText(null); // clear any partial stream on success OR failure
     }
@@ -337,9 +329,11 @@ export default function RexCoach({
     setActing(true);
     try {
       const result = await executeAction(action, contacts);
+      // UI-backed actions such as Smart Blast finish their real work in
+      // AppShell. Await that work so the success log and Done message are true.
+      await onActed?.(action);
       logRexAction(action, 'success').catch(() => undefined); // audit chat-taken writes too
       pushRex(`✓ Done — ${summarizeAction(action)}`);
-      onActed?.(action);
       if (result.openContactId) onOpenContact?.(result.openContactId);
       setPending(null);
     } catch (e: any) {
@@ -370,8 +364,6 @@ export default function RexCoach({
     pushUser(`🎙 Parse this conversation (${transcript.length} chars)`);
     setParsing(true);
     setTyping(true);
-    setWarming(false);
-    const warmTimer = setTimeout(() => setWarming(true), 5_000);
     try {
       const result = await extractFromConversation(transcript, contacts.map(c => ({ id: c.id, name: c.name })));
       const who = result.is_new
@@ -382,8 +374,6 @@ export default function RexCoach({
     } catch (e: any) {
       setMessages(m => [...m, { from: 'rex', text: `Couldn't parse that one: ${e?.message ?? 'failed'}. Try again?`, time: stamp() }]);
     } finally {
-      clearTimeout(warmTimer);
-      setWarming(false);
       setParsing(false);
       setTyping(false);
     }
@@ -496,7 +486,7 @@ export default function RexCoach({
               <View style={[styles.bubble, styles.bubbleRex, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
                 <RadarLoader size={16} />
                 <Text style={styles.bubbleText}>
-                  {warming ? 'Warming up — first reply can take a few seconds…' : 'Rex is thinking…'}
+                  Rex is thinking…
                 </Text>
               </View>
             </View>

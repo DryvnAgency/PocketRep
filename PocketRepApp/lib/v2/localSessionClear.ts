@@ -14,21 +14,44 @@
 // `pocketrep:v2:*` localStorage key is covered automatically — nobody has to
 // remember to add it here when they add a new local cache.
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import { resetRepSettingsCache } from '@/lib/v2/repSettings';
+import { resetRexSettingsCache } from '@/lib/v2/rexSettings';
+import { resetCoachLogCache } from '@/lib/v2/coachLog';
+import { resetNotificationReadsCache } from '@/lib/v2/notificationReads';
+import { clearDemoSim } from '@/lib/v2/demoBlastSim';
+import { resetInventoryCache } from '@/lib/v2/vehicleFinder';
 
 const PREFIX = 'pocketrep:v2:';
 
-export function clearLocalSessionState(): void {
-  if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return;
-  // Collect keys before removing — mutating localStorage mid-iteration shifts
-  // its live index and can skip entries.
-  const toRemove: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith(PREFIX)) toRemove.push(key);
+export async function clearLocalSessionState(): Promise<void> {
+  // These modules use synchronous in-memory fallbacks on native. Clear them on
+  // every platform so a mounted app cannot carry rep A's state into rep B.
+  resetRexSettingsCache();
+  resetCoachLogCache();
+  resetNotificationReadsCache();
+  clearDemoSim();
+  resetInventoryCache();
+
+  if (Platform.OS === 'web') {
+    if (typeof localStorage === 'undefined') return;
+    // Collect keys before removing — mutating localStorage mid-iteration shifts
+    // its live index and can skip entries.
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(PREFIX)) toRemove.push(key);
+    }
+    for (const key of toRemove) localStorage.removeItem(key);
+    return;
   }
-  for (const key of toRemove) localStorage.removeItem(key);
+
+  await resetRepSettingsCache();
+  const keys = await AsyncStorage.getAllKeys();
+  const toRemove = keys.filter(key => key.startsWith(PREFIX));
+  if (toRemove.length > 0) await AsyncStorage.multiRemove(toRemove);
 }
 
 // The robust sign-out behind every "Sign Out" control (v2 ProfileTab + the
@@ -52,8 +75,8 @@ export async function signOutAndReset(): Promise<void> {
   } catch {
     /* fall through — force teardown regardless of a signOut error */
   } finally {
+    await clearLocalSessionState().catch(() => undefined);
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      clearLocalSessionState();
       window.location.reload();
     }
   }

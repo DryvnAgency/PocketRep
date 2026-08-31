@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { generateQueue, markSentAndLog, markSkipped, type QueueItem } from '@/lib/messageQueue';
 import { launchSms } from '@/lib/v2/smsLauncher';
+import { isCurrentWebRuntimeNativeProtocolCapable } from '@/lib/v2/smsCapability';
+import { formatSequenceTemplateTokens } from '@/lib/v2/sequenceTemplates';
 import { supabase } from '@/lib/supabase';
 
 function channelLabel(channel: QueueItem['channel']) {
@@ -11,30 +13,52 @@ function channelLabel(channel: QueueItem['channel']) {
   return 'EMAIL';
 }
 
-async function launchChannel(item: QueueItem): Promise<boolean> {
-  if (item.isDemo) return true;
-  if (item.channel === 'text') return (await launchSms({
-    contact_id: item.contact_id,
-    contact_name: item.contact_name,
-    phone: item.phone,
-    message: item.message,
-    isDemo: item.isDemo,
-  })) === 'opened';
+type LaunchResult = 'confirmed' | 'opened' | 'not_sent' | 'unsupported' | 'failed';
+
+async function launchChannel(item: QueueItem): Promise<LaunchResult> {
+  if (item.isDemo) return 'confirmed';
+  if (item.channel === 'text') {
+    const result = await launchSms({
+      contact_id: item.contact_id,
+      contact_name: item.contact_name,
+      phone: item.phone,
+      message: item.message,
+      isDemo: item.isDemo,
+      source: 'sequence',
+    });
+    if (result === 'unsupported') return 'unsupported';
+    if (result === 'not_sent') return 'not_sent';
+    return result === 'opened' ? 'confirmed' : 'failed';
+  }
+
+  if (item.channel === 'email') {
+    const email = (item.email ?? '').trim();
+    if (!email) return 'failed';
+    try {
+      await Linking.openURL(`mailto:${email}?subject=${encodeURIComponent(`Follow-up with ${item.contact_name}`)}&body=${encodeURIComponent(item.message)}`);
+      return 'opened';
+    } catch {
+      return 'failed';
+    }
+  }
 
   const digits = (item.phone ?? '').replace(/[^\d+]/g, '');
-  if (!digits) return false;
+  if (!digits) return 'failed';
+  if (Platform.OS === 'web' && !isCurrentWebRuntimeNativeProtocolCapable()) return 'unsupported';
   try {
-    await Linking.openURL(item.channel === 'call' ? `tel:${digits}` : `mailto:?subject=${encodeURIComponent(`Follow-up with ${item.contact_name}`)}&body=${encodeURIComponent(item.message)}`);
-    return true;
+    await Linking.openURL(`tel:${digits}`);
+    return 'opened';
   } catch {
-    return false;
+    return 'failed';
   }
 }
 
 export default function FollowUpQueue() {
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [openedKey, setOpenedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const busyRef = useRef(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -53,23 +77,47 @@ export default function FollowUpQueue() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const act = async (item: QueueItem, action: 'work' | 'skip') => {
+  const act = async (item: QueueItem, action: 'work' | 'complete' | 'skip') => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     const key = `${item.contact_id}:${item.sequence_id}:${item.step_number}`;
     setBusyKey(key);
     setError(null);
     try {
       if (action === 'work') {
-        const opened = await launchChannel(item);
-        if (!opened) throw new Error(`Couldn't open ${item.channel}. Check the contact's ${item.channel === 'email' ? 'email address' : 'phone number'}.`);
+        if (item.unresolved_tokens?.length) {
+          throw new Error(`Add values for ${formatSequenceTemplateTokens(item.unresolved_tokens)} before working this follow-up.`);
+        }
+        const result = await launchChannel(item);
+        if (result === 'unsupported') {
+          throw new Error(
+            item.channel === 'call'
+              ? 'Call from your phone, then mark this follow-up complete. The browser did not open a dialer.'
+              : 'Open PocketRep on your phone to launch Messages. This follow-up is still waiting.',
+          );
+        }
+        if (result === 'not_sent') {
+          throw new Error('Text was not marked sent. This follow-up is still waiting.');
+        }
+        if (result === 'failed') throw new Error(`Couldn't open ${item.channel}. Check the contact's ${item.channel === 'email' ? 'email address' : 'phone number'}.`);
+        // Texts return confirmed only after the rep says they tapped Send.
+        // Calls and emails have no reliable OS send/completion callback, so
+        // keep the step in the queue until the rep explicitly completes it.
+        if (result === 'opened') {
+          setOpenedKey(key);
+          return;
+        }
       }
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('You are signed out.');
       if (action === 'skip') await markSkipped(item, user.id);
       else await markSentAndLog(item, user.id);
+      setOpenedKey(null);
       setItems(prev => (prev ?? []).filter(x => x !== item));
     } catch (e: any) {
       setError(e?.message ?? 'That follow-up could not be completed.');
     } finally {
+      busyRef.current = false;
       setBusyKey(null);
     }
   };
@@ -88,7 +136,7 @@ export default function FollowUpQueue() {
         </Pressable>
       </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
 
       {items.length === 0 ? (
         <Text style={styles.empty}>Enroll customers in a sequence and their due steps will appear here.</Text>
@@ -107,15 +155,26 @@ export default function FollowUpQueue() {
                   <Text style={styles.meta}>STEP {item.step_number} · {channelLabel(item.channel)} · DUE {item.due_date}</Text>
                 </View>
               </View>
-              <Text style={styles.message} numberOfLines={4}>{item.message || 'No message template — work this step manually.'}</Text>
+              <Text style={styles.message} numberOfLines={4}>
+                {item.unresolved_tokens?.length
+                  ? `Needs setup: ${formatSequenceTemplateTokens(item.unresolved_tokens)}`
+                  : item.message || 'No message template — work this step manually.'}
+              </Text>
               <View style={styles.actions}>
-                <Pressable disabled={busy} onPress={() => void act(item, 'skip')} style={styles.skip}>
+                <Pressable disabled={busy} onPress={() => void act(item, 'skip')} style={styles.skip} accessibilityRole="button" accessibilityLabel={`Skip follow-up for ${item.contact_name}`}>
                   <Text style={styles.skipText}>Skip</Text>
                 </Pressable>
-                <Pressable disabled={busy} onPress={() => void act(item, 'work')} style={styles.work}>
-                  <Text style={styles.workText}>{busy ? 'Working…' : item.isDemo ? 'Simulate' : `Work ${channelLabel(item.channel)}`}</Text>
+                <Pressable
+                  disabled={busy}
+                  onPress={() => void act(item, openedKey === key ? 'complete' : 'work')}
+                  style={styles.work}
+                  accessibilityRole="button"
+                  accessibilityLabel={openedKey === key ? `Mark follow-up complete for ${item.contact_name}` : `Work ${item.channel} follow-up for ${item.contact_name}`}
+                >
+                  <Text style={styles.workText}>{busy ? 'Working…' : openedKey === key ? 'MARK COMPLETE ✓' : item.isDemo ? 'Simulate' : `Work ${channelLabel(item.channel)}`}</Text>
                 </Pressable>
               </View>
+              {openedKey === key ? <Text style={styles.openedHint}>Finish the {item.channel}, then mark this step complete.</Text> : null}
             </View>
           );
         })
@@ -145,4 +204,5 @@ const styles = StyleSheet.create({
   skipText: { color: colors.grey2, fontSize: 12, fontWeight: '700' },
   work: { flex: 1, backgroundColor: colors.gold, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 9, alignItems: 'center' },
   workText: { color: colors.ink, fontSize: 12, fontWeight: '800' },
+  openedHint: { color: colors.gold, fontSize: 10, lineHeight: 15, marginTop: 8, textAlign: 'right' },
 });

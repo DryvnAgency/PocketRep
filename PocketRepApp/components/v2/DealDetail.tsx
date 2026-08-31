@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Alert, Platform,
 } from 'react-native';
@@ -42,16 +42,25 @@ export default function DealDetail({
   onDeleted: () => void;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deletingRef = useRef(false);
   if (!deal) return null;
 
   const doDelete = async () => {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
     setDeleting(true);
+    setDeleteError(null);
     try {
       await deleteDeal(deal.id);
       onDeleted();
       onClose();
-    } catch (e) {
+    } catch (e: any) {
+      // Previously logged only to console — the button just returned to
+      // normal with zero feedback, as if nothing had been tapped.
       console.warn('deleteDeal failed', e);
+      setDeleteError(e?.message ?? "Couldn't delete — try again");
+      deletingRef.current = false;
       setDeleting(false);
     }
   };
@@ -74,7 +83,7 @@ export default function DealDetail({
       <View style={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Pressable onPress={onClose} style={styles.headerBtn}>
+          <Pressable onPress={onClose} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Close deal details">
             <Text style={styles.headerBtnText}>Close</Text>
           </Pressable>
           <View style={{ flex: 1, alignItems: 'center' }}>
@@ -106,9 +115,13 @@ export default function DealDetail({
             ) : null}
           </View>
 
+          {deleteError ? <Text style={styles.deleteErrorText}>{deleteError}</Text> : null}
           <Pressable
             onPress={confirmDelete}
             disabled={deleting}
+            accessibilityRole="button"
+            accessibilityLabel="Delete deal"
+            accessibilityState={{ disabled: deleting }}
             style={[styles.deleteBtn, deleting && { opacity: 0.6 }]}
           >
             <Text style={styles.deleteText}>{deleting ? 'Deleting…' : 'Delete deal'}</Text>
@@ -197,4 +210,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   deleteText: { fontSize: 14, fontWeight: '800', color: colors.red, letterSpacing: 0.2 },
+  deleteErrorText: { fontSize: 12, color: colors.red, textAlign: 'center', marginTop: -4 },
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet, Linking, Platform, Alert,
 } from 'react-native';
@@ -25,8 +25,12 @@ import {
 import { titleCase, normalizeVehicle } from '@/lib/v2/format';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 import { useContactNurtures } from '@/lib/v2/contactNurtures';
-import { logInteraction, useInteractions, type InteractionType, type TimelineEventType } from '@/lib/v2/interactions';
+import { logInteraction, useInteractions, type Interaction, type InteractionType } from '@/lib/v2/interactions';
 import { launchSms } from '@/lib/v2/smsLauncher';
+import {
+  isCurrentWebRuntimeNativeProtocolCapable,
+  isCurrentWebRuntimeSmsCapable,
+} from '@/lib/v2/smsCapability';
 import { pickAndUploadContactPhoto } from '@/lib/v2/contactPhoto';
 import { formatBirthday, parseBirthdayInput } from '@/lib/v2/birthday';
 import LanguageToggle from './LanguageToggle';
@@ -52,6 +56,20 @@ const INTERACTION_META: Record<string, { icon: string; color: string; label: str
   reply:        { icon: '↩️', color: colors.green, label: 'REPLY',   verb: 'Customer replied' },
   referral_ask: { icon: '🤝', color: colors.gold2, label: 'REFERRAL', verb: 'Referral ask sent' },
 };
+
+const SMS_ATTEMPT_META: Record<string, { icon: string; color: string; label: string; verb: string }> = {
+  opened: { icon: '↗', color: colors.orange, label: 'TEXT · COMPOSER OPENED', verb: 'Composer opened; send not confirmed' },
+  not_sent: { icon: '∅', color: colors.red, label: 'TEXT · NOT SENT', verb: 'Text was not sent' },
+  failed: { icon: '!', color: colors.red, label: 'TEXT · FAILED', verb: 'Text could not be opened' },
+  no_phone: { icon: '!', color: colors.red, label: 'TEXT · NO NUMBER', verb: 'No phone number was available' },
+};
+
+function timelineMeta(interaction: Interaction) {
+  if (interaction.source === 'sms_action' && interaction.outcome) {
+    return SMS_ATTEMPT_META[interaction.outcome] ?? INTERACTION_META.text;
+  }
+  return INTERACTION_META[interaction.type] ?? INTERACTION_META.note;
+}
 
 function digitsOnly(s: string | null): string {
   return (s ?? '').replace(/[^\d]/g, '');
@@ -90,14 +108,14 @@ export default function ContactDetail({
   const tier = TIERS[contact.tier];
   const allTags = useTags();
   const { sequences, reload: reloadSequences } = useSequences();
-  const deals = useDeals(contact.id, dealsRefetchKey);
+  const { deals, error: dealsError } = useDeals(contact.id, dealsRefetchKey);
   const [nurtureRefetchKey, setNurtureRefetchKey] = useState(0);
   const nurtures = useContactNurtures(contact.id, nurtureRefetchKey);
   const unmarkedNurtures = nurtures.filter(n => n.sent_at && !n.reply_received);
   const [interactionsKey, setInteractionsKey] = useState(0);
   const interactions = useInteractions(contact.id, interactionsKey);
   // Web compose modal (Call/Text/Email). Native goes straight to Linking.openURL.
-  const [compose, setCompose] = useState<{ mode: 'call' | 'text' | 'email'; body: string } | null>(null);
+  const [compose, setCompose] = useState<{ mode: 'call' | 'text' | 'email'; body: string; opened?: boolean } | null>(null);
 
   const [notes, setNotes] = useState(contact.notes ?? '');
   const [editingNotes, setEditingNotes] = useState(false);
@@ -122,6 +140,7 @@ export default function ContactDetail({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [editingReferral, setEditingReferral] = useState(false);
   const [referralInput, setReferralInput] = useState('');
@@ -138,6 +157,17 @@ export default function ContactDetail({
   const [trimInput, setTrimInput] = useState('');
   const [budgetInput, setBudgetInput] = useState('');
   const [tradeInput, setTradeInput] = useState('');
+
+  // Synchronous re-entrancy guards for the per-field saves below (mirrors
+  // AddContactModal.tsx's savingRef/pickingRef pattern) — the `saving*` state
+  // above updates asynchronously, so a same-tick double-tap could otherwise
+  // fire two overlapping writes to the same field.
+  const savingReferralRef = useRef(false);
+  const savingNotesRef = useRef(false);
+  const savingBdayRef = useRef(false);
+  const savingNameRef = useRef(false);
+  const savingVehicleRef = useRef(false);
+  const tagToggleRef = useRef(false);
 
   useEffect(() => {
     setNotes(contact.notes ?? '');
@@ -175,6 +205,7 @@ export default function ContactDetail({
   // Save the referral. A name that exactly matches a contact links the two; an
   // explicit pick (opts) always links; anything else stores free text.
   const saveReferral = async (opts?: { contactId: string; name: string }) => {
+    if (savingReferralRef.current) return;
     const next = opts ?? (() => {
       const typed = referralInput.trim();
       if (!typed) return { contactId: null as string | null, name: null as string | null };
@@ -185,6 +216,7 @@ export default function ContactDetail({
         ? { contactId: exact.id, name: exact.name }
         : { contactId: null as string | null, name: typed };
     })();
+    savingReferralRef.current = true;
     setSavingReferral(true);
     try {
       await updateContactReferredBy(contact.id, next);
@@ -192,12 +224,16 @@ export default function ContactDetail({
       setEditingReferral(false);
     } catch (e) {
       console.warn('saveReferral failed', e);
+      flash("Couldn't save referral");
     } finally {
+      savingReferralRef.current = false;
       setSavingReferral(false);
     }
   };
 
   const clearReferral = async () => {
+    if (savingReferralRef.current) return;
+    savingReferralRef.current = true;
     setSavingReferral(true);
     try {
       await updateContactReferredBy(contact.id, { contactId: null, name: null });
@@ -206,7 +242,9 @@ export default function ContactDetail({
       setReferralInput('');
     } catch (e) {
       console.warn('clearReferral failed', e);
+      flash("Couldn't clear referral");
     } finally {
+      savingReferralRef.current = false;
       setSavingReferral(false);
     }
   };
@@ -225,6 +263,8 @@ export default function ContactDetail({
   };
 
   const saveNotes = async () => {
+    if (savingNotesRef.current) return;
+    savingNotesRef.current = true;
     setSavingNotes(true);
     try {
       await updateContactNotes(contact.id, notes);
@@ -238,7 +278,9 @@ export default function ContactDetail({
       }
     } catch (e) {
       console.warn('saveNotes failed', e);
+      flash("Couldn't save notes");
     } finally {
+      savingNotesRef.current = false;
       setSavingNotes(false);
     }
   };
@@ -249,8 +291,10 @@ export default function ContactDetail({
   };
 
   const saveBday = async () => {
+    if (savingBdayRef.current) return;
     const parsed = parseBirthdayInput(bday);
     if (parsed === false) return; // unparseable — keep editing so the rep can fix it
+    savingBdayRef.current = true;
     setSavingBday(true);
     try {
       await updateContactBirthday(contact.id, parsed);
@@ -259,7 +303,9 @@ export default function ContactDetail({
       setEditingBday(false);
     } catch (e) {
       console.warn('saveBday failed', e);
+      flash("Couldn't save birthday");
     } finally {
+      savingBdayRef.current = false;
       setSavingBday(false);
     }
   };
@@ -267,10 +313,12 @@ export default function ContactDetail({
   const startEditName = () => { setNameInput(contact.name); setEditingName(true); };
   const cancelName = () => { setEditingName(false); setNameInput(''); };
   const saveName = async () => {
+    if (savingNameRef.current) return;
     const full = nameInput.trim();
     if (!full) return; // name is required — keep editing so the rep can fix it
     const [first, ...rest] = full.split(/\s+/);
     const last = rest.join(' ');
+    savingNameRef.current = true;
     setSavingName(true);
     try {
       await updateContactName(contact.id, first, last);
@@ -278,7 +326,9 @@ export default function ContactDetail({
       setEditingName(false);
     } catch (e) {
       console.warn('saveName failed', e);
+      flash("Couldn't save name");
     } finally {
+      savingNameRef.current = false;
       setSavingName(false);
     }
   };
@@ -291,6 +341,8 @@ export default function ContactDetail({
     setEditingVehicle(true);
   };
   const saveVehicle = async () => {
+    if (savingVehicleRef.current) return;
+    savingVehicleRef.current = true;
     setSavingVehicle(true);
     try {
       await updateContactVehicleInfo(contact.id, {
@@ -306,12 +358,20 @@ export default function ContactDetail({
       setEditingVehicle(false);
     } catch (e) {
       console.warn('saveVehicle failed', e);
+      flash("Couldn't save vehicle info");
     } finally {
+      savingVehicleRef.current = false;
       setSavingVehicle(false);
     }
   };
 
   const toggleTag = async (name: string) => {
+    // Guards the stale-closure race a rapid double-tap could otherwise hit:
+    // `contact` is a prop, so a second toggleTag firing before the first
+    // save's onLocalUpdate lands would compute `next` from the OLD tag list
+    // and silently drop the first tag change on write.
+    if (tagToggleRef.current) return;
+    tagToggleRef.current = true;
     const has = contact.tags.includes(name);
     const next = has ? contact.tags.filter(t => t !== name) : [...contact.tags, name];
     onLocalUpdate({ ...contact, tags: next });
@@ -320,6 +380,9 @@ export default function ContactDetail({
     } catch (e) {
       onLocalUpdate({ ...contact, tags: contact.tags });
       console.warn('toggleTag failed', e);
+      flash("Couldn't save tag change");
+    } finally {
+      tagToggleRef.current = false;
     }
   };
 
@@ -360,26 +423,32 @@ export default function ContactDetail({
   // Record a touch: stamp last_contact_date + reset the follow-up clock, append
   // an entry to the activity timeline (interactions), and optimistically zero
   // the days-since counter. Working a lead is logging it.
-  const recordTouch = (method: InteractionType, summary?: string) => {
-    if (method !== 'note') {
-      logContactTouch(contact.id, method, summary).catch(e => console.warn('logContactTouch', e));
+  const recordTouch = async (method: InteractionType, summary?: string) => {
+    try {
+      if (method !== 'note') await logContactTouch(contact.id, method, summary);
+      await logInteraction(contact.id, method, summary);
+      setInteractionsKey(k => k + 1);
+      onLocalUpdate({ ...contact, days: 0 });
+      const labels: Record<InteractionType, string> = {
+        call: '✓ Call logged', text: '✓ Text logged', email: '✓ Email logged', note: '✓ Note logged',
+      };
+      flash(labels[method]);
+      return true;
+    } catch (e) {
+      console.warn('recordTouch failed', e);
+      flash("Couldn't log that touch — try again");
+      return false;
     }
-    logInteraction(contact.id, method, summary)
-      .then(() => setInteractionsKey(k => k + 1))
-      .catch(e => console.warn('logInteraction', e));
-    onLocalUpdate({ ...contact, days: 0 });
-    const labels: Record<InteractionType, string> = {
-      call: '✓ Call logged', text: '✓ Text logged', email: '✓ Email logged', note: '✓ Note logged',
-    };
-    flash(labels[method]);
   };
 
   const webCopy = async (text: string) => {
     try {
       if (typeof navigator !== 'undefined' && (navigator as any).clipboard) {
         await (navigator as any).clipboard.writeText(text);
+        return true;
       }
-    } catch { /* ignore */ }
+    } catch { /* handled by caller */ }
+    return false;
   };
 
   // Platform URL for a channel. sms/tel use digits only; mailto carries a subject.
@@ -416,12 +485,16 @@ export default function ContactDetail({
     });
     if (outcome) {
       const summary = `Call outcome: ${outcome.replace('-', ' ')}`;
-      logContactTouch(contact.id, 'call', summary, outcome).catch(e => console.warn('logContactTouch', e));
-      logInteraction(contact.id, 'call', summary, outcome)
-        .then(() => setInteractionsKey(k => k + 1))
-        .catch(e => console.warn('logInteraction', e));
-      onLocalUpdate({ ...contact, days: 0 });
-      flash('✓ Call logged');
+      try {
+        await logContactTouch(contact.id, 'call', summary, outcome);
+        await logInteraction(contact.id, 'call', summary, outcome);
+        setInteractionsKey(k => k + 1);
+        onLocalUpdate({ ...contact, days: 0 });
+        flash('✓ Call logged');
+      } catch (e) {
+        console.warn('call outcome save failed', e);
+        flash("Couldn't log that call — try again");
+      }
     }
   };
   const openText = async (body?: string) => {
@@ -435,17 +508,34 @@ export default function ContactDetail({
       isDemo: contact.isDemo,
     });
     if (result === 'opened') {
-      recordTouch('text', body);
+      await recordTouch('text', body);
     }
   };
   // Email mirrors Call/Text: web opens the compose modal (mailto: silently
   // no-ops when no desktop mail client is registered, which read as a dead
-  // button); native opens the mail client directly.
-  const openEmail = (body?: string) => {
+  // button); native opens the mail client directly. Only record the touch —
+  // clearing the follow-up date — once the mail app actually opened, same
+  // as openText's launchSms gate.
+  const openEmail = async (body?: string) => {
     if (!contact.email) { flash('No email on file'); return; }
     if (Platform.OS === 'web') { setCompose({ mode: 'email', body: body ?? '' }); return; }
-    Linking.openURL(channelUrl('email', body));
-    recordTouch('email', body);
+    try {
+      await Linking.openURL(channelUrl('email', body));
+      const sent = await new Promise<boolean>(resolve => {
+        Alert.alert(
+          'Email confirmation',
+          `Did you send the email to ${contact.name.split(' ')[0]}?`,
+          [
+            { text: 'Not Sent', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Yes, I Sent It', onPress: () => resolve(true) },
+          ],
+          { cancelable: false },
+        );
+      });
+      if (sent) await recordTouch('email', body);
+    } catch {
+      flash('Could not open mail app');
+    }
   };
 
   const runGamePlan = async () => {
@@ -471,14 +561,15 @@ export default function ContactDetail({
   const handleDelete = async () => {
     if (deleting) return;
     setDeleting(true);
+    setDeleteError(null);
     try {
       await deleteContact(contact.id);
       onDeleted?.(contact.id);
       onClose();
-    } catch (e) {
+    } catch (e: any) {
       console.warn('deleteContact failed', e);
+      setDeleteError(e?.message ?? 'Could not delete this contact. Try again.');
       setDeleting(false);
-      setConfirmDelete(false);
     }
   };
 
@@ -498,11 +589,21 @@ export default function ContactDetail({
   return (
     <View style={styles.root}>
       <View style={styles.topBar}>
-        <Pressable onPress={onClose} style={styles.iconBtn}>
+        <Pressable
+          onPress={onClose}
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Close contact details"
+        >
           <Text style={styles.iconBtnText}>‹</Text>
         </Pressable>
         <View style={{ flex: 1 }} />
-        <Pressable onPress={() => setMenuOpen(true)} style={[styles.iconBtn, { borderColor: colors.ink4 }]}>
+        <Pressable
+          onPress={() => setMenuOpen(true)}
+          style={[styles.iconBtn, { borderColor: colors.ink4 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Open contact actions"
+        >
           <Text style={[styles.iconBtnText, { color: colors.grey2, fontSize: 14 }]}>⋯</Text>
         </Pressable>
       </View>
@@ -521,8 +622,10 @@ export default function ContactDetail({
           />
           <View style={styles.menuCard}>
             <Pressable
-              onPress={() => { setMenuOpen(false); setConfirmDelete(true); }}
+              onPress={() => { setMenuOpen(false); setDeleteError(null); setConfirmDelete(true); }}
               style={styles.menuRow}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${contact.name}`}
             >
               <Text style={[styles.menuRowText, { color: colors.red }]}>Delete contact</Text>
             </Pressable>
@@ -539,13 +642,16 @@ export default function ContactDetail({
           <View style={styles.confirmCard}>
             <Text style={styles.confirmTitle}>Delete {contact.name}?</Text>
             <Text style={styles.confirmBody}>
-              This permanently removes {contact.name} from your book. It can't be undone.
+              This removes {contact.name} from your active book. Their history stays protected.
             </Text>
+            {deleteError ? <Text style={styles.confirmError} accessibilityLiveRegion="polite">{deleteError}</Text> : null}
             <View style={styles.confirmActions}>
               <Pressable
                 onPress={() => setConfirmDelete(false)}
                 disabled={deleting}
                 style={styles.confirmCancel}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel delete"
               >
                 <Text style={styles.confirmCancelText}>Cancel</Text>
               </Pressable>
@@ -553,6 +659,8 @@ export default function ContactDetail({
                 onPress={handleDelete}
                 disabled={deleting}
                 style={styles.confirmDelete}
+                accessibilityRole="button"
+                accessibilityLabel={`Confirm delete ${contact.name}`}
               >
                 <Text style={styles.confirmDeleteText}>
                   {deleting ? 'Deleting…' : 'Delete'}
@@ -573,6 +681,8 @@ export default function ContactDetail({
               }
             }}
             style={{ position: 'relative' }}
+            accessibilityRole="button"
+            accessibilityLabel={contact.photoUrl ? `Change photo for ${contact.name}` : `Add photo for ${contact.name}`}
           >
             <Avatar name={contact.name} size={68} photoUrl={contact.photoUrl} />
             <View style={styles.photoBadge}>
@@ -592,20 +702,32 @@ export default function ContactDetail({
                   onSubmitEditing={saveName}
                   returnKeyType="done"
                 />
-                <Pressable onPress={cancelName} hitSlop={6}>
+                <Pressable onPress={cancelName} hitSlop={6} accessibilityRole="button" accessibilityLabel="Cancel name edit">
                   <Text style={styles.linkSecondary}>Cancel</Text>
                 </Pressable>
-                <Pressable onPress={saveName} hitSlop={6} disabled={savingName}>
+                <Pressable
+                  onPress={saveName}
+                  hitSlop={6}
+                  disabled={savingName}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save customer name"
+                  accessibilityState={{ disabled: savingName }}
+                >
                   <Text style={styles.linkPrimary}>{savingName ? '…' : 'SAVE'}</Text>
                 </Pressable>
               </View>
             ) : (
-              <Pressable onPress={startEditName} hitSlop={4}>
+              <Pressable onPress={startEditName} hitSlop={4} accessibilityRole="button" accessibilityLabel="Edit customer name">
                 <Text style={styles.heroName}>{contact.name}</Text>
               </Pressable>
             )}
             <View style={styles.heroPills}>
-              <Pressable onPress={cycleTier} hitSlop={6}>
+              <Pressable
+                onPress={cycleTier}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={`Change heat level, currently ${tier.label}`}
+              >
                 <Pill color={tier.color}>{tier.icon} {tier.label}</Pill>
               </Pressable>
               {contact.planLabel ? <Pill color={colors.gold}>{contact.planLabel}</Pill> : null}
@@ -632,7 +754,13 @@ export default function ContactDetail({
             { label: 'Email', icon: '✉️', onPress: () => openEmail() },
             { label: 'Note',  icon: '📝', onPress: () => setEditingNotes(true) },
           ].map(a => (
-            <Pressable key={a.label} onPress={a.onPress} style={styles.quickBtn}>
+            <Pressable
+              key={a.label}
+              onPress={a.onPress}
+              style={styles.quickBtn}
+              accessibilityRole="button"
+              accessibilityLabel={`${a.label} ${contact.name}`}
+            >
               <Text style={styles.quickIcon}>{a.icon}</Text>
               <Text style={styles.quickLabel}>{a.label.toUpperCase()}</Text>
             </Pressable>
@@ -650,13 +778,20 @@ export default function ContactDetail({
                   styles.tagChip,
                   { backgroundColor: rgbaTint(col, 0.12), borderColor: rgbaTint(col, 0.35) },
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove tag ${t}`}
               >
                 <View style={[styles.tagDot, { backgroundColor: col }]} />
                 <Text style={[styles.tagText, { color: col }]}>{t}</Text>
               </Pressable>
             );
           })}
-          <Pressable onPress={() => setTagPickerOpen(true)} style={styles.tagAdd}>
+          <Pressable
+            onPress={() => setTagPickerOpen(true)}
+            style={styles.tagAdd}
+            accessibilityRole="button"
+            accessibilityLabel="Add a tag"
+          >
             <Text style={styles.tagAddText}>＋ Add tag</Text>
           </Pressable>
         </View>
@@ -666,15 +801,22 @@ export default function ContactDetail({
           <View style={{ flex: 1 }} />
           {editingVehicle ? (
             <>
-              <Pressable onPress={() => setEditingVehicle(false)} hitSlop={6}>
+              <Pressable onPress={() => setEditingVehicle(false)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Cancel vehicle edit">
                 <Text style={styles.linkSecondary}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={saveVehicle} hitSlop={6} disabled={savingVehicle}>
+              <Pressable
+                onPress={saveVehicle}
+                hitSlop={6}
+                disabled={savingVehicle}
+                accessibilityRole="button"
+                accessibilityLabel="Save vehicle details"
+                accessibilityState={{ disabled: savingVehicle }}
+              >
                 <Text style={styles.linkPrimary}>{savingVehicle ? 'SAVING…' : 'SAVE'}</Text>
               </Pressable>
             </>
           ) : (
-            <Pressable onPress={startEditVehicle} hitSlop={6}>
+            <Pressable onPress={startEditVehicle} hitSlop={6} accessibilityRole="button" accessibilityLabel="Edit vehicle details">
               <Text style={styles.linkPrimary}>EDIT ›</Text>
             </Pressable>
           )}
@@ -713,7 +855,7 @@ export default function ContactDetail({
             </View>
           </View>
         ) : (
-          <Pressable onPress={startEditVehicle} style={styles.card}>
+          <Pressable onPress={startEditVehicle} style={styles.card} accessibilityRole="button" accessibilityLabel="Edit vehicle details">
             <Text style={styles.vehicleName}>{contact.vehicle ?? '—'}</Text>
             {contact.trim ? <Text style={styles.vehicleTrim}>{contact.trim}</Text> : null}
             <View style={styles.vehicleStats}>
@@ -734,15 +876,22 @@ export default function ContactDetail({
           <View style={{ flex: 1 }} />
           {editingBday ? (
             <>
-              <Pressable onPress={cancelBday} hitSlop={6}>
+              <Pressable onPress={cancelBday} hitSlop={6} accessibilityRole="button" accessibilityLabel="Cancel birthday edit">
                 <Text style={styles.linkSecondary}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={saveBday} hitSlop={6} disabled={savingBday}>
+              <Pressable
+                onPress={saveBday}
+                hitSlop={6}
+                disabled={savingBday}
+                accessibilityRole="button"
+                accessibilityLabel="Save birthday"
+                accessibilityState={{ disabled: savingBday }}
+              >
                 <Text style={styles.linkPrimary}>{savingBday ? 'SAVING…' : 'SAVE'}</Text>
               </Pressable>
             </>
           ) : (
-            <Pressable onPress={() => setEditingBday(true)} hitSlop={6}>
+            <Pressable onPress={() => setEditingBday(true)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Edit birthday">
               <Text style={styles.linkPrimary}>{contact.birthday ? 'EDIT ›' : '＋ ADD'}</Text>
             </Pressable>
           )}
@@ -751,6 +900,8 @@ export default function ContactDetail({
         <Pressable
           onPress={() => !editingBday && setEditingBday(true)}
           style={[styles.card, editingBday && { borderColor: colors.gold }, { paddingVertical: 14 }]}
+          accessibilityRole={editingBday ? undefined : 'button'}
+          accessibilityLabel={editingBday ? undefined : 'Edit birthday'}
         >
           {editingBday ? (
             <TextInput
@@ -773,15 +924,22 @@ export default function ContactDetail({
           <View style={{ flex: 1 }} />
           {editingReferral ? (
             <>
-              <Pressable onPress={() => setEditingReferral(false)} hitSlop={6}>
+              <Pressable onPress={() => setEditingReferral(false)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Cancel referral edit">
                 <Text style={styles.linkSecondary}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={() => saveReferral()} hitSlop={6} disabled={savingReferral}>
+              <Pressable
+                onPress={() => saveReferral()}
+                hitSlop={6}
+                disabled={savingReferral}
+                accessibilityRole="button"
+                accessibilityLabel="Save referral"
+                accessibilityState={{ disabled: savingReferral }}
+              >
                 <Text style={styles.linkPrimary}>{savingReferral ? 'SAVING…' : 'SAVE'}</Text>
               </Pressable>
             </>
           ) : (
-            <Pressable onPress={startEditReferral} hitSlop={6}>
+            <Pressable onPress={startEditReferral} hitSlop={6} accessibilityRole="button" accessibilityLabel="Edit referral source">
               <Text style={styles.linkPrimary}>{referrerLabel ? 'EDIT ›' : '＋ ADD'}</Text>
             </Pressable>
           )}
@@ -806,6 +964,8 @@ export default function ContactDetail({
                       key={m.id}
                       onPress={() => saveReferral({ contactId: m.id, name: m.name })}
                       style={styles.referralChip}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Set referrer to ${m.name}`}
                     >
                       <Text style={styles.referralChipText}>👥 {m.name}</Text>
                     </Pressable>
@@ -814,7 +974,14 @@ export default function ContactDetail({
               </View>
             ) : null}
             {referrerLabel ? (
-              <Pressable onPress={clearReferral} hitSlop={6} disabled={savingReferral}>
+              <Pressable
+                onPress={clearReferral}
+                hitSlop={6}
+                disabled={savingReferral}
+                accessibilityRole="button"
+                accessibilityLabel="Remove referral"
+                accessibilityState={{ disabled: savingReferral }}
+              >
                 <Text style={styles.linkSecondary}>Remove referral</Text>
               </Pressable>
             ) : null}
@@ -823,6 +990,8 @@ export default function ContactDetail({
           <Pressable
             onPress={() => (referrer ? onOpenContact?.(referrer.id) : startEditReferral())}
             style={[styles.card, { paddingVertical: 14 }]}
+            accessibilityRole="button"
+            accessibilityLabel={referrer ? `Open referrer ${referrer.name}` : 'Add referral source'}
           >
             {referrerLabel ? (
               <Text style={referrer ? styles.referralLinked : styles.bdayText}>
@@ -851,6 +1020,8 @@ export default function ContactDetail({
                   key={r.id}
                   onPress={() => onOpenContact?.(r.id)}
                   style={[styles.referralRow, i < referrals.length - 1 && styles.divider]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open referral ${r.name}`}
                 >
                   <Avatar name={r.name} size={28} photoUrl={r.photoUrl} />
                   <Text style={styles.referralRowName} numberOfLines={1}>{r.name}</Text>
@@ -865,7 +1036,14 @@ export default function ContactDetail({
         <View style={styles.toggleWrap}>
           <View style={styles.toggle}>
             {(['latest', 'next'] as const).map(k => (
-              <Pressable key={k} onPress={() => setStepView(k)} style={styles.toggleBtn}>
+              <Pressable
+                key={k}
+                onPress={() => setStepView(k)}
+                style={styles.toggleBtn}
+                accessibilityRole="tab"
+                accessibilityLabel={k === 'latest' ? 'Latest activity' : 'Next step'}
+                accessibilityState={{ selected: stepView === k }}
+              >
                 <View
                   style={[
                     styles.togglePill,
@@ -894,7 +1072,7 @@ export default function ContactDetail({
             ) : (
               <>
                 {interactions.map((it, i) => {
-                  const meta = INTERACTION_META[it.type] ?? INTERACTION_META.note;
+                  const meta = timelineMeta(it);
                   const last = i === interactions.length - 1 && contact.milestones.length === 0;
                   return (
                     <View key={it.id} style={[styles.milestoneRow, !last && styles.divider]}>
@@ -968,15 +1146,22 @@ export default function ContactDetail({
           <View style={{ flex: 1 }} />
           {editingNotes ? (
             <>
-              <Pressable onPress={cancelNotes} hitSlop={6}>
+              <Pressable onPress={cancelNotes} hitSlop={6} accessibilityRole="button" accessibilityLabel="Cancel note edit">
                 <Text style={styles.linkSecondary}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={saveNotes} hitSlop={6} disabled={savingNotes}>
+              <Pressable
+                onPress={saveNotes}
+                hitSlop={6}
+                disabled={savingNotes}
+                accessibilityRole="button"
+                accessibilityLabel="Save customer notes"
+                accessibilityState={{ disabled: savingNotes }}
+              >
                 <Text style={styles.linkPrimary}>{savingNotes ? 'SAVING…' : 'SAVE'}</Text>
               </Pressable>
             </>
           ) : (
-            <Pressable onPress={() => setEditingNotes(true)} hitSlop={6}>
+            <Pressable onPress={() => setEditingNotes(true)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Edit customer notes">
               <Text style={styles.linkPrimary}>EDIT ›</Text>
             </Pressable>
           )}
@@ -989,6 +1174,8 @@ export default function ContactDetail({
             editingNotes && { borderColor: colors.gold },
             { paddingVertical: 14 },
           ]}
+          accessibilityRole={editingNotes ? undefined : 'button'}
+          accessibilityLabel={editingNotes ? undefined : 'Edit customer notes'}
         >
           {editingNotes ? (
             <TextInput
@@ -1012,6 +1199,9 @@ export default function ContactDetail({
             onPress={runGamePlan}
             disabled={aiLoading}
             style={[styles.gamePlan, aiLoading && { opacity: 0.6 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Generate Rex game plan"
+            accessibilityState={{ disabled: aiLoading }}
           >
             <Text style={styles.gamePlanText}>GAME PLAN</Text>
             <Text style={styles.gamePlanHint}>
@@ -1040,7 +1230,7 @@ export default function ContactDetail({
               </Text>
               <View style={{ flex: 1 }} />
               {!aiLoading ? (
-                <Pressable onPress={runGamePlan} hitSlop={6}>
+                <Pressable onPress={runGamePlan} hitSlop={6} accessibilityRole="button" accessibilityLabel="Regenerate Rex game plan">
                   <Text style={styles.linkPrimary}>↻ REGENERATE</Text>
                 </Pressable>
               ) : null}
@@ -1049,7 +1239,7 @@ export default function ContactDetail({
             {aiError ? (
               <View style={styles.aiBody}>
                 <Text style={styles.aiError}>Couldn't reach Rex: {aiError}</Text>
-                <Pressable onPress={runGamePlan} hitSlop={6} style={{ marginTop: 10 }}>
+                <Pressable onPress={runGamePlan} hitSlop={6} style={{ marginTop: 10 }} accessibilityRole="button" accessibilityLabel="Retry Rex game plan">
                   <Text style={styles.linkPrimary}>↻ TAP TO RETRY</Text>
                 </Pressable>
               </View>
@@ -1073,21 +1263,21 @@ export default function ContactDetail({
                   />
                 </View>
                 <View style={styles.aiActions}>
-                  <Pressable onPress={copyScript} style={[styles.aiAction, copied && styles.aiActionDone]}>
+                  <Pressable onPress={copyScript} style={[styles.aiAction, copied && styles.aiActionDone]} accessibilityRole="button" accessibilityLabel="Copy Rex script">
                     <Text style={[styles.aiActionText, copied && { color: colors.white }]}>
                       {copied ? '✓ COPIED' : '⧉ COPY'}
                     </Text>
                   </Pressable>
                   {aiChannel === 'call' ? (
-                    <Pressable onPress={openCall} style={[styles.aiAction, styles.aiActionPrimary]}>
+                    <Pressable onPress={openCall} style={[styles.aiAction, styles.aiActionPrimary]} accessibilityRole="button" accessibilityLabel={`Call ${contact.name}`}>
                       <Text style={styles.aiActionPrimaryText}>📞 CALL</Text>
                     </Pressable>
                   ) : aiChannel === 'text' ? (
-                    <Pressable onPress={() => openText(aiScript)} style={[styles.aiAction, styles.aiActionPrimary]}>
+                    <Pressable onPress={() => openText(aiScript)} style={[styles.aiAction, styles.aiActionPrimary]} accessibilityRole="button" accessibilityLabel={`Text ${contact.name}`}>
                       <Text style={styles.aiActionPrimaryText}>💬 TEXT</Text>
                     </Pressable>
                   ) : (
-                    <Pressable onPress={() => openEmail(aiScript)} style={[styles.aiAction, styles.aiActionPrimary]}>
+                    <Pressable onPress={() => openEmail(aiScript)} style={[styles.aiAction, styles.aiActionPrimary]} accessibilityRole="button" accessibilityLabel={`Email ${contact.name}`}>
                       <Text style={styles.aiActionPrimaryText}>✉ EMAIL</Text>
                     </Pressable>
                   )}
@@ -1134,13 +1324,18 @@ export default function ContactDetail({
             </View>
           ) : null}
           <View style={{ flex: 1 }} />
-          <Pressable onPress={onLogDeal} hitSlop={6}>
+          <Pressable onPress={onLogDeal} hitSlop={6} accessibilityRole="button" accessibilityLabel="Log a deal">
             <Text style={styles.linkPrimary}>＋ LOG DEAL</Text>
           </Pressable>
         </View>
 
-        {deals.length === 0 ? (
-          <Pressable onPress={onLogDeal} style={styles.dealEmpty}>
+        {dealsError ? (
+          <View style={styles.dealEmpty}>
+            <Text style={[styles.dealEmptyTitle, { color: colors.red }]}>Couldn't load deals</Text>
+            <Text style={styles.dealEmptyHint}>{dealsError}</Text>
+          </View>
+        ) : deals.length === 0 ? (
+          <Pressable onPress={onLogDeal} style={styles.dealEmpty} accessibilityRole="button" accessibilityLabel="Log the first deal">
             <Text style={styles.dealEmptyTitle}>No deals yet — close them and log it here</Text>
             <Text style={styles.dealEmptyHint}>Flows straight into your Metrics</Text>
           </Pressable>
@@ -1214,35 +1409,56 @@ export default function ContactDetail({
               <Pressable
                 onPress={async () => {
                   const hasBody = compose.mode === 'text' || compose.mode === 'email';
-                  const body = hasBody ? compose.body : undefined;
                   const copyText = hasBody && compose.body
                     ? compose.body
                     : compose.mode === 'email' ? (contact.email ?? '') : (contact.phone ?? '');
-                  await webCopy(copyText);
-                  recordTouch(compose.mode, body);
-                  setCompose(null);
+                  const didCopy = await webCopy(copyText);
+                  flash(didCopy ? '✓ Copied' : "Couldn't copy — try again");
                 }}
                 style={styles.aiAction}
+                accessibilityRole="button"
+                accessibilityLabel={compose.mode === 'call' ? 'Copy phone number' : 'Copy message'}
               >
                 <Text style={styles.aiActionText}>
                   {compose.mode === 'call' ? '⧉ COPY NUMBER' : '⧉ COPY MESSAGE'}
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => {
+                onPress={async () => {
                   const body = (compose.mode === 'text' || compose.mode === 'email') ? compose.body : undefined;
-                  try { Linking.openURL(channelUrl(compose.mode, body || undefined)); } catch { /* ignore */ }
-                  recordTouch(compose.mode, body);
-                  setCompose(null);
+                  if (compose.opened) {
+                    const saved = await recordTouch(compose.mode, body);
+                    if (saved) setCompose(null);
+                    return;
+                  }
+                  if (compose.mode === 'text' && !isCurrentWebRuntimeSmsCapable()) {
+                    flash('Open PocketRep on your phone to launch Messages. You can copy the draft here.');
+                    return;
+                  }
+                  if (compose.mode === 'call' && !isCurrentWebRuntimeNativeProtocolCapable()) {
+                    setCompose(c => c ? { ...c, opened: true } : c);
+                    flash('Call from your phone, then mark the call complete here. The browser did not open a dialer.');
+                    return;
+                  }
+                  try {
+                    await Linking.openURL(channelUrl(compose.mode, body || undefined));
+                    setCompose(c => c ? { ...c, opened: true } : c);
+                  } catch {
+                    flash(`Couldn't open ${compose.mode === 'call' ? 'the dialer' : compose.mode === 'email' ? 'mail' : 'messages'}`);
+                  }
                 }}
                 style={[styles.aiAction, styles.aiActionPrimary]}
+                accessibilityRole="button"
+                accessibilityLabel={compose.opened ? `Mark ${compose.mode} complete` : `Open ${compose.mode}`}
               >
                 <Text style={styles.aiActionPrimaryText}>
-                  {compose.mode === 'call' ? '📞 OPEN DIALER' : compose.mode === 'email' ? '✉️ OPEN MAIL' : '💬 OPEN SMS'}
+                  {compose.opened
+                    ? compose.mode === 'call' ? '✓ MARK CALLED' : '✓ MARK SENT'
+                    : compose.mode === 'call' ? '📞 OPEN DIALER' : compose.mode === 'email' ? '✉️ OPEN MAIL' : '💬 OPEN SMS'}
                 </Text>
               </Pressable>
             </View>
-            <Pressable onPress={() => setCompose(null)} style={{ alignSelf: 'center', paddingVertical: 8 }}>
+            <Pressable onPress={() => setCompose(null)} style={{ alignSelf: 'center', paddingVertical: 8 }} accessibilityRole="button" accessibilityLabel="Cancel contact action">
               <Text style={styles.linkSecondary}>Cancel</Text>
             </Pressable>
           </View>
@@ -1479,6 +1695,7 @@ const styles = StyleSheet.create({
   } as any,
   confirmTitle: { fontSize: 16, fontWeight: '700', color: colors.white, letterSpacing: -0.2 },
   confirmBody: { fontSize: 13, color: colors.grey2, marginTop: 8, lineHeight: 18 },
+  confirmError: { fontSize: 12, color: colors.red, marginTop: 10, lineHeight: 17 },
   confirmActions: { flexDirection: 'row', gap: 8, marginTop: 16 },
   confirmCancel: {
     flex: 1,

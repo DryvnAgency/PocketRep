@@ -23,6 +23,11 @@ type CoachSummary = { date: string; text: string };
 let memLog: CoachDay | null = null;
 let memSummary: CoachSummary | null = null;
 
+export function resetCoachLogCache(): void {
+  memLog = null;
+  memSummary = null;
+}
+
 // Local calendar date (NOT UTC) so the reset happens at the rep's local midnight.
 function localDate(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

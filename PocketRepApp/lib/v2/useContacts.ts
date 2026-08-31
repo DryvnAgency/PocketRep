@@ -136,7 +136,14 @@ export function useContacts(enabled: boolean = true) {
     setContacts(rows);
   }, [enabled]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!enabled) {
+      setContacts(null);
+      setError(null);
+      return;
+    }
+    void load();
+  }, [enabled, load]);
 
   const patchLocal = useCallback((id: string, patch: Partial<V2Contact>) => {
     setContacts(prev =>

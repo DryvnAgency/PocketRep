@@ -10,8 +10,12 @@ import {
   archiveSequence,
   type V2Sequence,
 } from '@/lib/v2/useSequences';
+import {
+  SEQUENCE_TEMPLATE_TOKENS,
+  formatSequenceTemplateTokens,
+  getUnsupportedSequenceTemplateTokens,
+} from '@/lib/v2/sequenceTemplates';
 
-const TOKENS = ['first_name', 'rep_name', 'dealer', 'vehicle', 'color', 'trade_value', 'lease_end'];
 const CHANNELS: Array<{ value: 'text' | 'call' | 'email'; icon: string; label: string }> = [
   { value: 'text', icon: '💬', label: 'Text' },
   { value: 'call', icon: '📞', label: 'Call' },
@@ -91,6 +95,12 @@ export default function SequenceEditor({
     setSaving(true);
     setError(null);
     try {
+      const unsupported = [...new Set(
+        Object.values(stepDrafts).flatMap(getUnsupportedSequenceTemplateTokens),
+      )];
+      if (unsupported.length) {
+        throw new Error(`Unsupported template fields: ${formatSequenceTemplateTokens(unsupported)}. Use the insert fields shown below.`);
+      }
       const tasks: Promise<void>[] = [];
       if (name.trim() && name.trim() !== sequence.name) {
         tasks.push(renameSequence(sequence.id, name.trim()));
@@ -227,7 +237,7 @@ export default function SequenceEditor({
               {!previewing ? (
                 <View style={styles.tokensRow}>
                   <Label color={colors.grey2}>INSERT</Label>
-                  {TOKENS.map(tok => (
+                  {SEQUENCE_TEMPLATE_TOKENS.map(tok => (
                     <Pressable
                       key={tok}
                       onPress={() => insertToken(step.id, tok)}

@@ -11,8 +11,9 @@ import type { Sequence, SequenceStep } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import {
   generateQueue, loadQueueState, saveQueueState, clearQueueState,
-  markSentAndLog, type QueueItem,
+  markSentAndLog, markSkipped, type QueueItem,
 } from '@/lib/messageQueue';
+import { launchSms } from '@/lib/v2/smsLauncher';
 
 let AsyncStorage: any = null;
 try {
@@ -399,12 +400,47 @@ export default function SequencesScreen() {
   async function handleSendItem(item: QueueItem) {
     pendingSendRef.current = item;
     if (item.channel === 'text' && item.phone) {
-      const url = `sms:${item.phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(editingMessage ?? item.message)}`;
-      await Linking.openURL(url).catch(() => {});
-      // AppState listener fires when rep returns to app → shows "Did you send it?" banner
-    } else {
-      // Call/email: confirm immediately (no SMS app transition)
-      await confirmSent(item);
+      // launchSms owns the composer-return confirmation. Clear the legacy
+      // AppState marker first so the listener cannot show a second prompt.
+      pendingSendRef.current = null;
+      const result = await launchSms({
+        contact_id: item.contact_id,
+        contact_name: item.contact_name,
+        phone: item.phone,
+        message: editingMessage ?? item.message,
+        isDemo: item.isDemo,
+        source: 'sequence',
+      });
+      if (result === 'opened') {
+        await confirmSent(item);
+      } else if (result === 'unsupported') {
+        const message = 'Open PocketRep on your phone to launch Messages. This follow-up is still waiting.';
+        if (Platform.OS === 'web') (globalThis as any).alert?.(message);
+        else Alert.alert('Phone required', message);
+      } else if (result !== 'not_sent') {
+        Alert.alert('Could not open Messages', 'Check the contact phone number and try again.');
+      }
+      return;
+    }
+
+    const destination = item.channel === 'call'
+      ? item.phone
+      : item.email;
+    if (!destination) {
+      pendingSendRef.current = null;
+      Alert.alert('Missing contact detail', `Add a ${item.channel === 'call' ? 'phone number' : 'email address'} before working this step.`);
+      return;
+    }
+
+    const url = item.channel === 'call'
+      ? `tel:${item.phone.replace(/[^\d+]/g, '')}`
+      : `mailto:${item.email.trim()}?subject=${encodeURIComponent(`Follow-up with ${item.contact_name}`)}&body=${encodeURIComponent(editingMessage ?? item.message)}`;
+    try {
+      await Linking.openURL(url);
+      setShowConfirmSent(true);
+    } catch {
+      pendingSendRef.current = null;
+      Alert.alert('Could not open app', `Check the contact's ${item.channel === 'call' ? 'phone number' : 'email address'} and try again.`);
     }
   }
 
@@ -428,7 +464,14 @@ export default function SequencesScreen() {
     }
   }
 
-  async function handleSkipItem() {
+  async function handleSkipItem(item: QueueItem) {
+    if (!userId) return;
+    try {
+      await markSkipped(item, userId);
+    } catch (error: any) {
+      Alert.alert('Could not skip follow-up', error?.message ?? 'Refresh the queue and try again.');
+      return;
+    }
     const updatedItems = queueItems.map((q, i) =>
       i === queuePos ? { ...q, status: 'skipped' as const } : q
     );
@@ -474,31 +517,61 @@ export default function SequencesScreen() {
 
   async function sendMassText() {
     if (!massMsg.trim() || selectedContactIds.size === 0) return;
-    const count = selectedContactIds.size;
+    const recipients = allContacts.filter(c => selectedContactIds.has(c.id) && c.phone);
+    if (!recipients.length) { Alert.alert('No phone numbers', 'Selected contacts have no phone numbers.'); return; }
+    const count = recipients.length;
 
-    Alert.alert('Send Mass Text', `Send to ${count} contact${count !== 1 ? 's' : ''}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Send',
-        onPress: async () => {
-          // Save record to AsyncStorage
-          if (AsyncStorage) {
-            const record: MassTextRecord = {
-              id: Date.now().toString(),
-              message: massMsg,
-              recipient_count: count,
-              sent_at: new Date().toISOString(),
-            };
-            const existing = massTexts;
-            const updated = [...existing, record];
-            await AsyncStorage.setItem(MASS_TEXT_KEY, JSON.stringify(updated));
-            setMassTexts(updated);
-          }
-          setShowMassTextModal(false);
-          Alert.alert('Queued!', `${count} messages queued for delivery.`);
-        },
-      },
-    ]);
+    const confirmed = await new Promise<boolean>(resolve => {
+      if (Platform.OS === 'web') {
+        resolve(typeof window !== 'undefined' && window.confirm(`Open SMS composer for ${count} contact${count !== 1 ? 's' : ''} one at a time?`));
+      } else {
+        Alert.alert('Send Mass Text', `Open SMS composer for ${count} contact${count !== 1 ? 's' : ''} one at a time?`, [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Start', onPress: () => resolve(true) },
+        ]);
+      }
+    });
+    if (!confirmed) return;
+
+    let sent = 0;
+    let unsupported = false;
+    for (const c of recipients) {
+      const result = await launchSms({
+        contact_id: c.id,
+        contact_name: `${c.first_name} ${c.last_name}`.trim(),
+        phone: c.phone,
+        message: massMsg,
+        source: 'manual',
+      });
+      if (result === 'unsupported') {
+        unsupported = true;
+        break;
+      }
+      if (result === 'opened') sent++;
+    }
+
+    if (unsupported) {
+      Alert.alert('Phone required', 'Open PocketRep on your phone to launch Messages. Your message and recipient selection are still here.');
+      return;
+    }
+
+    // Record to AsyncStorage for history
+    if (AsyncStorage && sent > 0) {
+      const record: MassTextRecord = {
+        id: Date.now().toString(),
+        message: massMsg,
+        recipient_count: sent,
+        sent_at: new Date().toISOString(),
+      };
+      const updated = [...massTexts, record];
+      await AsyncStorage.setItem(MASS_TEXT_KEY, JSON.stringify(updated)).catch(() => {});
+      setMassTexts(updated);
+    }
+
+    setShowMassTextModal(false);
+    setMassMsg('');
+    setSelectedContactIds(new Set());
+    Alert.alert('Done', `${sent} of ${count} message${count !== 1 ? 's' : ''} confirmed sent.`);
   }
 
   async function loadMassTexts() {
@@ -568,7 +641,8 @@ export default function SequencesScreen() {
         message_template: s.message_template,
         ai_personalize: s.ai_personalize,
       }));
-      await supabase.from('sequence_steps').insert(steps);
+      const { error: stepErr } = await supabase.from('sequence_steps').insert(steps);
+      if (stepErr) throw new Error(`Steps failed: ${stepErr.message}`);
 
       await loadMySequences();
       setView('list');
@@ -881,7 +955,7 @@ export default function SequencesScreen() {
                   <View style={sq.avatar}><Text style={sq.avatarText}>{initials}</Text></View>
                   <View>
                     <Text style={sq.contactName}>{item.contact_name}</Text>
-                    <Text style={sq.contactPhone}>{item.phone || 'No phone'}</Text>
+                    <Text style={sq.contactPhone}>{item.channel === 'email' ? (item.email || 'No email') : (item.phone || 'No phone')}</Text>
                     <Text style={sq.dueDate}>Due: {item.due_date} · {CHANNEL_ICON[item.channel]}</Text>
                   </View>
                 </View>
@@ -907,8 +981,13 @@ export default function SequencesScreen() {
                     <Text style={sq.openSmsBtnText}>📱 Open in Messages →</Text>
                   </TouchableOpacity>
                 ) : (
-                  <TouchableOpacity style={sq.openSmsBtn} onPress={() => handleSendItem(item)} activeOpacity={0.85}>
-                    <Text style={sq.openSmsBtnText}>{item.channel === 'call' ? '📞 Mark Call Done →' : '📧 Mark Email Done →'}</Text>
+                  <TouchableOpacity
+                    style={[sq.openSmsBtn, !(item.channel === 'call' ? item.phone : item.email) && { opacity: 0.4 }]}
+                    onPress={() => handleSendItem(item)}
+                    disabled={!(item.channel === 'call' ? item.phone : item.email)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={sq.openSmsBtnText}>{item.channel === 'call' ? '📞 Open Dialer →' : '📧 Open Email →'}</Text>
                   </TouchableOpacity>
                 )}
 
@@ -916,7 +995,7 @@ export default function SequencesScreen() {
                   <TouchableOpacity style={sq.editBtn} onPress={() => setEditingMessage(editingMessage === null ? item.message : null)} activeOpacity={0.8}>
                     <Text style={sq.editBtnText}>{editingMessage !== null ? '↩ Reset' : '✏️ Edit'}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={sq.skipBtn} onPress={handleSkipItem} activeOpacity={0.8}>
+                  <TouchableOpacity style={sq.skipBtn} onPress={() => handleSkipItem(item)} activeOpacity={0.8}>
                     <Text style={sq.skipBtnText}>⏭ Skip</Text>
                   </TouchableOpacity>
                 </View>

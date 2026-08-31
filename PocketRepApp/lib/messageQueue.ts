@@ -10,6 +10,8 @@
  */
 
 import { supabase } from './supabase';
+import { getRepSetting } from './v2/repSettings';
+import { renderSequenceTemplate } from './v2/sequenceTemplates';
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
@@ -36,10 +38,12 @@ export interface QueueItem {
   contact_id: string;
   contact_name: string;
   phone: string;
+  email: string;
   message: string;
   due_date: string;
   channel: 'text' | 'call' | 'email';
   status: 'pending' | 'sent' | 'skipped' | 'saved';
+  unresolved_tokens?: string[];
   isDemo?: boolean;
 }
 
@@ -53,16 +57,6 @@ function addDays(date: string, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
   return d;
-}
-
-function personalizeMessage(template: string | null, contact: any): string {
-  const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model]
-    .filter(Boolean).join(' ') || 'your vehicle';
-  return String(template ?? '')
-    .replace(/\{\{first_name\}\}/g, contact.first_name ?? 'there')
-    .replace(/\{\{vehicle\}\}/g, vehicle)
-    .replace(/\{\{vehicle_make\}\}/g, contact.vehicle_make ?? 'your vehicle')
-    .replace(/\{\{last_name\}\}/g, contact.last_name ?? '');
 }
 
 export async function loadQueueState(): Promise<QueueState | null> {
@@ -84,7 +78,7 @@ export async function clearQueueState(): Promise<void> {
  * kept the sent state only in one device's local storage, which caused duplicate
  * sends and broke across devices.
  */
-export async function markSentAndLog(item: QueueItem, userId: string): Promise<void> {
+async function advanceEnrollment(item: QueueItem, userId: string): Promise<void> {
   const now = new Date().toISOString();
 
   const { data: enrollment, error: enrollmentError } = await supabase
@@ -95,34 +89,51 @@ export async function markSentAndLog(item: QueueItem, userId: string): Promise<v
     .eq('sequence_id', item.sequence_id)
     .maybeSingle();
   if (enrollmentError) throw enrollmentError;
-
-  if (enrollment && enrollment.status === 'active' && enrollment.current_step === item.step_number) {
-    const { data: nextStep } = await supabase
-      .from('sequence_steps')
-      .select('step_number,delay_days')
-      .eq('sequence_id', item.sequence_id)
-      .eq('step_number', item.step_number + 1)
-      .maybeSingle();
-
-    if (nextStep) {
-      const nextAt = addDays(enrollment.started_at ?? now, Number(nextStep.delay_days ?? 0)).toISOString();
-      // Optimistic lock: another device may have already advanced this step.
-      // If current_step no longer matches, 0 rows are updated — that's fine.
-      const { error } = await supabase
-        .from('contact_sequences')
-        .update({ current_step: nextStep.step_number, next_step_at: nextAt })
-        .eq('id', enrollment.id)
-        .eq('current_step', item.step_number);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase
-        .from('contact_sequences')
-        .update({ current_step: item.step_number, next_step_at: null, status: 'completed', completed_at: now })
-        .eq('id', enrollment.id)
-        .eq('current_step', item.step_number);
-      if (error) throw error;
-    }
+  if (!enrollment || enrollment.status !== 'active' || enrollment.current_step !== item.step_number) {
+    throw new Error('This follow-up was already worked on another device. Refresh the queue.');
   }
+
+  const { data: nextStep, error: nextStepError } = await supabase
+    .from('sequence_steps')
+    .select('step_number,delay_days')
+    .eq('sequence_id', item.sequence_id)
+    .eq('step_number', item.step_number + 1)
+    .maybeSingle();
+  if (nextStepError) throw nextStepError;
+
+  const patch = nextStep
+    ? {
+        current_step: nextStep.step_number,
+        next_step_at: addDays(enrollment.started_at ?? now, Number(nextStep.delay_days ?? 0)).toISOString(),
+      }
+    : {
+        current_step: item.step_number,
+        next_step_at: null,
+        status: 'completed',
+        completed_at: now,
+      };
+
+  // Optimistic lock: if another device already advanced this exact step,
+  // surface the stale queue instead of logging the same action twice.
+  const { data: advanced, error: advanceError } = await supabase
+    .from('contact_sequences')
+    .update(patch)
+    .eq('id', enrollment.id)
+    .eq('status', 'active')
+    .eq('current_step', item.step_number)
+    .select('id')
+    .maybeSingle();
+  if (advanceError) throw advanceError;
+  if (!advanced) {
+    throw new Error('This follow-up was already worked on another device. Refresh the queue.');
+  }
+}
+
+export async function markSentAndLog(item: QueueItem, userId: string): Promise<void> {
+  if (item.unresolved_tokens?.length) {
+    throw new Error('This follow-up still has unresolved template fields.');
+  }
+  await advanceEnrollment(item, userId);
 
   const { error: logError } = await supabase.from('contact_interactions').insert({
     user_id: userId,
@@ -138,7 +149,7 @@ export async function markSentAndLog(item: QueueItem, userId: string): Promise<v
 
 /** Mark the current step skipped and advance exactly like a sent step. */
 export async function markSkipped(item: QueueItem, userId: string): Promise<void> {
-  await markSentAndLog({ ...item, status: 'skipped' }, userId);
+  await advanceEnrollment(item, userId);
 }
 
 /**
@@ -168,9 +179,18 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
   const contactIds = [...new Set(enrollments.map((e: any) => e.contact_id))];
   const { data: contacts, error: contactError } = await supabase
     .from('contacts')
-    .select('id,first_name,last_name,phone,vehicle_year,vehicle_make,vehicle_model,is_deleted,is_demo')
+    .select('id,first_name,last_name,phone,email,vehicle_year,vehicle_make,vehicle_model,lease_end_date,is_deleted,is_demo')
     .in('id', contactIds);
   if (contactError) throw contactError;
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', userId)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  const repName = String(profile?.full_name ?? '').trim();
+  const dealer = getRepSetting('dealership');
 
   const contactMap: Record<string, any> = {};
   for (const c of contacts ?? []) contactMap[c.id] = c;
@@ -187,13 +207,26 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
     if (!step) continue;
 
     const dueAt = enrollment.next_step_at ?? enrollment.started_at ?? now.toISOString();
+    const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model]
+      .filter(Boolean).join(' ') || null;
+    const rendered = renderSequenceTemplate(step.message_template, {
+      firstName: contact.first_name,
+      lastName: contact.last_name,
+      repName,
+      dealer,
+      vehicle,
+      vehicleMake: contact.vehicle_make,
+      leaseEnd: contact.lease_end_date,
+    });
     items.push({
       sequence_id: enrollment.sequence_id,
       step_number: step.step_number,
       contact_id: contact.id,
       contact_name: `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim(),
       phone: contact.phone ?? '',
-      message: personalizeMessage(step.message_template, contact),
+      email: contact.email ?? '',
+      message: rendered.message,
+      unresolved_tokens: rendered.unresolvedTokens,
       due_date: dueAt.split('T')[0],
       channel: step.channel,
       status: 'pending',

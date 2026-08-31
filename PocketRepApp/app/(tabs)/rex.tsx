@@ -12,6 +12,7 @@ import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import { callBrain } from '@/lib/v2/aiProxy';
 import { buildCoachMessages } from '@/lib/v2/coachBrain';
 import { startDictation, isDictationAvailable, type Dictation } from '@/lib/v2/sttDictation';
+import { launchSms } from '@/lib/v2/smsLauncher';
 
 // ── Model: Gemini 2.5 Flash for speed + cost on every Rex call ──────────────
 const REX_MODEL = 'gemini-2.5-flash';
@@ -22,8 +23,15 @@ let ImagePicker: any = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
 
 // ── Action types Rex can execute ─────────────────────────────────────────────
+// 'log_customer' and 'start_sequence' were declared here and (log_customer
+// only) offered to the model in the prompt below, but executeAction() never
+// had a case for either — the rep would see a "confirm" card that silently
+// did nothing on tap. Removed rather than implemented: this V1 surface is
+// intentionally self-contained (mass_text / show_followups only); logging a
+// customer or starting a sequence from chat is real new functionality, not a
+// one-line fix, and already exists on the V2 side (lib/v2/rexActions.ts).
 interface RexAction {
-  type: 'mass_text' | 'show_followups' | 'log_customer' | 'start_sequence';
+  type: 'mass_text' | 'show_followups';
   filter?: { vehicle_make?: string; stage?: string; lease_months?: number };
   message?: string;
   contact_name?: string;
@@ -122,12 +130,13 @@ Follow-up Date: ${contact.follow_up_date ?? 'none set'}
 When the rep asks you to take action, end your message with:
 <action>{"type":"mass_text","filter":{"vehicle_make":"Malibu"},"message":"Hey {{first_name}}, ..."}</action>
 <action>{"type":"show_followups"}</action>
-<action>{"type":"log_customer","contact_name":"Marcus Webb"}</action>
 
 Action types:
 - mass_text: rep says "send a text to [group] about [offer]" — fill filter (vehicle_make, stage) and message
 - show_followups: rep says "who should I call today" or "who needs attention" — no filter needed
-- log_customer: rep describes a customer interaction in chat — extract and offer to log it
+These are the only two actions you can take here. If the rep asks to log a
+customer or start a sequence, tell them to do it from the Book or Sequences
+tab — don't emit an action tag for anything other than the two above.
 `.trim();
 
 // ── Rebuttals data ────────────────────────────────────────────────────────────
@@ -414,6 +423,9 @@ export default function RexScreen() {
         content: `Summarise key facts about this sales rep from their conversation with Rex. Focus on their style, common customers, recurring challenges. Be concise.\n\n${transcript}`,
       }],
     }).catch(() => '');
+    // A failed/empty AI summary must never overwrite the rep's existing saved
+    // understanding — bail out instead (matches lib/v2/rexMemory.ts's guard).
+    if (!summary || !summary.trim()) return;
     await supabase.from('rex_memory').upsert({ user_id: userId, summary, message_count: count });
   }
 
@@ -463,6 +475,7 @@ export default function RexScreen() {
     }
 
     if (action.type === 'mass_text' && action.message) {
+      const message = action.message;
       // Filter contacts based on action.filter
       let filtered = contacts;
       if (action.filter?.vehicle_make) {
@@ -472,14 +485,51 @@ export default function RexScreen() {
       if (action.filter?.stage) {
         filtered = filtered.filter(c => c.stage === action.filter!.stage);
       }
+      const recipients = filtered.filter(c => c.phone);
 
-      const confirmMsg: RexMessage = {
-        id: Date.now().toString() + 'a',
-        user_id: user.id, contact_id: null, role: 'assistant',
-        content: `✅ Mass text queued to ${filtered.length} contact${filtered.length !== 1 ? 's' : ''}${action.filter?.vehicle_make ? ` with a ${action.filter.vehicle_make}` : ''}.\n\nMessage: "${action.message?.replace('{{first_name}}', filtered[0]?.first_name ?? 'there')}"`,
-        created_at: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, confirmMsg]);
+      if (recipients.length === 0) {
+        setMessages(prev => [...prev, {
+          id: Date.now().toString() + 'a',
+          user_id: user.id, contact_id: null, role: 'assistant',
+          content: `No contacts with a phone number matched${action.filter?.vehicle_make ? ` "${action.filter.vehicle_make}"` : ''}.`,
+          created_at: new Date().toISOString(),
+        }]);
+      } else {
+        // Real send: open the composer per contact (same pattern as Smart
+        // Blast) — {{first_name}} is substituted per recipient, never sent
+        // literally. The rep already confirmed once on the pending-action
+        // card; launchSms asks "did you send it?" for each individual text.
+        setMessages(prev => [...prev, {
+          id: Date.now().toString() + 'a',
+          user_id: user.id, contact_id: null, role: 'assistant',
+          content: `Opening the text composer for ${recipients.length} contact${recipients.length !== 1 ? 's' : ''}, one at a time. Confirm each send as it opens.`,
+          created_at: new Date().toISOString(),
+        }]);
+        let sentCount = 0;
+        let unsupported = false;
+        for (const c of recipients) {
+          const personalized = message.replace(/\{\{first_name\}\}/g, c.first_name || 'there');
+          const result = await launchSms({
+            contact_id: c.id,
+            contact_name: `${c.first_name} ${c.last_name}`.trim(),
+            phone: c.phone,
+            message: personalized,
+          });
+          if (result === 'unsupported') {
+            unsupported = true;
+            break;
+          }
+          if (result === 'opened') sentCount++;
+        }
+        setMessages(prev => [...prev, {
+          id: Date.now().toString() + 'b',
+          user_id: user.id, contact_id: null, role: 'assistant',
+          content: unsupported
+            ? '📱 Open PocketRep on your phone to launch Messages. No remaining texts were marked sent.'
+            : `✅ ${sentCount} of ${recipients.length} message${recipients.length !== 1 ? 's' : ''} confirmed sent.`,
+          created_at: new Date().toISOString(),
+        }]);
+      }
     }
 
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150);

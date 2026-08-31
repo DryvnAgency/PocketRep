@@ -134,6 +134,44 @@ function routeOf(req: Request): 'rexlens' | 'brain' | 'stt' | 'tts' | 'root' {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Fallback path when the increment_daily_usage RPC throws: read-then-upsert
+// so the day's row for this user/model ACCUMULATES instead of being replaced.
+// The previous plain .upsert() wrote only this request's totals, so a second
+// request that also hit the fallback the same user/day/model silently
+// overwrote (deflated) the first request's recorded cost — which the daily
+// cap check sums. Not atomic (still a read then a write), but the RPC above
+// is the race-free primary path; this only runs when that RPC itself failed.
+async function recordUsageFallback(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  date: string,
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  costCents: number,
+  requestCount = 1,
+): Promise<void> {
+  try {
+    const { data: existing } = await supabase
+      .from('daily_ai_usage')
+      .select('input_tokens, output_tokens, cost_cents, request_count')
+      .eq('user_id', userId).eq('usage_date', date).eq('model', model)
+      .maybeSingle();
+    await supabase.from('daily_ai_usage').upsert({
+      user_id: userId,
+      usage_date: date,
+      model,
+      input_tokens: (existing?.input_tokens ?? 0) + inputTokens,
+      output_tokens: (existing?.output_tokens ?? 0) + outputTokens,
+      cost_cents: (existing?.cost_cents ?? 0) + costCents,
+      request_count: (existing?.request_count ?? 0) + requestCount,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,usage_date,model' });
+  } catch (e) {
+    console.error('daily_ai_usage fallback failed', e);
+  }
+}
+
 async function authAndPlan(authHeader: string | null) {
   if (!authHeader) return { error: json({ error: { type: 'auth_error', message: 'Missing authorization' } }, 401) };
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -156,8 +194,11 @@ async function authAndPlan(authHeader: string | null) {
   const capCents = DAILY_CAP_CENTS[plan] ?? DEFAULT_CAP_CENTS;
   const today = new Date().toISOString().slice(0, 10);
   if (!isUnlimited) {
-    const { data: usage } = await supabase.from('daily_ai_usage').select('cost_cents').eq('user_id', user.id).eq('usage_date', today).single();
-    if (Number(usage?.cost_cents ?? 0) >= capCents) {
+    // One row per model per day now (see 20260828_referral_economics.sql), so
+    // sum across all of today's rows rather than assuming a single row.
+    const { data: usageRows } = await supabase.from('daily_ai_usage').select('cost_cents').eq('user_id', user.id).eq('usage_date', today);
+    const spentCents = (usageRows ?? []).reduce((sum, r: { cost_cents: number | null }) => sum + Number(r.cost_cents ?? 0), 0);
+    if (spentCents >= capCents) {
       return { error: json({ error: { type: 'DAILY_LIMIT', message: `Daily limit reached ($${(capCents / 100).toFixed(2)}/day). Resets at midnight.` } }, 429) };
     }
   }
@@ -236,7 +277,7 @@ async function handleRexLens(req: Request) {
     }
     const uncached = Math.max(0, tIn - tCW - tCR);
     const cost = (uncached * REXLENS_PRICING.input + tCW * REXLENS_PRICING.cacheWrite + tCR * REXLENS_PRICING.cacheRead + tOut * REXLENS_PRICING.output) / 1e6 * 100;
-    try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: tIn, p_output_tokens: tOut, p_cost_cents: cost }); } catch { await supabase!.from('daily_ai_usage').upsert({ user_id: user!.id, usage_date: today, input_tokens: tIn, output_tokens: tOut, cost_cents: cost, request_count: tasks.length, updated_at: new Date().toISOString() }, { onConflict: 'user_id,usage_date' }); }
+    try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: tIn, p_output_tokens: tOut, p_cost_cents: cost, p_model: model }); } catch { await recordUsageFallback(supabase!, user!.id, today, model, tIn, tOut, cost, tasks.length); }
     return json({ content: [{ type: 'text', text: JSON.stringify(results) }], usage: { input_tokens: tIn, output_tokens: tOut, cache_creation_input_tokens: tCW, cache_read_input_tokens: tCR }, model, batch_size: tasks.length });
   }
 
@@ -249,8 +290,9 @@ async function handleRexLens(req: Request) {
   const u = r.json.usage ?? {};
   const iT = u.input_tokens ?? 0, oT = u.output_tokens ?? 0, cW = u.cache_creation_input_tokens ?? 0, cR = u.cache_read_input_tokens ?? 0;
   const cost = (Math.max(0, iT - cW - cR) * REXLENS_PRICING.input + cW * REXLENS_PRICING.cacheWrite + cR * REXLENS_PRICING.cacheRead + oT * REXLENS_PRICING.output) / 1e6 * 100;
-  try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost }); } catch { await supabase!.from('daily_ai_usage').upsert({ user_id: user!.id, usage_date: today, input_tokens: iT, output_tokens: oT, cost_cents: cost, request_count: 1, updated_at: new Date().toISOString() }, { onConflict: 'user_id,usage_date' }); }
-  return json({ content: r.json.content, usage: { input_tokens: iT, output_tokens: oT, cache_creation_input_tokens: cW, cache_read_input_tokens: cR }, model: r.json.model || model });
+  const usedModel = r.json.model || model;
+  try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost, p_model: usedModel }); } catch { await recordUsageFallback(supabase!, user!.id, today, usedModel, iT, oT, cost); }
+  return json({ content: r.json.content, usage: { input_tokens: iT, output_tokens: oT, cache_creation_input_tokens: cW, cache_read_input_tokens: cR }, model: usedModel });
 }
 
 async function handleBrain(req: Request) {
@@ -303,7 +345,7 @@ async function handleBrain(req: Request) {
       },
       async flush() {
         try {
-          let iT = 0, oT = 0, cost = 0;
+          let iT = 0, oT = 0, cost = 0, usedModel = '';
           for (const line of sseBuf.split('\n')) {
             const t = line.trim();
             if (!t.startsWith('data:')) continue;
@@ -311,6 +353,7 @@ async function handleBrain(req: Request) {
             if (!d || d === '[DONE]') continue;
             try {
               const obj = JSON.parse(d);
+              if (obj.model) usedModel = obj.model;
               if (obj.usage) {
                 iT = Number(obj.usage.prompt_tokens ?? 0);
                 oT = Number(obj.usage.completion_tokens ?? 0);
@@ -318,9 +361,10 @@ async function handleBrain(req: Request) {
               }
             } catch { /* partial / non-JSON frame */ }
           }
+          if (!usedModel) usedModel = models[0] ?? 'unknown';
           if (iT || oT || cost) {
-            try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost }); }
-            catch { await supabase!.from('daily_ai_usage').upsert({ user_id: user!.id, usage_date: today, input_tokens: iT, output_tokens: oT, cost_cents: cost, request_count: 1, updated_at: new Date().toISOString() }, { onConflict: 'user_id,usage_date' }); }
+            try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost, p_model: usedModel }); }
+            catch { await recordUsageFallback(supabase!, user!.id, today, usedModel, iT, oT, cost); }
           }
         } catch { /* usage metering is best-effort */ }
       },
@@ -345,7 +389,8 @@ async function handleBrain(req: Request) {
   }
   if (!apiJson) return json({ error: { type: 'OVERLOADED', message: 'AI at capacity.', detail: lastErr?.error?.message } }, 503);
   const u = apiJson.usage ?? {}; const iT = Number(u.prompt_tokens ?? 0); const oT = Number(u.completion_tokens ?? 0); const cost = Number(u.cost ?? 0) * 100;
-  try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost }); } catch { await supabase!.from('daily_ai_usage').upsert({ user_id: user!.id, usage_date: today, input_tokens: iT, output_tokens: oT, cost_cents: cost, request_count: 1, updated_at: new Date().toISOString() }, { onConflict: 'user_id,usage_date' }); }
+  const usedModel = apiJson.model || models[0] || 'unknown';
+  try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost, p_model: usedModel }); } catch { await recordUsageFallback(supabase!, user!.id, today, usedModel, iT, oT, cost); }
   return json(apiJson);
 }
 

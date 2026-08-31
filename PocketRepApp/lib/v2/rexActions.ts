@@ -16,6 +16,7 @@ import { executeBatchAction, type BatchActionKind } from './batchActions';
 import { callBrainStream, type BrainMessage } from './aiProxy';
 import type { V2Contact } from './useContacts';
 import { isRexMultistepEnabled, isVehicleFinderEnabled } from './rexFeatureFlags';
+import { getRepSetting } from './repSettings';
 import { frameUntrusted } from './promptSafety';
 import type { VehicleRequirements } from './vehicleMatch';
 
@@ -266,6 +267,13 @@ function buildPrompt(
   const memorySection = memory.trim()
     ? `\nWHAT YOU REMEMBER ABOUT THIS REP (use to disambiguate / recall context — never quote it back verbatim):\n${memory.trim()}\n`
     : '';
+  const tone = getRepSetting('voiceTone');
+  const toneDirectives: Record<string, string> = {
+    Steady: 'Tone: calm, patient, measured. Reassuring language. Trusted advisor energy.',
+    Sharp: 'Tone: direct, confident, no fluff. Sharp desk manager energy.',
+    Fire: 'Tone: high energy, urgency, momentum. Last day of the month energy.',
+  };
+  const toneDirective = toneDirectives[tone] ?? toneDirectives.Sharp;
   return `You are Rex, the voice assistant inside PocketRep — a sales rep CRM. The rep just said something to you. Pick the single best action.${multistep ? ' For a clearly multi-intent request you may return a chain (see action 17).' : ''}${memorySection}${screenContext}
 
 ${frameUntrusted('BOOK STATE', bookSection)}
@@ -347,6 +355,8 @@ RULES:
 - Currency amounts ("twenty eight hundred", "$2,800") → integer 2800.
 
 ${REX_COPY_RULES}
+
+${toneDirective}
 
 The rep said:
 "${transcript}"
@@ -601,11 +611,15 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
     }
     case 'update_notes': {
       const p = action.payload;
-      const { data } = await supabase
+      const { data, error: readErr } = await supabase
         .from('contacts')
         .select('notes')
         .eq('id', p.contact_id)
         .maybeSingle();
+      // A failed read must never be treated as "no existing notes" — that
+      // silently overwrites the contact's entire note history with just the
+      // new fragment. Abort instead; the caller's catch surfaces this.
+      if (readErr) throw new Error(`Couldn't read existing notes: ${readErr.message}`);
       const existing = (data?.notes ?? '').trim();
       const joined = existing
         ? `${existing}\n\n${p.notes_append}`

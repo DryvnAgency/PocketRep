@@ -135,7 +135,10 @@ export function useNotifications(
   const [, bump] = useReducer((x: number) => x + 1, 0);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setRaw([]);
+      return;
+    }
     let cancelled = false;
     loadNotifications(contacts ?? []).then(r => { if (!cancelled) setRaw(r); });
     return () => { cancelled = true; };

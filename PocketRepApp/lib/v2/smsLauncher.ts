@@ -1,5 +1,6 @@
 import { Alert, AppState, Linking, Platform } from 'react-native';
 import { recordSmsOpened, markSmsSent, markSmsNotSent, recordSmsFailure, type SmsActionSource } from '@/lib/v2/smsActions';
+import { isCurrentWebRuntimeSmsCapable } from '@/lib/v2/smsCapability';
 
 function digitsOnly(phone: string | null | undefined): string {
   return (phone ?? '').replace(/[^\d]/g, '');
@@ -23,7 +24,7 @@ export type SendableDraft = {
  * The database status is `sent`; composer-open alone is never treated as sent.
  * `not_sent` means the rep returned without sending.
  */
-export type SmsLaunchResult = 'opened' | 'not_sent' | 'no_phone' | 'failed';
+export type SmsLaunchResult = 'opened' | 'not_sent' | 'no_phone' | 'unsupported' | 'failed';
 
 function confirmSent(contactName: string): Promise<boolean> {
   if (Platform.OS === 'web') {
@@ -97,11 +98,32 @@ export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> 
     return 'no_phone';
   }
 
+  if (Platform.OS === 'web' && !isCurrentWebRuntimeSmsCapable()) {
+    await recordSmsFailure({
+      contactId: draft.contact_id,
+      message: draft.message,
+      status: 'failed',
+      source: draft.source,
+    }).catch(() => undefined);
+    return 'unsupported';
+  }
+
   const url = `sms:${phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(draft.message)}`;
   let actionId: string | null = null;
   const returnPromise = waitForComposerReturn();
   try {
-    await Linking.openURL(url);
+    if (Platform.OS === 'web') {
+      // Mobile browsers can suspend JavaScript while Messages is open, leaving
+      // the Linking promise unsettled until the rep returns. Treat that handoff
+      // as opened after a short grace period; explicit confirmation below is
+      // still required before anything is recorded as sent.
+      await Promise.race([
+        Linking.openURL(url),
+        new Promise<void>(resolve => setTimeout(resolve, 1500)),
+      ]);
+    } else {
+      await Linking.openURL(url);
+    }
     actionId = await recordSmsOpened({
       contactId: draft.contact_id,
       message: draft.message,

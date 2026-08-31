@@ -15,6 +15,11 @@ const EVENT_NAME = 'pocketrep:notif-reads-changed';
 let memRead: string[] = [];
 let memDismiss: string[] = [];
 
+export function resetNotificationReadsCache(): void {
+  memRead = [];
+  memDismiss = [];
+}
+
 function readList(key: string, mem: string[]): string[] {
   if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return mem;
   try {

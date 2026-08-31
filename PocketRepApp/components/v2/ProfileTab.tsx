@@ -1,5 +1,5 @@
-import { useEffect, useReducer, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Switch, Platform, Share } from 'react-native';
+import { useEffect, useReducer, useRef, useState } from 'react';
+import { View, Text, Pressable, StyleSheet, Platform, Share, Linking } from 'react-native';
 import Constants from 'expo-constants';
 import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, Pill, SectionHead } from './atoms';
@@ -7,16 +7,11 @@ import { supabase } from '@/lib/supabase';
 import { signOutAndReset } from '@/lib/v2/localSessionClear';
 import { shouldShowInstallRow } from './PWAInstallPrompt';
 import {
-  getAlwaysListenEnabled,
-  setAlwaysListenEnabled,
-} from '@/lib/v2/rexSettings';
-import {
   getRepSetting,
   setRepSetting,
   subscribeRepSettings,
   type RepSettingKey,
 } from '@/lib/v2/repSettings';
-import { sendTestPush } from '@/lib/v2/pushNotifications';
 import { isVehicleFinderEnabled } from '@/lib/v2/rexFeatureFlags';
 import { loadSendTime, setSendHour as persistSendHour, formatHour, DEFAULT_SEND_HOUR } from '@/lib/v2/sendTime';
 import { usePayPlan } from '@/lib/v2/payPlan';
@@ -45,6 +40,10 @@ function Row({
   return (
     <Pressable
       onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? `${label}${detail ? `, ${detail}` : ''}` : undefined}
+      accessibilityState={{ disabled: !onPress }}
       style={({ pressed }) => [
         styles.row,
         pressed && onPress && { backgroundColor: colors.goldBg },
@@ -74,6 +73,10 @@ export default function ProfileTab({
   onOpenPayPlan,
   onInstallApp,
   onNavigate,
+  onOpenSupport,
+  isAdmin,
+  onOpenAdminSupport,
+  adminOpenTicketCount,
   payPlanRefetchKey = 0,
 }: {
   onOpenGamePlan?: () => void;
@@ -82,11 +85,14 @@ export default function ProfileTab({
   onOpenPayPlan?: () => void;
   onInstallApp?: () => void;
   onNavigate?: (tab: TabId) => void;
+  onOpenSupport?: () => void;
+  isAdmin?: boolean;
+  onOpenAdminSupport?: () => void;
+  adminOpenTicketCount?: number;
   payPlanRefetchKey?: number;
 } = {}) {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [alwaysListen, setAlwaysListen] = useState<boolean>(false);
   const [editTarget, setEditTarget] = useState<{ key: EditKey; config: SettingEditConfig } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
@@ -101,7 +107,6 @@ export default function ProfileTab({
 
   useEffect(() => {
     let cancelled = false;
-    setAlwaysListen(getAlwaysListenEnabled());
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || cancelled) return;
@@ -114,10 +119,8 @@ export default function ProfileTab({
       if (data && !cancelled) setProfile(data as ProfileRow);
       const st = await loadSendTime();
       if (!cancelled) { setSendHourState(st.send_hour); setTimezone(st.timezone); }
-      // Fetch referral code (ensures row exists in referral_codes table)
       const { data: code } = await supabase.rpc('ensure_my_referral_code');
       if (code && !cancelled) setReferralCode(code);
-      // Fetch referral count
       const { count } = await supabase
         .from('referrals')
         .select('id', { count: 'exact', head: true })
@@ -127,11 +130,6 @@ export default function ProfileTab({
     const unsub = subscribeRepSettings(forceTick);
     return () => { cancelled = true; unsub(); };
   }, []);
-
-  const toggleListen = (next: boolean) => {
-    setAlwaysListen(next);
-    setAlwaysListenEnabled(next);
-  };
 
   const editSetting = (key: RepSettingKey, title: string, label: string, extra?: Partial<SettingEditConfig>) => {
     setEditTarget({ key, config: { title, label, value: getRepSetting(key), ...extra } });
@@ -144,16 +142,18 @@ export default function ProfileTab({
     });
   };
 
-  const handleSettingSave = (value: string) => {
+  const handleSettingSave = async (value: string) => {
     if (!editTarget) return;
     if (editTarget.key === 'name') {
+      if (!value.trim()) throw new Error('Enter your name before saving.');
+      if (!userId) throw new Error('Your session is still loading. Try again.');
+      const { error } = await supabase.from('profiles').update({ full_name: value }).eq('id', userId);
+      if (error) throw new Error("Couldn't save your name. Try again.");
       setProfile(p => (p ? { ...p, full_name: value } : p));
-      if (userId) {
-        supabase.from('profiles').update({ full_name: value }).eq('id', userId)
-          .then(undefined, (e: any) => console.warn('save name failed', e));
-      }
+      flash('✓ Name updated');
     } else {
-      setRepSetting(editTarget.key, value);
+      await setRepSetting(editTarget.key, value);
+      flash('✓ Setting updated');
     }
   };
 
@@ -166,9 +166,12 @@ export default function ProfileTab({
     try {
       if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
         await navigator.clipboard.writeText(text);
+        flash(`✓ ${label}`);
+        return true;
       }
-    } catch { /* ignore */ }
-    flash(`✓ ${label}`);
+    } catch { /* handled below */ }
+    flash("Couldn't copy — try again");
+    return false;
   };
 
   const fullName = profile?.full_name?.trim() ?? '';
@@ -178,8 +181,36 @@ export default function ProfileTab({
   const title = getRepSetting('title');
   const heroSub = [dealership, title].filter(Boolean).join(' · ') || 'Tap to set up your profile';
   const referLink = referralCode
-    ? `https://app.pocketrep.pro/?ref=${encodeURIComponent(referralCode)}`
+    ? `https://pocketrep.pro/?ref=${encodeURIComponent(referralCode)}`
     : null;
+
+  const [openingBilling, setOpeningBilling] = useState(false);
+  const openingBillingRef = useRef(false);
+  const openBillingPortal = async () => {
+    if (openingBillingRef.current) return;
+    openingBillingRef.current = true;
+    setOpeningBilling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('billing-portal');
+      if (error || !data?.url) {
+        flash(data?.error === 'no_stripe_customer'
+          ? "Billing isn't set up on this account yet"
+          : "Couldn't open billing — try again in a moment");
+        return;
+      }
+      if (Platform.OS === 'web') {
+        if (typeof window === 'undefined') throw new Error('Browser unavailable');
+        window.location.assign(data.url);
+      } else {
+        await Linking.openURL(data.url);
+      }
+    } catch {
+      flash("Couldn't open billing — try again in a moment");
+    } finally {
+      openingBillingRef.current = false;
+      setOpeningBilling(false);
+    }
+  };
 
   const shareReferral = async () => {
     if (!referLink) { flash('Loading your referral code…'); return; }
@@ -193,7 +224,7 @@ export default function ProfileTab({
       });
     } catch { /* user cancelled share sheet */ }
   };
-  // Real build identity from the Expo config (app.json) — no hardcoded version.
+
   const appVersion = Constants.expoConfig?.version ?? null;
   const buildNo =
     Constants.expoConfig?.ios?.buildNumber ??
@@ -206,8 +237,6 @@ export default function ProfileTab({
   const doSignOut = async () => {
     setSigningOut(true);
     try {
-      // Robust local-scope sign-out: never hangs on a network revoke, and
-      // force-clears local state + reloads (web) so logout can't get stuck.
       await signOutAndReset();
     } catch (e) {
       console.warn('sign out failed', e);
@@ -218,7 +247,7 @@ export default function ProfileTab({
 
   return (
     <View style={styles.root}>
-      <Pressable onPress={editName} style={styles.heroCard}>
+      <Pressable onPress={editName} style={styles.heroCard} accessibilityRole="button" accessibilityLabel="Edit your name and profile">
         <Avatar name={fullName || profile?.email || 'You'} size={56} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.heroName}>{displayName}</Text>
@@ -232,10 +261,10 @@ export default function ProfileTab({
 
       <View style={styles.planCard}>
         <View style={{ flex: 1 }}>
-          <Label color={colors.grey2}>PLAN · {planLabel}</Label>
-          <Text style={styles.planRenews}>Tap MANAGE to edit your pay plan</Text>
+          <Label color={colors.grey2}>COMPENSATION PLAN</Label>
+          <Text style={styles.planRenews}>Set how your dealership pays you</Text>
         </View>
-        <Pressable onPress={() => onOpenPayPlan?.()} style={styles.manageBtn}>
+        <Pressable onPress={() => onOpenPayPlan?.()} style={styles.manageBtn} accessibilityRole="button" accessibilityLabel="Manage compensation plan">
           <Text style={styles.manageText}>MANAGE</Text>
         </Pressable>
       </View>
@@ -259,47 +288,47 @@ export default function ProfileTab({
           onPress={() => isVehicleFinderEnabled()
             ? editSetting('inventoryFeed', 'Dealership website', 'INVENTORY URL (https)', { placeholder: 'https://www.yourdealership.com', keyboardType: 'url' })
             : editSetting('inventoryFeed', 'Inventory feed', 'FEED STATUS / SOURCE')} />
-        <Row icon="🔔" label="Weekly digest" detail="View →" onPress={() => onNavigate?.('heat')} />
+        <Row icon="🔔" label="Weekly digest" detail="Mondays after 8 AM" chevron={false} />
         <Row icon="⏰" label="Daily send time" detail={formatHour(sendHour)} onPress={() => setShowSendPicker(true)} />
         <Row icon="📊" label="Goals & quota" detail="View →" onPress={() => onNavigate?.('metrics')} />
       </View>
 
       <SectionHead label="REX" color={colors.gold} />
       <View style={styles.group}>
-        <View style={styles.row}>
+        <View style={styles.toneRow}>
           <View style={[styles.rowIcon, { backgroundColor: colors.goldBg, borderColor: colors.goldBorder }]}>
-            <Text style={{ color: colors.gold, fontSize: 14 }}>🎙</Text>
+            <Text style={{ color: colors.gold, fontSize: 14 }}>🤖</Text>
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.rowLabel}>Always listen for “Hey Rex”</Text>
-            <Text style={styles.rowSub}>Wake word + 4s silence trigger</Text>
+            <Text style={styles.rowLabel}>Rex style</Text>
+            <View style={styles.tonePills}>
+              {(['Steady', 'Sharp', 'Fire'] as const).map(t => {
+                const active = getRepSetting('voiceTone') === t;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => {
+                      void setRepSetting('voiceTone', t).catch(() => undefined);
+                      forceTick();
+                    }}
+                    style={[styles.tonePill, active && styles.tonePillActive]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Set Rex style to ${t}`}
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.tonePillText, active && styles.tonePillTextActive]}>
+                      {t === 'Steady' ? '🧘 Steady' : t === 'Sharp' ? '🔪 Sharp' : '🔥 Fire'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-          <Switch
-            value={alwaysListen}
-            onValueChange={toggleListen}
-            trackColor={{ false: colors.ink4, true: colors.gold }}
-            thumbColor={alwaysListen ? colors.ink : colors.grey2}
-          />
         </View>
-        <Row icon="🤖" label="Voice & tone" detail={getRepSetting('voiceTone')}
-          onPress={() => editSetting('voiceTone', 'Voice & tone', 'HOW SHOULD REX SOUND?')} />
-        <Row icon="🔐" label="Data sources" detail={getRepSetting('dataSources') || 'None'}
-          onPress={() => editSetting('dataSources', 'Data sources', 'CONNECTED SOURCES')} />
-        <Row icon="📝" label="Custom prompts" detail={getRepSetting('customPrompts') || 'None saved'}
-          onPress={() => editSetting('customPrompts', 'Custom prompts', 'YOUR SAVED PROMPTS', { multiline: true })} />
-        <Row icon="🧾" label="Rex activity" detail="Action log →" onPress={onOpenRexActivity} />
-        <Pressable
-          onPress={async () => {
-            const r = await sendTestPush();
-            flash(r.ok ? '✓ Test push sent' : `Couldn't send: ${r.reason ?? 'unknown'}`);
-          }}
-        >
-          <Row icon="🔔" label="Send a test push" detail="ping →" chevron={false} />
-        </Pressable>
       </View>
 
       <SectionHead label="LEARN" color={colors.gold} />
-      <Pressable onPress={onReplayOnboarding} style={styles.learnCard}>
+      <Pressable onPress={onReplayOnboarding} style={styles.learnCard} accessibilityRole="button" accessibilityLabel="Open sales rep playbook">
         <View style={styles.learnPlay}>
           <Text style={styles.learnPlayIcon}>▶</Text>
         </View>
@@ -311,7 +340,7 @@ export default function ProfileTab({
       </Pressable>
 
       {shouldShowInstallRow() ? (
-        <Pressable onPress={onInstallApp} style={styles.learnCard}>
+        <Pressable onPress={onInstallApp} style={styles.learnCard} accessibilityRole="button" accessibilityLabel="Install PocketRep app">
           <View style={styles.learnPlay}>
             <Text style={styles.learnPlayIcon}>📲</Text>
           </View>
@@ -323,31 +352,43 @@ export default function ProfileTab({
         </Pressable>
       ) : null}
 
+      {isAdmin ? (
+        <>
+          <SectionHead label="ADMIN" color={colors.green} />
+          <View style={styles.group}>
+            <Row icon="🛟" label="Support inbox"
+              detail={adminOpenTicketCount ? `${adminOpenTicketCount} open` : 'No tickets'}
+              onPress={onOpenAdminSupport} />
+          </View>
+        </>
+      ) : null}
+
       <SectionHead label="ACCOUNT" color={colors.grey2} />
       <View style={styles.group}>
-        <Row icon="✉" label="Email" detail={profile?.email ?? '—'}
-          onPress={() => profile?.email && copy(profile.email, 'Email copied')} />
+        <Row icon="💬" label="Support" detail="Chat with PocketRep"
+          onPress={onOpenSupport} />
+        <Row icon="✉" label="Email" detail={profile?.email ?? '—'} chevron={false} />
         <Row icon="📱" label="Phone" detail={getRepSetting('phone') || 'Add'}
           onPress={() => editSetting('phone', 'Phone', 'PHONE NUMBER', { keyboardType: 'phone-pad' })} />
-        <Row icon="🔒" label="Security" detail={getRepSetting('security') || 'Not set'}
-          onPress={() => editSetting('security', 'Security', 'SIGN-IN METHOD')} />
-        <Row icon="↗" label="Refer a rep" detail={referralCode ?? 'Loading…'}
-          onPress={shareReferral} />
-        {referralCount > 0 ? (
-          <Row icon="🎁" label="Give a Month. Get a Month." detail={`${referralCount} referred`} chevron={false} />
-        ) : (
-          <Row icon="🎁" label="Give a Month. Get a Month." detail="Share & earn" chevron={false} />
-        )}
+        <Row icon="💳" label="Billing" detail={openingBilling ? 'Opening…' : 'Manage subscription'}
+          onPress={openBillingPortal} />
+        <Row
+          icon="🎁"
+          label="Give a Month. Get a Month."
+          detail={referralCount > 0 ? `${referralCount} referred · tap to copy` : 'Tap to copy referral link'}
+          onPress={shareReferral}
+        />
       </View>
 
-      <Pressable
-        onPress={() => setConfirmSignOut(true)}
-        style={styles.signOut}
-        accessibilityRole="button"
-        accessibilityLabel="Sign out"
-      >
-        <Row icon="↩" label="Sign out" danger chevron={false} />
-      </Pressable>
+      <View style={styles.signOut}>
+        <Row
+          icon="↩"
+          label="Sign out"
+          danger
+          chevron={false}
+          onPress={() => setConfirmSignOut(true)}
+        />
+      </View>
 
       <Text style={styles.footer}>{versionLine}</Text>
 
@@ -406,10 +447,11 @@ export default function ProfileTab({
                     key={h}
                     style={[styles.sendChip, isActive && styles.sendChipActive]}
                     onPress={async () => {
+                      const previous = sendHour;
                       setSendHourState(h);
                       setShowSendPicker(false);
                       try { await persistSendHour(h); flash('✓ Send time updated'); }
-                      catch { flash("Couldn't save send time"); }
+                      catch { setSendHourState(previous); flash("Couldn't save send time"); }
                     }}
                     accessibilityRole="button"
                     accessibilityLabel={`Set daily send time to ${formatHour(h)}`}
@@ -619,4 +661,26 @@ const styles = StyleSheet.create({
   sendChipActive: { borderColor: colors.gold, backgroundColor: colors.goldBg },
   sendChipText: { fontSize: 12, fontWeight: '600', color: colors.grey2 },
   sendChipTextActive: { color: colors.gold },
+
+  toneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink4,
+  },
+  tonePills: { flexDirection: 'row', gap: 8, marginTop: 6 },
+  tonePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    backgroundColor: colors.surface2,
+  },
+  tonePillActive: { borderColor: colors.gold, backgroundColor: colors.goldBg },
+  tonePillText: { fontSize: 11, fontWeight: '700', color: colors.grey2 },
+  tonePillTextActive: { color: colors.gold },
 });

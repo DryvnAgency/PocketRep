@@ -2,12 +2,13 @@ import { useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, Modal, ScrollView, Alert, ActivityIndicator,
-  Animated,
+  Animated, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing } from '@/constants/theme';
 import type { Deal, Contact } from '@/lib/types';
+import { parseGrossInput, roundCurrency } from '@/lib/v2/dealValidation';
 
 const EMPTY_FORM = {
   title: '',
@@ -33,6 +34,14 @@ function currency(n: number | null) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0 });
 }
 
+function showDealAlert(title: string, message?: string) {
+  if (Platform.OS === 'web') {
+    (globalThis as any).alert?.(message ? `${title}\n\n${message}` : title);
+  } else {
+    Alert.alert(title, message);
+  }
+}
+
 export default function DealsScreen() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -41,6 +50,7 @@ export default function DealsScreen() {
   const [editing, setEditing] = useState<Deal | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [showContactPicker, setShowContactPicker] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
 
@@ -86,44 +96,69 @@ export default function DealsScreen() {
   }
 
   async function save() {
-    if (!form.title.trim()) { Alert.alert('Deal name is required'); return; }
-    setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSaving(false); return; }
-
-    const payload = {
-      user_id: user.id,
-      title: form.title.trim(),
-      contact_id: form.contact_id || null,
-      amount: form.amount ? parseFloat(form.amount) : null,
-      front_gross: form.front_gross ? parseFloat(form.front_gross) : null,
-      back_gross: form.back_gross ? parseFloat(form.back_gross) : null,
-      closed_at: form.closed_at.trim() || null,
-      notes: form.notes.trim() || null,
-    };
-
-    if (editing) {
-      await supabase.from('deals').update(payload).eq('id', editing.id);
-    } else {
-      await supabase.from('deals').insert(payload);
+    if (savingRef.current) return;
+    if (!form.title.trim()) { showDealAlert('Deal name is required'); return; }
+    const frontGross = parseGrossInput(form.front_gross);
+    const backGross = parseGrossInput(form.back_gross);
+    if (frontGross.error) { showDealAlert('Check front gross', frontGross.error); return; }
+    if (backGross.error) { showDealAlert('Check back gross', backGross.error); return; }
+    if (frontGross.value + backGross.value <= 0) {
+      showDealAlert('Gross is required', 'Enter front gross or back gross.');
+      return;
     }
 
-    setSaving(false);
-    setShowModal(false);
-    load();
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('You are signed out.');
+
+      const payload = {
+        user_id: user.id,
+        title: form.title.trim(),
+        contact_id: form.contact_id || null,
+        amount: form.amount ? parseFloat(form.amount) : null,
+        front_gross: form.front_gross ? roundCurrency(frontGross.value) : null,
+        back_gross: form.back_gross ? roundCurrency(backGross.value) : null,
+        closed_at: form.closed_at.trim() || null,
+        notes: form.notes.trim() || null,
+      };
+
+      const { error } = editing
+        ? await supabase.from('deals').update(payload).eq('id', editing.id)
+        : await supabase.from('deals').insert(payload);
+      if (error) throw error;
+
+      setShowModal(false);
+      await load();
+    } catch (error: any) {
+      showDealAlert('Save failed', error?.message ?? 'Unknown error');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   }
 
   async function deleteDeal(d: Deal) {
-    Alert.alert('Delete deal', `Remove "${d.title}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          await supabase.from('deals').delete().eq('id', d.id);
-          load();
-        },
-      },
-    ]);
+    const msg = `Remove "${d.title}"? This can't be undone.`;
+    const proceed = async () => {
+      const { error } = await supabase.from('deals').delete().eq('id', d.id);
+      if (error) {
+        if (Platform.OS === 'web') (globalThis as any).alert?.(`Couldn't delete deal: ${error.message}`);
+        else Alert.alert('Delete failed', error.message);
+        return;
+      }
+      setDeals(prev => prev.filter(x => x.id !== d.id));
+      load();
+    };
+    if (Platform.OS === 'web') {
+      if (typeof window === 'undefined' || window.confirm(msg)) proceed();
+    } else {
+      Alert.alert('Delete deal', msg, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: proceed },
+      ]);
+    }
   }
 
   const selectedContact = contacts.find(c => c.id === form.contact_id);
@@ -137,7 +172,7 @@ export default function DealsScreen() {
       {/* Header */}
       <View style={s.header}>
         <Text style={s.headerTitle}>Deals</Text>
-        <TouchableOpacity style={s.addBtn} onPress={openAdd} activeOpacity={0.8}>
+        <TouchableOpacity style={s.addBtn} onPress={openAdd} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Log a deal">
           <Text style={s.addBtnText}>+ Log Deal</Text>
         </TouchableOpacity>
       </View>
@@ -194,7 +229,7 @@ export default function DealsScreen() {
             <View style={m.handle} />
             <View style={m.mHeader}>
               <Text style={m.mTitle}>{editing ? 'Edit Deal' : 'Log a Deal'}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}>
+              <TouchableOpacity onPress={() => setShowModal(false)} accessibilityRole="button" accessibilityLabel="Close deal form">
                 <Text style={m.mClose}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -208,6 +243,8 @@ export default function DealsScreen() {
                 style={m.contactPickerBtn}
                 onPress={() => { setContactSearch(''); setShowContactPicker(true); }}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Select customer"
               >
                 <Text style={[m.contactPickerText, selectedContact ? { color: colors.white } : {}]}>
                   {selectedContact ? `${selectedContact.first_name} ${selectedContact.last_name}` : 'Select customer (optional)'}
@@ -254,7 +291,7 @@ export default function DealsScreen() {
                 multiline
               />
 
-              <TouchableOpacity style={m.saveBtn} onPress={save} disabled={saving} activeOpacity={0.85}>
+              <TouchableOpacity style={m.saveBtn} onPress={save} disabled={saving} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel={editing ? 'Save deal changes' : 'Log deal'} accessibilityState={{ disabled: saving }}>
                 {saving ? <ActivityIndicator color={colors.ink} /> : <Text style={m.saveBtnText}>{editing ? 'Save Changes' : 'Log Deal'}</Text>}
               </TouchableOpacity>
               <View style={{ height: 40 }} />

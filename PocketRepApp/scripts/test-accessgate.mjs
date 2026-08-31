@@ -1,10 +1,24 @@
-// Unit tests for the access gate decision function (lib/v2/accessGate.ts).
-// Mirrors decideAccess logic without importing React or Supabase.
+// Unit tests for the access gate (lib/v2/accessGate.ts).
+//
+// Part 1 mirrors decideAccess logic without importing React or Supabase.
+// Part 2 covers the auth/access race: useAccessGate used to run once on mount
+// with `[]` deps, so a logged-out mount latched `locked / invalid_account` and
+// a subsequently-signed-in valid rep hit LockoutScreen ("Account not found")
+// until a focus change or the 60s interval happened to re-run it. A hook's
+// effect gating can't be exercised in a plain Node runner, so that part pairs a
+// behavioral mirror with source-level guardrails against the real files — the
+// same approach scripts/test-production-hardening.mjs already uses.
 //
 //   npm run test:accessgate    (from PocketRepApp/)
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 let failures = 0;
-const ok = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failures++; };
+// Counted rather than hardcoded — the previous literal had drifted out of sync
+// with the real number of assertions.
+let checks = 0;
+const ok = (name, cond) => { checks++; console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failures++; };
 
 // ---- mirrored logic from accessGate.ts ----
 function decideAccess(input) {
@@ -91,5 +105,97 @@ ok('unknown sub status → no_subscription', decideAccess({ subscriptionStatus: 
 ok('no sub + future trial → allowed', decideAccess({ trialEndsAt: FUTURE, now: NOW }).status === 'allowed');
 ok('no sub + past trial → trial_expired', decideAccess({ trialEndsAt: PAST, now: NOW }).reason === 'trial_expired');
 
-console.log(`\n${failures === 0 ? '✅ ALL PASSED' : `❌ ${failures} FAILED`} (${26} checks)`);
+// ===========================================================================
+// Part 2 — auth/access race (useAccessGate enable-gating)
+// ===========================================================================
+
+// Behavioral mirror of the hook's effect body. Counts the two network reads so
+// we can prove the disabled path performs neither.
+function createGate({ user = null, profile = null, profileError = false, now = NOW } = {}) {
+  const calls = { getUser: 0, profileRead: 0 };
+  let state = { status: 'loading' };
+  const runEffect = (enabled) => {
+    if (!enabled) {
+      state = state.status === 'loading' ? state : { status: 'loading' };
+      return;
+    }
+    calls.getUser++;
+    if (!user) { state = { status: 'locked', reason: 'invalid_account' }; return; }
+    calls.profileRead++;
+    if (profileError || !profile) { state = { status: 'locked', reason: 'no_subscription' }; return; }
+    state = decideAccess({ ...profile, now });
+  };
+  return { runEffect, calls, get state() { return state; } };
+}
+
+console.log('\n--- auth/access race: logged-out mount must not poison state ---');
+const gOut = createGate({ user: null });
+gOut.runEffect(false); // mounts before auth resolves
+ok('disabled mount stays loading', gOut.state.status === 'loading');
+ok('disabled mount does not call getUser', gOut.calls.getUser === 0);
+ok('disabled mount does not read billing profile', gOut.calls.profileRead === 0);
+ok('disabled mount never produces a locked state', gOut.state.status !== 'locked');
+
+console.log('\n--- auth/access race: successful sign-in rechecks immediately ---');
+const gTrial = createGate({ user: { id: 'u1' }, profile: { subscriptionStatus: 'trialing', trialEndsAt: FUTURE } });
+gTrial.runEffect(false); // logged-out mount
+ok('still loading before auth is ready', gTrial.state.status === 'loading');
+gTrial.runEffect(true);  // SIGNED_IN -> authReady flips true
+ok('sign-in triggers exactly one entitlement check', gTrial.calls.getUser === 1);
+ok('valid trialing account is ALLOWED after sign-in (the repro)', gTrial.state.status === 'allowed');
+ok('valid trialing account is not locked after sign-in', gTrial.state.status !== 'locked');
+
+const gActive = createGate({ user: { id: 'u2' }, profile: { subscriptionStatus: 'active' } });
+gActive.runEffect(false);
+gActive.runEffect(true);
+ok('valid active account is ALLOWED after sign-in', gActive.state.status === 'allowed');
+
+console.log('\n--- auth/access race: real lock reasons still lock ---');
+const gNoUser = createGate({ user: null });
+gNoUser.runEffect(true); // enabled but session genuinely gone (e.g. expired)
+ok('enabled + no user still locks', gNoUser.state.status === 'locked');
+ok('enabled + no user still reports invalid_account', gNoUser.state.reason === 'invalid_account');
+
+const gNoProfile = createGate({ user: { id: 'u3' }, profile: null });
+gNoProfile.runEffect(true);
+ok('enabled + missing profile row still reports no_subscription', gNoProfile.state.reason === 'no_subscription');
+
+const gCanceled = createGate({ user: { id: 'u4' }, profile: { subscriptionStatus: 'canceled' } });
+gCanceled.runEffect(true);
+ok('enabled + canceled still reports subscription_canceled', gCanceled.state.reason === 'subscription_canceled');
+
+const gExpired = createGate({ user: { id: 'u5' }, profile: { subscriptionStatus: 'trialing', trialEndsAt: PAST } });
+gExpired.runEffect(true);
+ok('enabled + expired trial still reports trial_expired', gExpired.state.reason === 'trial_expired');
+
+console.log('\n--- auth/access race: sign-out clears entitlement state ---');
+const gSignOut = createGate({ user: { id: 'u6' }, profile: { subscriptionStatus: 'active' } });
+gSignOut.runEffect(true);
+ok('signed-in active account allowed', gSignOut.state.status === 'allowed');
+gSignOut.runEffect(false); // SIGNED_OUT -> authReady false
+ok('sign-out resets to loading (no stale allowed for the next account)', gSignOut.state.status === 'loading');
+
+console.log('\n--- auth/access race: source guardrails on the real files ---');
+const root = path.resolve(new URL('..', import.meta.url).pathname);
+const gateSrc = fs.readFileSync(path.join(root, 'lib/v2/accessGate.ts'), 'utf8');
+const shellSrc = fs.readFileSync(path.join(root, 'components/v2/AppShell.tsx'), 'utf8');
+
+ok('accessGate exposes the enabled flag with a safe default',
+  gateSrc.includes('export function useAccessGate(enabled = true)'));
+ok('accessGate short-circuits when disabled',
+  gateSrc.includes('if (!enabled) {'));
+ok('accessGate effect depends on enabled (not a bare [])',
+  gateSrc.includes('}, [enabled]);') && !gateSrc.includes('}, []);'));
+ok('disabled branch returns before any getUser call',
+  gateSrc.indexOf('if (!enabled) {') < gateSrc.indexOf('supabase.auth.getUser()'));
+ok('AppShell gates the access check on authReady',
+  shellSrc.includes('useAccessGate(authReady)'));
+ok('visibility/foreground recheck preserved',
+  gateSrc.includes('visibilitychange') && gateSrc.includes('AppState.addEventListener'));
+ok('60s interval fallback preserved',
+  gateSrc.includes('RECHECK_INTERVAL_MS') && gateSrc.includes('setInterval(safeLoad'));
+ok('decideAccess still drives the resolved state',
+  gateSrc.includes('setState(decideAccess({'));
+
+console.log(`\n${failures === 0 ? '✅ ALL PASSED' : `❌ ${failures} FAILED`} (${checks} checks)`);
 process.exit(failures ? 1 : 0);

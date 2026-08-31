@@ -68,11 +68,11 @@ export default function NotificationsCenter({
             </Text>
           </View>
           {unread > 0 ? (
-            <Pressable onPress={() => markManyRead(items.map(i => i.key))} style={styles.markAll}>
+            <Pressable onPress={() => markManyRead(items.map(i => i.key))} style={styles.markAll} accessibilityRole="button" accessibilityLabel="Mark all notifications read">
               <Text style={styles.markAllText}>Mark all read</Text>
             </Pressable>
           ) : null}
-          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={6}>
+          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Close notifications">
             <Text style={styles.closeText}>✕</Text>
           </Pressable>
         </View>
@@ -89,7 +89,7 @@ export default function NotificationsCenter({
               const meta = KIND_META[n.kind];
               return (
                 <View key={n.key} style={[styles.card, !n.read && styles.cardUnread]}>
-                  <Pressable onPress={() => openItem(n)} style={styles.cardMain}>
+                  <Pressable onPress={() => openItem(n)} style={styles.cardMain} accessibilityRole="button" accessibilityLabel={`Open notification: ${n.title}`}>
                     <View style={[styles.iconWrap, { borderColor: meta.color }]}>
                       <Text style={{ fontSize: 15 }}>{meta.icon}</Text>
                     </View>
@@ -106,7 +106,7 @@ export default function NotificationsCenter({
                   </Pressable>
                   <View style={styles.actions}>
                     {n.kind === 'reminder' ? (
-                      <Pressable onPress={() => completeReminderItem(n)} hitSlop={6} style={styles.doneBtn}>
+                      <Pressable onPress={() => completeReminderItem(n)} hitSlop={6} style={styles.doneBtn} accessibilityRole="button" accessibilityLabel={`Complete reminder: ${n.title}`}>
                         <Text style={styles.doneText}>✓ Done</Text>
                       </Pressable>
                     ) : (
@@ -114,11 +114,13 @@ export default function NotificationsCenter({
                         onPress={() => (n.read ? markUnread(n.key) : markRead(n.key))}
                         hitSlop={6}
                         style={styles.actionBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${n.read ? 'Mark unread' : 'Mark read'}: ${n.title}`}
                       >
                         <Text style={styles.actionText}>{n.read ? 'Mark unread' : 'Mark read'}</Text>
                       </Pressable>
                     )}
-                    <Pressable onPress={() => dismissNotification(n.key)} hitSlop={6} style={styles.dismissBtn}>
+                    <Pressable onPress={() => dismissNotification(n.key)} hitSlop={6} style={styles.dismissBtn} accessibilityRole="button" accessibilityLabel={`Dismiss notification: ${n.title}`}>
                       <Text style={styles.dismissText}>✕</Text>
                     </Pressable>
                   </View>

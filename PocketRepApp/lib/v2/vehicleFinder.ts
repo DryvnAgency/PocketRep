@@ -129,6 +129,10 @@ export function getSavedInventoryUrl(): string {
 type CacheEntry = { at: number; vehicles: VehicleListing[]; parser: string; source_url: string };
 const memCache = new Map<string, CacheEntry>();
 
+export function resetInventoryCache(): void {
+  memCache.clear();
+}
+
 function readDiskCache(): Record<string, CacheEntry> {
   if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return {};
   try {

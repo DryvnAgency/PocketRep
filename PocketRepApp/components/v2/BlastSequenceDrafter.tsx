@@ -10,6 +10,7 @@ import type { V2Contact } from '@/lib/v2/useContacts';
 import type { BlastDraft, DraftedStep } from '@/lib/v2/blastSequences';
 import {
   copyRuleViolations,
+  enforceUniqueness,
   markBlastApproved,
   markBlastCancelled,
   recordSentBlast,
@@ -87,6 +88,17 @@ export default function BlastSequenceDrafter({
 
   const handleSendAll = async () => {
     if (sending) return;
+    const uniqueness = enforceUniqueness(toSend);
+    const copyIssues = toSend.flatMap(step =>
+      copyRuleViolations(step.message).map(issue => `${step.contact_name}: ${issue}`)
+    );
+    if (!uniqueness.passed || copyIssues.length > 0) {
+      setError([
+        ...uniqueness.violations,
+        ...copyIssues,
+      ].join(' · '));
+      return;
+    }
     setSending(true);
     setError(null);
     try {
@@ -107,6 +119,9 @@ export default function BlastSequenceDrafter({
         // changes that same row to sent/not_sent. Do not create a second SMS
         // action in recordSentBlast for a real contact.
         const result = await launchSms(sendable);
+        if (result === 'unsupported') {
+          throw new Error('Open PocketRep on your phone to launch Messages. Unsent drafts remain available.');
+        }
         if (result === 'opened') {
           confirmedCount++;
           if (c?.isDemo) {
@@ -137,7 +152,15 @@ export default function BlastSequenceDrafter({
 
   const handleCancel = async () => {
     if (draft.sequence_id) {
-      await markBlastCancelled(draft.sequence_id).catch(() => undefined);
+      try {
+        await markBlastCancelled(draft.sequence_id);
+      } catch (e: any) {
+        // Tapping Cancel always looked successful even when the row was
+        // still pending_review server-side. Surface the failure and keep
+        // the sheet open instead of closing as if it worked.
+        setError(e?.message ?? "Couldn't cancel — try again");
+        return;
+      }
     }
     onClose();
   };

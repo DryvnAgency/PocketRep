@@ -3,7 +3,6 @@ import { View, Text, ScrollView, StyleSheet, RefreshControl, Platform } from 're
 import { colors } from '@/constants/theme';
 import CustomNavBar, { TabId } from './CustomNavBar';
 import TabBar from './TabBar';
-import { OrbState } from './HeyRexOrb';
 import HeatSheetTab from './HeatSheetTab';
 import ContactsTab from './ContactsTab';
 import ContactDetail from './ContactDetail';
@@ -14,8 +13,6 @@ import DealDetail from './DealDetail';
 import BulkTagFlow from './BulkTagFlow';
 import AddContactModal from './AddContactModal';
 import ImportContactsModal from './ImportContactsModal';
-import RexDisclosure from './RexDisclosure';
-import HeyRexSheet from './HeyRexSheet';
 import RexOnboarding from './RexOnboarding';
 import PWAInstallPrompt, { shouldAutoPrompt } from './PWAInstallPrompt';
 import GamePlanSheet from './GamePlanSheet';
@@ -26,6 +23,9 @@ import NurtureReviewer from './NurtureReviewer';
 import PayPlanEditor from './PayPlanEditor';
 import NotificationsCenter from './NotificationsCenter';
 import RexCoach from './RexCoach';
+import SupportChat from './SupportChat';
+import AdminSupportDashboard from './AdminSupportDashboard';
+import OwnerControlCenter from './admin/OwnerControlCenter';
 import VehicleFinderModal from './VehicleFinderModal';
 import LockoutScreen from './LockoutScreen';
 import AuthScreen from './AuthScreen';
@@ -38,7 +38,6 @@ import {
   type StalledReport,
   type StalledRecommendation,
 } from '@/lib/v2/stalledLeads';
-import { scheduleNurtureBlast } from '@/lib/v2/nurtureEngine';
 import { useNotifications } from '@/lib/v2/notifications';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { clearLocalSessionState, signOutAndReset } from '@/lib/v2/localSessionClear';
@@ -50,25 +49,21 @@ import { useTags } from '@/lib/v2/useTags';
 import { deleteTag } from '@/lib/v2/tagMutations';
 import type { V2DealRich } from '@/lib/v2/useUserDeals';
 import {
-  getAlwaysListenEnabled,
-  hasSeenDisclosure,
-  markDisclosureSeen,
-  setAlwaysListenEnabled,
-  subscribeAlwaysListen,
   hasCompletedOnboarding,
   markOnboardingComplete,
   syncOnboardingFromProfile,
 } from '@/lib/v2/rexSettings';
-import { useHeyRex } from '@/lib/v2/useHeyRex';
 import { isRexOnboardingEnabled, isContactImportEnabled, isVehicleFinderEnabled } from '@/lib/v2/rexFeatureFlags';
-import type { FindVehiclesPayload } from '@/lib/v2/rexActions';
+import type { CreateBlastSequencePayload, FindVehiclesPayload } from '@/lib/v2/rexActions';
 import { useAccessGate } from '@/lib/v2/accessGate';
 import { supabase } from '@/lib/supabase';
 import { captureTimezone } from '@/lib/v2/sendTime';
+import { checkIsAdmin, countOpenTickets } from '@/lib/v2/supportChat';
+import { hydrateRepSettings } from '@/lib/v2/repSettings';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
-  const [orbState, setOrbState] = useState<OrbState>('idle');
+  const [searchFocusKey, setSearchFocusKey] = useState(0);
   const [authReady, setAuthReady] = useState(false);
   // True once we've checked for a session and found none — renders AuthScreen
   // instead of the app shell. Stays false (shell shows "Signing in…") while the
@@ -86,31 +81,32 @@ export default function AppShell() {
   const [importOpen, setImportOpen] = useState(false);
   const [vehicleFinderOpen, setVehicleFinderOpen] = useState(false);
   const [vehicleFinderPrefill, setVehicleFinderPrefill] = useState<FindVehiclesPayload | null>(null);
-  const [disclosureOpen, setDisclosureOpen] = useState(false);
-  const [alwaysListen, setAlwaysListen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [installPromptOpen, setInstallPromptOpen] = useState(false);
   const [gamePlanOpen, setGamePlanOpen] = useState(false);
   const [rexActivityOpen, setRexActivityOpen] = useState(false);
   const [blastDraft, setBlastDraft] = useState<BlastDraft | null>(null);
-  const [blastDrafting, setBlastDrafting] = useState(false);
   const [stalledOpen, setStalledOpen] = useState(false);
   const [stalledReport, setStalledReport] = useState<StalledReport | null>(null);
   const [stalledLoading, setStalledLoading] = useState(false);
   const [nurtureReviewerOpen, setNurtureReviewerOpen] = useState(false);
   const [nurtureRefetchKey, setNurtureRefetchKey] = useState(0);
-  const [schedulingNurture, setSchedulingNurture] = useState(false);
   const [payPlanOpen, setPayPlanOpen] = useState(false);
   const [payPlanRefetchKey, setPayPlanRefetchKey] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [rexCoachOpen, setRexCoachOpen] = useState(false);
+  const [supportChatOpen, setSupportChatOpen] = useState(false);
+  const [adminSupportOpen, setAdminSupportOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminOpenTicketCount, setAdminOpenTicketCount] = useState(0);
   const [rexActionError, setRexActionError] = useState<string | null>(null);
+  const [contactActionNotice, setContactActionNotice] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const payPlan = usePayPlan(payPlanRefetchKey, authReady);
   // HARD LOCKOUT gate — inert until Eduardo wires the real subscription read in
   // accessGate.ts (it returns 'allowed' today, so no behavior change). See the
   // early return below + docs/MASTER_PLAN.md §"Gated P0 — Eduardo only".
-  const access = useAccessGate();
+  const access = useAccessGate(authReady);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts(authReady);
 
@@ -131,7 +127,6 @@ export default function AppShell() {
     return () => { cancelled = true; clearInterval(iv); };
   }, []);
   const tags = useTags(tagsRefetchKey, authReady);
-  const tagNames = useMemo(() => tags.map(t => t.name), [tags]);
   const { items: notifItems, unread: notifUnread } = useNotifications(
     contacts,
     nurtureRefetchKey,
@@ -143,18 +138,6 @@ export default function AppShell() {
     [contacts],
   );
   const totalCount = contacts?.length ?? 0;
-
-  const rex = useHeyRex({
-    enabled: authReady && alwaysListen,
-    contacts: contacts ?? [],
-    tagNames,
-    onOpenContact: setSelectedId,
-    // Vehicle Finder pivot — only wired when the flag is on, so find_vehicles is
-    // a no-op (nothing opens) with the flag off even if the action is emitted.
-    onFindVehicles: isVehicleFinderEnabled() ? (payload: FindVehiclesPayload) => openVehicleFinder(payload) : undefined,
-    activeScreen: active,
-    selectedContactId: selectedId,
-  });
 
   // P0-1: real sign-in. Every visitor used to be silently auto-signed into one
   // shared demo account here; now we check for an actual session and, if there
@@ -172,25 +155,42 @@ export default function AppShell() {
     // Also closes the cold-boot race where getSession().then() and the listener
     // can both resolve for the same session near-simultaneously.
     const lastUserIdRef = { current: null as string | null };
+    let sessionClear: Promise<void> = Promise.resolve();
 
     const finishBoot = async () => {
+      // A very fast account switch must not hydrate rep B from rep A's device
+      // storage while the asynchronous native sign-out sweep is still running.
+      await sessionClear;
+      if (cancelled) return;
+      // Native preferences are asynchronous. Hydrate them before authReady so
+      // dealer/name tokens and Profile settings are correct on the first frame.
+      await hydrateRepSettings();
+      if (cancelled) return;
       // Hydrate the localStorage cache from the canonical profile flag so a
       // fresh browser doesn't show the playbook again to a user who already
       // ran through it on another device.
       await syncOnboardingFromProfile().catch(() => undefined);
       if (cancelled) return;
       setNeedsAuth(false);
+      // Resolve admin role BEFORE setting authReady so the admin shell
+      // renders on the very first frame — no flash of the rep CRM.
+      try {
+        const admin = await checkIsAdmin();
+        if (cancelled) return;
+        setIsAdmin(admin);
+        if (admin) countOpenTickets().then(c => { if (!cancelled) setAdminOpenTicketCount(c); }).catch(() => {});
+      } catch {
+        // Non-fatal — default to rep view
+      }
+      if (cancelled) return;
       setAuthReady(true);
-      setAlwaysListen(getAlwaysListenEnabled());
-      // Warm the ai-proxy brain on launch so the rep's first Rex call (coach or
-      // voice) isn't a 30-60s cold start.
+      // Warm the ai-proxy brain on launch so the rep's first Rex coach call
+      // isn't a 30-60s cold start.
       warmBrain();
       // NEW 6: at the local-day boundary, collapse yesterday's coach log into a
       // recap summary and start today fresh.
       rolloverCoachLog().catch(() => undefined);
-      if (!hasSeenDisclosure()) {
-        setDisclosureOpen(true);
-      } else if (!hasCompletedOnboarding()) {
+      if (!hasCompletedOnboarding()) {
         setOnboardingOpen(true);
       }
       // Fire-and-forget — push registration is silent on web/unsupported devices.
@@ -220,35 +220,64 @@ export default function AppShell() {
         lastUserIdRef.current = null;
         setNeedsAuth(true);
         setAuthReady(false);
+        // AppShell remains mounted on native, so explicitly discard every
+        // customer-bearing overlay/draft before another rep can authenticate.
+        setActive('heat');
+        setSearchFocusKey(0);
+        setSelectedId(null);
+        setDealLoggerOpen(false);
+        setDealLoggerPrefill(undefined);
+        setSelectedDeal(null);
+        setBulkTagOpen(false);
+        setAddContactOpen(false);
+        setImportOpen(false);
+        setVehicleFinderOpen(false);
+        setVehicleFinderPrefill(null);
+        setOnboardingOpen(false);
+        setInstallPromptOpen(false);
+        setGamePlanOpen(false);
+        setRexActivityOpen(false);
+        setBlastDraft(null);
+        setStalledOpen(false);
+        setStalledReport(null);
+        setStalledLoading(false);
+        setNurtureReviewerOpen(false);
+        setPayPlanOpen(false);
+        setNotifOpen(false);
+        setRexCoachOpen(false);
+        setSupportChatOpen(false);
+        setAdminSupportOpen(false);
+        setIsAdmin(false);
+        setAdminOpenTicketCount(0);
+        setRexActionError(null);
+        setContactActionNotice(null);
+        setRefreshing(false);
         // Cross-account leak guard (audit finding, HIGH): AppShell never
         // unmounts across a sign-out/sign-in transition, so useContacts/
         // useTags/usePayPlan/useUserDeals/useNotifications all keep the
         // PREVIOUS rep's data in memory until each independently refetches —
         // a real risk on a shared/kiosk device (rep A signs out, rep B signs
         // in on the same tab and briefly sees rep A's book). A full reload is
-        // the simplest guarantee that every hook's state — these five and any
-        // other in-memory cache — starts genuinely empty for whoever signs in
-        // next. Web only; on native there is no cheap reload equivalent, but
-        // native has no real distribution yet (this go-live is web-first).
+        // the simplest guarantee that every hook's state starts genuinely empty
+        // on web. Native hooks now clear themselves when authReady becomes false.
         //
         // The reload alone isn't enough: several per-user PREFERENCES survive
-        // it in localStorage (always-listen mic consent + disclosure-seen,
-        // onboarding-seen, the coach chat log) — clearLocalSessionState()
-        // closes that (audit finding, HIGH — without it, the next sign-in on
-        // this device could inherit always-listening mic consent they never
-        // gave).
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          clearLocalSessionState();
-          window.location.reload();
-        }
+        // it in localStorage (onboarding-seen, the coach chat log, per-day
+        // check-in/digest collapse state) — clearLocalSessionState() closes
+        // that (audit finding, HIGH — without it, the next sign-in on this
+        // device could inherit the previous rep's local UI state).
+        sessionClear = clearLocalSessionState().catch(() => undefined);
+        void sessionClear.finally(() => {
+          if (Platform.OS === 'web' && typeof window !== 'undefined') {
+            window.location.reload();
+          }
+        });
       }
     });
 
-    const unsubAlwaysListen = subscribeAlwaysListen(setAlwaysListen);
     return () => {
       cancelled = true;
       authSub.subscription.unsubscribe();
-      unsubAlwaysListen();
     };
   }, []);
 
@@ -260,36 +289,23 @@ export default function AppShell() {
     await ensureDemoSession();
   };
 
-  // Map listener state to the orb visual
-  useEffect(() => {
-    if (!alwaysListen) { setOrbState('idle'); return; }
-    if (rex.state === 'awake') setOrbState('listening');
-    else if (rex.thinking || rex.state === 'processing') setOrbState('processing');
-    else if (rex.executing) setOrbState('saved');
-    else setOrbState('idle');
-  }, [rex.state, rex.thinking, rex.executing, alwaysListen]);
-
-  // Surface mic problems on the always-listen path + auto-clear voice-action
-  // errors — replaces the old silent console.warns so failures are visible.
-  useEffect(() => {
-    if (rex.state === 'denied') {
-      setRexActionError('Microphone access is blocked. Enable it in your browser settings to use Hey Rex.');
-    } else if (rex.state === 'unsupported') {
-      setRexActionError("Voice isn't supported in this browser. On iPhone, tap the gold Rex orb to chat instead; on desktop, use Chrome.");
-    }
-  }, [rex.state]);
-
+  // Auto-clear a transient action error (e.g. stalled-leads analysis failure)
+  // so it doesn't pin a banner up indefinitely.
   useEffect(() => {
     if (!rexActionError) return;
     const id = setTimeout(() => setRexActionError(null), 6000);
     return () => clearTimeout(id);
   }, [rexActionError]);
 
-  // Tapping the orb opens the Rex Coach chat. Voice ("Hey Rex") remains the
-  // only thing that triggers the action-taking assistant — the orb visual still
-  // animates with the listener state (see the effect above), but a tap is just
-  // the doorway to coaching. A pending voice action is cancelled from the
-  // HeyRexSheet's own Cancel button.
+  useEffect(() => {
+    if (!contactActionNotice) return;
+    const id = setTimeout(() => setContactActionNotice(null), 3500);
+    return () => clearTimeout(id);
+  }, [contactActionNotice]);
+
+  // V1 is text-only: tapping the gold Rex orb just opens the Rex Coach text
+  // chat. No voice/listening path exists in V1 (see AppShell's voice-runtime
+  // disconnect note near the JSX below).
   const handleOrbPress = () => setRexCoachOpen(true);
 
   const selected = selectedId
@@ -307,7 +323,7 @@ export default function AppShell() {
   };
 
   // Opens the Stalled Leads analysis overlay and runs the analyzer. Reachable
-  // both from a Rex voice action and the Heat Sheet "Review stalled leads" button.
+  // from the Heat Sheet "Review stalled leads" button.
   const openStalledAnalysis = async (opts?: { daysSilentThreshold?: number; includeDead?: boolean }) => {
     setStalledOpen(true);
     setStalledReport(null);
@@ -328,93 +344,24 @@ export default function AppShell() {
     }
   };
 
-  const handleRexConfirm = async () => {
-    const actionType = rex.action?.type;
-    const blastPayload = rex.action?.type === 'create_blast_sequence' ? rex.action.payload : null;
-    const stalledPayload = rex.action?.type === 'analyze_stalled_leads' ? rex.action.payload : null;
-    const nurturePayload = rex.action?.type === 'schedule_nurture_blast' ? rex.action.payload : null;
-    // P2-R3: a chain bundles several writes — capture its steps before confirm()
-    // clears the action so we can refresh exactly the surfaces those steps touched.
-    const chainSteps = rex.action?.type === 'chain' ? (rex.action.payload.steps ?? []) : [];
-    const result = await rex.confirm();
-    // Refresh writers' downstream state
-    if (actionType === 'log_deal') {
-      setDealsRefetchKey(k => k + 1);
-    }
-    if (actionType === 'add_contact'
-      || actionType === 'update_notes'
-      || actionType === 'delete_contact'
-      || actionType === 'schedule_followup'
-      || actionType === 'retier_contact'
-      || actionType === 'batch_action'
-    ) {
-      reloadContacts();
-    }
-    // A reminder (single action or inside a chain) needs the bell badge to refresh
-    // (useNotifications is keyed on nurtureRefetchKey — same as RexCoach.onActed).
-    if (actionType === 'create_reminder') setNurtureRefetchKey(k => k + 1);
-    // P2-R3: a chain can mix deal + contact + reminder writes — refresh each surface
-    // any of its steps actually touched.
-    if (actionType === 'chain') {
-      const stepTypes = new Set(chainSteps.map(s => s.type));
-      if (stepTypes.has('log_deal')) setDealsRefetchKey(k => k + 1);
-      if (stepTypes.has('create_reminder')) setNurtureRefetchKey(k => k + 1);
-      if (stepTypes.has('add_contact') || stepTypes.has('update_notes')
-        || stepTypes.has('delete_contact') || stepTypes.has('schedule_followup')
-        || stepTypes.has('retier_contact') || stepTypes.has('batch_action')
-      ) {
-        reloadContacts();
-      }
-    }
-    if (result?.openContactId) {
-      setSelectedId(result.openContactId);
-    }
-    // Nurture blast: write pending drafts then open the reviewer.
-    if (nurturePayload) {
-      setSchedulingNurture(true);
-      try {
-        await scheduleNurtureBlast({
-          trigger: nurturePayload.trigger,
-          audience: nurturePayload.audience,
-          customIntent: nurturePayload.custom_intent,
-        });
-        setNurtureRefetchKey(k => k + 1);
-        setNurtureReviewerOpen(true);
-      } catch (e) {
-        console.warn('nurture blast failed', e);
-        setRexActionError('Could not queue the nurture blast. Try again.');
-      } finally {
-        setSchedulingNurture(false);
-      }
-    }
-    // Stalled lead analysis: open the overlay, run the analyzer in parallel.
-    if (stalledPayload) {
-      await openStalledAnalysis({
-        daysSilentThreshold: stalledPayload.days_silent_threshold ?? 14,
-        includeDead: stalledPayload.include_dead ?? false,
+  // Text-only V1 still needs a real Smart Blast entry point. Rex Coach proposes
+  // the segment, the rep confirms, then this creates a per-contact draft and
+  // opens the existing review sheet. Nothing sends without the rep's next tap.
+  const openBlastFromRex = async (payload: CreateBlastSequencePayload) => {
+    const selected = (contacts ?? []).filter(contact => payload.contact_ids.includes(contact.id));
+    if (selected.length === 0) throw new Error('No matching contacts were found for that blast.');
+    try {
+      const draft = await createBlastDraft({
+        intent: payload.intent,
+        filterSummary: payload.filter_summary,
+        promotion: payload.promotion ?? {},
+        contacts: selected,
       });
-    }
-    // Blast sequence: confirm just opens the drafter. The drafter handles its
-    // own send-loop and DB writes; we kick off the per-contact brain call now.
-    if (blastPayload && (contacts?.length ?? 0) > 0) {
-      const selected = (contacts ?? []).filter(c => blastPayload.contact_ids.includes(c.id));
-      if (selected.length > 0) {
-        setBlastDrafting(true);
-        try {
-          const draft = await createBlastDraft({
-            intent: blastPayload.intent,
-            filterSummary: blastPayload.filter_summary,
-            promotion: blastPayload.promotion ?? {},
-            contacts: selected,
-          });
-          setBlastDraft(draft);
-        } catch (e) {
-          console.warn('blast draft failed', e);
-          setRexActionError('Could not draft the blast. Try again.');
-        } finally {
-          setBlastDrafting(false);
-        }
-      }
+      setBlastDraft(draft);
+      setRexCoachOpen(false);
+    } catch (error: any) {
+      setRexActionError(error?.message ?? 'Could not draft the blast. Try again.');
+      throw error;
     }
   };
 
@@ -436,6 +383,8 @@ export default function AppShell() {
 
   // Web back button → peel the topmost overlay instead of leaving the app.
   const closeTopOverlay = () => {
+    if (supportChatOpen) { setSupportChatOpen(false); return; }
+    if (adminSupportOpen) { setAdminSupportOpen(false); return; }
     if (rexCoachOpen) { setRexCoachOpen(false); return; }
     if (notifOpen) { setNotifOpen(false); return; }
     if (stalledOpen) { setStalledOpen(false); setStalledReport(null); return; }
@@ -453,6 +402,7 @@ export default function AppShell() {
     if (selectedId) { setSelectedId(null); return; }
   };
   const anyOverlayOpen =
+    supportChatOpen || adminSupportOpen ||
     rexCoachOpen || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
     !!blastDraft || gamePlanOpen || rexActivityOpen || addContactOpen || importOpen || vehicleFinderOpen || bulkTagOpen || !!selectedDeal ||
     dealLoggerOpen || !!selectedId;
@@ -502,6 +452,17 @@ export default function AppShell() {
     );
   }
 
+  // ── Admin shell: completely separate from the rep CRM ───────────────────
+  // When the authenticated user has role='admin', render the admin dashboard
+  // hub — no Heat Sheet, Contacts, Metrics, Rex, or tab bar.
+  if (isAdmin && authReady) {
+    return (
+      <View style={styles.root}>
+        <OwnerControlCenter onSignOut={() => signOutAndReset()} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
       <CustomNavBar
@@ -510,7 +471,10 @@ export default function AppShell() {
         activeCount={activeCount}
         totalCount={totalCount}
         onNotifications={() => setNotifOpen(true)}
-        onSearch={() => setActive('contacts')}
+        onSearch={() => {
+          setActive('contacts');
+          setSearchFocusKey(k => k + 1);
+        }}
         onUpgrade={() => setActive('profile')}
       />
 
@@ -557,6 +521,7 @@ export default function AppShell() {
               setTagsRefetchKey(k => k + 1);
               reloadContacts();
             }}
+            searchFocusKey={searchFocusKey}
           />
         ) : active === 'profile' ? (
           <ProfileTab
@@ -566,6 +531,10 @@ export default function AppShell() {
             onOpenPayPlan={() => setPayPlanOpen(true)}
             onInstallApp={() => setInstallPromptOpen(true)}
             onNavigate={setActive}
+            onOpenSupport={() => setSupportChatOpen(true)}
+            isAdmin={isAdmin}
+            onOpenAdminSupport={() => setAdminSupportOpen(true)}
+            adminOpenTicketCount={adminOpenTicketCount}
             payPlanRefetchKey={payPlanRefetchKey}
           />
         ) : (
@@ -577,7 +546,11 @@ export default function AppShell() {
         )}
       </ScrollView>
 
-      <TabBar active={active} onChange={setActive} orbState={orbState} onOrbPress={handleOrbPress} />
+      {/* V1 is text-only — the orb has no listening/thinking/saved states to
+          reflect (those were driven by the now-disconnected voice runtime), so
+          it's passed a static idle visual. TabBar/HeyRexOrb keep their state
+          prop for V2, which will drive it again once voice returns. */}
+      <TabBar active={active} onChange={setActive} orbState="idle" onOrbPress={handleOrbPress} />
 
       {selected ? (
         <ContactDetail
@@ -586,7 +559,11 @@ export default function AppShell() {
           onOpenContact={(id) => setSelectedId(id)}
           onClose={() => setSelectedId(null)}
           onLocalUpdate={(next: V2Contact) => patchLocal(next.id, next)}
-          onDeleted={() => { reloadContacts(); setSelectedId(null); }}
+          onDeleted={() => {
+            reloadContacts();
+            setSelectedId(null);
+            setContactActionNotice('Contact removed from your book');
+          }}
           dealsRefetchKey={dealsRefetchKey}
           onLogDeal={() => openDealLogger({
             name: selected.name,
@@ -631,7 +608,12 @@ export default function AppShell() {
         open={importOpen}
         allContacts={contacts ?? []}
         onClose={() => setImportOpen(false)}
-        onImported={() => { clearDemoSim(); reloadContacts(); setActive('contacts'); }}
+        onImported={(count) => {
+          clearDemoSim();
+          reloadContacts();
+          setActive('contacts');
+          setContactActionNotice(`${count} contact${count === 1 ? '' : 's'} imported`);
+        }}
       />
 
       {isVehicleFinderEnabled() ? (
@@ -642,23 +624,10 @@ export default function AppShell() {
         />
       ) : null}
 
-      <RexDisclosure
-        open={disclosureOpen}
-        onEnable={() => {
-          setAlwaysListenEnabled(true);
-          setAlwaysListen(true);
-          markDisclosureSeen();
-          setDisclosureOpen(false);
-          if (!hasCompletedOnboarding()) setOnboardingOpen(true);
-        }}
-        onDecline={() => {
-          setAlwaysListenEnabled(false);
-          setAlwaysListen(false);
-          markDisclosureSeen();
-          setDisclosureOpen(false);
-          if (!hasCompletedOnboarding()) setOnboardingOpen(true);
-        }}
-      />
+      {/* V1 voice-runtime disconnect: RexDisclosure (the "Hey Rex" mic-consent
+          modal) is intentionally not mounted here — V1 is text-only, so there
+          is no mic permission to ask for. The component file is kept for V2,
+          which will restore STT/TTS together. */}
 
       {/* First-run onboarding: the Rex interview. The old static-carousel
           duplicate (components/v2/Onboarding.tsx) was removed in the onboarding
@@ -692,20 +661,11 @@ export default function AppShell() {
         onClose={() => setRexActivityOpen(false)}
       />
 
-      <HeyRexSheet
-        state={rex.state}
-        partial={rex.partial}
-        thinking={rex.thinking || blastDrafting || schedulingNurture}
-        streamingSay={rex.streamingSay}
-        speaking={rex.speaking}
-        action={rex.action}
-        executing={rex.executing}
-        error={rex.error}
-        contacts={contacts ?? []}
-        onConfirm={handleRexConfirm}
-        onCancel={rex.cancel}
-        onOpenContact={(id) => setSelectedId(id)}
-      />
+      {/* V1 voice-runtime disconnect: HeyRexSheet (the listening/thinking/
+          speaking overlay + voice-action confirm card) is intentionally not
+          mounted — V1 has no background listener to drive it, and Rex actions
+          proposed through text go through RexCoach's own confirm flow below.
+          The component file is kept for V2. */}
 
       <BlastSequenceDrafter
         open={!!blastDraft}
@@ -746,9 +706,13 @@ export default function AppShell() {
         contacts={contacts ?? []}
         payPlan={payPlan}
         onOpenContact={(id) => setSelectedId(id)}
-        onActed={(action) => {
-          // Mirror handleRexConfirm's refresh, by action type.
+        onActed={async (action) => {
+          // Refresh whichever surface a text-confirmed Rex action touched.
           const t = action.type;
+          if (t === 'create_blast_sequence') {
+            await openBlastFromRex(action.payload);
+            return;
+          }
           if (t === 'log_deal') setDealsRefetchKey(k => k + 1);
           if (t === 'add_contact' || t === 'update_notes' || t === 'schedule_followup' || t === 'retier_contact') {
             reloadContacts();
@@ -762,6 +726,18 @@ export default function AppShell() {
           }
         }}
       />
+
+      <SupportChat
+        open={supportChatOpen}
+        onClose={() => setSupportChatOpen(false)}
+      />
+
+      {isAdmin ? (
+        <AdminSupportDashboard
+          open={adminSupportOpen}
+          onClose={() => { setAdminSupportOpen(false); countOpenTickets().then(setAdminOpenTicketCount).catch(() => {}); }}
+        />
+      ) : null}
 
       <StalledLeadsAnalysis
         open={stalledOpen}
@@ -795,6 +771,11 @@ export default function AppShell() {
       {rexActionError ? (
         <View style={styles.errorBanner} pointerEvents="box-none">
           <Text style={styles.errorBannerText}>{rexActionError}</Text>
+        </View>
+      ) : null}
+      {contactActionNotice ? (
+        <View style={styles.noticeBanner} pointerEvents="none" accessibilityLiveRegion="polite">
+          <Text style={styles.noticeBannerText}>✓ {contactActionNotice}</Text>
         </View>
       ) : null}
     </View>
@@ -831,4 +812,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   errorBannerText: { color: colors.red, fontSize: 13, fontWeight: '600' },
+  noticeBanner: {
+    position: 'absolute',
+    left: 12, right: 12, bottom: 168,
+    backgroundColor: colors.ink2,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  noticeBannerText: { color: colors.gold, fontSize: 13, fontWeight: '700' },
 });

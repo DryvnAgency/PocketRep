@@ -77,7 +77,15 @@ export async function loadRepIdentity(): Promise<RepIdentity> {
         .eq('id', user.id)
         .maybeSingle();
       const full = String((data as any)?.full_name ?? '').trim();
-      if (full) name = full.split(/\s+/)[0];
+      if (full) {
+        name = full.split(/\s+/)[0];
+      } else if (user.email !== 'demo@pocketrep.pro') {
+        // A real rep who hasn't set their name yet must never be silently
+        // addressed as "Eddie" by their own AI — that identity belongs only
+        // to the shared demo account. Give real reps a neutral stand-in so
+        // coachBrain's DEFAULT_REP_NAME fallback is reached only by the demo.
+        name = 'the rep';
+      }
     }
   } catch {
     // fall through to defaults

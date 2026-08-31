@@ -53,6 +53,8 @@ function DealRow({ d, onPress }: { d: V2DealRich; onPress?: () => void }) {
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.dealRow, pressed && { backgroundColor: colors.goldBg }]}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? `Open deal for ${d.name}, ${formatMoney(d.amount)}` : undefined}
     >
       <View style={styles.dealDate}>
         <Text style={styles.dealMo}>{MONTHS_SHORT[dt.getMonth()]}</Text>
@@ -95,7 +97,7 @@ function MonthAccordion({
   const units = unitsOf(deals);
   return (
     <View style={[styles.month, primary ? styles.monthPrimary : styles.monthSecondary]}>
-      <Pressable onPress={onToggle} style={styles.monthHead}>
+      <Pressable onPress={onToggle} style={styles.monthHead} accessibilityRole="button" accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${label} deals`} accessibilityState={{ expanded }}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.monthLabel, { color: primary ? colors.gold : colors.grey2 }]}>{label}</Text>
           <Text style={[styles.monthSub, { color: primary ? colors.white : colors.grey3 }]}>
@@ -324,7 +326,7 @@ export default function MetricsTab({
       ) : null}
 
       <View style={{ paddingHorizontal: 14, paddingTop: 12 }}>
-        <Pressable onPress={onLogDeal} style={styles.logDeal}>
+        <Pressable onPress={onLogDeal} disabled={!onLogDeal} style={styles.logDeal} accessibilityRole="button" accessibilityLabel="Log a deal">
           <Text style={styles.logDealText}>＋ LOG A DEAL</Text>
         </Pressable>
       </View>

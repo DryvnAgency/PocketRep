@@ -78,7 +78,7 @@ Respond with ONLY one \`\`\`json fenced block and nothing else, no prose before 
   "action": null
 }
 When the situation is genuinely ambiguous and you would be guessing, set "clarify" to ONE sharp question string and leave the other fields best-effort; the app will show your question and skip straight to it. Otherwise "clarify" stays null.
-Set "action" ONLY when the rep clearly and explicitly asks you to DO one of the app actions on their own book (add a contact, log a deal, set a reminder or follow up, add a note, retier). Use the action manifest and the CONTACT IDS provided below, never invent a contact_id, and if no existing contact clearly matches, ask with "clarify" instead. For pure coaching, "what do I say", role play, recall, or anything off topic, "action" stays null. The app always shows a Confirm button before anything is written, so an action is a proposal, never a done deal.`;
+Set "action" ONLY when the rep clearly and explicitly asks you to DO one of the app actions on their own book (add a contact, log a deal, set a reminder or follow up, add a note, retier, or draft a Smart Blast for a real segment). Use the action manifest and the CONTACT IDS provided below, never invent a contact_id, and if no existing contact clearly matches, ask with "clarify" instead. For pure coaching, "what do I say", role play, recall, or anything off topic, "action" stays null. The app always shows a Confirm button before anything is written, so an action is a proposal, never a done deal.`;
 }
 
 // ── EXECUTOR system prompt (plan → the actual words) ─────────────────────────

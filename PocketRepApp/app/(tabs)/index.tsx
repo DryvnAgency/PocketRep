@@ -125,7 +125,18 @@ export default function HeatSheetScreen() {
           .select('id, first_name, last_name, follow_up_date, lease_end_date, personal_events')
           .eq('user_id', user.id);
         if (contacts) {
-          for (const c of contacts) await scheduleContactReminders(c as any);
+          // scheduleContactReminders takes camelCase params; the DB row is
+          // snake_case. The previous `c as any` cast let every field resolve
+          // to undefined, so no reminder ever actually scheduled.
+          for (const c of contacts as any[]) {
+            await scheduleContactReminders({
+              contactId: c.id,
+              contactName: `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim(),
+              followUpDate: c.follow_up_date ?? null,
+              leaseEndDate: c.lease_end_date ?? null,
+              personalEvents: c.personal_events ?? [],
+            });
+          }
         }
         if (AsyncStorage) await AsyncStorage.setItem(key, '1');
       } catch {}

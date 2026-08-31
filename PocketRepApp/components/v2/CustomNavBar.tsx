@@ -39,7 +39,7 @@ export default function CustomNavBar({
   return (
     <View style={styles.root}>
       <View style={styles.row}>
-        <Pressable onPress={onUpgrade} accessibilityRole="button" accessibilityLabel="Upgrade plan">
+        <Pressable onPress={onUpgrade} accessibilityRole="button" accessibilityLabel="Open profile and plan">
           <LinearGradient
             colors={[colors.gold2, colors.gold]}
             start={{ x: 0, y: 0 }}

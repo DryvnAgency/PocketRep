@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform,
   KeyboardAvoidingView,
@@ -11,6 +11,7 @@ import {
 } from '@/lib/v2/dealLogger';
 import { usePayPlan, calcCommissionWithPlan, DEFAULT_PAY_PLAN } from '@/lib/v2/payPlan';
 import { formatMoney } from '@/lib/v2/format';
+import { parseGrossInput, validateDealDraft } from '@/lib/v2/dealValidation';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -40,11 +41,19 @@ export default function DealLogger({
   const [d, setD] = useState<DealDraft>(blank());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [frontGrossInput, setFrontGrossInput] = useState('');
+  const [backGrossInput, setBackGrossInput] = useState('');
+  // `saving` state updates asynchronously, so a same-tick double-tap on Save
+  // could pass the `!canSave || saving` guard twice and insert two deals —
+  // AddContactModal.tsx's savingRef fixes the identical race there.
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
     setError(null);
     setSaving(false);
+    setFrontGrossInput('');
+    setBackGrossInput('');
     if (prefill) {
       setD({
         ...blank(),
@@ -67,17 +76,30 @@ export default function DealLogger({
   const set = <K extends keyof DealDraft>(k: K, v: DealDraft[K]) =>
     setD(s => ({ ...s, [k]: v }));
 
-  const setNum = (k: 'frontGross' | 'backGross', text: string) => {
-    const n = text === '' ? 0 : Number(text.replace(/[^0-9]/g, ''));
-    set(k, Number.isFinite(n) ? n : 0);
+  const setMoney = (k: 'frontGross' | 'backGross', text: string) => {
+    const parsed = parseGrossInput(text);
+    if (parsed.error) {
+      setError(parsed.error);
+      return;
+    }
+    setError(null);
+    if (k === 'frontGross') setFrontGrossInput(parsed.input);
+    else setBackGrossInput(parsed.input);
+    set(k, parsed.value);
   };
 
   const totalGross = d.frontGross + d.backGross;
   const commission = calcCommissionWithPlan(d, plan);
-  const canSave = !!d.name.trim() && !!d.stock.trim() && !!d.vehicle.trim() && totalGross > 0;
+  const validationError = validateDealDraft(d);
+  const canSave = validationError === null;
 
   const handleSave = async () => {
-    if (!canSave || saving) return;
+    if (savingRef.current) return;
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -93,37 +115,9 @@ export default function DealLogger({
     } catch (e: any) {
       setError(e?.message ?? 'Save failed');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
-  };
-
-  const Seg = ({
-    value, current, onPick, label,
-  }: {
-    value: string;
-    current: string;
-    onPick: () => void;
-    label: string;
-  }) => {
-    const active = value === current;
-    return (
-      <Pressable
-        onPress={onPick}
-        style={[
-          styles.segBtn,
-          active
-            ? { backgroundColor: colors.goldBg, borderColor: colors.gold }
-            : { backgroundColor: 'transparent', borderColor: colors.ink4 },
-        ]}
-      >
-        <Text style={[
-          styles.segText,
-          { color: active ? colors.gold : colors.grey2 },
-        ]}>
-          {label}
-        </Text>
-      </Pressable>
-    );
   };
 
   return (
@@ -135,7 +129,7 @@ export default function DealLogger({
       >
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Pressable onPress={onClose} style={styles.headerBtn}>
+          <Pressable onPress={onClose} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Cancel deal entry">
             <Text style={styles.headerBtnText}>Cancel</Text>
           </Pressable>
           <View style={{ flex: 1, alignItems: 'center' }}>
@@ -144,10 +138,14 @@ export default function DealLogger({
           </View>
           <Pressable
             onPress={handleSave}
-            disabled={!canSave || saving}
-            style={[styles.headerBtn, canSave ? styles.headerBtnPrimary : styles.headerBtnDisabled]}
+            disabled={saving}
+            accessibilityRole="button"
+            accessibilityLabel="Save deal"
+            accessibilityHint={canSave ? 'Saves this delivery to Metrics.' : (validationError ?? undefined)}
+            accessibilityState={{ disabled: saving }}
+            style={[styles.headerBtn, saving ? styles.headerBtnDisabled : styles.headerBtnPrimary]}
           >
-            <Text style={[styles.headerBtnText, canSave ? { color: colors.ink } : { color: colors.grey }]}>
+            <Text style={[styles.headerBtnText, { color: saving ? colors.grey : colors.ink }]}>
               {saving ? 'Saving…' : 'Save'}
             </Text>
           </Pressable>
@@ -160,6 +158,7 @@ export default function DealLogger({
               onChangeText={t => set('name', t)}
               placeholder="Full name"
               placeholderTextColor={colors.grey}
+              accessibilityLabel="Customer name, required"
               style={styles.input}
             />
           </Field>
@@ -172,6 +171,7 @@ export default function DealLogger({
                 placeholder="P8421"
                 placeholderTextColor={colors.grey}
                 autoCapitalize="characters"
+                accessibilityLabel="Stock number, required"
                 style={[styles.input, { fontFamily: 'Menlo', letterSpacing: 0.5 }]}
               />
             </Field>
@@ -181,6 +181,7 @@ export default function DealLogger({
                 onChangeText={t => set('date', t)}
                 placeholder="YYYY-MM-DD"
                 placeholderTextColor={colors.grey}
+                accessibilityLabel="Delivery date, required, YYYY-MM-DD"
                 style={styles.input}
               />
             </Field>
@@ -192,29 +193,33 @@ export default function DealLogger({
               onChangeText={t => set('vehicle', t)}
               placeholder="'26 M3 Competition · Brooklyn Grey"
               placeholderTextColor={colors.grey}
+              accessibilityLabel="Vehicle, required"
               style={styles.input}
             />
           </Field>
 
           <Field label="INVENTORY">
             <View style={styles.segRow}>
-              <Seg value="NEW" current={d.type} onPick={() => set('type', 'NEW')} label="New" />
-              <Seg value="CPO" current={d.type} onPick={() => set('type', 'CPO')} label="CPO" />
-              <Seg value="USED" current={d.type} onPick={() => set('type', 'USED')} label="Used" />
+              <SegmentButton value="NEW" current={d.type} onPick={() => set('type', 'NEW')} label="New" />
+              <SegmentButton value="CPO" current={d.type} onPick={() => set('type', 'CPO')} label="CPO" />
+              <SegmentButton value="USED" current={d.type} onPick={() => set('type', 'USED')} label="Used" />
             </View>
           </Field>
 
           <Field label="FUNDING">
             <View style={styles.segRow}>
-              <Seg value="finance" current={d.funding} onPick={() => set('funding', 'finance')} label="Finance" />
-              <Seg value="lease" current={d.funding} onPick={() => set('funding', 'lease')} label="Lease" />
-              <Seg value="cash" current={d.funding} onPick={() => set('funding', 'cash')} label="Cash" />
+              <SegmentButton value="finance" current={d.funding} onPick={() => set('funding', 'finance')} label="Finance" />
+              <SegmentButton value="lease" current={d.funding} onPick={() => set('funding', 'lease')} label="Lease" />
+              <SegmentButton value="cash" current={d.funding} onPick={() => set('funding', 'cash')} label="Cash" />
             </View>
           </Field>
 
           <Field label="SPLIT DEAL?">
             <Pressable
               onPress={() => set('split', !d.split)}
+              accessibilityRole="button"
+              accessibilityLabel={d.split ? 'Split deal selected' : 'Full deal selected'}
+              accessibilityState={{ selected: d.split }}
               style={[
                 styles.splitToggle,
                 d.split
@@ -250,6 +255,7 @@ export default function DealLogger({
                   onChangeText={t => set('splitWith', t)}
                   placeholder="Co-rep name"
                   placeholderTextColor={colors.grey}
+                  accessibilityLabel="Co-rep name, required for a split deal"
                   style={styles.splitWithInput}
                 />
               </View>
@@ -261,11 +267,13 @@ export default function DealLogger({
               <View style={styles.moneyWrap}>
                 <Text style={styles.moneyPrefix}>$</Text>
                 <TextInput
-                  value={d.frontGross ? String(d.frontGross) : ''}
-                  onChangeText={t => setNum('frontGross', t)}
+                  value={frontGrossInput}
+                  onChangeText={t => setMoney('frontGross', t)}
                   placeholder="0"
                   placeholderTextColor={colors.grey}
-                  keyboardType="numeric"
+                  keyboardType="decimal-pad"
+                  maxLength={12}
+                  accessibilityLabel="Front gross in dollars"
                   style={[styles.input, { paddingLeft: 26 }]}
                 />
               </View>
@@ -274,11 +282,13 @@ export default function DealLogger({
               <View style={styles.moneyWrap}>
                 <Text style={styles.moneyPrefix}>$</Text>
                 <TextInput
-                  value={d.backGross ? String(d.backGross) : ''}
-                  onChangeText={t => setNum('backGross', t)}
+                  value={backGrossInput}
+                  onChangeText={t => setMoney('backGross', t)}
                   placeholder="0"
                   placeholderTextColor={colors.grey}
-                  keyboardType="numeric"
+                  keyboardType="decimal-pad"
+                  maxLength={12}
+                  accessibilityLabel="Back gross in dollars"
                   style={[styles.input, { paddingLeft: 26 }]}
                 />
               </View>
@@ -307,11 +317,43 @@ export default function DealLogger({
             </View>
           </View>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
           <View style={{ height: 28 }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
+  );
+}
+
+function SegmentButton({
+  value, current, onPick, label,
+}: {
+  value: string;
+  current: string;
+  onPick: () => void;
+  label: string;
+}) {
+  const active = value === current;
+  return (
+    <Pressable
+      onPress={onPick}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      style={[
+        styles.segBtn,
+        active
+          ? { backgroundColor: colors.goldBg, borderColor: colors.gold }
+          : { backgroundColor: 'transparent', borderColor: colors.ink4 },
+      ]}
+    >
+      <Text style={[
+        styles.segText,
+        { color: active ? colors.gold : colors.grey2 },
+      ]}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
