@@ -46,7 +46,7 @@ The product should increasingly feel like:
 
 As of this update, `main` HEAD is:
 
-`fae1f2d2b2427aef028d1bf07aaa8e217bd910b3`
+`1bf089ee5fb97b2b927e614bc0b053be12f540f3`
 
 Latest merged launch-polish work on `main` includes:
 
@@ -63,6 +63,8 @@ Recent merged `main` work also includes:
 - referral reward hardening/idempotency;
 - paid-invoice qualification for referral rewards;
 - more honest SMS send-state handling.
+- PR #107's full V1 rep UI, Rex, admin, web/mobile workflow hardening, and
+  supporting test/build coverage.
 
 Production web surfaces:
 
@@ -175,11 +177,12 @@ Never change referral economics without an explicit owner decision.
 
 ---
 
-## 9. Active work — NOT YET PRODUCTION
+## 9. Recently shipped work and active follow-ups
 
 ### PR #107 — `Admin dashboard hub + Rex UX improvements + voiceTone wiring`
 
-Status at this update: **OPEN, DRAFT, mergeable**.
+Status at this update: **MERGED to `main` on 2026-08-31 and deployed to production**.
+Both `project-t90u1` and `pocket-rep` reached READY on merge commit `1bf089e`.
 
 CLAIMED scope includes:
 
@@ -192,7 +195,7 @@ CLAIMED scope includes:
 - additional product/AI/referral analytics work;
 - follow-up fixes discovered during audit.
 
-### 2026-08-30 rep UI stress hardening — ON PR #107, NOT PRODUCTION
+### 2026-08-30 rep UI stress hardening — MERGED / PRODUCTION
 
 Implementation commits `4869240` and `6e46780` address issues reproduced in the active rep UI and then carried through the current native V1 screens:
 
@@ -211,7 +214,7 @@ Verification completed on the implementation tree:
 - Expo exports succeed for web, current native V1 iOS/Android, and the flag-enabled V2 iOS/Android cutover path;
 - GitHub CI passed on both implementation commits and the `pocket-rep` branch preview reached READY on the mobile-parity commit.
 
-### 2026-08-31 full rep + mobile stress follow-up — ON PR #107, NOT PRODUCTION
+### 2026-08-31 full rep + mobile stress follow-up — MERGED / PRODUCTION
 
 The continued desktop/mobile stress pass found and fixed additional workflow-integrity issues on the PR branch:
 
@@ -234,23 +237,25 @@ Verification completed on the latest working tree:
 - clean V1 and flag-enabled V2 exports succeed for web, iOS, and Android, with distinct bundle hashes between modes (the first cached comparison was discarded and rebuilt clean);
 - the authenticated isolated audit build verified Heat, contacts/search/filtering, sequence call/text failure honesty, call outcomes, deal validation/commission math, notifications, Metrics, and profile editing without a browser protocol wedge.
 
-Remaining verification boundaries are explicit:
+Post-merge verification resolved the previous web uncertainty: the production audit
+account now authenticates and reaches the Heat Sheet, and both production Vercel
+projects are READY on the merge SHA. Real-device checks remain required for
+cold-start auth persistence, native permission prompts, OS composer return
+behavior, and installed-app safe-area/keyboard behavior. Native EAS builds still
+remain on V1 until the explicit `EXPO_PUBLIC_NEW_UI=1` cutover decision.
 
-- the newest local bundle was not promoted: the deployment safety gate rejected replacing even the isolated audit alias without fresh deploy approval;
-- a refreshed cloud-browser session could not reopen the audit account because the secure sign-in handoff was blocked before prompting, so the newest timeline/token/auth-storage changes are covered by builds and focused tests rather than a second live touch pass;
-- production `app.pocketrep.pro` previously authenticated the audit credentials but returned `Account not found. This account is no longer active.` while the isolated PR build allowed the same account; trace the production entitlement/profile boundary before launch, without silently granting access;
-- real-device verification is still required for cold-restart auth, iOS/Android permission prompts, native Messages/dialer return behavior, and installed-app safe-area/keyboard behavior;
-- PR #107 remains draft/unmerged and production has not been promoted.
+### 2026-08-31 post-merge sequence compatibility follow-up — ACTIVE BRANCH, NOT PRODUCTION
 
-Still open before calling this shipped or mobile-certified:
-
-- PR #107 remains draft/unmerged and production was not promoted;
-- the separate `project-t90u1` preview continues to cancel before useful build logs, while the `pocket-rep` preview is healthy;
-- the cloud interaction browser did not recover from the original external-protocol wedge, so the rebuilt preview has not received a fresh authenticated touch/viewport pass;
-- real-device checks remain required for cold-start auth persistence, native permission prompts, OS composer return behavior, and installed-app safe-area/keyboard behavior;
-- native EAS builds intentionally remain on V1 until the explicit `EXPO_PUBLIC_NEW_UI=1` cutover decision.
-
-Do not describe #107 features as shipped until the PR is reviewed, merged, CI/deploy is verified, and production behavior is checked where relevant.
+The first production rep-day boundary exposed a compatibility regression: an
+existing sequence using `{{product}}` was blocked as unsupported. The follow-up
+branch restores the legacy aliases already promised by the workflow contract:
+`product`, `color`, `trade`, `trade_in`, `dealership`, and `lease`. They resolve
+through the same allowlist/renderer as the canonical vehicle/dealer/lease fields;
+genuinely unknown fields remain blocked. Color is inferred only from the existing
+structured `trim / color` display when a separator is present, never guessed from
+a plain trim. The working tree passes all 20 scripts (**607 checks**), TypeScript,
+focused lint, and clean V1/V2 merged-tree exports; preview/live re-verification is
+still required before this follow-up is merged.
 
 ### PR #109 — `Launch copy: premium, accurate V1 funnel`
 

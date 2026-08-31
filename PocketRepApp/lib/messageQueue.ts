@@ -11,7 +11,7 @@
 
 import { supabase } from './supabase';
 import { getRepSetting } from './v2/repSettings';
-import { renderSequenceTemplate } from './v2/sequenceTemplates';
+import { inferSequenceColor, renderSequenceTemplate } from './v2/sequenceTemplates';
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
@@ -179,7 +179,7 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
   const contactIds = [...new Set(enrollments.map((e: any) => e.contact_id))];
   const { data: contacts, error: contactError } = await supabase
     .from('contacts')
-    .select('id,first_name,last_name,phone,email,vehicle_year,vehicle_make,vehicle_model,lease_end_date,is_deleted,is_demo')
+    .select('id,first_name,last_name,phone,email,vehicle,trim,trade_in,vehicle_year,vehicle_make,vehicle_model,lease_end_date,is_deleted,is_demo')
     .in('id', contactIds);
   if (contactError) throw contactError;
 
@@ -207,8 +207,13 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
     if (!step) continue;
 
     const dueAt = enrollment.next_step_at ?? enrollment.started_at ?? now.toISOString();
-    const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model]
-      .filter(Boolean).join(' ') || null;
+    const vehicle = String(contact.vehicle ?? '').trim()
+      || [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ')
+      || null;
+    // V2 currently stores display color with trim in the form
+    // "Gun Metallic · Premium Package" (or "Blue / Premium"). Only infer a
+    // color when that delimiter is present; a plain trim must not be mislabeled.
+    const color = inferSequenceColor(contact.trim);
     const rendered = renderSequenceTemplate(step.message_template, {
       firstName: contact.first_name,
       lastName: contact.last_name,
@@ -216,6 +221,8 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
       dealer,
       vehicle,
       vehicleMake: contact.vehicle_make,
+      color,
+      trade: contact.trade_in,
       leaseEnd: contact.lease_end_date,
     });
     items.push({

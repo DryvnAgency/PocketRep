@@ -98,16 +98,28 @@ const templateOutput = ts.transpileModule(sequenceTemplates, {
 });
 const templateModule = { exports: {} };
 new Function('module', 'exports', templateOutput.outputText)(templateModule, templateModule.exports);
-const { renderSequenceTemplate, getUnsupportedSequenceTemplateTokens } = templateModule.exports;
+const {
+  SEQUENCE_TEMPLATE_TOKENS,
+  renderSequenceTemplate,
+  getUnsupportedSequenceTemplateTokens,
+  inferSequenceColor,
+} = templateModule.exports;
 const resolvedTemplate = renderSequenceTemplate(
-  'Hi {{first_name}}, this is {{rep_name}} at {{dealer}} about your {{vehicle}}. Lease: {{lease_end}}.',
-  { firstName: 'Jordan', repName: 'Taylor', dealer: 'Northside', vehicle: '2025 Atlas', leaseEnd: '2028-06-01' },
+  'Hi {{first_name}}, this is {{rep_name}} at {{dealership}} about your {{product}} in {{color}}. Trade: {{trade}}. Lease: {{lease}}.',
+  { firstName: 'Jordan', repName: 'Taylor', dealer: 'Northside', vehicle: '2025 Atlas', color: 'Blue', trade: '2019 Tiguan', leaseEnd: '2028-06-01' },
 );
-ok(resolvedTemplate.message === 'Hi Jordan, this is Taylor at Northside about your 2025 Atlas. Lease: 2028-06-01.', 'supported sequence fields resolve to customer-ready copy');
+ok(resolvedTemplate.message === 'Hi Jordan, this is Taylor at Northside about your 2025 Atlas in Blue. Trade: 2019 Tiguan. Lease: 2028-06-01.', 'supported sequence fields resolve legacy customer-ready aliases');
 ok(resolvedTemplate.unresolvedTokens.length === 0, 'fully populated sequence copy has no unresolved fields');
-const blockedTemplate = renderSequenceTemplate('Hi {{first_name}} from {{rep_name}} about {{product}}', { firstName: 'Jordan' });
-ok(blockedTemplate.unresolvedTokens.join(',') === 'rep_name,product', 'missing and unknown sequence fields are reported before launch');
-ok(getUnsupportedSequenceTemplateTokens('Hi {{first_name}} {{product}}').join(',') === 'product', 'editor identifies unsupported sequence fields');
+const blockedTemplate = renderSequenceTemplate('Hi {{first_name}} from {{rep_name}} with {{loyalty_code}}', { firstName: 'Jordan' });
+ok(blockedTemplate.unresolvedTokens.join(',') === 'rep_name,loyalty_code', 'missing and unknown sequence fields are reported before launch');
+ok(getUnsupportedSequenceTemplateTokens('Hi {{first_name}} {{loyalty_code}}').join(',') === 'loyalty_code', 'editor identifies unsupported sequence fields');
+ok(
+  ['product', 'color', 'trade', 'trade_in', 'dealership', 'lease'].every(token => SEQUENCE_TEMPLATE_TOKENS.includes(token)),
+  'editor preserves every legacy sequence field already used by rep workflows',
+);
+ok(inferSequenceColor('Gun Metallic · Premium Package') === 'Gun Metallic', 'sequence color resolves from the structured V2 trim display');
+ok(inferSequenceColor('Blue / Premium') === 'Blue', 'sequence color supports the legacy slash-delimited trim display');
+ok(inferSequenceColor('Premium Package') === null, 'plain trim is never mislabeled as a vehicle color');
 
 console.log();
 if (failed) {
