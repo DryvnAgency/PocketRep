@@ -3,9 +3,15 @@ export const SEQUENCE_TEMPLATE_TOKENS = [
   'last_name',
   'rep_name',
   'dealer',
+  'dealership',
   'vehicle',
+  'product',
   'vehicle_make',
+  'color',
+  'trade',
+  'trade_in',
   'lease_end',
+  'lease',
 ] as const;
 
 export type SequenceTemplateToken = typeof SEQUENCE_TEMPLATE_TOKENS[number];
@@ -17,6 +23,8 @@ export type SequenceTemplateContext = {
   dealer?: string | null;
   vehicle?: string | null;
   vehicleMake?: string | null;
+  color?: string | null;
+  trade?: string | null;
   leaseEnd?: string | null;
 };
 
@@ -46,6 +54,12 @@ export function getUnsupportedSequenceTemplateTokens(template: string | null | u
   return getSequenceTemplateTokens(template).filter(token => !SUPPORTED_TOKENS.has(token));
 }
 
+export function inferSequenceColor(trim: string | null | undefined): string | null {
+  const normalized = clean(trim);
+  if (!normalized || !/[·/|]/.test(normalized)) return null;
+  return clean(normalized.split(/[·/|]/, 1)[0]);
+}
+
 export function renderSequenceTemplate(
   template: string | null | undefined,
   context: SequenceTemplateContext,
@@ -57,9 +71,15 @@ export function renderSequenceTemplate(
     last_name: clean(context.lastName) ?? '',
     rep_name: clean(context.repName),
     dealer: clean(context.dealer),
+    dealership: clean(context.dealer),
     vehicle,
+    product: vehicle,
     vehicle_make: clean(context.vehicleMake) ?? vehicle,
+    color: clean(context.color),
+    trade: clean(context.trade),
+    trade_in: clean(context.trade),
     lease_end: clean(context.leaseEnd),
+    lease: clean(context.leaseEnd),
   };
   const unresolved = new Set<string>();
 

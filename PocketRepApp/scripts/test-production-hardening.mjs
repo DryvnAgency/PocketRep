@@ -45,7 +45,7 @@ ok(rexCoach.includes("'create_blast_sequence'"), 'text Rex permits the Smart Bla
 ok(coachBrain.includes('create_blast_sequence'), 'text Rex is taught how to propose Smart Blast');
 ok(appShell.includes('await openBlastFromRex(action.payload)'), 'confirmed text Rex Smart Blast opens a validated draft before claiming success');
 
-ok(queue.includes('phone,email,vehicle_year'), 'follow-up queue loads the real email recipient');
+ok(queue.includes('phone,email,vehicle,trim,trade_in,vehicle_year'), 'follow-up queue loads the real email recipient and legacy sequence context');
 ok(queue.includes('async function advanceEnrollment'), 'sent and skipped follow-ups share one guarded enrollment advance');
 ok(queue.includes('await advanceEnrollment(item, userId);'), 'skip advances without creating a fake sent interaction');
 ok(followUpQueue.includes('`mailto:${email}?subject='), 'V2 email follow-up targets the contact email');
