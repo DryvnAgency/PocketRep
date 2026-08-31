@@ -10,6 +10,8 @@
  */
 
 import { supabase } from './supabase';
+import { getRepSetting } from './v2/repSettings';
+import { renderSequenceTemplate } from './v2/sequenceTemplates';
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
@@ -41,6 +43,7 @@ export interface QueueItem {
   due_date: string;
   channel: 'text' | 'call' | 'email';
   status: 'pending' | 'sent' | 'skipped' | 'saved';
+  unresolved_tokens?: string[];
   isDemo?: boolean;
 }
 
@@ -54,16 +57,6 @@ function addDays(date: string, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
   return d;
-}
-
-function personalizeMessage(template: string | null, contact: any): string {
-  const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model]
-    .filter(Boolean).join(' ') || 'your vehicle';
-  return String(template ?? '')
-    .replace(/\{\{first_name\}\}/g, contact.first_name ?? 'there')
-    .replace(/\{\{vehicle\}\}/g, vehicle)
-    .replace(/\{\{vehicle_make\}\}/g, contact.vehicle_make ?? 'your vehicle')
-    .replace(/\{\{last_name\}\}/g, contact.last_name ?? '');
 }
 
 export async function loadQueueState(): Promise<QueueState | null> {
@@ -137,6 +130,9 @@ async function advanceEnrollment(item: QueueItem, userId: string): Promise<void>
 }
 
 export async function markSentAndLog(item: QueueItem, userId: string): Promise<void> {
+  if (item.unresolved_tokens?.length) {
+    throw new Error('This follow-up still has unresolved template fields.');
+  }
   await advanceEnrollment(item, userId);
 
   const { error: logError } = await supabase.from('contact_interactions').insert({
@@ -183,9 +179,18 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
   const contactIds = [...new Set(enrollments.map((e: any) => e.contact_id))];
   const { data: contacts, error: contactError } = await supabase
     .from('contacts')
-    .select('id,first_name,last_name,phone,email,vehicle_year,vehicle_make,vehicle_model,is_deleted,is_demo')
+    .select('id,first_name,last_name,phone,email,vehicle_year,vehicle_make,vehicle_model,lease_end_date,is_deleted,is_demo')
     .in('id', contactIds);
   if (contactError) throw contactError;
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', userId)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  const repName = String(profile?.full_name ?? '').trim();
+  const dealer = getRepSetting('dealership');
 
   const contactMap: Record<string, any> = {};
   for (const c of contacts ?? []) contactMap[c.id] = c;
@@ -202,6 +207,17 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
     if (!step) continue;
 
     const dueAt = enrollment.next_step_at ?? enrollment.started_at ?? now.toISOString();
+    const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model]
+      .filter(Boolean).join(' ') || null;
+    const rendered = renderSequenceTemplate(step.message_template, {
+      firstName: contact.first_name,
+      lastName: contact.last_name,
+      repName,
+      dealer,
+      vehicle,
+      vehicleMake: contact.vehicle_make,
+      leaseEnd: contact.lease_end_date,
+    });
     items.push({
       sequence_id: enrollment.sequence_id,
       step_number: step.step_number,
@@ -209,7 +225,8 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
       contact_name: `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim(),
       phone: contact.phone ?? '',
       email: contact.email ?? '',
-      message: personalizeMessage(step.message_template, contact),
+      message: rendered.message,
+      unresolved_tokens: rendered.unresolvedTokens,
       due_date: dueAt.split('T')[0],
       channel: step.channel,
       status: 'pending',

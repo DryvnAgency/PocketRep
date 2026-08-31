@@ -145,13 +145,14 @@ export default function ProfileTab({
   const handleSettingSave = async (value: string) => {
     if (!editTarget) return;
     if (editTarget.key === 'name') {
+      if (!value.trim()) throw new Error('Enter your name before saving.');
       if (!userId) throw new Error('Your session is still loading. Try again.');
       const { error } = await supabase.from('profiles').update({ full_name: value }).eq('id', userId);
       if (error) throw new Error("Couldn't save your name. Try again.");
       setProfile(p => (p ? { ...p, full_name: value } : p));
       flash('✓ Name updated');
     } else {
-      setRepSetting(editTarget.key, value);
+      await setRepSetting(editTarget.key, value);
       flash('✓ Setting updated');
     }
   };
@@ -306,7 +307,10 @@ export default function ProfileTab({
                 return (
                   <Pressable
                     key={t}
-                    onPress={() => { setRepSetting('voiceTone', t); forceTick(); }}
+                    onPress={() => {
+                      void setRepSetting('voiceTone', t).catch(() => undefined);
+                      forceTick();
+                    }}
                     style={[styles.tonePill, active && styles.tonePillActive]}
                     accessibilityRole="button"
                     accessibilityLabel={`Set Rex style to ${t}`}

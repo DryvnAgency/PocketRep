@@ -7,7 +7,10 @@ export function useTags(refetchKey: number = 0, enabled: boolean = true): V2Tag[
   const [tags, setTags] = useState<V2Tag[]>([]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setTags([]);
+      return;
+    }
     let cancelled = false;
     supabase
       .from('tags')

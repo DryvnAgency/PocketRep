@@ -62,9 +62,9 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
       if (user && answers.name.trim()) {
         await supabase.from('profiles').update({ full_name: answers.name.trim() }).eq('id', user.id);
       }
-      if (answers.dealership.trim()) setRepSetting('dealership', answers.dealership.trim());
-      if (answers.title.trim()) setRepSetting('title', answers.title.trim());
-      if (answers.tone) setRepSetting('voiceTone', answers.tone);
+      if (answers.dealership.trim()) await setRepSetting('dealership', answers.dealership.trim());
+      if (answers.title.trim()) await setRepSetting('title', answers.title.trim());
+      if (answers.tone) await setRepSetting('voiceTone', answers.tone);
     } catch { /* profile setup is best effort; do not trap the rep */ }
     finally {
       setSaving(false); onClose(true);

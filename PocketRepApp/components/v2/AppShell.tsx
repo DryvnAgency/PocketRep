@@ -59,6 +59,7 @@ import { useAccessGate } from '@/lib/v2/accessGate';
 import { supabase } from '@/lib/supabase';
 import { captureTimezone } from '@/lib/v2/sendTime';
 import { checkIsAdmin, countOpenTickets } from '@/lib/v2/supportChat';
+import { hydrateRepSettings } from '@/lib/v2/repSettings';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
@@ -154,8 +155,17 @@ export default function AppShell() {
     // Also closes the cold-boot race where getSession().then() and the listener
     // can both resolve for the same session near-simultaneously.
     const lastUserIdRef = { current: null as string | null };
+    let sessionClear: Promise<void> = Promise.resolve();
 
     const finishBoot = async () => {
+      // A very fast account switch must not hydrate rep B from rep A's device
+      // storage while the asynchronous native sign-out sweep is still running.
+      await sessionClear;
+      if (cancelled) return;
+      // Native preferences are asynchronous. Hydrate them before authReady so
+      // dealer/name tokens and Profile settings are correct on the first frame.
+      await hydrateRepSettings();
+      if (cancelled) return;
       // Hydrate the localStorage cache from the canonical profile flag so a
       // fresh browser doesn't show the playbook again to a user who already
       // ran through it on another device.
@@ -210,26 +220,58 @@ export default function AppShell() {
         lastUserIdRef.current = null;
         setNeedsAuth(true);
         setAuthReady(false);
+        // AppShell remains mounted on native, so explicitly discard every
+        // customer-bearing overlay/draft before another rep can authenticate.
+        setActive('heat');
+        setSearchFocusKey(0);
+        setSelectedId(null);
+        setDealLoggerOpen(false);
+        setDealLoggerPrefill(undefined);
+        setSelectedDeal(null);
+        setBulkTagOpen(false);
+        setAddContactOpen(false);
+        setImportOpen(false);
+        setVehicleFinderOpen(false);
+        setVehicleFinderPrefill(null);
+        setOnboardingOpen(false);
+        setInstallPromptOpen(false);
+        setGamePlanOpen(false);
+        setRexActivityOpen(false);
+        setBlastDraft(null);
+        setStalledOpen(false);
+        setStalledReport(null);
+        setStalledLoading(false);
+        setNurtureReviewerOpen(false);
+        setPayPlanOpen(false);
+        setNotifOpen(false);
+        setRexCoachOpen(false);
+        setSupportChatOpen(false);
+        setAdminSupportOpen(false);
+        setIsAdmin(false);
+        setAdminOpenTicketCount(0);
+        setRexActionError(null);
+        setContactActionNotice(null);
+        setRefreshing(false);
         // Cross-account leak guard (audit finding, HIGH): AppShell never
         // unmounts across a sign-out/sign-in transition, so useContacts/
         // useTags/usePayPlan/useUserDeals/useNotifications all keep the
         // PREVIOUS rep's data in memory until each independently refetches —
         // a real risk on a shared/kiosk device (rep A signs out, rep B signs
         // in on the same tab and briefly sees rep A's book). A full reload is
-        // the simplest guarantee that every hook's state — these five and any
-        // other in-memory cache — starts genuinely empty for whoever signs in
-        // next. Web only; on native there is no cheap reload equivalent, but
-        // native has no real distribution yet (this go-live is web-first).
+        // the simplest guarantee that every hook's state starts genuinely empty
+        // on web. Native hooks now clear themselves when authReady becomes false.
         //
         // The reload alone isn't enough: several per-user PREFERENCES survive
         // it in localStorage (onboarding-seen, the coach chat log, per-day
         // check-in/digest collapse state) — clearLocalSessionState() closes
         // that (audit finding, HIGH — without it, the next sign-in on this
         // device could inherit the previous rep's local UI state).
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          clearLocalSessionState();
-          window.location.reload();
-        }
+        sessionClear = clearLocalSessionState().catch(() => undefined);
+        void sessionClear.finally(() => {
+          if (Platform.OS === 'web' && typeof window !== 'undefined') {
+            window.location.reload();
+          }
+        });
       }
     });
 

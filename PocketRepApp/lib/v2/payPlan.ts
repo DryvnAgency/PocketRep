@@ -79,7 +79,10 @@ export function usePayPlan(refetchKey: number = 0, enabled: boolean = true) {
   const [plan, setPlan] = useState<PayPlan | null>(null);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setPlan(null);
+      return;
+    }
     let cancelled = false;
     loadPayPlan().then(p => { if (!cancelled) setPlan(p); });
     return () => { cancelled = true; };

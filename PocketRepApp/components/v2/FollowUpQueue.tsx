@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { generateQueue, markSentAndLog, markSkipped, type QueueItem } from '@/lib/messageQueue';
 import { launchSms } from '@/lib/v2/smsLauncher';
+import { isCurrentWebRuntimeNativeProtocolCapable } from '@/lib/v2/smsCapability';
+import { formatSequenceTemplateTokens } from '@/lib/v2/sequenceTemplates';
 import { supabase } from '@/lib/supabase';
 
 function channelLabel(channel: QueueItem['channel']) {
@@ -42,6 +44,7 @@ async function launchChannel(item: QueueItem): Promise<LaunchResult> {
 
   const digits = (item.phone ?? '').replace(/[^\d+]/g, '');
   if (!digits) return 'failed';
+  if (Platform.OS === 'web' && !isCurrentWebRuntimeNativeProtocolCapable()) return 'unsupported';
   try {
     await Linking.openURL(`tel:${digits}`);
     return 'opened';
@@ -82,9 +85,16 @@ export default function FollowUpQueue() {
     setError(null);
     try {
       if (action === 'work') {
+        if (item.unresolved_tokens?.length) {
+          throw new Error(`Add values for ${formatSequenceTemplateTokens(item.unresolved_tokens)} before working this follow-up.`);
+        }
         const result = await launchChannel(item);
         if (result === 'unsupported') {
-          throw new Error('Open PocketRep on your phone to launch Messages. This follow-up is still waiting.');
+          throw new Error(
+            item.channel === 'call'
+              ? 'Call from your phone, then mark this follow-up complete. The browser did not open a dialer.'
+              : 'Open PocketRep on your phone to launch Messages. This follow-up is still waiting.',
+          );
         }
         if (result === 'not_sent') {
           throw new Error('Text was not marked sent. This follow-up is still waiting.');
@@ -145,7 +155,11 @@ export default function FollowUpQueue() {
                   <Text style={styles.meta}>STEP {item.step_number} · {channelLabel(item.channel)} · DUE {item.due_date}</Text>
                 </View>
               </View>
-              <Text style={styles.message} numberOfLines={4}>{item.message || 'No message template — work this step manually.'}</Text>
+              <Text style={styles.message} numberOfLines={4}>
+                {item.unresolved_tokens?.length
+                  ? `Needs setup: ${formatSequenceTemplateTokens(item.unresolved_tokens)}`
+                  : item.message || 'No message template — work this step manually.'}
+              </Text>
               <View style={styles.actions}>
                 <Pressable disabled={busy} onPress={() => void act(item, 'skip')} style={styles.skip} accessibilityRole="button" accessibilityLabel={`Skip follow-up for ${item.contact_name}`}>
                   <Text style={styles.skipText}>Skip</Text>

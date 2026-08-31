@@ -9,6 +9,7 @@ import type { V2Tag } from '@/lib/v2/useTags';
 import { logInteraction } from '@/lib/v2/interactions';
 import { logContactTouch, type CallOutcome } from '@/lib/v2/updateContact';
 import { launchSms } from '@/lib/v2/smsLauncher';
+import { isCurrentWebRuntimeNativeProtocolCapable } from '@/lib/v2/smsCapability';
 import { supabase } from '@/lib/supabase';
 
 type FilterTag = null | { kind: 'tier'; tier: TierKey; name: string; color: string; icon: string } | { kind: 'custom'; name: string; color: string };
@@ -60,6 +61,11 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
     setQueueError(null);
     if (current.isDemo) { setCalled(true); actionBusyRef.current = false; return; }
     try {
+      if (Platform.OS === 'web' && !isCurrentWebRuntimeNativeProtocolCapable()) {
+        setCalled(true);
+        setQueueError('Call from your phone, then record the outcome here. The browser did not open a dialer.');
+        return;
+      }
       await Linking.openURL(`tel:${digitsOnly(current.phone)}`);
       setCalled(true);
     } catch {

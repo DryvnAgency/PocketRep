@@ -92,12 +92,16 @@ export default function VehicleFinderModal({
     }
   };
 
-  const saveUrl = () => {
+  const saveUrl = async () => {
     const normalized = normalizeInventoryUrl(urlDraft);
     if (!normalized) { setError('Enter a full https website, e.g. https://www.yourdealership.com'); return; }
-    setRepSetting('inventoryFeed', normalized);
-    setSavedUrl(normalized);
-    setError(null);
+    try {
+      await setRepSetting('inventoryFeed', normalized);
+      setSavedUrl(normalized);
+      setError(null);
+    } catch {
+      setError("Couldn't save the inventory website. Try again.");
+    }
   };
 
   const refresh = async () => {

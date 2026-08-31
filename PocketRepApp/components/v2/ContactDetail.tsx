@@ -25,9 +25,12 @@ import {
 import { titleCase, normalizeVehicle } from '@/lib/v2/format';
 import { generateGamePlan, type GamePlanChannel } from '@/lib/v2/gamePlan';
 import { useContactNurtures } from '@/lib/v2/contactNurtures';
-import { logInteraction, useInteractions, type InteractionType, type TimelineEventType } from '@/lib/v2/interactions';
+import { logInteraction, useInteractions, type Interaction, type InteractionType } from '@/lib/v2/interactions';
 import { launchSms } from '@/lib/v2/smsLauncher';
-import { isCurrentWebRuntimeSmsCapable } from '@/lib/v2/smsCapability';
+import {
+  isCurrentWebRuntimeNativeProtocolCapable,
+  isCurrentWebRuntimeSmsCapable,
+} from '@/lib/v2/smsCapability';
 import { pickAndUploadContactPhoto } from '@/lib/v2/contactPhoto';
 import { formatBirthday, parseBirthdayInput } from '@/lib/v2/birthday';
 import LanguageToggle from './LanguageToggle';
@@ -53,6 +56,20 @@ const INTERACTION_META: Record<string, { icon: string; color: string; label: str
   reply:        { icon: '↩️', color: colors.green, label: 'REPLY',   verb: 'Customer replied' },
   referral_ask: { icon: '🤝', color: colors.gold2, label: 'REFERRAL', verb: 'Referral ask sent' },
 };
+
+const SMS_ATTEMPT_META: Record<string, { icon: string; color: string; label: string; verb: string }> = {
+  opened: { icon: '↗', color: colors.orange, label: 'TEXT · COMPOSER OPENED', verb: 'Composer opened; send not confirmed' },
+  not_sent: { icon: '∅', color: colors.red, label: 'TEXT · NOT SENT', verb: 'Text was not sent' },
+  failed: { icon: '!', color: colors.red, label: 'TEXT · FAILED', verb: 'Text could not be opened' },
+  no_phone: { icon: '!', color: colors.red, label: 'TEXT · NO NUMBER', verb: 'No phone number was available' },
+};
+
+function timelineMeta(interaction: Interaction) {
+  if (interaction.source === 'sms_action' && interaction.outcome) {
+    return SMS_ATTEMPT_META[interaction.outcome] ?? INTERACTION_META.text;
+  }
+  return INTERACTION_META[interaction.type] ?? INTERACTION_META.note;
+}
 
 function digitsOnly(s: string | null): string {
   return (s ?? '').replace(/[^\d]/g, '');
@@ -572,11 +589,21 @@ export default function ContactDetail({
   return (
     <View style={styles.root}>
       <View style={styles.topBar}>
-        <Pressable onPress={onClose} style={styles.iconBtn}>
+        <Pressable
+          onPress={onClose}
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Close contact details"
+        >
           <Text style={styles.iconBtnText}>‹</Text>
         </Pressable>
         <View style={{ flex: 1 }} />
-        <Pressable onPress={() => setMenuOpen(true)} style={[styles.iconBtn, { borderColor: colors.ink4 }]}>
+        <Pressable
+          onPress={() => setMenuOpen(true)}
+          style={[styles.iconBtn, { borderColor: colors.ink4 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Open contact actions"
+        >
           <Text style={[styles.iconBtnText, { color: colors.grey2, fontSize: 14 }]}>⋯</Text>
         </Pressable>
       </View>
@@ -654,6 +681,8 @@ export default function ContactDetail({
               }
             }}
             style={{ position: 'relative' }}
+            accessibilityRole="button"
+            accessibilityLabel={contact.photoUrl ? `Change photo for ${contact.name}` : `Add photo for ${contact.name}`}
           >
             <Avatar name={contact.name} size={68} photoUrl={contact.photoUrl} />
             <View style={styles.photoBadge}>
@@ -673,20 +702,32 @@ export default function ContactDetail({
                   onSubmitEditing={saveName}
                   returnKeyType="done"
                 />
-                <Pressable onPress={cancelName} hitSlop={6}>
+                <Pressable onPress={cancelName} hitSlop={6} accessibilityRole="button" accessibilityLabel="Cancel name edit">
                   <Text style={styles.linkSecondary}>Cancel</Text>
                 </Pressable>
-                <Pressable onPress={saveName} hitSlop={6} disabled={savingName}>
+                <Pressable
+                  onPress={saveName}
+                  hitSlop={6}
+                  disabled={savingName}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save customer name"
+                  accessibilityState={{ disabled: savingName }}
+                >
                   <Text style={styles.linkPrimary}>{savingName ? '…' : 'SAVE'}</Text>
                 </Pressable>
               </View>
             ) : (
-              <Pressable onPress={startEditName} hitSlop={4}>
+              <Pressable onPress={startEditName} hitSlop={4} accessibilityRole="button" accessibilityLabel="Edit customer name">
                 <Text style={styles.heroName}>{contact.name}</Text>
               </Pressable>
             )}
             <View style={styles.heroPills}>
-              <Pressable onPress={cycleTier} hitSlop={6}>
+              <Pressable
+                onPress={cycleTier}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={`Change heat level, currently ${tier.label}`}
+              >
                 <Pill color={tier.color}>{tier.icon} {tier.label}</Pill>
               </Pressable>
               {contact.planLabel ? <Pill color={colors.gold}>{contact.planLabel}</Pill> : null}
@@ -713,7 +754,13 @@ export default function ContactDetail({
             { label: 'Email', icon: '✉️', onPress: () => openEmail() },
             { label: 'Note',  icon: '📝', onPress: () => setEditingNotes(true) },
           ].map(a => (
-            <Pressable key={a.label} onPress={a.onPress} style={styles.quickBtn}>
+            <Pressable
+              key={a.label}
+              onPress={a.onPress}
+              style={styles.quickBtn}
+              accessibilityRole="button"
+              accessibilityLabel={`${a.label} ${contact.name}`}
+            >
               <Text style={styles.quickIcon}>{a.icon}</Text>
               <Text style={styles.quickLabel}>{a.label.toUpperCase()}</Text>
             </Pressable>
@@ -731,13 +778,20 @@ export default function ContactDetail({
                   styles.tagChip,
                   { backgroundColor: rgbaTint(col, 0.12), borderColor: rgbaTint(col, 0.35) },
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove tag ${t}`}
               >
                 <View style={[styles.tagDot, { backgroundColor: col }]} />
                 <Text style={[styles.tagText, { color: col }]}>{t}</Text>
               </Pressable>
             );
           })}
-          <Pressable onPress={() => setTagPickerOpen(true)} style={styles.tagAdd}>
+          <Pressable
+            onPress={() => setTagPickerOpen(true)}
+            style={styles.tagAdd}
+            accessibilityRole="button"
+            accessibilityLabel="Add a tag"
+          >
             <Text style={styles.tagAddText}>＋ Add tag</Text>
           </Pressable>
         </View>
@@ -747,15 +801,22 @@ export default function ContactDetail({
           <View style={{ flex: 1 }} />
           {editingVehicle ? (
             <>
-              <Pressable onPress={() => setEditingVehicle(false)} hitSlop={6}>
+              <Pressable onPress={() => setEditingVehicle(false)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Cancel vehicle edit">
                 <Text style={styles.linkSecondary}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={saveVehicle} hitSlop={6} disabled={savingVehicle}>
+              <Pressable
+                onPress={saveVehicle}
+                hitSlop={6}
+                disabled={savingVehicle}
+                accessibilityRole="button"
+                accessibilityLabel="Save vehicle details"
+                accessibilityState={{ disabled: savingVehicle }}
+              >
                 <Text style={styles.linkPrimary}>{savingVehicle ? 'SAVING…' : 'SAVE'}</Text>
               </Pressable>
             </>
           ) : (
-            <Pressable onPress={startEditVehicle} hitSlop={6}>
+            <Pressable onPress={startEditVehicle} hitSlop={6} accessibilityRole="button" accessibilityLabel="Edit vehicle details">
               <Text style={styles.linkPrimary}>EDIT ›</Text>
             </Pressable>
           )}
@@ -794,7 +855,7 @@ export default function ContactDetail({
             </View>
           </View>
         ) : (
-          <Pressable onPress={startEditVehicle} style={styles.card}>
+          <Pressable onPress={startEditVehicle} style={styles.card} accessibilityRole="button" accessibilityLabel="Edit vehicle details">
             <Text style={styles.vehicleName}>{contact.vehicle ?? '—'}</Text>
             {contact.trim ? <Text style={styles.vehicleTrim}>{contact.trim}</Text> : null}
             <View style={styles.vehicleStats}>
@@ -815,15 +876,22 @@ export default function ContactDetail({
           <View style={{ flex: 1 }} />
           {editingBday ? (
             <>
-              <Pressable onPress={cancelBday} hitSlop={6}>
+              <Pressable onPress={cancelBday} hitSlop={6} accessibilityRole="button" accessibilityLabel="Cancel birthday edit">
                 <Text style={styles.linkSecondary}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={saveBday} hitSlop={6} disabled={savingBday}>
+              <Pressable
+                onPress={saveBday}
+                hitSlop={6}
+                disabled={savingBday}
+                accessibilityRole="button"
+                accessibilityLabel="Save birthday"
+                accessibilityState={{ disabled: savingBday }}
+              >
                 <Text style={styles.linkPrimary}>{savingBday ? 'SAVING…' : 'SAVE'}</Text>
               </Pressable>
             </>
           ) : (
-            <Pressable onPress={() => setEditingBday(true)} hitSlop={6}>
+            <Pressable onPress={() => setEditingBday(true)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Edit birthday">
               <Text style={styles.linkPrimary}>{contact.birthday ? 'EDIT ›' : '＋ ADD'}</Text>
             </Pressable>
           )}
@@ -832,6 +900,8 @@ export default function ContactDetail({
         <Pressable
           onPress={() => !editingBday && setEditingBday(true)}
           style={[styles.card, editingBday && { borderColor: colors.gold }, { paddingVertical: 14 }]}
+          accessibilityRole={editingBday ? undefined : 'button'}
+          accessibilityLabel={editingBday ? undefined : 'Edit birthday'}
         >
           {editingBday ? (
             <TextInput
@@ -854,15 +924,22 @@ export default function ContactDetail({
           <View style={{ flex: 1 }} />
           {editingReferral ? (
             <>
-              <Pressable onPress={() => setEditingReferral(false)} hitSlop={6}>
+              <Pressable onPress={() => setEditingReferral(false)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Cancel referral edit">
                 <Text style={styles.linkSecondary}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={() => saveReferral()} hitSlop={6} disabled={savingReferral}>
+              <Pressable
+                onPress={() => saveReferral()}
+                hitSlop={6}
+                disabled={savingReferral}
+                accessibilityRole="button"
+                accessibilityLabel="Save referral"
+                accessibilityState={{ disabled: savingReferral }}
+              >
                 <Text style={styles.linkPrimary}>{savingReferral ? 'SAVING…' : 'SAVE'}</Text>
               </Pressable>
             </>
           ) : (
-            <Pressable onPress={startEditReferral} hitSlop={6}>
+            <Pressable onPress={startEditReferral} hitSlop={6} accessibilityRole="button" accessibilityLabel="Edit referral source">
               <Text style={styles.linkPrimary}>{referrerLabel ? 'EDIT ›' : '＋ ADD'}</Text>
             </Pressable>
           )}
@@ -887,6 +964,8 @@ export default function ContactDetail({
                       key={m.id}
                       onPress={() => saveReferral({ contactId: m.id, name: m.name })}
                       style={styles.referralChip}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Set referrer to ${m.name}`}
                     >
                       <Text style={styles.referralChipText}>👥 {m.name}</Text>
                     </Pressable>
@@ -895,7 +974,14 @@ export default function ContactDetail({
               </View>
             ) : null}
             {referrerLabel ? (
-              <Pressable onPress={clearReferral} hitSlop={6} disabled={savingReferral}>
+              <Pressable
+                onPress={clearReferral}
+                hitSlop={6}
+                disabled={savingReferral}
+                accessibilityRole="button"
+                accessibilityLabel="Remove referral"
+                accessibilityState={{ disabled: savingReferral }}
+              >
                 <Text style={styles.linkSecondary}>Remove referral</Text>
               </Pressable>
             ) : null}
@@ -904,6 +990,8 @@ export default function ContactDetail({
           <Pressable
             onPress={() => (referrer ? onOpenContact?.(referrer.id) : startEditReferral())}
             style={[styles.card, { paddingVertical: 14 }]}
+            accessibilityRole="button"
+            accessibilityLabel={referrer ? `Open referrer ${referrer.name}` : 'Add referral source'}
           >
             {referrerLabel ? (
               <Text style={referrer ? styles.referralLinked : styles.bdayText}>
@@ -932,6 +1020,8 @@ export default function ContactDetail({
                   key={r.id}
                   onPress={() => onOpenContact?.(r.id)}
                   style={[styles.referralRow, i < referrals.length - 1 && styles.divider]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open referral ${r.name}`}
                 >
                   <Avatar name={r.name} size={28} photoUrl={r.photoUrl} />
                   <Text style={styles.referralRowName} numberOfLines={1}>{r.name}</Text>
@@ -946,7 +1036,14 @@ export default function ContactDetail({
         <View style={styles.toggleWrap}>
           <View style={styles.toggle}>
             {(['latest', 'next'] as const).map(k => (
-              <Pressable key={k} onPress={() => setStepView(k)} style={styles.toggleBtn}>
+              <Pressable
+                key={k}
+                onPress={() => setStepView(k)}
+                style={styles.toggleBtn}
+                accessibilityRole="tab"
+                accessibilityLabel={k === 'latest' ? 'Latest activity' : 'Next step'}
+                accessibilityState={{ selected: stepView === k }}
+              >
                 <View
                   style={[
                     styles.togglePill,
@@ -975,7 +1072,7 @@ export default function ContactDetail({
             ) : (
               <>
                 {interactions.map((it, i) => {
-                  const meta = INTERACTION_META[it.type] ?? INTERACTION_META.note;
+                  const meta = timelineMeta(it);
                   const last = i === interactions.length - 1 && contact.milestones.length === 0;
                   return (
                     <View key={it.id} style={[styles.milestoneRow, !last && styles.divider]}>
@@ -1049,15 +1146,22 @@ export default function ContactDetail({
           <View style={{ flex: 1 }} />
           {editingNotes ? (
             <>
-              <Pressable onPress={cancelNotes} hitSlop={6}>
+              <Pressable onPress={cancelNotes} hitSlop={6} accessibilityRole="button" accessibilityLabel="Cancel note edit">
                 <Text style={styles.linkSecondary}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={saveNotes} hitSlop={6} disabled={savingNotes}>
+              <Pressable
+                onPress={saveNotes}
+                hitSlop={6}
+                disabled={savingNotes}
+                accessibilityRole="button"
+                accessibilityLabel="Save customer notes"
+                accessibilityState={{ disabled: savingNotes }}
+              >
                 <Text style={styles.linkPrimary}>{savingNotes ? 'SAVING…' : 'SAVE'}</Text>
               </Pressable>
             </>
           ) : (
-            <Pressable onPress={() => setEditingNotes(true)} hitSlop={6}>
+            <Pressable onPress={() => setEditingNotes(true)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Edit customer notes">
               <Text style={styles.linkPrimary}>EDIT ›</Text>
             </Pressable>
           )}
@@ -1070,6 +1174,8 @@ export default function ContactDetail({
             editingNotes && { borderColor: colors.gold },
             { paddingVertical: 14 },
           ]}
+          accessibilityRole={editingNotes ? undefined : 'button'}
+          accessibilityLabel={editingNotes ? undefined : 'Edit customer notes'}
         >
           {editingNotes ? (
             <TextInput
@@ -1093,6 +1199,9 @@ export default function ContactDetail({
             onPress={runGamePlan}
             disabled={aiLoading}
             style={[styles.gamePlan, aiLoading && { opacity: 0.6 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Generate Rex game plan"
+            accessibilityState={{ disabled: aiLoading }}
           >
             <Text style={styles.gamePlanText}>GAME PLAN</Text>
             <Text style={styles.gamePlanHint}>
@@ -1121,7 +1230,7 @@ export default function ContactDetail({
               </Text>
               <View style={{ flex: 1 }} />
               {!aiLoading ? (
-                <Pressable onPress={runGamePlan} hitSlop={6}>
+                <Pressable onPress={runGamePlan} hitSlop={6} accessibilityRole="button" accessibilityLabel="Regenerate Rex game plan">
                   <Text style={styles.linkPrimary}>↻ REGENERATE</Text>
                 </Pressable>
               ) : null}
@@ -1130,7 +1239,7 @@ export default function ContactDetail({
             {aiError ? (
               <View style={styles.aiBody}>
                 <Text style={styles.aiError}>Couldn't reach Rex: {aiError}</Text>
-                <Pressable onPress={runGamePlan} hitSlop={6} style={{ marginTop: 10 }}>
+                <Pressable onPress={runGamePlan} hitSlop={6} style={{ marginTop: 10 }} accessibilityRole="button" accessibilityLabel="Retry Rex game plan">
                   <Text style={styles.linkPrimary}>↻ TAP TO RETRY</Text>
                 </Pressable>
               </View>
@@ -1154,21 +1263,21 @@ export default function ContactDetail({
                   />
                 </View>
                 <View style={styles.aiActions}>
-                  <Pressable onPress={copyScript} style={[styles.aiAction, copied && styles.aiActionDone]}>
+                  <Pressable onPress={copyScript} style={[styles.aiAction, copied && styles.aiActionDone]} accessibilityRole="button" accessibilityLabel="Copy Rex script">
                     <Text style={[styles.aiActionText, copied && { color: colors.white }]}>
                       {copied ? '✓ COPIED' : '⧉ COPY'}
                     </Text>
                   </Pressable>
                   {aiChannel === 'call' ? (
-                    <Pressable onPress={openCall} style={[styles.aiAction, styles.aiActionPrimary]}>
+                    <Pressable onPress={openCall} style={[styles.aiAction, styles.aiActionPrimary]} accessibilityRole="button" accessibilityLabel={`Call ${contact.name}`}>
                       <Text style={styles.aiActionPrimaryText}>📞 CALL</Text>
                     </Pressable>
                   ) : aiChannel === 'text' ? (
-                    <Pressable onPress={() => openText(aiScript)} style={[styles.aiAction, styles.aiActionPrimary]}>
+                    <Pressable onPress={() => openText(aiScript)} style={[styles.aiAction, styles.aiActionPrimary]} accessibilityRole="button" accessibilityLabel={`Text ${contact.name}`}>
                       <Text style={styles.aiActionPrimaryText}>💬 TEXT</Text>
                     </Pressable>
                   ) : (
-                    <Pressable onPress={() => openEmail(aiScript)} style={[styles.aiAction, styles.aiActionPrimary]}>
+                    <Pressable onPress={() => openEmail(aiScript)} style={[styles.aiAction, styles.aiActionPrimary]} accessibilityRole="button" accessibilityLabel={`Email ${contact.name}`}>
                       <Text style={styles.aiActionPrimaryText}>✉ EMAIL</Text>
                     </Pressable>
                   )}
@@ -1215,7 +1324,7 @@ export default function ContactDetail({
             </View>
           ) : null}
           <View style={{ flex: 1 }} />
-          <Pressable onPress={onLogDeal} hitSlop={6}>
+          <Pressable onPress={onLogDeal} hitSlop={6} accessibilityRole="button" accessibilityLabel="Log a deal">
             <Text style={styles.linkPrimary}>＋ LOG DEAL</Text>
           </Pressable>
         </View>
@@ -1226,7 +1335,7 @@ export default function ContactDetail({
             <Text style={styles.dealEmptyHint}>{dealsError}</Text>
           </View>
         ) : deals.length === 0 ? (
-          <Pressable onPress={onLogDeal} style={styles.dealEmpty}>
+          <Pressable onPress={onLogDeal} style={styles.dealEmpty} accessibilityRole="button" accessibilityLabel="Log the first deal">
             <Text style={styles.dealEmptyTitle}>No deals yet — close them and log it here</Text>
             <Text style={styles.dealEmptyHint}>Flows straight into your Metrics</Text>
           </Pressable>
@@ -1324,6 +1433,11 @@ export default function ContactDetail({
                   }
                   if (compose.mode === 'text' && !isCurrentWebRuntimeSmsCapable()) {
                     flash('Open PocketRep on your phone to launch Messages. You can copy the draft here.');
+                    return;
+                  }
+                  if (compose.mode === 'call' && !isCurrentWebRuntimeNativeProtocolCapable()) {
+                    setCompose(c => c ? { ...c, opened: true } : c);
+                    flash('Call from your phone, then mark the call complete here. The browser did not open a dialer.');
                     return;
                   }
                   try {

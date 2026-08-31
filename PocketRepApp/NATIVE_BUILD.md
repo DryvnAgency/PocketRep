@@ -20,11 +20,9 @@ account / store credentials** and must be run from a machine with the Expo CLI
    eas init
    ```
 
-2. **Set the build-time env — IMPORTANT.** Every profile's `env` block in
-   `eas.json` is currently `""`. An empty string is a *real value* at build time
-   and will **override** any EAS secret, so the app would ship with an empty
-   Supabase URL. Either fill the values in `eas.json`, **or** delete the empty
-   keys and use project secrets:
+2. **Set the build-time env — IMPORTANT.** The old committed empty Supabase
+   overrides have been removed from every `eas.json` profile, so they no longer
+   mask project secrets. Configure the public client values as project secrets:
    ```
    eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL       --value https://fwvrauqdoevwmwwqlfav.supabase.co
    eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY  --value <supabase anon key>
@@ -54,12 +52,17 @@ account / store credentials** and must be run from a machine with the Expo CLI
 
 6. **Store listing** — icon/splash exist; add App Store / Play metadata + screenshots.
 
-## Known native-only risks to test (NOT fixed here)
-- **SecureStore 2 KB limit.** `lib/supabase.ts` persists the auth session in
-  `expo-secure-store` on native. A Supabase session (access + refresh JWT) can
-  exceed SecureStore's ~2 KB per-key limit, which logs a warning and can drop the
-  session. Verify login *persists across an app restart* on a real device; if not,
-  chunk the stored value or swap the storage adapter.
+## Known native-only risks to test
+- **Cold-restart auth.** Supabase sessions now use generation-based encrypted
+  SecureStore chunks below the historical iOS per-value rejection threshold,
+  with migration from the old single-value key. The adapter is covered by a
+  large-token/Unicode round-trip test; still verify login persists across a cold
+  restart on the first real-device build.
+- **Native local state.** Rep profile settings now persist in AsyncStorage and
+  hydrate before the shell renders. Sign-out sweeps them and clears retained
+  contacts, tags, pay-plan, notification, Rex/coach, demo, and inventory state;
+  still verify restart persistence and a rep-A → sign-out → rep-B switch on two
+  real devices.
 - **Native voice.** "Hey Rex" voice uses the Web Speech API (web only). On a native
   build the voice flow is a no-op until a native STT/TTS path is added — the rest of
   Rex (text) works.
@@ -69,5 +72,7 @@ account / store credentials** and must be run from a machine with the Expo CLI
 
 ## Verify after the first build
 - App boots, **auth persists across a cold restart** (SecureStore check above).
+- Dealership/title/tone/inventory settings persist across restart; signing out
+  leaves no previous-rep contact, modal, notification, or coach state behind.
 - Rex (Game Plan / Coach text) returns drafts; push notifications register.
 - Contacts / deals / sequences load against the production Supabase project.

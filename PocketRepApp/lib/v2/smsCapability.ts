@@ -1,15 +1,17 @@
-export type WebSmsRuntime = {
+export type WebNativeProtocolRuntime = {
   userAgent?: string | null;
   platform?: string | null;
   maxTouchPoints?: number | null;
 };
+
+export type WebSmsRuntime = WebNativeProtocolRuntime;
 
 /**
  * Desktop browsers commonly advertise the `sms:` protocol even when they
  * cannot complete the handoff. Opening it can strand the rep behind a browser
  * protocol dialog, so only mobile web runtimes may attempt the native composer.
  */
-export function isSmsCapableWebRuntime(runtime: WebSmsRuntime): boolean {
+export function isNativeProtocolCapableWebRuntime(runtime: WebNativeProtocolRuntime): boolean {
   const userAgent = runtime.userAgent ?? '';
   const platform = runtime.platform ?? '';
   const maxTouchPoints = runtime.maxTouchPoints ?? 0;
@@ -20,11 +22,19 @@ export function isSmsCapableWebRuntime(runtime: WebSmsRuntime): boolean {
   return platform === 'MacIntel' && maxTouchPoints > 1;
 }
 
-export function isCurrentWebRuntimeSmsCapable(): boolean {
+export function isSmsCapableWebRuntime(runtime: WebSmsRuntime): boolean {
+  return isNativeProtocolCapableWebRuntime(runtime);
+}
+
+export function isCurrentWebRuntimeNativeProtocolCapable(): boolean {
   if (typeof navigator === 'undefined') return false;
-  return isSmsCapableWebRuntime({
+  return isNativeProtocolCapableWebRuntime({
     userAgent: navigator.userAgent,
     platform: navigator.platform,
     maxTouchPoints: navigator.maxTouchPoints,
   });
+}
+
+export function isCurrentWebRuntimeSmsCapable(): boolean {
+  return isCurrentWebRuntimeNativeProtocolCapable();
 }

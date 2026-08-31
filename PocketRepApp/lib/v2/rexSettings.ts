@@ -69,6 +69,11 @@ export function markDisclosureSeen(): void {
 const ONBOARDING_KEY = 'pocketrep:v2:onboarding-complete';
 let memOnboarding = false;
 
+export function resetRexSettingsCache(): void {
+  mem = false;
+  memOnboarding = false;
+}
+
 export function hasCompletedOnboarding(): boolean {
   if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return memOnboarding;
   return localStorage.getItem(ONBOARDING_KEY) === '1';
