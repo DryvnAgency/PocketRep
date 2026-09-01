@@ -25,6 +25,7 @@ const migration = read('../supabase/migrations/20260821_production_retry_and_sms
 const blastLogic = read('lib/v2/blastSequences.ts');
 const rexCoach = read('components/v2/RexCoach.tsx');
 const coachBrain = read('lib/v2/coachBrain.ts');
+const rexActions = read('lib/v2/rexActions.ts');
 const appShell = read('components/v2/AppShell.tsx');
 const queue = read('lib/messageQueue.ts');
 const followUpQueue = read('components/v2/FollowUpQueue.tsx');
@@ -44,6 +45,13 @@ ok(blastLogic.includes('drafted.length !== contacts.length'), 'generated blast m
 ok(rexCoach.includes("'create_blast_sequence'"), 'text Rex permits the Smart Blast action');
 ok(coachBrain.includes('create_blast_sequence'), 'text Rex is taught how to propose Smart Blast');
 ok(appShell.includes('await openBlastFromRex(action.payload)'), 'confirmed text Rex Smart Blast opens a validated draft before claiming success');
+ok(rexActions.includes('Check appointment state before choosing the next move'), 'Rex checks appointment state before drafting the next move');
+ok(rexActions.includes('If a confirmed upcoming appointment exists, protect and prepare that appointment'), 'Rex protects and prepares confirmed appointments');
+ok(rexActions.includes('Do not ask them to come in earlier, offer a second appointment'), 'Rex does not reopen scheduling when an appointment exists');
+ok(rexActions.includes('If no appointment exists, the default next move is a specific in-person appointment'), 'Rex defaults toward an appointment only when one is not already set');
+ok(rexActions.includes('Do not volunteer to run, quote, or send numbers by phone, text, or email'), 'Rex does not volunteer remote numbers');
+ok(rexActions.includes('If the customer explicitly asks to handle numbers remotely'), 'Rex honors an explicit customer request for remote numbers');
+ok(coachBrain.includes('Want to stop in so we can compare both side by side'), 'lease-versus-finance playbook advances to an appointment');
 
 ok(queue.includes('phone,email,vehicle,trim,trade_in,vehicle_year'), 'follow-up queue loads the real email recipient and legacy sequence context');
 ok(queue.includes('async function advanceEnrollment'), 'sent and skipped follow-ups share one guarded enrollment advance');

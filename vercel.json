@@ -11,6 +11,9 @@
     { "source": "/privacy", "destination": "/privacy.html" },
     { "source": "/terms", "destination": "/terms.html" },
     { "source": "/cancel", "destination": "/cancel.html" },
+    { "source": "/car-sales-follow-up-software", "destination": "/car-sales-follow-up-software.html" },
+    { "source": "/car-sales-follow-up-text-templates", "destination": "/car-sales-follow-up-text-templates.html" },
+    { "source": "/crm-for-car-salespeople", "destination": "/crm-for-car-salespeople.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
