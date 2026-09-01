@@ -17,9 +17,28 @@ export type RexMemoryRow = {
   message_count: number;
 };
 
-export async function getRexMemory(): Promise<RexMemoryRow | null> {
+export async function getRexMemory(contactId?: string | null): Promise<RexMemoryRow | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
+
+  // When Rex is working one known customer, use only that customer's recent
+  // history. A rep-wide summary can mention several named deals and caused Rex
+  // to carry Jordan's vehicle into Mike's answer. Never inject it here.
+  if (contactId) {
+    const { data: rows } = await supabase
+      .from('rex_messages')
+      .select('role,content')
+      .eq('user_id', user.id)
+      .eq('contact_id', contactId)
+      .order('created_at', { ascending: false })
+      .limit(8);
+    const turns = (rows ?? [])
+      .reverse()
+      .map((row: any) => `${row.role === 'assistant' ? 'Rex' : 'Rep'}: ${String(row.content ?? '').slice(0, 280)}`)
+      .join('\n');
+    return turns ? { summary: `ACTIVE CUSTOMER HISTORY:\n${turns}`, message_count: rows?.length ?? 0 } : null;
+  }
+
   const { data } = await supabase
     .from('rex_memory')
     .select('summary,message_count')
@@ -31,7 +50,7 @@ export async function getRexMemory(): Promise<RexMemoryRow | null> {
 export async function recordRexTurn(
   userText: string,
   rexReply: string,
-  contactId?: string,
+  contactId?: string | null,
 ): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
@@ -91,6 +110,7 @@ Return only the bullets.`;
   try {
     text = (await callBrain({
       maxTokens: 400,
+      tier: 'flash',
       messages: [{ role: 'user', content: prompt }],
     })).trim();
   } catch {

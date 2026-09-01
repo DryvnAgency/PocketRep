@@ -83,7 +83,7 @@ export async function extractRequirements(
   const regex = extractRequirementsRegex(notes);
   try {
     const reply = await callBrain({
-      tier: 'fast',
+      tier: 'flash',
       maxTokens: 300,
       signal: opts?.signal,
       messages: [

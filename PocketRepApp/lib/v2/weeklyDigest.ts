@@ -114,6 +114,7 @@ Stats:
 Write 2-4 short bullets — what went well, what needs attention next week, one specific suggestion. Each bullet under 18 words. No preamble.`;
     highlights = (await callBrain({
       maxTokens: 400,
+      tier: 'pro',
       messages: [{ role: 'user', content: prompt }],
     })).trim();
   } catch {

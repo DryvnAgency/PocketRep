@@ -84,13 +84,11 @@ export async function callBrain(opts: {
   maxTokens?: number;
   signal?: AbortSignal;
   timeoutMs?: number;
-  // P2-R7: optional model tier. The edge function only honors this when its
-  // BRAIN_TIERED env flag is on (default off); otherwise it's ignored. Omitted →
-  // the request body is byte-identical to before, so existing callers are unaffected.
-  tier?: 'fast' | 'default';
-  // P3-A1: optional triad role + sampling temperature. The edge function honors
-  // `role` only once redeployed with BRAIN_MODELS_<ROLE> env lists set; older
-  // deployments ignore both unknown fields. Omitted → body byte-identical.
+  // Deterministic Rex model tier. New deployments normalize legacy fast/default
+  // to Flash; older edge deployments safely ignore the newer flash/pro values.
+  tier?: 'fast' | 'default' | 'flash' | 'pro';
+  // Optional triad role + sampling temperature. The DeepSeek route maps planner
+  // to Pro and executor/parser to Flash; env model lists can override providers.
   role?: 'planner' | 'executor' | 'parser';
   temperature?: number;
 }): Promise<string> {
@@ -138,11 +136,9 @@ export async function callBrainStream(opts: {
   signal?: AbortSignal;
   timeoutMs?: number;
   onDelta?: (fullText: string, chunk: string) => void;
-  // P2-R7: optional model tier (see callBrain). Honored only when the edge
-  // function's BRAIN_TIERED flag is on; omitted → byte-identical request body.
-  tier?: 'fast' | 'default';
-  // P3-A1: optional triad role + temperature (see callBrain). Honored only by a
-  // redeployed ai-proxy with BRAIN_MODELS_<ROLE> set; omitted → body identical.
+  // Deterministic model tier (see callBrain).
+  tier?: 'fast' | 'default' | 'flash' | 'pro';
+  // Optional triad role + temperature (see callBrain).
   role?: 'planner' | 'executor' | 'parser';
   temperature?: number;
 }): Promise<string> {

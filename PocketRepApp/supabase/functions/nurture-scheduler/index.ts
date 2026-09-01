@@ -26,7 +26,9 @@ const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
 const POCKETREP_API_KEY = Deno.env.get('POCKETREP_API_KEY') ?? '';
 const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6'];
+const BRAIN_MODELS = (Deno.env.get('BRAIN_MODELS_FLASH') ?? '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+if (BRAIN_MODELS.length === 0) BRAIN_MODELS.push('deepseek/deepseek-v4-flash-0731', 'x-ai/grok-4.3');
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 // P2-A7: timezone-aware delivery. OFF by default → exact current daily behavior.
@@ -366,7 +368,7 @@ Return ONLY a single JSON object inside a \`\`\`json fenced block:
 }
 
 // Low-level OpenRouter call — returns the raw model content (or '' on failure).
-async function callBrainRaw(prompt: string, maxTokens = 2500): Promise<string> {
+async function callBrainRaw(prompt: string, maxTokens = 2000): Promise<string> {
   try {
     const res = await fetch(OPENROUTER_URL, {
       method: 'POST',
@@ -379,7 +381,8 @@ async function callBrainRaw(prompt: string, maxTokens = 2500): Promise<string> {
       body: JSON.stringify({
         models: BRAIN_MODELS,
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
+        max_tokens: Math.min(maxTokens, 2000),
+        reasoning: { effort: 'none', exclude: true },
       }),
     });
     if (!res.ok) {

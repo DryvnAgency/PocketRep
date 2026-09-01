@@ -96,18 +96,25 @@ function parsePlan(raw) {
 }
 
 // ── mirrored from supabase/functions/ai-proxy/index.ts (role routing) ─────────
-function makeRouter({ tiered = false, fast = [], roles = {} } = {}) {
-  const BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6'];
-  const ROLE_MODELS = { planner: roles.planner ?? [], executor: roles.executor ?? [], parser: roles.parser ?? [] };
+function makeRouter({ flash, pro, roles = {} } = {}) {
+  const BRAIN_MODELS_FLASH = flash ?? ['deepseek/deepseek-v4-flash-0731', 'x-ai/grok-4.3'];
+  const BRAIN_MODELS_PRO = pro ?? ['deepseek/deepseek-v4-pro-0813', ...BRAIN_MODELS_FLASH];
+  const BRAIN_MODELS = BRAIN_MODELS_FLASH;
+  const ROLE_MODELS = {
+    planner: roles.planner ?? BRAIN_MODELS_PRO,
+    executor: roles.executor ?? BRAIN_MODELS_FLASH,
+    parser: roles.parser ?? BRAIN_MODELS_FLASH,
+  };
   function modelsForTier(tier) {
-    if (tiered && tier === 'fast' && fast.length > 0) return fast;
-    return BRAIN_MODELS;
+    return tier === 'pro' ? BRAIN_MODELS_PRO : BRAIN_MODELS_FLASH;
   }
-  function modelsForRequest(role, tier) {
-    if (typeof role === 'string' && ROLE_MODELS[role]?.length > 0) return ROLE_MODELS[role];
-    return modelsForTier(tier);
+  function routingForRequest(role, tier) {
+    if (role === 'planner') return { models: ROLE_MODELS.planner, tier: 'pro' };
+    if (role === 'executor' || role === 'parser') return { models: ROLE_MODELS[role], tier: 'flash' };
+    const normalized = tier === 'pro' ? 'pro' : 'flash';
+    return { models: modelsForTier(normalized), tier: normalized };
   }
-  return { modelsForTier, modelsForRequest, BRAIN_MODELS };
+  return { modelsForTier, routingForRequest, BRAIN_MODELS, BRAIN_MODELS_FLASH, BRAIN_MODELS_PRO };
 }
 
 // ── planner prompt contract ──────────────────────────────────────────────────
@@ -179,12 +186,13 @@ eq('action: default payload + say', coachActionFromRaw({ action: 'create_reminde
 
 // ── model routing contract ───────────────────────────────────────────────────
 const rNoEnv = makeRouter();
-eq('routing: no role env → BRAIN_MODELS', rNoEnv.modelsForRequest('planner', undefined), rNoEnv.BRAIN_MODELS);
-eq('routing: role list wins when set', makeRouter({ roles: { planner: ['anthropic/claude-sonnet-4.5'] } }).modelsForRequest('planner', undefined), ['anthropic/claude-sonnet-4.5']);
-eq('routing: executor role list', makeRouter({ roles: { executor: ['deepseek/x'] } }).modelsForRequest('executor', 'fast'), ['deepseek/x']);
-eq('routing: role env empty → tier fallback (fast)', makeRouter({ tiered: true, fast: ['fast/m'] }).modelsForRequest('executor', 'fast'), ['fast/m']);
-eq('routing: no role, no tier → default', makeRouter().modelsForRequest(undefined, undefined), rNoEnv.BRAIN_MODELS);
-eq('routing: unknown role → tier fallback', makeRouter({ tiered: true, fast: ['fast/m'] }).modelsForRequest('bogus', 'fast'), ['fast/m']);
+eq('routing: default → DeepSeek Flash', rNoEnv.routingForRequest(undefined, undefined), { models: rNoEnv.BRAIN_MODELS_FLASH, tier: 'flash' });
+eq('routing: explicit Pro → DeepSeek Pro chain', rNoEnv.routingForRequest(undefined, 'pro'), { models: rNoEnv.BRAIN_MODELS_PRO, tier: 'pro' });
+eq('routing: planner defaults to Pro', rNoEnv.routingForRequest('planner', 'flash'), { models: rNoEnv.BRAIN_MODELS_PRO, tier: 'pro' });
+eq('routing: planner env override wins', makeRouter({ roles: { planner: ['custom/pro'] } }).routingForRequest('planner', undefined), { models: ['custom/pro'], tier: 'pro' });
+eq('routing: executor defaults to Flash', rNoEnv.routingForRequest('executor', 'pro'), { models: rNoEnv.BRAIN_MODELS_FLASH, tier: 'flash' });
+eq('routing: parser env override stays Flash tier', makeRouter({ roles: { parser: ['custom/parser'] } }).routingForRequest('parser', 'pro'), { models: ['custom/parser'], tier: 'flash' });
+eq('routing: legacy fast aliases to Flash', rNoEnv.routingForRequest(undefined, 'fast'), { models: rNoEnv.BRAIN_MODELS_FLASH, tier: 'flash' });
 
 console.log(failures === 0 ? '\nAll Rex triad checks passed.' : `\n${failures} check(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

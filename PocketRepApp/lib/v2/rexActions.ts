@@ -13,12 +13,13 @@ import { getRexMemory, recordRexTurn } from './rexMemory';
 import { loadBookContext, bookContextForPrompt } from './bookContext';
 import { chooseNextCall } from './callNext';
 import { executeBatchAction, type BatchActionKind } from './batchActions';
-import { callBrainStream, type BrainMessage } from './aiProxy';
+import { callBrain, callBrainStream, type BrainMessage } from './aiProxy';
 import type { V2Contact } from './useContacts';
 import { isRexMultistepEnabled, isVehicleFinderEnabled } from './rexFeatureFlags';
 import { getRepSetting } from './repSettings';
 import { frameUntrusted } from './promptSafety';
 import type { VehicleRequirements } from './vehicleMatch';
+import { chooseRexTier } from './rexRouting';
 
 export type RexAction =
   | { type: 'add_contact'; payload: AddContactPayload; say: string }
@@ -439,6 +440,30 @@ function parseAction(raw: string): RexAction {
   }
 }
 
+function explicitWriteRequest(text: string): boolean {
+  return [
+    /\badd\s+(?:a\s+)?(?:contact|customer|lead)\b/i,
+    /\blog\s+(?:a\s+)?(?:deal|sale)\b/i,
+    /\b(?:schedule|set)\s+(?:a\s+)?(?:follow[ -]?up|appointment|reminder)\b/i,
+    /\bremind\s+me\b/i,
+    /\bupdate\b[\s\S]{0,32}\bnotes?\b/i,
+    /\b(?:move|change|retier)\b[\s\S]{0,32}\b(?:hot|warm|cold)\b/i,
+    /\bcreate\b[\s\S]{0,24}\bblast\b/i,
+  ].some((pattern) => pattern.test(text));
+}
+
+function needsProRepair(transcript: string, raw: string, action: RexAction): boolean {
+  if (!explicitWriteRequest(transcript) || action.type !== 'say') return false;
+  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fence ? fence[1] : raw;
+  try {
+    JSON.parse(candidate.trim());
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 export type RexInterpretOpts = {
   // Recent conversation turns (this session) so follow-ups like "text him too"
   // resolve against what was just said.
@@ -487,27 +512,42 @@ export async function rexInterpret(
   opts: RexInterpretOpts = {},
 ): Promise<RexAction> {
   const [memory, book] = await Promise.all([
-    getRexMemory(),
+    getRexMemory(opts.selectedContactId),
     loadBookContext(),
   ]);
 
   const bookSection = bookContextForPrompt(book);
   const prompt = buildPrompt(transcript, contacts, tagNames, memory?.summary ?? '', bookSection, buildScreenContext(opts, contacts));
-  const raw = await callBrainStream({
+  const brainMessages: BrainMessage[] = [
+    ...(opts.recentTurns ?? []),
+    { role: 'user', content: prompt },
+  ];
+  let raw = await callBrainStream({
     maxTokens: 800,
     signal: opts.signal,
-    // P2-R7: Hey Rex voice is the latency-sensitive interactive path — request the
-    // fast model tier. Inert until the edge function's BRAIN_TIERED flag is on.
-    tier: 'fast',
-    messages: [
-      ...(opts.recentTurns ?? []),
-      { role: 'user', content: prompt },
-    ],
+    // Hey Rex voice is the latency-sensitive interactive path. The deterministic
+    // router keeps ordinary structured actions on Flash and escalates only the
+    // explicitly complex workloads defined in rexRouting.
+    tier: chooseRexTier({ workload: 'structured_action', text: transcript }),
+    messages: brainMessages,
     onDelta: opts.onSayDelta
       ? (fullText) => opts.onSayDelta!(spokenPortion(fullText))
       : undefined,
   });
-  const action = parseAction(raw);
+  let action = parseAction(raw);
+
+  // One constrained repair only: when Flash returns malformed plain text for
+  // an explicit write request, ask Pro to repair the same structured action.
+  // Never retry ordinary coaching, clarifications, or a valid JSON response.
+  if (needsProRepair(transcript, raw, action)) {
+    raw = await callBrain({
+      maxTokens: 800,
+      signal: opts.signal,
+      tier: chooseRexTier({ workload: 'repair', text: transcript, flashValidationFailed: true }),
+      messages: brainMessages,
+    });
+    action = parseAction(raw);
+  }
 
   // Prefer the streamed spoken line as the say — it's what the rep already
   // heard and watched type out. (If Rex led straight with the fence, keep the

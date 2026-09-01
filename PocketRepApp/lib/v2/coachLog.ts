@@ -89,7 +89,7 @@ async function summarizeDay(entries: CoachEntry[]): Promise<string> {
   const prompt = `Summarize this rep's day with their Rex assistant into ONE tight recap line. Count the concrete actions taken (contacts added, reminders set, deals logged, follow-ups scheduled, tier changes) and name the main things discussed. Example: "Today: added 2 contacts, set 1 reminder, logged 1 deal, worked an X5 payment objection." Return only the one line, no preamble.
 
 ${transcript}`;
-  const raw = await callBrain({ maxTokens: 200, messages: [{ role: 'user', content: prompt }] });
+  const raw = await callBrain({ maxTokens: 200, tier: 'flash', messages: [{ role: 'user', content: prompt }] });
   return (raw ?? '').trim();
 }
 

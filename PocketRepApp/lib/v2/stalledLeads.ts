@@ -91,6 +91,7 @@ async function fetchOpeners(contacts: BookContact[]): Promise<Map<string, BrainO
   try {
     const raw = await callBrain({
       maxTokens: 1200,
+      tier: 'flash',
       messages: [{ role: 'user', content: buildOpenerPrompt(contacts) }],
     });
     const fence = raw.match(/```json\s*([\s\S]*?)```/i) ?? raw.match(/```\s*([\s\S]*?)```/);

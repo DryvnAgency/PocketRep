@@ -26,6 +26,8 @@ const blastLogic = read('lib/v2/blastSequences.ts');
 const rexCoach = read('components/v2/RexCoach.tsx');
 const coachBrain = read('lib/v2/coachBrain.ts');
 const rexActions = read('lib/v2/rexActions.ts');
+const rexRouting = read('lib/v2/rexRouting.ts');
+const aiProxy = read('supabase/functions/ai-proxy/index.ts');
 const appShell = read('components/v2/AppShell.tsx');
 const queue = read('lib/messageQueue.ts');
 const followUpQueue = read('components/v2/FollowUpQueue.tsx');
@@ -52,6 +54,13 @@ ok(rexActions.includes('If no appointment exists, the default next move is a spe
 ok(rexActions.includes('Do not volunteer to run, quote, or send numbers by phone, text, or email'), 'Rex does not volunteer remote numbers');
 ok(rexActions.includes('If the customer explicitly asks to handle numbers remotely'), 'Rex honors an explicit customer request for remote numbers');
 ok(coachBrain.includes('Want to stop in so we can compare both side by side'), 'lease-versus-finance playbook advances to an appointment');
+ok(aiProxy.includes("deepseek/deepseek-v4-flash-0731"), 'routine Rex defaults to DeepSeek V4 Flash');
+ok(aiProxy.includes("deepseek/deepseek-v4-pro-0813"), 'complex Rex has DeepSeek V4 Pro escalation');
+ok(aiProxy.includes("effort: 'none'"), 'Flash calls disable unnecessary reasoning');
+ok(aiProxy.includes("AI_MONTHLY_CAP_CENTS') ?? '2000'"), 'Rex has a $20 default monthly AI ceiling');
+ok(aiProxy.includes('increment_monthly_ai_usage'), 'Rex records the canonical monthly AI ledger');
+ok(rexRouting.includes("'weekly_coach'"), 'weekly coaching deterministically escalates to Pro');
+ok(rexRouting.includes('flashValidationFailed'), 'failed Flash validation can escalate once to Pro');
 
 ok(queue.includes('phone,email,vehicle,trim,trade_in,vehicle_year'), 'follow-up queue loads the real email recipient and legacy sequence context');
 ok(queue.includes('async function advanceEnrollment'), 'sent and skipped follow-ups share one guarded enrollment advance');
