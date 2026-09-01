@@ -109,6 +109,8 @@ Provider/model selection is an implementation choice, not the product thesis.
 
 Current discussions have considered multiple providers/models, including OpenRouter-based routing, DeepSeek, GLM, Claude, GPT, Grok, Kimi, and others. **Discussion does not equal an approved production migration.**
 
+Owner-approved migration target (2026-09-01): route routine Rex work through DeepSeek V4 Flash and reserve DeepSeek V4 Pro for explicit strategy workloads or one constrained structured-output repair. Keep model IDs configuration-driven, retain a temporary provider fallback, enforce the existing daily limits plus a $20 monthly ceiling, and keep the triad off by default. This is an approved target, **not a production claim**; the live route must not change until the representative eval and rollback checks below pass.
+
 Before changing the live model/provider stack:
 
 1. verify the currently deployed route/model;

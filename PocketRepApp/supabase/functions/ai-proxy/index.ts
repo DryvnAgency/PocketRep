@@ -12,47 +12,49 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const BRAIN_MODELS = ['x-ai/grok-4.3', 'moonshotai/kimi-k2.6'];
+const DEEPSEEK_FLASH = 'deepseek/deepseek-v4-flash-0731';
+const DEEPSEEK_PRO = 'deepseek/deepseek-v4-pro-0813';
+const ROLLOUT_FALLBACK = 'x-ai/grok-4.3';
 
-// P2-R7: tiered model routing for the ~2s interactive latency budget. When
-// BRAIN_TIERED is on, a request carrying { tier: 'fast' } (the Hey Rex voice
-// path) routes to BRAIN_MODELS_FAST — a faster/cheaper model list. Double
-// default-to-no-op: BRAIN_TIERED off → tier is ignored and every call uses
-// BRAIN_MODELS (byte-identical to today); and even with the flag on, if
-// BRAIN_MODELS_FAST is unset the fast tier falls back to BRAIN_MODELS — so
-// activation needs BOTH the flag and a configured fast list. No redeploy here.
-const BRAIN_TIERED = ['1', 'true', 'yes', 'on'].includes((Deno.env.get('BRAIN_TIERED') ?? '').trim().toLowerCase());
-const BRAIN_MODELS_FAST = (Deno.env.get('BRAIN_MODELS_FAST') ?? '')
-  .split(',').map((s) => s.trim()).filter(Boolean);
-
-// The OpenRouter `models` list for one request. Diverges from default only when
-// tiering is enabled AND the caller asked for the fast tier AND a fast list exists.
-function modelsForTier(tier: unknown): string[] {
-  if (BRAIN_TIERED && tier === 'fast' && BRAIN_MODELS_FAST.length > 0) return BRAIN_MODELS_FAST;
-  return BRAIN_MODELS;
+function envModels(name: string, fallback: string[]): string[] {
+  const configured = (Deno.env.get(name) ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  return configured.length > 0 ? configured : fallback;
 }
 
-// P3-A1: per-role model routing for the Rex triad (planner / executor / parser).
-// COMMITTED — NOT DEPLOYED: this handler change ships in the repo; the owner
-// redeploys ai-proxy and sets the env lists below when ready. Each role reads a
-// comma-separated OpenRouter model list from its own env var (same parse as
-// BRAIN_MODELS_FAST). A role with no configured list falls back to the tier
-// routing above, so before the env is set every request is byte-identical to
-// today. Suggested IDs to verify at deploy time (do NOT hardcode — set in env):
-//   BRAIN_MODELS_PLANNER  → a strong reasoner, e.g. anthropic/claude-sonnet-4.5
-//   BRAIN_MODELS_EXECUTOR → a fast writer, e.g. a deepseek chat model
-//   BRAIN_MODELS_PARSER   → a cheap JSON extractor, e.g. a hermes model
+// DeepSeek combo: Flash handles routine Rex work; Pro is an explicit,
+// deterministic escalation. Grok remains the temporary outage fallback during
+// rollout and can be removed with env configuration after the eval window.
+const BRAIN_MODELS_FLASH = envModels(
+  'BRAIN_MODELS_FLASH',
+  envModels('BRAIN_MODELS_FAST', [DEEPSEEK_FLASH, ROLLOUT_FALLBACK]),
+);
+const BRAIN_MODELS_PRO = envModels('BRAIN_MODELS_PRO', [DEEPSEEK_PRO, DEEPSEEK_FLASH, ROLLOUT_FALLBACK]);
+const BRAIN_MODELS = BRAIN_MODELS_FLASH;
+
+type BrainTier = 'flash' | 'pro';
+
+function normalizeTier(tier: unknown): BrainTier {
+  return tier === 'pro' ? 'pro' : 'flash';
+}
+
+function modelsForTier(tier: unknown): string[] {
+  return normalizeTier(tier) === 'pro' ? BRAIN_MODELS_PRO : BRAIN_MODELS_FLASH;
+}
+
+// The optional two-pass triad stays off by default in the client. If enabled,
+// only its planner spends Pro; executor/parser stay on Flash. Env lists remain
+// available for an instant rollback or provider override without a redeploy.
 const ROLE_MODELS: Record<string, string[]> = {
-  planner: (Deno.env.get('BRAIN_MODELS_PLANNER') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
-  executor: (Deno.env.get('BRAIN_MODELS_EXECUTOR') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
-  parser: (Deno.env.get('BRAIN_MODELS_PARSER') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  planner: envModels('BRAIN_MODELS_PLANNER', BRAIN_MODELS_PRO),
+  executor: envModels('BRAIN_MODELS_EXECUTOR', BRAIN_MODELS_FLASH),
+  parser: envModels('BRAIN_MODELS_PARSER', BRAIN_MODELS_FLASH),
 };
 
-// Choose the model list for one request: an explicit triad role with a
-// configured list wins; otherwise fall back to the existing tier routing.
-function modelsForRequest(role: unknown, tier: unknown): string[] {
-  if (typeof role === 'string' && ROLE_MODELS[role]?.length > 0) return ROLE_MODELS[role];
-  return modelsForTier(tier);
+function routingForRequest(role: unknown, tier: unknown): { models: string[]; tier: BrainTier } {
+  if (role === 'planner') return { models: ROLE_MODELS.planner, tier: 'pro' };
+  if (role === 'executor' || role === 'parser') return { models: ROLE_MODELS[role], tier: 'flash' };
+  const normalized = normalizeTier(tier);
+  return { models: modelsForTier(normalized), tier: normalized };
 }
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
@@ -107,6 +109,8 @@ const REXLENS_PRICING = { input: 1.00, output: 5.00, cacheWrite: 1.25, cacheRead
 
 const DAILY_CAP_CENTS: Record<string, number> = { rex_lens: 75, pro: 75, elite: 125 };
 const DEFAULT_CAP_CENTS = 75;
+const MONTHLY_CAP_CENTS = Math.max(100, Number(Deno.env.get('AI_MONTHLY_CAP_CENTS') ?? '2000'));
+const MAX_BRAIN_OUTPUT_TOKENS = Math.max(400, Number(Deno.env.get('AI_MAX_BRAIN_OUTPUT_TOKENS') ?? '2000'));
 
 // Per-minute request throttle (abuse / cost-runaway rail). Tunable via env; <=0 disables.
 const RATE_PER_MIN = Number(Deno.env.get('AI_RATE_PER_MIN') ?? '30');
@@ -172,6 +176,45 @@ async function recordUsageFallback(
   }
 }
 
+async function recordUsage(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  date: string,
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  costCents: number,
+  requestCount = 1,
+): Promise<void> {
+  try {
+    await supabase.rpc('increment_daily_usage', {
+      p_user_id: userId,
+      p_date: date,
+      p_input_tokens: inputTokens,
+      p_output_tokens: outputTokens,
+      p_cost_cents: costCents,
+      p_model: model,
+    });
+  } catch {
+    await recordUsageFallback(supabase, userId, date, model, inputTokens, outputTokens, costCents, requestCount);
+  }
+
+  // Keep the canonical monthly ledger current as well. The cap gate below also
+  // checks the daily ledger for this month, so a transient monthly-RPC failure
+  // cannot silently disable the ceiling.
+  try {
+    await supabase.rpc('increment_monthly_ai_usage', {
+      p_user_id: userId,
+      p_month: `${date.slice(0, 7)}-01`,
+      p_input_tokens: inputTokens,
+      p_output_tokens: outputTokens,
+      p_cost_cents: costCents,
+    });
+  } catch (e) {
+    console.error('monthly_ai_usage increment failed', e);
+  }
+}
+
 async function authAndPlan(authHeader: string | null) {
   if (!authHeader) return { error: json({ error: { type: 'auth_error', message: 'Missing authorization' } }, 401) };
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -200,6 +243,18 @@ async function authAndPlan(authHeader: string | null) {
     const spentCents = (usageRows ?? []).reduce((sum, r: { cost_cents: number | null }) => sum + Number(r.cost_cents ?? 0), 0);
     if (spentCents >= capCents) {
       return { error: json({ error: { type: 'DAILY_LIMIT', message: `Daily limit reached ($${(capCents / 100).toFixed(2)}/day). Resets at midnight.` } }, 429) };
+    }
+
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const [monthlyRow, monthDailyRows] = await Promise.all([
+      supabase.from('monthly_ai_usage').select('cost_cents').eq('user_id', user.id).eq('usage_month', monthStart).maybeSingle(),
+      supabase.from('daily_ai_usage').select('cost_cents').eq('user_id', user.id).gte('usage_date', monthStart).lte('usage_date', today),
+    ]);
+    const monthlyLedger = Number(monthlyRow.data?.cost_cents ?? 0);
+    const dailyLedger = (monthDailyRows.data ?? []).reduce((sum, r: { cost_cents: number | null }) => sum + Number(r.cost_cents ?? 0), 0);
+    const monthSpentCents = Math.max(monthlyLedger, dailyLedger);
+    if (monthSpentCents >= MONTHLY_CAP_CENTS) {
+      return { error: json({ error: { type: 'MONTHLY_LIMIT', message: `Monthly AI limit reached ($${(MONTHLY_CAP_CENTS / 100).toFixed(2)}). Resets next month.` } }, 429) };
     }
   }
   return { user, supabase, today };
@@ -277,7 +332,7 @@ async function handleRexLens(req: Request) {
     }
     const uncached = Math.max(0, tIn - tCW - tCR);
     const cost = (uncached * REXLENS_PRICING.input + tCW * REXLENS_PRICING.cacheWrite + tCR * REXLENS_PRICING.cacheRead + tOut * REXLENS_PRICING.output) / 1e6 * 100;
-    try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: tIn, p_output_tokens: tOut, p_cost_cents: cost, p_model: model }); } catch { await recordUsageFallback(supabase!, user!.id, today, model, tIn, tOut, cost, tasks.length); }
+    await recordUsage(supabase!, user!.id, today, model, tIn, tOut, cost, tasks.length);
     return json({ content: [{ type: 'text', text: JSON.stringify(results) }], usage: { input_tokens: tIn, output_tokens: tOut, cache_creation_input_tokens: tCW, cache_read_input_tokens: tCR }, model, batch_size: tasks.length });
   }
 
@@ -291,7 +346,7 @@ async function handleRexLens(req: Request) {
   const iT = u.input_tokens ?? 0, oT = u.output_tokens ?? 0, cW = u.cache_creation_input_tokens ?? 0, cR = u.cache_read_input_tokens ?? 0;
   const cost = (Math.max(0, iT - cW - cR) * REXLENS_PRICING.input + cW * REXLENS_PRICING.cacheWrite + cR * REXLENS_PRICING.cacheRead + oT * REXLENS_PRICING.output) / 1e6 * 100;
   const usedModel = r.json.model || model;
-  try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost, p_model: usedModel }); } catch { await recordUsageFallback(supabase!, user!.id, today, usedModel, iT, oT, cost); }
+  await recordUsage(supabase!, user!.id, today, usedModel, iT, oT, cost);
   return json({ content: r.json.content, usage: { input_tokens: iT, output_tokens: oT, cache_creation_input_tokens: cW, cache_read_input_tokens: cR }, model: usedModel });
 }
 
@@ -303,13 +358,18 @@ async function handleBrain(req: Request) {
   const { user, supabase, today } = auth;
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: { type: 'invalid_request', message: 'Invalid JSON' } }, 400); }
-  const maxTok = typeof body.max_tokens === 'number' ? body.max_tokens : 2048;
+  const requestedMax = typeof body.max_tokens === 'number' ? body.max_tokens : 1200;
+  const maxTok = Math.max(16, Math.min(Math.floor(requestedMax), MAX_BRAIN_OUTPUT_TOKENS));
   const msgs = (body.messages as Array<{ role: string; content: unknown }>) || [];
   const sys = typeof body.system === 'string' ? body.system : '';
   const messages = sys ? [{ role: 'system', content: sys }, ...msgs] : msgs;
-  // P2-R7 / P3-A1: choose the model list for this request. A triad role with a
-  // configured env list wins; else the tier routing (default-off → BRAIN_MODELS).
-  const models = modelsForRequest(body.role, body.tier);
+  const routing = routingForRequest(body.role, body.tier);
+  const models = routing.models;
+  // Routine Flash calls do not spend output tokens on hidden reasoning. Pro is
+  // reserved for explicit complex workloads and gets a bounded high effort.
+  const reasoning = routing.tier === 'pro'
+    ? { reasoning: { effort: 'high', exclude: true } }
+    : { reasoning: { effort: 'none', exclude: true } };
   // P3-A1: optional sampling temperature (0-2), passed through to OpenRouter when
   // the caller sets it. Omitted → OpenRouter's default, byte-identical to before.
   const temp = (typeof body.temperature === 'number' && body.temperature >= 0 && body.temperature <= 2)
@@ -326,7 +386,7 @@ async function handleBrain(req: Request) {
       upstream = await fetch(OPENROUTER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' },
-        body: JSON.stringify({ models, messages, max_tokens: maxTok, stream: true, usage: { include: true }, ...temp }),
+        body: JSON.stringify({ models, messages, max_tokens: maxTok, stream: true, usage: { include: true }, ...reasoning, ...temp }),
       });
     } catch (e: unknown) {
       return json({ error: { type: 'OVERLOADED', message: 'AI at capacity.', detail: e instanceof Error ? e.message : 'Unknown' } }, 503);
@@ -363,8 +423,7 @@ async function handleBrain(req: Request) {
           }
           if (!usedModel) usedModel = models[0] ?? 'unknown';
           if (iT || oT || cost) {
-            try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost, p_model: usedModel }); }
-            catch { await recordUsageFallback(supabase!, user!.id, today, usedModel, iT, oT, cost); }
+            await recordUsage(supabase!, user!.id, today, usedModel, iT, oT, cost);
           }
         } catch { /* usage metering is best-effort */ }
       },
@@ -379,7 +438,7 @@ async function handleBrain(req: Request) {
   let apiJson: any = null; let lastErr: any = null;
   for (let i = 0; i < 3; i++) {
     try {
-      const r = await fetch(OPENROUTER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' }, body: JSON.stringify({ models, messages, max_tokens: maxTok, usage: { include: true }, ...temp }) });
+      const r = await fetch(OPENROUTER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}`, 'HTTP-Referer': 'https://pocketrep.pro', 'X-Title': 'PocketRep' }, body: JSON.stringify({ models, messages, max_tokens: maxTok, usage: { include: true }, ...reasoning, ...temp }) });
       const j = await r.json();
       if (r.ok && !j.error && j.choices?.length) { apiJson = j; break; }
       lastErr = { status: r.status, error: j.error ?? j };
@@ -390,13 +449,22 @@ async function handleBrain(req: Request) {
   if (!apiJson) return json({ error: { type: 'OVERLOADED', message: 'AI at capacity.', detail: lastErr?.error?.message } }, 503);
   const u = apiJson.usage ?? {}; const iT = Number(u.prompt_tokens ?? 0); const oT = Number(u.completion_tokens ?? 0); const cost = Number(u.cost ?? 0) * 100;
   const usedModel = apiJson.model || models[0] || 'unknown';
-  try { await supabase!.rpc('increment_daily_usage', { p_user_id: user!.id, p_date: today, p_input_tokens: iT, p_output_tokens: oT, p_cost_cents: cost, p_model: usedModel }); } catch { await recordUsageFallback(supabase!, user!.id, today, usedModel, iT, oT, cost); }
+  await recordUsage(supabase!, user!.id, today, usedModel, iT, oT, cost);
   return json(apiJson);
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors() });
-  if (req.method === 'GET') return json({ status: 'ok', service: 'ai-proxy', brain: BRAIN_MODELS, brainFast: BRAIN_TIERED && BRAIN_MODELS_FAST.length > 0 ? BRAIN_MODELS_FAST : null, tiered: BRAIN_TIERED, rexlens: REXLENS_DEFAULT_MODEL });
+  if (req.method === 'GET') return json({
+    status: 'ok',
+    service: 'ai-proxy',
+    brain: BRAIN_MODELS,
+    brainFlash: BRAIN_MODELS_FLASH,
+    brainPro: BRAIN_MODELS_PRO,
+    routing: 'deepseek-flash-pro',
+    monthlyCapCents: MONTHLY_CAP_CENTS,
+    rexlens: REXLENS_DEFAULT_MODEL,
+  });
   if (req.method !== 'POST') return json({ error: { type: 'invalid_request', message: 'POST required' } }, 405);
   switch (routeOf(req)) {
     case 'rexlens': return handleRexLens(req);

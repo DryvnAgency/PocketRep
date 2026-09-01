@@ -242,7 +242,7 @@ export async function runTriadCoach(input: {
     maxTokens: 400,
     temperature: 0.4,
     role: 'planner',
-    tier: 'fast',
+    tier: 'pro',
     timeoutMs: 60_000,
     signal,
   });
@@ -262,6 +262,7 @@ export async function runTriadCoach(input: {
     maxTokens: 900,
     temperature: 0.7,
     role: 'executor',
+    tier: 'flash',
     timeoutMs: 60_000,
     signal,
     // Defensive: if the executor ever appends a fence, never let it flash on screen.

@@ -24,6 +24,7 @@ import { extractFromConversation, type ConversationParse } from '@/lib/v2/conver
 import { getTodayLog, getCarrySummary, appendCoachEntry } from '@/lib/v2/coachLog';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
+import { chooseRexTier, resolveMentionedContactId } from '@/lib/v2/rexRouting';
 
 // The coach may emit this narrow action allow-list; destructive batch/delete
 // operations stay voice/UI-only and every listed action still needs Confirm.
@@ -102,6 +103,7 @@ export default function RexCoach({
   // server-thread restore from clobbering a conversation already in progress).
   const [streamText, setStreamText] = useState<string | null>(null);
   const repIdent = useRef<RepIdentity>({});
+  const activeContactIdRef = useRef<string | null>(null);
   const interactedRef = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -148,6 +150,7 @@ export default function RexCoach({
       setParseResult(null);
       setStreamText(null);
       interactedRef.current = false;
+      activeContactIdRef.current = null;
       // Warm the brain function while the rep reads the greeting + types, so the
       // first real send lands on a warm container instead of a cold start.
       warmBrain();
@@ -209,6 +212,14 @@ export default function RexCoach({
   const deliver = async (text: string, history: ChatMessage[]) => {
     setTyping(true);
     const repContext = serializeRepContext({ contacts, payPlan, mtd });
+    const mentionedContactId = resolveMentionedContactId(text, contacts);
+    if (mentionedContactId) activeContactIdRef.current = mentionedContactId;
+    const turnContactId = activeContactIdRef.current;
+    const activeContact = turnContactId ? contacts.find(c => c.id === turnContactId) : null;
+    const scopedActivity = activeContact
+      ? `ACTIVE CUSTOMER: ${activeContact.name} (${activeContact.id}). Keep this turn scoped to this customer unless the rep explicitly names someone else.\n${activity}`
+      : activity;
+    const tier = chooseRexTier({ workload: 'routine', text });
     let attempt = 0;
     // P3-A1: flips to false only if the planner returns an unusable plan, so this
     // turn falls back to the single call without a hard error. Transient failures
@@ -226,7 +237,7 @@ export default function RexCoach({
                 planner: {
                   history, text, repContext,
                   contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
-                  recentActivity: activity,
+                  recentActivity: scopedActivity,
                   rep: repIdent.current,
                 },
                 rep: repIdent.current,
@@ -238,7 +249,7 @@ export default function RexCoach({
               setStreamText(null);
               pushRex(line);
               if (actionable) setPending(action!);
-              recordRexTurn(text, line).catch(() => undefined);
+              recordRexTurn(text, line, turnContactId).catch(() => undefined);
               return;
             } catch (e: any) {
               // A bad/unparseable plan is not worth erroring on — quietly use the
@@ -254,10 +265,11 @@ export default function RexCoach({
           // cut off mid-sentence — the prompt still asks Rex to stay tight.
           const brainOpts = {
             maxTokens: 1200,
+            tier,
             messages: buildCoachMessages({
               history, text, repContext,
               contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
-              recentActivity: activity,
+              recentActivity: scopedActivity,
               rep: REX_CHAT ? repIdent.current : undefined,
             }),
           };
@@ -287,7 +299,7 @@ export default function RexCoach({
           if (actionable) setPending(action!);
           // Durable thread: mirror the exchange into rex_messages (fire-and-
           // forget; also feeds the rolling rex_memory summary shared with voice).
-          if (REX_CHAT) recordRexTurn(text, line).catch(() => undefined);
+          if (REX_CHAT) recordRexTurn(text, line, turnContactId).catch(() => undefined);
           return;
         } catch (e: any) {
           const msg = String(e?.message ?? '');

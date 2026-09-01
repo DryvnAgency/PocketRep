@@ -267,6 +267,7 @@ export async function createBlastDraft({
 
   const raw = await callBrain({
     maxTokens: 2000,
+    tier: 'flash',
     messages: [{ role: 'user', content: buildBlastPrompt({ intent, promotion, contacts }) }],
   });
   const parsed = parseDraftedSteps(raw);
@@ -421,6 +422,7 @@ MESSAGE:
 ${trimmed}`;
   const raw = await callBrain({
     maxTokens: 400,
+    tier: 'flash',
     messages: [{ role: 'user', content: prompt }],
   });
   const out = (raw ?? '').trim().replace(/^["']+|["']+$/g, '').trim();

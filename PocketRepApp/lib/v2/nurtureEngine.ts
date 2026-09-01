@@ -253,7 +253,8 @@ export async function scheduleNurtureBlast({
 
   // Brain call: one message per contact
   const raw = await callBrain({
-    maxTokens: 2500,
+    maxTokens: 2000,
+    tier: 'flash',
     messages: [{
       role: 'user',
       content: buildPrompt(passing, trigger, toneGuidance, pitchIntensity, customIntent),

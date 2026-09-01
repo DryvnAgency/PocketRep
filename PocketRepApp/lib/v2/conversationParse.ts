@@ -56,6 +56,7 @@ export async function extractFromConversation(
 ): Promise<ConversationParse> {
   const raw = await callBrain({
     maxTokens: 900,
+    tier: 'flash',
     messages: [{ role: 'user', content: buildPrompt(transcript, contacts) }],
   });
   const fence = raw.match(/```json\s*([\s\S]*?)```/i) ?? raw.match(/```\s*([\s\S]*?)```/);

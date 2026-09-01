@@ -37,7 +37,7 @@ export type Followup = {
 // A brain call narrowed to what the drafters need. Defaults to the real callBrain;
 // tests pass a mock so generateRecapDraft/generateFollowupDraft make no live call.
 export type BrainFn = (messages: BrainMessage[], maxTokens: number) => Promise<string>;
-const defaultBrain: BrainFn = (messages, maxTokens) => callBrain({ messages, maxTokens });
+const defaultBrain: BrainFn = (messages, maxTokens) => callBrain({ messages, maxTokens, tier: 'flash' });
 
 export async function generateRecapDraft(input: RecapInput, brain: BrainFn = defaultBrain): Promise<string> {
   const raw = await brain([{ role: 'user', content: buildRecapPrompt(input) }], 400);

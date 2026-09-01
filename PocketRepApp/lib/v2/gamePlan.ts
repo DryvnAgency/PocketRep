@@ -55,6 +55,7 @@ function parseResponse(raw: string): GamePlanResult {
 export async function generateGamePlan(c: V2Contact, notes: string): Promise<GamePlanResult> {
   const raw = await callBrain({
     maxTokens: 600,
+    tier: 'flash',
     messages: [{ role: 'user', content: buildPrompt(c, notes) }],
   });
   return parseResponse(raw);
