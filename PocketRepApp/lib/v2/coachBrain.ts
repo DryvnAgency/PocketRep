@@ -148,7 +148,7 @@ export const COACH_PLAYBOOKS: Playbook[] = [
     triggers: ['lease', 'finance', 'should i buy', 'lease or buy', 'lease vs', 'miles', 'buy or lease'],
     lens: "Don't pitch one — let their usage pick it. Two questions decide it: annual miles and whether they like a fresh car every few years or owning long-term. Then recommend with the why.",
     exampleLine: "Easy way to call it — roughly how many miles a year do you drive, and do you like being in something new every couple years or keeping it long-term and eventually payment-free?",
-    followUp: "Give the recommendation with the reason behind it, then: \"Want me to run both side by side so you see the real monthly and what you actually walk away with at the end of each?\" — let the numbers confirm what they already leaned toward.",
+    followUp: "Give the recommendation with the reason behind it, then: \"Want to stop in so we can compare both side by side and see which fits you better?\" — use the appointment to let the numbers confirm what they already leaned toward. If the customer explicitly asks to handle the comparison remotely, respect that request.",
   },
   {
     id: 'ghosting',

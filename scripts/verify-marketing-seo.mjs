@@ -60,6 +60,9 @@ for (const [route, filename] of routes) {
 const homepage = readFileSync(resolve(marketing, "index.html"), "utf8");
 check(!homepage.includes("data:font/woff2;base64"), "homepage: embedded font payload still present");
 check(statSync(resolve(marketing, "index.html")).size < 200_000, "homepage: HTML exceeds 200 KB performance guardrail");
+check(homepage.includes("Would later today or tomorrow work better for a quick appointment?"), "homepage: Rex sample is not appointment-first");
+check(homepage.includes("with the appointment as the next move"), "homepage: Rex sample context does not explain the appointment goal");
+check(!homepage.includes("Want me to run the numbers with your trade before Saturday?"), "homepage: old phone-numbers Rex sample is still present");
 
 const sitemap = readFileSync(resolve(marketing, "sitemap.xml"), "utf8");
 const sitemapUrls = matches(sitemap, /<loc>([^<]+)<\/loc>/g).map((match) => match[1]);
