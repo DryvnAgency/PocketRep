@@ -60,8 +60,9 @@ for (const [route, filename] of routes) {
 const homepage = readFileSync(resolve(marketing, "index.html"), "utf8");
 check(!homepage.includes("data:font/woff2;base64"), "homepage: embedded font payload still present");
 check(statSync(resolve(marketing, "index.html")).size < 200_000, "homepage: HTML exceeds 200 KB performance guardrail");
-check(homepage.includes("Would later today or tomorrow work better for a quick appointment?"), "homepage: Rex sample is not appointment-first");
-check(homepage.includes("with the appointment as the next move"), "homepage: Rex sample context does not explain the appointment goal");
+check(homepage.includes("Make sure you bring your trade Saturday"), "homepage: Rex sample does not prepare the confirmed appointment");
+check(homepage.includes("reinforces the visit instead of asking for another one"), "homepage: Rex sample context does not explain appointment-aware behavior");
+check(!homepage.includes("Would later today or tomorrow work better for a quick appointment?"), "homepage: Rex sample asks for a second appointment");
 check(!homepage.includes("Want me to run the numbers with your trade before Saturday?"), "homepage: old phone-numbers Rex sample is still present");
 
 const sitemap = readFileSync(resolve(marketing, "sitemap.xml"), "utf8");
