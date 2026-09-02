@@ -1,0 +1,77 @@
+name: Pricing cutover transform
+
+on:
+  push:
+    branches: [fix/v1-founding-29-cutover]
+
+permissions:
+  contents: write
+
+jobs:
+  transform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v1-founding-29-cutover
+      - name: Update landing pricing and checkout
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('Pocketrep/index.html')
+          s = path.read_text()
+          old_url = 'https://buy.stripe.com/cNi4gAbMn4kg9Ax5AucbC06'
+          new_url = 'https://buy.stripe.com/3cI3cw3fRcQM141bYScbC09'
+
+          replacements = {
+              '"price":"39.00"': '"price":"29.00"',
+              'Founding price is 39.00 USD per month for the first 500 paying reps and stays with an active founding subscription. New-customer pricing is planned at 54.00 USD for reps 501 through 1000 and 69.00 USD thereafter. Includes a 7-day free trial.': 'Founding Rep access is 29.00 USD per month with a 7-day free trial. The founding software subscription rate stays with the rep while the subscription remains continuously active.',
+              'PocketRep is 39 USD per month for the first 500 paying reps, 54 USD per month for new customers 501 through 1000, and 69 USD per month thereafter. The 39 USD founding rate stays with an active founding subscription. The individual app includes a 7-day free trial. PocketRep Team is not for sale yet.': 'PocketRep V1 Founding Rep access is 29 USD per month with a 7-day free trial. The founding software subscription rate stays with the rep while the subscription remains continuously active. PocketRep Team is not for sale yet.',
+              '<span class="now">$39</span>': '<span class="now">$29</span>',
+              '<div class="was">Next new-customer cohort: $54/mo after the first 500</div>': '<div class="was">7 days free · card required · no subscription charge until day 8</div>',
+              '<div class="lock">◆ Founding $39 rate stays with your active founding subscription</div>': '<div class="lock">◆ Keep your founding software rate while your subscription stays active</div>',
+              '<div class="spots"><span class="pip"></span> First 500 paying reps</div>': '<div class="spots"><span class="pip"></span> Founding Rep access</div>',
+              'Card required · no subscription charge until day 8 · $39/mo founding rate stays locked while your founding subscription is active.': 'Card required · no subscription charge until day 8 · $29/mo founding software rate stays locked while your subscription remains active.',
+              old_url: new_url,
+          }
+
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'Expected landing text missing: {old[:100]}')
+              s = s.replace(old, new)
+
+          banned = [
+              old_url,
+              'Next new-customer cohort: $54/mo after the first 500',
+              'First 500 paying reps',
+              'Users 501',
+              '39 USD per month for the first 500',
+          ]
+          for value in banned:
+              if value in s:
+                  raise SystemExit(f'Stale launch pricing remains: {value}')
+
+          required = [
+              '"price":"29.00"',
+              '<span class="now">$29</span>',
+              '$29/mo founding software rate stays locked',
+              new_url,
+          ]
+          for value in required:
+              if value not in s:
+                  raise SystemExit(f'New launch pricing missing: {value}')
+
+          path.write_text(s)
+          PY
+      - name: Commit transformed landing
+        run: |
+          if git diff --quiet -- Pocketrep/index.html; then
+            echo "Landing already transformed"
+            exit 0
+          fi
+          git config user.name "PocketRep Launch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add Pocketrep/index.html
+          git commit -m "Align landing with $29 founding offer"
+          git push origin HEAD:fix/v1-founding-29-cutover
