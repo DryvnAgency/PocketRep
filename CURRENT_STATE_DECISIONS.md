@@ -1,421 +1,281 @@
 # PocketRep — Current State / Decisions
 
-**Last updated:** 2026-09-02
+**Last updated:** 2026-09-01 CT / 2026-09-02 UTC
 
-**Purpose:** Living operational truth for PocketRep. Update this file whenever a product decision changes, a meaningful PR merges, production behavior changes, pricing/referral economics change, or the launch priority changes.
-
-Read `PROJECT_OPERATING_SYSTEM.md` first.
+**Purpose:** This is PocketRep's living operational truth. Read `PROJECT_OPERATING_SYSTEM.md` first. If older handoffs, plans, PR descriptions, or chat history conflict with this file, this file wins unless current production proves otherwise.
 
 ---
 
-## 1. Source-of-truth rules
+## 1. Product identity — LOCKED
 
-- Owner decisions recorded here are authoritative business/product decisions.
-- Production behavior must be verified before calling something shipped.
-- `main` describes intended shipped code, but deployment/runtime should be checked when it matters.
-- Open PRs are proposed/claimed work until merged and deployed.
-- `HANDOVER_PROMPT.txt`, `PROJECT_MASTER_CONTEXT.txt`, and older dated handoff sections are historical snapshots and **must not override this file**.
-- If this file conflicts with current production, flag the mismatch and resolve it deliberately. Do not silently rewrite business rules to match stale code or stale marketing.
-
----
-
-## 2. Current product identity — LOCKED
-
-PocketRep is a **Daily Sales Execution Engine for individual salespeople**.
-
-Initial wedge: **automotive sales reps working their own book of business**.
+PocketRep is a **Daily Sales Execution Engine for individual automotive salespeople working their own book of business**.
 
 Core positioning:
 
 - **WORK YOUR BOOK.**
 - **WORK SMARTER.**
-- Your next deal may already be in your phone/book.
-- PocketRep tells the rep who deserves attention next and helps move that opportunity forward.
+- Your next deal may already be in your book.
+- PocketRep tells the rep who deserves attention next, why, what to do, and helps move the opportunity forward.
 
-PocketRep is not being positioned primarily as a generic CRM, generic AI assistant, bulk texting platform, or sales-automation suite.
+PocketRep is **not** being positioned as a generic CRM, generic AI chatbot, bulk-texting platform, dealership management suite, or multi-industry sales tool for V1.
 
-**Rex** remains the salesperson-facing intelligence/coaching identity.
-
-The product should increasingly feel like:
+The intended loop is:
 
 > Open → know who to work → understand why → take the recommended action → record the outcome → PocketRep determines what comes next.
 
+**Rex** is the salesperson-facing intelligence/coaching layer. Rex is the highest product priority, but the deterministic execution engine remains the system of record and must still function when AI is unavailable.
+
 ---
 
-## 3. Current repository / deployment baseline — VERIFIED
+## 2. Verified production baseline
 
-As of this update, `main` HEAD is:
+Current `main` HEAD:
 
-`7c8c661df40a10386484c307da912529dc4ec16e`
+`33bf3cc191497b492dc2420003545c837454dd12`
 
-Latest merged launch-polish work on `main` includes:
+Production surfaces:
 
-- closing the unpaid/free-account signup backdoor;
-- removing expired pricing-date/placeholders;
-- wiring the full test suite into CI;
-- fixing the Vercel Expo build dependency;
-- adding the PWA install experience.
-
-Recent merged `main` work also includes:
-
-- Stripe-backed paid signup/entitlement handling;
-- webhook-based entitlement clearing;
-- referral reward hardening/idempotency;
-- paid-invoice qualification for referral rewards;
-- more honest SMS send-state handling.
-- PR #107's full V1 rep UI, Rex, admin, web/mobile workflow hardening, and
-  supporting test/build coverage.
-
-Production web surfaces:
-
-- Marketing: `https://pocketrep.pro`
+- Marketing: `https://pocketrep.pro` / `https://www.pocketrep.pro`
 - App: `https://app.pocketrep.pro`
 
-Do not infer that an open PR is production merely because its preview deploy is green.
+Both Vercel production projects are **READY** on `33bf3cc`.
 
-Latest verified production work:
+Recent production sequence:
 
-- PR #114: landing SEO foundation, three high-intent automotive pages, sitemap/indexing/performance fixes, and appointment-aware Rex copy;
-- PR #115: deterministic DeepSeek Flash/Pro routing, active-contact Rex memory isolation, constrained Pro repair, and AI cost ceilings;
-- both Vercel production projects reached READY on merge commit `7c8c661`;
-- Supabase `ai-proxy` v39 and `nurture-scheduler` v15 are ACTIVE.
+- **PR #107** — V1 rep UI, Rex/admin hardening, workflow and audit coverage.
+- **PR #112** — legacy sequence-template compatibility restored; unknown tokens still blocked.
+- **PR #113** — landing proof and trial-activation polish.
+- **PR #114** — organic SEO foundation plus appointment-aware Rex copy.
+- **PR #115** — deterministic DeepSeek Flash/Pro routing, active-contact memory isolation, output/cost rails.
+- **PR #116** — Pro responsiveness hardening, one-shot Flash recovery, Rex `LIVE` / `WORKING` state, duplicate/test-record whole-book protection.
+- **PR #117** — whole-book turns now clear single-contact scope and ignore stale prior chat claims so current CRM data is the identity source.
 
----
-
-## 4. Current V1 product thesis
-
-The **Daily Execution Engine / Heat Sheet workflow** is the product center.
-
-The current experience is built around these capabilities/surfaces:
-
-- Heat Sheet / prioritized book;
-- contacts / owned book;
-- contact context and notes;
-- Game Plan / next move;
-- Rex coaching and drafting;
-- text/call follow-up workflow;
-- Smart Blast / personalized per-contact draft workflow with human send/review;
-- nurture/follow-up state;
-- deal logging and commission/production metrics;
-- sequences;
-- referral logic;
-- bilingual outreach where supported;
-- PWA/web app install flow.
-
-Do not expand the roadmap just because older files contain Rex Lens, dealership-suite, or multi-industry concepts.
+Do not infer that an old PR or green preview is production. Verify `main`, Vercel, and Supabase when behavior matters.
 
 ---
 
-## 5. AI / architecture decision — LOCKED PRINCIPLE
+## 3. Rex / AI production route — VERIFIED
 
 PocketRep is **deterministic-first**.
 
-Core workflow must remain useful if AI providers are unavailable.
+Current live Supabase state:
 
-Provider/model selection is an implementation choice, not the product thesis.
+- `ai-proxy` **v42 ACTIVE**
+- `nurture-scheduler` **v15 ACTIVE**
 
-Current discussions have considered multiple providers/models, including OpenRouter-based routing, DeepSeek, GLM, Claude, GPT, Grok, Kimi, and others. **Discussion does not equal an approved production migration.**
+Routing:
 
-**Production route (verified 2026-09-02):** `ai-proxy` v39 routes routine Rex work through `deepseek/deepseek-v4-flash-0731` and reserves `deepseek/deepseek-v4-pro-0813` for explicit strategy workloads or one constrained structured-output repair. Grok 4.3 remains a temporary outage fallback. Existing daily limits plus a $20 monthly ceiling are active, output is capped, and the triad remains off by default. `nurture-scheduler` v15 uses the Flash route. Rollback snapshots are `ai-proxy` v38 and `nurture-scheduler` v14.
+- Routine Rex coaching/drafting/parsing → `deepseek/deepseek-v4-flash-0731`
+- Explicit whole-book / weekly / strategy workloads → `deepseek/deepseek-v4-pro-0813`
+- Structured repair may escalate to Pro only where explicitly allowed.
+- Optional triad remains **off by default**.
+- Temporary outage fallback remains `x-ai/grok-4.3`.
 
-Before changing the live model/provider stack:
+Production hardening now includes:
 
-1. verify the currently deployed route/model;
-2. define the workload being improved;
-3. compare latency, quality, reliability, and cost;
-4. protect caching and deterministic behavior;
-5. define rollback;
-6. run a representative PocketRep eval.
+- hidden Pro reasoning disabled on user-facing work so output budget produces visible answers;
+- stalled/empty/timed-out Pro work gets one Flash recovery attempt;
+- Rex presents as **LIVE** when available and **WORKING** while processing; never sleeping/waking;
+- single-contact memory follows the active customer without bleeding into another customer;
+- whole-book requests clear single-contact scope and exclude stale chat-history identity claims;
+- whole-book rankings may not invent customers, duplicate contacts to fill a count, or rank obvious QA/test/audit records;
+- appointment state must be respected: if an appointment is already set, Rex should reinforce the appointment and relevant prep rather than ask the customer to come in earlier for a redundant step;
+- daily AI caps remain active;
+- monthly AI ceiling remains **$20/account** unless explicitly changed;
+- output is bounded;
+- CRM/contact text is treated as untrusted data.
 
-Do not rebuild product logic around a model vendor.
+Verified live model usage on 2026-09-02 UTC shows both DeepSeek Flash and DeepSeek Pro in the AI usage ledger. The immediately prior production usage was Grok, confirming the provider cutover is real rather than configuration-only.
+
+Rollback reference for the Rex stress-test window: `ai-proxy` v39 is the pre-v42 stress-hardening baseline. Do not roll back casually; verify the exact desired behavior first.
+
+---
+
+## 4. Rex behavior principles — LOCKED
+
+Rex should feel like an elite salesperson sitting in the rep's pocket, not a generic assistant.
+
+Rex should:
+
+- know the current customer's real PocketRep context;
+- understand notes, vehicle, trade, timing, objections, promises, appointment state, sequence state, recent outcome, and relationship context when available;
+- recommend the **best next move**, not merely generate copy;
+- prioritize getting or protecting the appointment when that is the logical deal-moving action;
+- give practical selling angles around value, family/use case, ownership, trade/equity, vehicle fit, urgency, and next step without fabricating facts;
+- carry relevant context inside one customer conversation;
+- never transfer one customer's facts into another customer's conversation;
+- use current CRM/book data as the only customer-identity source for whole-book rankings;
+- return fewer ranked contacts rather than inventing or duplicating names;
+- preserve human control over customer-facing sends;
+- remain useful when the model provider is degraded by falling back to deterministic workflow guidance where possible.
+
+Customer-facing copy should be conversational, specific, concise, appointment-aware, and based only on known context. Avoid generic follow-up filler and corporate AI language.
+
+---
+
+## 5. V1 workflow center — LOCKED
+
+The **Heat Sheet / Daily Execution Engine** is the product center.
+
+Current V1 centers on:
+
+- prioritized Heat Sheet / daily opportunities;
+- owned contacts/book;
+- contact details, notes, tags, vehicle/trade/timing context;
+- Game Plan / recommended next move;
+- Rex coaching and drafting;
+- call/text/email handoff workflows where supported;
+- honest outcome recording;
+- Smart Blast / individualized draft review with human send;
+- sequences and follow-up state;
+- nurture queue;
+- deal logging, commission, and production Metrics;
+- referrals;
+- bilingual outreach where supported;
+- PWA/web install experience;
+- owner/admin visibility without making the rep UX manager-first.
+
+Do not rebuild the core workflow during aesthetic or AI work.
 
 ---
 
 ## 6. Messaging / compliance — LOCKED
 
 - No unauthorized auto-send.
-- The rep remains in control of outbound customer messaging where the current workflow requires review/send.
-- DNC / opt-out handling wins over AI recommendations.
-- Do not weaken origin/source rules.
-- Unique contextual messages are for relevance and quality, **not spam-filter evasion**.
-- Record honest send state. Opening a composer is not the same as confirmed delivery.
-- Nothing in growth work should weaken compliance rails.
+- Human review/send remains required where the current workflow requires it.
+- DNC / opt-out wins over any Rex recommendation.
+- Unique contextual messages are for relevance, not spam-filter evasion.
+- Opening an SMS composer is **not** a confirmed send.
+- Real SMS flows preserve explicit `sent` / `not_sent` / failure truth where supported.
+- Unknown sequence tokens must be blocked before customer-facing handoff.
+- Legacy supported aliases such as product/color/trade/dealership/lease remain supported through the shared renderer.
+- Do not fabricate customer facts, vehicle data, numbers, dates, trade values, or appointment details.
 
 ---
 
-## 7. Pricing — OWNER DECISION + CURRENT MISMATCH
+## 7. Pricing — OWNER DECISION / ALIGNMENT REQUIRED
 
-### Current owner-approved pricing direction
+Owner-approved direction:
 
-- **Users 1–500:** $39/month
-- **Users 501–1,000:** $54/month
-- **After 1,000:** $69/month
-- 7-day free trial remains part of the current individual offer unless explicitly changed.
+- Users 1–500: **$39/month**
+- Users 501–1,000: **$54/month**
+- After 1,000: **$69/month**
+- Current individual offer retains a **7-day trial** unless explicitly changed.
 
-### Current production/marketing mismatch
-
-The current marketing source on `main` still states:
-
-- $39/month founding price for the first 500 reps;
-- then $69/month.
-
-Therefore the $54 middle stage is **an owner decision that still needs deliberate production alignment**.
-
-Do not silently change Stripe prices, landing copy, checkout links, or existing-customer terms merely because this file contains the intended ladder. Before implementation, verify exact Stripe products/prices and define whether the ladder applies only to new cohorts.
+Do not silently alter Stripe, checkout, landing copy, or existing-customer terms. Verify the live Stripe price/product setup and define cohort behavior before changing the production ladder.
 
 ---
 
 ## 8. Referral economics — LOCKED
 
-Current referral principle:
-
 1. A refers B.
-2. B may begin a trial, but **no reward is earned merely for trial/signup**.
-3. After B successfully becomes a paying customer / has the qualifying paid invoice, the referral qualifies.
-4. A receives **one free month**.
-5. B receives **one free month**.
-6. This is a one-time reward for that successful referral relationship.
-7. B can later refer C and earn another qualifying free month when C pays.
-8. Free usage earned from referrals is capped at **24 months maximum per account**.
+2. Trial/signup alone earns no reward.
+3. B must become a qualifying paying customer.
+4. A receives one free month.
+5. B receives one free month.
+6. The reward is one-time for that referral relationship.
+7. A customer may earn additional months from additional successful paying referrals.
+8. Free usage from referrals is capped at **24 months maximum per account**.
 
-Recent `main` commits verify that referral qualification was hardened to paid invoice behavior and reward processing was made Stripe-idempotent.
-
-**The 24-month cap remains a locked business rule. Verify enforcement before launch-scale referral promotion; do not assume a dashboard monitor equals enforcement.**
-
-Never change referral economics without an explicit owner decision.
+The live referral pipeline includes Stripe-aware qualification/reward handling and reconciliation for stuck qualified referrals. Preserve idempotency and the 24-month cap.
 
 ---
 
-## 9. Recently shipped work and active follow-ups
+## 9. Stale / superseded work — DO NOT MERGE
 
-### PR #107 — `Admin dashboard hub + Rex UX improvements + voiceTone wiring`
+Old drafts are historical reference unless explicitly rebuilt from current `main`.
 
-Status at this update: **MERGED to `main` on 2026-08-31 and deployed to production**.
-Both `project-t90u1` and `pocket-rep` reached READY on merge commit `1bf089e`.
+Explicitly superseded/closed include prior provider/privacy/checkpoint drafts plus:
 
-CLAIMED scope includes:
+- **PR #68** — stale June CSV-export implementation. CSV portability may be reconsidered later, but rebuild fresh if prioritized.
+- **PR #69** — stale June Referral Asks branch. Production referral/nurture infrastructure has evolved beyond it.
+- **PR #99** — obsolete demo-SMS implementation that would regress the newer sent/not-sent confirmation/audit contract.
+- **PR #109** — superseded launch-copy branch; do not merge.
 
-- owner/admin dashboard;
-- Stripe/revenue/admin data views;
-- Heat Sheet UX changes;
-- simplified Rex settings;
-- tone presets;
-- support/admin improvements;
-- additional product/AI/referral analytics work;
-- follow-up fixes discovered during audit.
+Do not revive old Claude/Grok/Kimi/provider plans merely because their PRs or docs still exist.
 
-### 2026-08-30 rep UI stress hardening — MERGED / PRODUCTION
-
-Implementation commits `4869240` and `6e46780` address issues reproduced in the active rep UI and then carried through the current native V1 screens:
-
-- desktop web SMS handoffs are capability-gated before `sms:` can strand the UI; unsupported work remains pending with an explicit phone-required message;
-- SMS callers, including sequence and mass-text paths, only record explicitly confirmed sends and now retain unsent drafts;
-- deal gross input preserves cents, rejects malformed/negative/implausibly large values, validates required data, rounds at persistence, and blocks rapid duplicate saves;
-- key deal and notification modal controls now expose button names/states to assistive technology;
-- legacy native mass text no longer opens one group-message composer, resolves `{{first_name}}` per recipient, and has a same-tick duplicate guard;
-- EAS profiles no longer override project Supabase values with committed empty strings.
-
-Verification completed on the implementation tree:
-
-- all 20 test scripts pass (558 checks);
-- TypeScript passes with 0 errors;
-- ESLint passes with 0 errors / 51 pre-existing warnings;
-- Expo exports succeed for web, current native V1 iOS/Android, and the flag-enabled V2 iOS/Android cutover path;
-- GitHub CI passed on both implementation commits and the `pocket-rep` branch preview reached READY on the mobile-parity commit.
-
-### 2026-08-31 full rep + mobile stress follow-up — MERGED / PRODUCTION
-
-The continued desktop/mobile stress pass found and fixed additional workflow-integrity issues on the PR branch:
-
-- desktop web `tel:` handoffs are now capability-gated in the call queue, sequence queue, and contact composer, so a browser without a dialer stays usable and the rep can record the real outcome manually;
-- contact history labels SMS composer attempts honestly (`COMPOSER OPENED`, `NOT SENT`, `FAILED`, or `NO NUMBER`) instead of making an unconfirmed attempt look sent;
-- sequence personalization now shares one supported-token contract between the editor and launch path, resolves rep/dealer/contact/vehicle/lease values, and blocks missing or unknown fields before any customer-facing channel opens;
-- a blank rep name can no longer be saved, preventing `{{rep_name}}` workflows from being silently broken;
-- surfaced contact-detail actions now have explicit accessible names/states for call, text, email, notes, tags, relationship data, Rex actions, and deal logging;
-- Expo SDK 51 dependencies were realigned (`expo-linking ~6.3.1`, `expo-image-picker ~15.1.0`) and `expo install --check` reports the dependency set current;
-- native Supabase auth persistence now uses generation-based encrypted SecureStore chunks, including migration from the previous single-value key, to avoid historical iOS large-value rejection during cold restarts;
-- native rep settings now hydrate from and persist to AsyncStorage before the authenticated shell renders, so dealership/title/tone/inventory values survive restart and sequence dealer tokens stay reliable;
-- native sign-out now clears retained contacts, tags, pay-plan, notifications, customer-bearing overlays/drafts, and every older in-memory Rex/coach/demo/inventory cache; a fast account switch waits for the device sweep before hydrating the next rep.
-
-Verification completed on the latest working tree:
-
-- all 20 test scripts pass (**603 checks**);
-- TypeScript passes with 0 errors;
-- ESLint passes with 0 errors / 50 existing warnings;
-- Expo dependency validation reports dependencies up to date;
-- clean V1 and flag-enabled V2 exports succeed for web, iOS, and Android, with distinct bundle hashes between modes (the first cached comparison was discarded and rebuilt clean);
-- the authenticated isolated audit build verified Heat, contacts/search/filtering, sequence call/text failure honesty, call outcomes, deal validation/commission math, notifications, Metrics, and profile editing without a browser protocol wedge.
-
-Post-merge verification resolved the previous web uncertainty: the production audit
-account now authenticates and reaches the Heat Sheet, and both production Vercel
-projects are READY on the merge SHA. Real-device checks remain required for
-cold-start auth persistence, native permission prompts, OS composer return
-behavior, and installed-app safe-area/keyboard behavior. Native EAS builds still
-remain on V1 until the explicit `EXPO_PUBLIC_NEW_UI=1` cutover decision.
-
-### 2026-08-31 post-merge sequence compatibility follow-up — ACTIVE BRANCH, NOT PRODUCTION
-
-The first production rep-day boundary exposed a compatibility regression: an
-existing sequence using `{{product}}` was blocked as unsupported. The follow-up
-branch restores the legacy aliases already promised by the workflow contract:
-`product`, `color`, `trade`, `trade_in`, `dealership`, and `lease`. They resolve
-through the same allowlist/renderer as the canonical vehicle/dealer/lease fields;
-genuinely unknown fields remain blocked. Color is inferred only from the existing
-structured `trim / color` display when a separator is present, never guessed from
-a plain trim. The working tree passes all 20 scripts (**607 checks**), TypeScript,
-focused lint, and clean V1/V2 merged-tree exports; preview/live re-verification is
-still required before this follow-up is merged.
-
-### PR #109 — `Launch copy: premium, accurate V1 funnel`
-
-Status at this update: **OPEN, DRAFT, mergeable**.
-
-Scope is intentionally limited to:
-
-- `Pocketrep/index.html`
-- `Pocketrep/thankyou.html`
-
-Purpose:
-
-- make the launch funnel sound premium;
-- remove claims that overstate hands-off automation;
-- make human review/control explicit;
-- turn the post-checkout page into a premium trial-activation / first-mission experience.
-
-This PR should remain isolated from app logic.
-
-### Older open PRs
-
-There are multiple older draft PRs in the repository from previous product directions/workstreams.
-
-**Default rule:** treat an old open PR as stale until explicitly reactivated. Do not merge it because it exists.
-
-Explicitly superseded and closed on 2026-09-02: PRs #57, #61, #62, and #67. Their Claude, Grok/Kimi, old privacy-provider, and legacy checkpoint assumptions conflict with the current production route and must not be revived without a fresh review.
+Historical files such as `HANDOVER_PROMPT.txt`, `PROJECT_MASTER_CONTEXT.txt`, and dated sections of `docs/HANDOFF.md` are reference material only.
 
 ---
 
-## 10. Immediate launch sequence — NOW
+## 10. Production evaluation status
 
-### #1 NEXT MOVE
+The DeepSeek/Rex production evaluation has progressed beyond the old checkpoint:
 
-**Run the post-deploy Rex production evaluation and watch real usage.**
+Verified:
 
-Why it matters:
+- DeepSeek Flash live routing;
+- DeepSeek Pro live routing;
+- model names recorded in usage ledgers;
+- Pro hidden-output failure reproduced and fixed;
+- Flash fallback added for failed/stalled Pro turns;
+- Rex `LIVE` / `WORKING` presentation shipped;
+- whole-book duplicate/test-record protection shipped;
+- stale whole-book chat-history contamination reproduced and fixed in PR #117;
+- both production Vercel surfaces READY on #117;
+- no app runtime error clusters found during the immediate post-deploy check.
 
-The DeepSeek route is live with rollback protection. The remaining proof is response quality on the real PocketRep cases: routine objection coaching, appointment-aware follow-up, Jordan/Mike customer isolation, a structured write action, and one whole-book/Weekly Coach Pro escalation.
-
-Complete when:
-
-- Flash and Pro return usable PocketRep responses on their intended workloads;
-- the actual model names appear in the AI usage ledger;
-- response latency and cost are acceptable;
-- no customer context crosses between contacts;
-- no unexpected 4xx/5xx or monthly-ledger errors appear in Edge logs;
-- rollback to v38/v14 remains available during the observation window.
-
-### Secondary priority 1
-
-**Align the actual app aesthetic and microcopy with the premium landing/thank-you direction.**
-
-Desired feel:
-
-> Private sales operating system for a serious producer.
-
-Design direction:
-
-- Heat Sheet = command center;
-- Rex = sales intelligence, not generic chatbot;
-- Contacts = the rep's book;
-- daily list = today's opportunities;
-- Metrics = production scoreboard;
-- cleaner hierarchy, spacing, surfaces, icons, and microcopy;
-- restrained premium accents rather than noisy “AI app” decoration.
-
-Do not redesign core workflow during this aesthetic pass.
-
-### Secondary priority 2
-
-**Run a final end-to-end launch audit, then align/merge launch copy.**
-
-Audit the complete chain:
-
-> Ad/landing → pricing/trial → Stripe checkout → account provisioning → thank-you/setup → login/app access → onboarding → first five / first daily list → follow-up action → outcome recording → next action.
-
-Verify both happy path and failure/retry states.
+Continue watching real usage for latency, cost, provider errors, and unexpected context leakage. Do not call an AI change complete only because tests pass.
 
 ---
 
 ## 11. NOW / NEXT / LATER
 
-### NOW
+### NOW — launch-critical
 
-- Finish/verify active launch-critical work.
-- Premium app aesthetic/microcopy alignment without workflow rebuild.
-- End-to-end launch verification.
-- Resolve pricing ladder mismatch deliberately.
-- Verify referral 24-month cap enforcement before aggressive referral promotion.
-- Keep landing/app/checkout claims aligned with real V1 behavior.
+1. **Rex quality first.** Continue adversarial production evaluation across real car-sales scenarios: objection, appointment set, trade, ghosted customer, sold customer, lease/ownership timing, pronoun follow-up, whole-book ranking, and malformed/hostile context.
+2. **Premium app aesthetic/microcopy pass** without changing workflow architecture. Desired feel: a private sales operating system for a serious producer.
+3. **Final end-to-end launch audit:** landing → pricing/trial → Stripe → provisioning → thank-you/setup → login → onboarding → daily list → customer action → outcome → next action.
+4. **Resolve pricing ladder implementation deliberately.**
+5. **Verify referral 24-month cap enforcement at launch scale.**
+6. Keep landing, checkout, thank-you, support, and app claims aligned with what V1 actually does.
 
-### NEXT
+### NEXT — after launch-critical proof
 
-- Stronger Rex recommended-action layer per contact: text vs call vs other next move.
-- Better structured memory around outcomes, objections, promises, and next action.
-- Outcome scorecard focused on response → appointment → show → sale where data exists.
-- Coach Rex improvements for newer reps and stalled deals.
-- Business-card/customer-intake flow that can start the relationship and first thank-you/follow-up workflow.
-- Inventory-link intelligence that can help select relevant dealership inventory based on customer context.
-- More systematic holiday/milestone outreach using unique contextual copy.
+- stronger Rex per-contact action recommendation: call vs text vs other next move;
+- better structured memory for outcomes, objections, promises, appointments, and next action;
+- response → appointment → show → sale scorecard where data supports it;
+- Coach Rex improvements for new reps and stalled deals;
+- business-card / customer-intake flow that can begin the relationship and first thank-you workflow;
+- dealership inventory-link intelligence using customer context;
+- systematic holiday/milestone outreach with genuinely unique contextual copy.
 
 ### LATER
 
-- Twilio/native communications inside PocketRep when justified by usage/compliance/cost.
-- Broader inventory integrations.
-- Additional verticals such as RV, powersports, marine, aviation, real estate, mortgage, etc. only after the automotive execution engine is proven.
-- Team/dealership expansion where it does not compromise rep-first UX.
-- Deeper learning/optimization after enough outcome data exists.
+- Twilio/native in-app communications when usage, compliance, and economics justify it;
+- broader inventory integrations;
+- team/dealership expansion that preserves rep-first UX;
+- additional verticals only after the automotive engine proves product-market fit;
+- deeper learning/optimization after sufficient outcome data exists.
 
 ---
 
-## 12. Explicitly off-limits until changed by owner decision
+## 12. Explicitly off-limits unless the owner changes the decision
 
-- Premature multi-industry repositioning.
-- Rebuilding PocketRep as a generic CRM.
-- Making Rex/AI the system of record.
-- Core workflow that fails when AI is down.
-- Unauthorized auto-send.
-- Messaging designed to evade spam safeguards.
-- Silent pricing changes.
-- Silent referral-economics changes.
-- Large architecture rewrites without evidence.
-- Merging stale PRs because they appear “complete.”
-- Marketing speculative future features as shipped.
-- Letting admin/team features make the individual rep experience manager-first.
-
----
-
-## 13. Legacy context warning
-
-These files remain useful for historical architecture/reference but are stale as product-direction sources:
-
-- `HANDOVER_PROMPT.txt` — April-era product framing/pricing/model assumptions.
-- `PROJECT_MASTER_CONTEXT.txt` — April-era master context.
-- `docs/HANDOFF.md` — useful deep technical map, but its header/current-state sections are dated and must be verified against current code/production.
-
-Do not delete useful history, but do not allow it to override this document.
+- premature multi-industry repositioning;
+- generic CRM rebuild;
+- Rex/AI becoming the system of record;
+- workflow that becomes useless if AI is down;
+- unauthorized auto-send;
+- spam-safeguard evasion;
+- silent pricing or referral-economics changes;
+- large architecture rewrites without evidence;
+- merging stale PRs because they look complete;
+- marketing speculative future features as shipped;
+- turning the individual rep experience into a manager-first dashboard.
 
 ---
 
-## 14. Maintenance rule
+## 13. Maintenance rule
 
-Update this file after any of the following:
+Update this file whenever any of these changes:
 
 - meaningful merge to `main`;
-- production deployment that changes behavior;
+- production behavior/deployment;
+- model/provider route;
 - pricing/trial/referral decision;
-- model/provider migration;
-- launch priority change;
-- feature moves between NOW/NEXT/LATER;
-- a previously speculative feature becomes verified production functionality;
+- launch priority;
+- a feature moves between NOW/NEXT/LATER;
 - a serious known issue is discovered or resolved.
 
-A future session should be able to read this file and know **where PocketRep actually stands without reconstructing months of chat history**.
+A future PocketRep session should be able to read this file and know **where production actually stands without reconstructing months of chat history**.
