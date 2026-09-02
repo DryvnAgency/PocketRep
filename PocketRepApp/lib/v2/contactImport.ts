@@ -107,6 +107,13 @@ const CSV_HEADER_ALIASES: Record<string, keyof ImportContactRow> = {
   'phone': 'phone', 'phone number': 'phone', 'mobile': 'phone', 'mobile phone': 'phone', 'cell': 'phone', 'cell phone': 'phone', 'telephone': 'phone',
   'email': 'email', 'email address': 'email', 'e-mail': 'email',
   'notes': 'notes', 'note': 'notes',
+  // Vehicle fields — accept both human-readable CSV headers and the raw
+  // snake_case column names a technical/DB-style export might use directly.
+  'vehicle year': 'vehicleYear', 'year': 'vehicleYear', 'vehicle_year': 'vehicleYear',
+  'vehicle make': 'vehicleMake', 'make': 'vehicleMake', 'vehicle_make': 'vehicleMake',
+  'vehicle model': 'vehicleModel', 'model': 'vehicleModel', 'vehicle_model': 'vehicleModel',
+  'mileage': 'currentMileage', 'current mileage': 'currentMileage', 'odometer': 'currentMileage', 'current_mileage': 'currentMileage',
+  'lease end date': 'leaseEndDate', 'lease end': 'leaseEndDate', 'lease_end_date': 'leaseEndDate',
 };
 
 export function parseCsv(text: string): ParsedImportContact[] {

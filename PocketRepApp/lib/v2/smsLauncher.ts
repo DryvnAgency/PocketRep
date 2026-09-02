@@ -1,6 +1,7 @@
 import { Alert, AppState, Linking, Platform } from 'react-native';
 import { recordSmsOpened, markSmsSent, markSmsNotSent, recordSmsFailure, type SmsActionSource } from '@/lib/v2/smsActions';
 import { isCurrentWebRuntimeSmsCapable } from '@/lib/v2/smsCapability';
+import { supabase } from '@/lib/supabase';
 
 function digitsOnly(phone: string | null | undefined): string {
   return (phone ?? '').replace(/[^\d]/g, '');
@@ -24,7 +25,7 @@ export type SendableDraft = {
  * The database status is `sent`; composer-open alone is never treated as sent.
  * `not_sent` means the rep returned without sending.
  */
-export type SmsLaunchResult = 'opened' | 'not_sent' | 'no_phone' | 'unsupported' | 'failed';
+export type SmsLaunchResult = 'opened' | 'not_sent' | 'no_phone' | 'unsupported' | 'failed' | 'blocked';
 
 function confirmSent(contactName: string): Promise<boolean> {
   if (Platform.OS === 'web') {
@@ -86,6 +87,29 @@ function waitForComposerReturn(): Promise<void> {
  */
 export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> {
   if (draft.isDemo) return 'opened';
+
+  // Final safety gate, as close to the actual send as practical: a draft
+  // (nurture, sequence, follow-up) can sit unreviewed long enough for the rep
+  // to delete the contact or flag them do-not-contact after it was queued.
+  // The listing screens filter both out, but this is the one check every
+  // caller of launchSms shares, so it's the backstop when a listing misses
+  // it. Fails open on a query error (e.g. a transient network blip) rather
+  // than blocking an otherwise-healthy send on this function's own hiccup —
+  // it only blocks on an authoritative "this contact is unsafe" answer.
+  const { data: safety } = await supabase
+    .from('contacts')
+    .select('is_deleted,do_not_contact')
+    .eq('id', draft.contact_id)
+    .maybeSingle();
+  if (safety?.is_deleted || safety?.do_not_contact) {
+    await recordSmsFailure({
+      contactId: draft.contact_id,
+      message: draft.message,
+      status: 'blocked_unsafe',
+      source: draft.source,
+    }).catch(() => undefined);
+    return 'blocked';
+  }
 
   const phone = digitsOnly(draft.phone);
   if (!phone) {

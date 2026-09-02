@@ -65,6 +65,13 @@ export default function NurtureReviewer({
         await markNurtureSent(d.id);
         dropDraft(d.id);
         onChanged();
+      } else if (opened === 'blocked') {
+        // Contact was deleted or flagged do-not-contact since this draft was
+        // queued. Retrying won't help — remove it rather than leaving a
+        // permanently-unsendable draft in the queue.
+        setError('This contact was removed or marked do-not-contact. Draft removed.');
+        dropDraft(d.id);
+        onChanged();
       } else if (opened === 'unsupported') {
         setError('Open PocketRep on your phone to launch Messages. This draft is still pending.');
       } else if (opened !== 'not_sent') {

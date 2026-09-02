@@ -50,10 +50,15 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
   const textBody = current
     ? `Hey ${current.name.split(' ')[0]}, ${repFirstName ? `it’s ${repFirstName}. ` : ''}Just tried giving you a call. Wanted to catch up with you real quick. Give me a call or text when you get a chance.`
     : '';
+  // Throws if either write fails — callers must not report success (or move
+  // on) when this hasn't actually persisted. Previously both writes were
+  // independently swallowed to console.warn, so a DB failure looked
+  // identical to success and the rep had no way to know their outcome/touch
+  // was never saved.
   const record = async (type: 'call' | 'text', notes: string, callOutcome?: CallOutcome) => {
     if (!current) return;
-    try { await logContactTouch(current.id, type, notes, callOutcome); } catch (e) { console.warn('call queue touch', e); }
-    try { await logInteraction(current.id, type, notes, callOutcome); } catch (e) { console.warn('call queue interaction', e); }
+    await logContactTouch(current.id, type, notes, callOutcome);
+    await logInteraction(current.id, type, notes, callOutcome);
   };
   const openCall = async () => {
     if (!current || actionBusyRef.current) return;
@@ -77,9 +82,19 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
   const chooseOutcome = async (next: NonNullable<typeof outcome>) => {
     if (!current || actionBusyRef.current) return;
     actionBusyRef.current = true;
+    setQueueError(null);
     setOutcome(next);
-    try { await record('call', `Call outcome: ${next.replace('-', ' ')}`, next); }
-    finally { actionBusyRef.current = false; }
+    try {
+      await record('call', `Call outcome: ${next.replace('-', ' ')}`, next);
+    } catch (e) {
+      console.warn('chooseOutcome record failed', e);
+      // Don't let the UI claim an outcome was recorded when it wasn't — put
+      // the outcome buttons back so the rep can retry.
+      setOutcome(null);
+      setQueueError("Couldn't save that outcome — try again.");
+    } finally {
+      actionBusyRef.current = false;
+    }
   };
   const openText = async () => {
     if (!current || actionBusyRef.current) return;
@@ -95,8 +110,18 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
         source: 'manual',
       });
       if (result === 'opened') {
-        await record('text', 'Text sent after no answer');
+        // The text truly was sent (rep confirmed it in the composer) —
+        // that's already true regardless of whether logging it succeeds, so
+        // don't undo it on a record() failure. Do surface the failure rather
+        // than letting it disappear, since record() now throws instead of
+        // swallowing.
         setTextOpened(true);
+        try {
+          await record('text', 'Text sent after no answer');
+        } catch (e) {
+          console.warn('record text-sent outcome failed', e);
+          setQueueError("Text sent, but the follow-up note couldn't be saved.");
+        }
       } else if (result === 'unsupported') {
         setQueueError('Open PocketRep on your phone to launch Messages. The text was not marked sent.');
       } else if (result !== 'not_sent') {

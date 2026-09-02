@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
-export type SmsActionStatus = 'opened' | 'confirmed_sent' | 'not_sent' | 'failed' | 'no_phone' | 'simulated_sent';
+export type SmsActionStatus = 'opened' | 'confirmed_sent' | 'not_sent' | 'failed' | 'no_phone' | 'simulated_sent' | 'blocked_unsafe';
 export type SmsActionSource = 'manual' | 'blast' | 'sequence' | 'demo';
 
 export type SmsAction = {
@@ -55,11 +55,11 @@ export async function markSmsNotSent(actionId: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Record a failed/no-phone attempt without pretending an SMS was sent. */
+/** Record a failed/no-phone/blocked attempt without pretending an SMS was sent. */
 export async function recordSmsFailure(input: {
   contactId: string;
   message: string;
-  status: 'failed' | 'no_phone';
+  status: 'failed' | 'no_phone' | 'blocked_unsafe';
   source?: SmsActionSource;
 }): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();

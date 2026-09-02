@@ -343,9 +343,14 @@ export async function loadPendingNurtures(): Promise<PendingNurture[]> {
   if (!user) return [];
   const { data } = await supabase
     .from('nurture_messages')
-    .select('id,contact_id,message_text,language,hook_used,pitch_intensity,trigger_type,scheduled_for,contacts!inner(first_name,last_name,phone,is_demo)')
+    .select('id,contact_id,message_text,language,hook_used,pitch_intensity,trigger_type,scheduled_for,contacts!inner(first_name,last_name,phone,is_demo,is_deleted,do_not_contact)')
     .eq('user_id', user.id)
     .is('sent_at', null)
+    // A draft can sit unreviewed long enough for the rep to delete the
+    // contact or flag them do-not-contact after it was queued — never
+    // surface it once that's happened.
+    .eq('contacts.is_deleted', false)
+    .eq('contacts.do_not_contact', false)
     .order('scheduled_for', { ascending: true });
   return (data ?? []).map((r: any) => ({
     id: r.id,
