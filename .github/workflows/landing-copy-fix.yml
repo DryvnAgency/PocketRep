@@ -1,0 +1,89 @@
+name: Landing pricing consistency transform
+
+on:
+  push:
+    branches: [fix/landing-29-copy-consistency]
+
+permissions:
+  contents: write
+
+jobs:
+  transform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/landing-29-copy-consistency
+      - name: Fix stale pricing and unsupported demo claims
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('Pocketrep/index.html')
+          s = path.read_text()
+
+          replacements = {
+            'Start with 7 days free. The first 500 paying reps get the $39 monthly founding rate while that founding subscription stays active.':
+              'Start with 7 days free. Founding Rep access is $29/month, and your founding software rate stays with you while your subscription remains continuously active.',
+            "If you keep PocketRep, the $39 founding subscription begins on day 8.":
+              "If you keep PocketRep, the $29 founding subscription begins on day 8.",
+            'Day 8 — $39/mo begins if the subscription is still active':
+              'Day 8 — $29/mo begins if the subscription is still active',
+            'Is it really worth $39 a month?':
+              'Is PocketRep worth $29 a month?',
+            '$39/mo founding rate for the first 500 paying reps. Keep it while your founding subscription stays active.':
+              '$29/mo Founding Rep rate. Keep your founding software rate while your subscription remains continuously active.',
+            'Founding rate · $39/mo locked forever':
+              'Founding rate · $29/mo while subscription stays active',
+            "Hey Jordan, your Gun Metallic Rogue is still here. Make sure you bring your trade Saturday—we'll appraise it while you're here and lay out every option so you can make the best call. I'll have everything ready for you.":
+              "Hey Jordan, looking forward to Saturday. Make sure you bring your trade so we can go over it alongside the Rogue options while you're here. I'll have your notes ready.",
+            "marcus, that m3 comp is still here with your name on it. i ran your m2 trade at the top of the range. got 10 min today to lock the monthly where you want it?":
+              "marcus, you loved the m3 comp but the monthly was the sticking point. want to stop in today and go over the options with your m2 trade?",
+            "hola priya, your x5 lease is up in a few weeks. i can have the new one ready so you never miss a beat. quick call this week?":
+              "hola priya, your x5 lease is up in a few weeks. want to stop in this week and go over your options for the next one?",
+            "derek, pulled the i4 numbers next to what you're cross-shopping. charging + warranty are no contest. want me to send the side-by-side?":
+              "derek, you were comparing the i4 with tesla and had questions about charging and warranty. want to go over both side by side?",
+            "theo, you're 12k over on the lease, which usually means it's upgrade time. saved you the 540i you liked. worth a look?":
+              "theo, you're 12k over on the current lease and liked the 540i. want to stop in and go over your options?",
+            "rachel, can't believe it's been a year already. the new ix is a serious step up. coffee + a drive this week?":
+              "rachel, can't believe it's been a year already. how's ownership going? if you're still curious about the ix, want to take another look this week?",
+            "ravi, not here to push numbers. the m340i in portimao is rare and it's still around. want me to hold it while you decide?":
+              "ravi, last thing we got hung up on was payment. instead of chasing price, want to go over the m340i options and see what actually fits?",
+          }
+
+          for old, new in replacements.items():
+            if old not in s:
+              raise SystemExit(f'Expected live landing string missing: {old[:120]}')
+            s = s.replace(old, new)
+
+          banned = [
+            'The first 500 paying reps get the $39 monthly founding rate',
+            'the $39 founding subscription begins on day 8',
+            'Day 8 — $39/mo begins',
+            'Is it really worth $39 a month?',
+            '$39/mo founding rate for the first 500 paying reps',
+            'Founding rate · $39/mo locked forever',
+            'still here with your name on it',
+            'trade at the top of the range',
+            'charging + warranty are no contest',
+            'saved you the 540i',
+            'm340i in portimao is rare',
+            'want me to hold it while you decide',
+          ]
+          for value in banned:
+            if value.lower() in s.lower():
+              raise SystemExit(f'Stale/unsupported landing claim remains: {value}')
+
+          path.write_text(s)
+          PY
+      - name: Commit transformed landing
+        run: |
+          if git diff --quiet -- Pocketrep/index.html; then
+            echo "Landing already aligned"
+            exit 0
+          fi
+          git config user.name "PocketRep Launch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add Pocketrep/index.html
+          git commit -m "Finish $29 landing copy alignment"
+          git push origin HEAD:fix/landing-29-copy-consistency
