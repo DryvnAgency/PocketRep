@@ -24,7 +24,7 @@ import { extractFromConversation, type ConversationParse } from '@/lib/v2/conver
 import { getTodayLog, getCarrySummary, appendCoachEntry } from '@/lib/v2/coachLog';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
-import { chooseRexTier, resolveMentionedContactId } from '@/lib/v2/rexRouting';
+import { chooseRexTier, isWholeBookRequest, resolveMentionedContactId } from '@/lib/v2/rexRouting';
 
 // The coach may emit this narrow action allow-list; destructive batch/delete
 // operations stay voice/UI-only and every listed action still needs Confirm.
@@ -212,9 +212,11 @@ export default function RexCoach({
   const deliver = async (text: string, history: ChatMessage[]) => {
     setTyping(true);
     const repContext = serializeRepContext({ contacts, payPlan, mtd });
+    const wholeBook = isWholeBookRequest(text);
     const mentionedContactId = resolveMentionedContactId(text, contacts);
-    if (mentionedContactId) activeContactIdRef.current = mentionedContactId;
-    const turnContactId = activeContactIdRef.current;
+    if (wholeBook) activeContactIdRef.current = null;
+    else if (mentionedContactId) activeContactIdRef.current = mentionedContactId;
+    const turnContactId = wholeBook ? null : activeContactIdRef.current;
     const activeContact = turnContactId ? contacts.find(c => c.id === turnContactId) : null;
     const scopedActivity = activeContact
       ? `ACTIVE CUSTOMER: ${activeContact.name} (${activeContact.id}). Keep this turn scoped to this customer unless the rep explicitly names someone else.\n${activity}`
@@ -235,7 +237,7 @@ export default function RexCoach({
             try {
               const { reply, action } = await runTriadCoach({
                 planner: {
-                  history, text, repContext,
+                  history: wholeBook ? [] : history, text, repContext,
                   contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
                   recentActivity: scopedActivity,
                   rep: repIdent.current,
@@ -267,7 +269,7 @@ export default function RexCoach({
             maxTokens: 1200,
             tier: activeTier,
             messages: buildCoachMessages({
-              history, text, repContext,
+              history: wholeBook ? [] : history, text, repContext,
               contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
               recentActivity: scopedActivity,
               rep: REX_CHAT ? repIdent.current : undefined,
