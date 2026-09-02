@@ -14,7 +14,8 @@ import { buildCoachMessages } from '@/lib/v2/coachBrain';
 import { startDictation, isDictationAvailable, type Dictation } from '@/lib/v2/sttDictation';
 import { launchSms } from '@/lib/v2/smsLauncher';
 
-// ── Model: Gemini 2.5 Flash for speed + cost on every Rex call ──────────────
+// Legacy/native V1 compatibility signature. The server intercepts this exact
+// slug and routes supported Rex work through the current DeepSeek stack.
 const REX_MODEL = 'gemini-2.5-flash';
 const AI_PROXY_URL = process.env.EXPO_PUBLIC_AI_PROXY_URL ?? 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1/ai-proxy';
 
@@ -49,7 +50,7 @@ function stripActionTag(text: string): string {
 }
 
 // An explicit "do something in the app" request (mass text, follow-up list, log
-// a customer, start a sequence) stays on the Gemini action path below. Everything
+// a customer, start a sequence) stays on the legacy action path below. Everything
 // else is a coaching question and routes to the real coaching engine.
 function isActionIntent(text: string): boolean {
   const q = text.toLowerCase();
@@ -101,10 +102,10 @@ Last Contact: ${contact.last_contact_date ?? 'never'}
 Follow-up Date: ${contact.follow_up_date ?? 'none set'}
 ` : ''}
 ## HOW TO READ THE DEAL
-* **Their Current Vehicle (Trade-In)**: What they drive now — the vehicle_year/make/model above. This is what they'd bring in. Factor in mileage, age, likely repair costs, equity position.
+* **Their Current Vehicle (Trade-In)**: What they drive now — the vehicle_year/make/model above. This is what they'd bring in. Use known mileage and age as context, but treat repair-cost or equity angles as possibilities unless the record actually proves them.
 * **Vehicle of Interest (VOI)**: When the rep mentions a specific unit, stock #, or model they're presenting — that's the VOI. If not mentioned yet, ask what they're looking at.
 * **Deal Stage**: Read the stage, heat tier, notes, last contact date. Where are we — fresh up, demo, numbers, objection, follow-up, gone cold?
-* **Buying Signals**: Mileage creeping up, lease ending soon, high urgency, multiple visits, specific model requests, payment questions.
+* **Buying Signals**: Mileage creeping up, lease ending soon, high urgency, multiple visits, specific model requests, payment questions — but only when those signals are actually present in the record.
 * **Blockers**: Credit concerns, negative equity on trade, payment too high, spouse approval, competitor shopping.
 
 ## YOUR JOB
@@ -117,13 +118,14 @@ Follow-up Date: ${contact.follow_up_date ?? 'none set'}
 * Keep responses tight — 2-4 sentences max unless walking through a rebuttal or game plan
 * When a contact is loaded, use their actual details — name, vehicle, trade, mileage, dates
 * Give the ACTUAL WORDS to say — not advice about what to say
-* Never say "I cannot" — find an angle or ask for more context
+* If a needed fact is missing, ask one sharp question or make the language conditional. Never invent the missing fact.
 * If a screenshot or image is shared, read every detail and coach on the next move
-* Always assume the deal can be saved. Find the angle.
-* When trade and VOI are both known, factor in equity, payment spread, and emotional triggers (new car smell vs repair bills on the old one)
-* Reference their trade by name ("your Camry has 87k — repairs start stacking around 100k") to make it real
-* Reference the VOI by name ("that Civic Sport holds its value way better") to build excitement
-* If mileage or lease end suggests urgency, USE IT — "3 months left on that lease, let's get ahead of it"
+* Always look for a legitimate angle to save or advance the deal without making up urgency.
+* Never invent lender counts, store traffic, competing buyers, hold/deposit policy, price-match authority, discounts, incentives, availability, trade value, equity, repair timing, vehicle-value claims, or appointment details.
+* When trade and VOI are both known, compare the customer's actual use case, timing, known ownership context, and possible equity only as a question or conditional unless verified.
+* Reference their trade by known facts (for example: "your Camry is at 87k, so let's compare keeping it versus moving now") without predicting repairs.
+* Reference the VOI by known features or fit. Never claim it holds value better, is scarce, or has stronger demand unless that fact is in the provided context.
+* If an exact lease end or mileage genuinely creates urgency, use the exact known fact. If it is inferred or incomplete, soften it instead of presenting it as certain.
 * If the rep asks you to DO something in the app, respond with your advice AND append an action block
 
 ## ACTIONS
@@ -144,11 +146,11 @@ const REBUTTAL_INDUSTRIES = ['Auto', 'Mortgage', 'Real Estate', 'HVAC', 'Staffin
 
 const REBUTTALS: Record<string, { objection: string; response: string }[]> = {
   'Auto': [
-    { objection: 'The payment is too high', response: '"I hear you — let me show you two options: we extend the term by 12 months or I find you a protection package that lowers the effective cost. Which sounds better?"' },
+    { objection: 'The payment is too high', response: '"I hear you. Is the car right and the payment wrong, or is the car itself not worth that payment to you? If the car is right, tell me where you hoped to be and I’ll see what real options we have."' },
     { objection: "I need to think about it", response: '"Totally fair. What\'s the one thing holding you back right now? Let\'s just talk through that one thing."' },
-    { objection: "I can get it cheaper online", response: '"You might find a lower sticker price, but factor in delivery fees, no trade-in value, and zero accountability after the sale. I can match within $300 and you drive it home today."' },
-    { objection: "My credit isn\'t great", response: '"We work with 14 lenders — someone\'s going to say yes. The question is do you want to know the real number or keep guessing? Let\'s pull it and I\'ll tell you exactly where you stand."' },
-    { objection: "I want to sleep on it", response: '"I respect that. Just so you know, this unit has had 3 people look at it this week. I can hold it with $500 fully refundable until tomorrow morning. Want me to do that?"' },
+    { objection: "I can get it cheaper online", response: '"That might be a better deal. Let’s compare the same car and the same total numbers side by side. If theirs really wins, I’ll tell you. What exactly are they showing you?"' },
+    { objection: "My credit isn\'t great", response: '"Got it. Let’s not guess or promise anything before we see the real options. If you’re comfortable, let’s get the information in and find out exactly what we can work with."' },
+    { objection: "I want to sleep on it", response: '"Absolutely. Before you leave, what are you hoping becomes clearer overnight: the car, the numbers, or the timing? If we solve that one thing right now, would you feel comfortable moving forward?"' },
   ],
   'Mortgage': [
     { objection: 'The rate is too high', response: '"Compare it to what you\'re paying in rent — at this rate your payment builds equity. And rates drop, you refi. Rents never go down. Want me to run the 5-year comparison?"' },
@@ -336,7 +338,7 @@ export default function RexScreen() {
         // path as the gold-orb RexCoach (buildCoachMessages + callBrain). 1200
         // tokens so the full structured answer comes back without truncation.
         // Only screenshots (vision) and explicit app-actions fall through to the
-        // /gemini else-branch below.
+        // legacy compatibility branch below.
         const coachMessages = buildCoachMessages({
           history: messages.map(m => ({
             from: m.role === 'assistant' ? ('rex' as const) : ('user' as const),
@@ -349,7 +351,8 @@ export default function RexScreen() {
           || 'Rex hit an error. Try again.';
       } else {
         // Screenshot (needs vision) or an explicit app-action/inventory request →
-        // keep the Gemini path that can read images and emit <action> blocks.
+        // use the legacy request contract. The server compatibility shim routes
+        // text/actions to DeepSeek and images to the isolated vision stack.
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch(`${AI_PROXY_URL}/gemini`, {
           method: 'POST',
@@ -434,7 +437,7 @@ export default function RexScreen() {
     setProactiveCoach(null);
     try {
       const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ');
-      const prompt = `In 2 sentences max, give the rep their immediate game plan for ${contact.first_name} ${contact.last_name}. Vehicle: ${vehicle || 'unknown'}. Lease end: ${contact.lease_end_date ?? 'unknown'}. Notes: ${contact.notes ?? 'none'}. Be direct — what to do next and the one thing to lead with.`;
+      const prompt = `In 2 sentences max, give the rep their immediate game plan for ${contact.first_name} ${contact.last_name}. Vehicle: ${vehicle || 'unknown'}. Lease end: ${contact.lease_end_date ?? 'unknown'}. Notes: ${contact.notes ?? 'none'}. Be direct — what to do next and the one thing to lead with. Never invent store policy, urgency, vehicle facts, financing facts, or customer history; if a needed fact is missing, make the angle conditional.`;
       const reply = await callBrain({ maxTokens: 250, messages: [{ role: 'user', content: prompt }] });
       setProactiveCoach(reply);
     } catch {
@@ -604,9 +607,10 @@ export default function RexScreen() {
   async function fetchAiRebuttal(key: string, objection: string, fallback: string, newAngle = false) {
     setAiLoading(key);
     try {
+      const guardrails = `Never invent store policies, inventory demand, competing buyers, lender counts, financing approvals, hold/deposit rules, price-match authority, discounts, incentives, availability, trade values, repair timing, vehicle-value claims, or customer facts. If a fact is unknown, ask for it or phrase the angle conditionally.`;
       const prompt = newAngle
-        ? `Give me a DIFFERENT fresh angle for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences.\n\nObjection: "${objection}"`
-        : `Give me a sharp, specific rebuttal for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences.\n\nObjection: "${objection}"`;
+        ? `Give me a DIFFERENT fresh angle for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences. ${guardrails}\n\nObjection: "${objection}"`
+        : `Give me a sharp, specific rebuttal for this sales objection in the ${rebuttalIndustry} industry. Be direct, give the actual words to say, keep it under 3 sentences. ${guardrails}\n\nObjection: "${objection}"`;
       const text = (await callBrain({ maxTokens: 600, messages: [{ role: 'user', content: prompt }] })) || fallback;
       setAiRebuttals(prev => ({ ...prev, [key]: text }));
     } catch {
