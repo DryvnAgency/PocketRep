@@ -47,10 +47,10 @@ ok(blastLogic.includes('drafted.length !== contacts.length'), 'generated blast m
 ok(rexCoach.includes("'create_blast_sequence'"), 'text Rex permits the Smart Blast action');
 ok(coachBrain.includes('create_blast_sequence'), 'text Rex is taught how to propose Smart Blast');
 ok(appShell.includes('await openBlastFromRex(action.payload)'), 'confirmed text Rex Smart Blast opens a validated draft before claiming success');
-ok(rexActions.includes('Check appointment state before choosing the next move'), 'Rex checks appointment state before drafting the next move');
+ok(rexActions.includes('Only treat an appointment as confirmed when the notes or conversation state an explicit day/time'), 'Rex checks appointment state before drafting the next move, and will not upgrade a vague mention into a confirmed one');
 ok(rexActions.includes('If a confirmed upcoming appointment exists, protect and prepare that appointment'), 'Rex protects and prepares confirmed appointments');
 ok(rexActions.includes('Do not ask them to come in earlier, offer a second appointment'), 'Rex does not reopen scheduling when an appointment exists');
-ok(rexActions.includes('If no appointment exists, the default next move is a specific in-person appointment'), 'Rex defaults toward an appointment only when one is not already set');
+ok(rexActions.includes('Otherwise (no appointment, or only a tentative one), the default next move is a specific in-person appointment'), 'Rex defaults toward an appointment only when one is not already confirmed');
 ok(rexActions.includes('Do not volunteer to run, quote, or send numbers by phone, text, or email'), 'Rex does not volunteer remote numbers');
 ok(rexActions.includes('If the customer explicitly asks to handle numbers remotely'), 'Rex honors an explicit customer request for remote numbers');
 ok(coachBrain.includes('Want to stop in so we can compare both side by side'), 'lease-versus-finance playbook advances to an appointment');
