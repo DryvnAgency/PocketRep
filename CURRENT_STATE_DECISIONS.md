@@ -1,6 +1,6 @@
 # PocketRep — Current State / Decisions
 
-**Last updated:** 2026-09-01 CT / 2026-09-02 UTC
+**Last updated:** 2026-09-02 CT / 2026-09-02 UTC
 
 **Purpose:** This is PocketRep's living operational truth. Read `PROJECT_OPERATING_SYSTEM.md` first. If older handoffs, plans, PR descriptions, or chat history conflict with this file, this file wins unless current production proves otherwise.
 
@@ -31,7 +31,7 @@ The intended loop is:
 
 Last runtime-affecting code baseline:
 
-`04a763c4978c94e1a6a4779a0fe3f74b94d7c40b` — PR #119
+`3c12a7b37da30c58b7058c41e2a3ff5221f12bb4` — PR #126
 
 Documentation-only commits may make Git `main` and Vercel's latest deployment SHA newer than this value without changing runtime behavior. When behavior matters, verify the last runtime-affecting commit plus the live deployment/function version rather than assuming the newest docs commit changed the app.
 
@@ -40,7 +40,7 @@ Production surfaces:
 - Marketing: `https://pocketrep.pro` / `https://www.pocketrep.pro`
 - App: `https://app.pocketrep.pro`
 
-Both Vercel production projects were verified **READY** on the PR #119 runtime baseline; later docs-only builds are expected to remain behavior-identical.
+The app production deployment for PR #126 was verified **READY** and aliased to `app.pocketrep.pro`. The marketing Vercel project also passed its check on the same merge commit.
 
 Recent production sequence:
 
@@ -53,6 +53,9 @@ Recent production sequence:
 - **PR #117** — whole-book turns now clear single-contact scope and ignore stale prior chat claims so current CRM data is the identity source.
 - **PR #118** — current-state source of truth refreshed and stale launch-era branches explicitly retired.
 - **PR #119** — legacy/native V1 Rex calls recovered through the current AI stack without requiring an installed-client update.
+- **PR #123** — Rex/native automotive coaching hardened against fabricated dealership facts while preserving truthful urgency and persuasion.
+- **PR #124** — checkout existing-account rebind protection hardened.
+- **PR #126** — verified monthly program context added to Rex: first-days monthly prompt, conversational mid-month updates, timezone-aware month boundaries, owner-scoped persistence, and prompt injection as facts rather than instructions.
 
 Do not infer that an old PR or green preview is production. Verify `main`, Vercel, and Supabase when behavior matters.
 
@@ -64,8 +67,9 @@ PocketRep is **deterministic-first**.
 
 Current live Supabase state:
 
-- `ai-proxy` **v43 ACTIVE**
+- `ai-proxy` **v44 ACTIVE**
 - `nurture-scheduler` **v15 ACTIVE**
+- `rex_monthly_programs` exists with RLS enabled and owner-scoped select/insert/update policies.
 
 Routing:
 
@@ -90,6 +94,10 @@ Production hardening now includes:
 - old V1 screenshots are converted from the legacy base64 message shape to the current OpenRouter image shape, while preserving the installed client's expected `content[0].text` response;
 - real Rex Lens traffic remains isolated on its Anthropic route;
 - `/brain` callers that omit an explicit tier now receive deterministic whole-book/weekly tier inference; explicit modern-client tiers still win;
+- on the first user-facing Rex turn during local days 1–3 of a month, Rex asks once for that month's programs if the monthly prompt has not yet been shown;
+- reps can give Rex monthly or mid-month program/sale updates conversationally; current-month verified facts are persisted separately from lossy rolling memory;
+- internal planner/executor/parser calls do not consume the once-per-month program prompt;
+- monthly program context is injected as rep-supplied business facts only, not executable instructions, and does not carry into a different month;
 - daily AI caps remain active;
 - monthly AI ceiling remains **$20/account** unless explicitly changed;
 - output is bounded;
@@ -116,6 +124,9 @@ Rex should:
 - understand notes, vehicle, trade, timing, objections, promises, appointment state, sequence state, recent outcome, and relationship context when available;
 - recommend the **best next move**, not merely generate copy;
 - prioritize getting or protecting the appointment when that is the logical deal-moving action;
+- create legitimate urgency from real calendar timing, customer context, holidays, ownership/lease milestones, and rep-verified dealership/manufacturer programs without fabricating facts;
+- use a new reason and genuinely different wording across repeated touches rather than recycling generic check-in language;
+- support sold-customer first-year follow-up, ownership/anniversary milestones, holiday touches, and context-appropriate referral asks;
 - give practical selling angles around value, family/use case, ownership, trade/equity, vehicle fit, urgency, and next step without fabricating facts;
 - carry relevant context inside one customer conversation;
 - never transfer one customer's facts into another customer's conversation;
@@ -123,6 +134,8 @@ Rex should:
 - return fewer ranked contacts rather than inventing or duplicating names;
 - preserve human control over customer-facing sends;
 - remain useful when the model provider is degraded by falling back to deterministic workflow guidance where possible.
+
+Monthly program behavior is a standing product rule: during days 1–3 Rex should request the month's programs once on the first user-facing Rex interaction if not already prompted; the rep can answer naturally and can later provide mid-month changes the same way. These verified program facts are month-scoped and may be used to create truthful urgency. If no verified program fact exists, Rex falls back to calendar/customer context rather than inventing incentives or dealer claims.
 
 Customer-facing copy should be conversational, specific, concise, appointment-aware, and based only on known context. Avoid generic follow-up filler and corporate AI language.
 
@@ -164,7 +177,7 @@ Do not rebuild the core workflow during aesthetic or AI work.
 - Real SMS flows preserve explicit `sent` / `not_sent` / failure truth where supported.
 - Unknown sequence tokens must be blocked before customer-facing handoff.
 - Legacy supported aliases such as product/color/trade/dealership/lease remain supported through the shared renderer.
-- Do not fabricate customer facts, vehicle data, numbers, dates, trade values, or appointment details.
+- Do not fabricate customer facts, vehicle data, numbers, dates, trade values, appointment details, incentives, program eligibility, sale terms, or dealer promises.
 
 ---
 
@@ -227,11 +240,15 @@ Verified:
 - Rex `LIVE` / `WORKING` presentation shipped;
 - whole-book duplicate/test-record protection shipped;
 - stale whole-book chat-history contamination reproduced and fixed in PR #117;
-- legacy/native V1 pre-call brief, weekly digest, explicit-action, and screenshot routing regression identified and server-side compatibility restored in PR #119 / `ai-proxy` v43;
-- both production Vercel surfaces READY on #119's runtime-affecting merge commit;
-- no app production error/fatal logs found during the immediate post-deploy check.
+- legacy/native V1 pre-call brief, weekly digest, explicit-action, and screenshot routing regression identified and server-side compatibility restored in PR #119;
+- fabricated dealership urgency/claims removed from native Rex coaching in PR #123 while preserving truthful urgency;
+- existing-account checkout rebind protection shipped in PR #124;
+- Rex verified monthly program persistence and first-days prompt shipped in PR #126;
+- `rex_monthly_programs` RLS and owner-scoped policies verified in production;
+- PR #126 app production deployment verified READY and aliased to `app.pocketrep.pro`;
+- no new Supabase security-advisor finding was introduced by the monthly-program table.
 
-Continue watching real usage for latency, cost, provider errors, unexpected context leakage, and vision-route behavior. Do not call an AI change complete only because tests pass.
+Continue watching real usage for latency, cost, provider errors, unexpected context leakage, vision-route behavior, and whether reps naturally phrase program updates in ways the deterministic capture recognizes. Do not call an AI change complete only because tests pass.
 
 ---
 
@@ -239,7 +256,7 @@ Continue watching real usage for latency, cost, provider errors, unexpected cont
 
 ### NOW — launch-critical
 
-1. **Rex quality first.** Continue adversarial production evaluation across real car-sales scenarios: objection, appointment set, trade, ghosted customer, sold customer, lease/ownership timing, pronoun follow-up, whole-book ranking, malformed/hostile context, and screenshot/legacy-client paths.
+1. **Rex quality first.** Continue adversarial production evaluation across real car-sales scenarios: objection, appointment set, trade, ghosted customer, sold customer, lease/ownership timing, monthly program update, mid-month sale update, pronoun follow-up, whole-book ranking, malformed/hostile context, and screenshot/legacy-client paths.
 2. **Premium app aesthetic/microcopy pass** without changing workflow architecture. Desired feel: a private sales operating system for a serious producer.
 3. **Final end-to-end launch audit:** landing → pricing/trial → Stripe → provisioning → thank-you/setup → login → onboarding → daily list → customer action → outcome → next action.
 4. **Resolve pricing ladder implementation deliberately.**
