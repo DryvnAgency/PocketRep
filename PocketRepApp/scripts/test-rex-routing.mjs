@@ -9,6 +9,7 @@ const root = path.resolve(new URL('..', import.meta.url).pathname);
 const routingSource = fs.readFileSync(path.join(root, 'lib/v2/rexRouting.ts'), 'utf8');
 const proxySource = fs.readFileSync(path.join(root, 'supabase/functions/ai-proxy/index.ts'), 'utf8');
 const memorySource = fs.readFileSync(path.join(root, 'lib/v2/rexMemory.ts'), 'utf8');
+const coachBrainSource = fs.readFileSync(path.join(root, 'lib/v2/coachBrain.ts'), 'utf8');
 const coachSource = fs.readFileSync(path.join(root, 'components/v2/RexCoach.tsx'), 'utf8');
 const actionsSource = fs.readFileSync(path.join(root, 'lib/v2/rexActions.ts'), 'utf8');
 
@@ -52,6 +53,7 @@ eq('ambiguous first name never guesses', resolve('Mike wants numbers', contacts)
 ok('source defaults routine Rex to DeepSeek V4 Flash', proxySource.includes("const DEEPSEEK_FLASH = 'deepseek/deepseek-v4-flash-0731'"));
 ok('source escalates to DeepSeek V4 Pro', proxySource.includes("const DEEPSEEK_PRO = 'deepseek/deepseek-v4-pro-0813'"));
 ok('source disables reasoning for Flash', proxySource.includes("{ reasoning: { effort: 'none', exclude: true } }"));
+ok('source disables hidden Pro reasoning so visible copy fits', proxySource.includes("{ reasoning: { enabled: false, exclude: true } }"));
 ok('source enforces $20 monthly ceiling', proxySource.includes("AI_MONTHLY_CAP_CENTS') ?? '2000'"));
 ok('source caps brain output tokens', proxySource.includes('Math.min(Math.floor(requestedMax), MAX_BRAIN_OUTPUT_TOKENS)'));
 ok('monthly ledger is recorded', proxySource.includes("increment_monthly_ai_usage"));
@@ -59,6 +61,9 @@ ok('monthly ledger writes to the canonical first-of-month bucket', proxySource.i
 ok('active-contact memory excludes rep-wide summary', memorySource.includes('Never inject it here'));
 ok('coach persists resolved contact id', coachSource.includes('recordRexTurn(text, line, turnContactId)'));
 ok('coach carries active contact through pronoun follow-ups', coachSource.includes('activeContactIdRef.current'));
+ok('empty or stalled Pro automatically recovers on Flash', coachSource.includes("if (activeTier === 'pro') activeTier = 'flash'"));
+ok('coach presents Rex as live or working, never waking', coachSource.includes("'REX · WORKING' : 'REX · LIVE'") && !coachSource.includes('may be waking up'));
+ok('whole-book rankings cannot duplicate or invent contacts', coachBrainSource.includes('rank it at most once') && coachBrainSource.includes('return the smaller honest count'));
 ok('router implementation stays deterministic', routingSource.includes('Rex never spends a model call deciding which model to use'));
 ok('malformed fenced actions can receive the one-shot repair', actionsSource.includes('JSON.parse(candidate.trim())'));
 

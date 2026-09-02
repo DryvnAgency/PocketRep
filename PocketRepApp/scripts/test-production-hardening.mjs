@@ -57,10 +57,15 @@ ok(coachBrain.includes('Want to stop in so we can compare both side by side'), '
 ok(aiProxy.includes("deepseek/deepseek-v4-flash-0731"), 'routine Rex defaults to DeepSeek V4 Flash');
 ok(aiProxy.includes("deepseek/deepseek-v4-pro-0813"), 'complex Rex has DeepSeek V4 Pro escalation');
 ok(aiProxy.includes("effort: 'none'"), 'Flash calls disable unnecessary reasoning');
+ok(aiProxy.includes('enabled: false'), 'hidden Pro reasoning is disabled so it cannot starve visible copy');
 ok(aiProxy.includes("AI_MONTHLY_CAP_CENTS') ?? '2000'"), 'Rex has a $20 default monthly AI ceiling');
 ok(aiProxy.includes('increment_monthly_ai_usage'), 'Rex records the canonical monthly AI ledger');
 ok(rexRouting.includes("'weekly_coach'"), 'weekly coaching deterministically escalates to Pro');
 ok(rexRouting.includes('flashValidationFailed'), 'failed Flash validation can escalate once to Pro');
+ok(rexCoach.includes("if (activeTier === 'pro') activeTier = 'flash'"), 'empty or stalled Pro recovers once on Flash');
+ok(rexCoach.includes("'REX · WORKING' : 'REX · LIVE'"), 'Rex visibly stays live while idle and working in flight');
+ok(!rexCoach.includes('may be waking up'), 'Rex never presents itself as asleep or waking');
+ok(coachBrain.includes('rank it at most once') && coachBrain.includes('return the smaller honest count'), 'whole-book rankings never duplicate contacts to fill a count');
 
 ok(queue.includes('phone,email,vehicle,trim,trade_in,vehicle_year'), 'follow-up queue loads the real email recipient and legacy sequence context');
 ok(queue.includes('async function advanceEnrollment'), 'sent and skipped follow-ups share one guarded enrollment advance');

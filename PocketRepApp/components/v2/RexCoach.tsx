@@ -219,7 +219,7 @@ export default function RexCoach({
     const scopedActivity = activeContact
       ? `ACTIVE CUSTOMER: ${activeContact.name} (${activeContact.id}). Keep this turn scoped to this customer unless the rep explicitly names someone else.\n${activity}`
       : activity;
-    const tier = chooseRexTier({ workload: 'routine', text });
+    let activeTier = chooseRexTier({ workload: 'routine', text });
     let attempt = 0;
     // P3-A1: flips to false only if the planner returns an unusable plan, so this
     // turn falls back to the single call without a hard error. Transient failures
@@ -265,7 +265,7 @@ export default function RexCoach({
           // cut off mid-sentence — the prompt still asks Rex to stay tight.
           const brainOpts = {
             maxTokens: 1200,
-            tier,
+            tier: activeTier,
             messages: buildCoachMessages({
               history, text, repContext,
               contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
@@ -303,9 +303,16 @@ export default function RexCoach({
           return;
         } catch (e: any) {
           const msg = String(e?.message ?? '');
-          const transient = msg.includes('timeout') || msg.includes('network');
+          // An empty Pro result usually means hidden reasoning consumed the
+          // output ceiling before visible copy began. Recover once on Flash
+          // instead of spending a second Pro call or making Rex appear asleep.
+          const transient = msg.includes('timeout') || msg.includes('network') || msg.includes('empty');
           if (attempt === 0 && transient) {
             attempt++;
+            if (activeTier === 'pro') activeTier = 'flash';
+            // If the optional planner was the failing Pro call, the recovery is
+            // the proven single-call coach path, not another planner attempt.
+            useTriad = false;
             setStreamText(null);
             await warmBrain();   // boot the container, then retry once
             continue;
@@ -316,7 +323,7 @@ export default function RexCoach({
     } catch {
       setMessages(m => [...m, {
         from: 'rex',
-        text: "Couldn't reach Rex just now — the assistant may be waking up. Tap Retry.",
+        text: "Rex hit a connection snag. Your work is safe. Tap Retry.",
         time: stamp(),
       }]);
       setRetry({ text, history });
@@ -459,7 +466,9 @@ export default function RexCoach({
       <View style={[styles.sheet, kbInset > 0 ? ({ bottom: kbInset } as any) : null]}>
         <View style={styles.header}>
           <View style={styles.live} />
-          <Text style={styles.headerLabel}>REX · COACH</Text>
+          <Text style={styles.headerLabel} accessibilityLiveRegion="polite">
+            {typing ? 'REX · WORKING' : 'REX · LIVE'}
+          </Text>
           <View style={{ flex: 1 }} />
           <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={6}>
             <Text style={styles.closeText}>✕</Text>
@@ -497,8 +506,8 @@ export default function RexCoach({
             <View style={styles.bubbleRow}>
               <View style={[styles.bubble, styles.bubbleRex, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
                 <RadarLoader size={16} />
-                <Text style={styles.bubbleText}>
-                  Rex is thinking…
+                <Text style={styles.bubbleText} accessibilityLiveRegion="polite">
+                  Rex is working the board…
                 </Text>
               </View>
             </View>

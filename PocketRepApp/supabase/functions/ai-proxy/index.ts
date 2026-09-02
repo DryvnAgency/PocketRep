@@ -366,9 +366,11 @@ async function handleBrain(req: Request) {
   const routing = routingForRequest(body.role, body.tier);
   const models = routing.models;
   // Routine Flash calls do not spend output tokens on hidden reasoning. Pro is
-  // reserved for explicit complex workloads and gets a bounded high effort.
+  // reserved for explicit complex workloads, but disable hidden reasoning on
+  // the user-facing route. Some provider routes ignore effort/token hints and
+  // consume the entire output ceiling before visible copy begins.
   const reasoning = routing.tier === 'pro'
-    ? { reasoning: { effort: 'high', exclude: true } }
+    ? { reasoning: { enabled: false, exclude: true } }
     : { reasoning: { effort: 'none', exclude: true } };
   // P3-A1: optional sampling temperature (0-2), passed through to OpenRouter when
   // the caller sets it. Omitted → OpenRouter's default, byte-identical to before.
