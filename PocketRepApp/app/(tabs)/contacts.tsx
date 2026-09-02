@@ -276,6 +276,7 @@ export default function ContactsScreen() {
       supabase.from('contacts')
         .select('*')
         .eq('user_id', user.id)
+        .eq('is_deleted', false)
         .order('last_name', { ascending: true })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1),
       reset ? supabase.from('profiles').select('plan').eq('id', user.id).single() : Promise.resolve({ data: null }),
@@ -406,13 +407,19 @@ export default function ContactsScreen() {
 
   async function deleteContact(c: Contact) {
     const name = `${c.first_name} ${c.last_name}`.trim();
-    const msg = `Remove ${name} from your book? This can't be undone.`;
+    const msg = `Remove ${name} from your book? Their history stays saved.`;
 
     const proceed = async () => {
-      const { error } = await supabase.from('contacts').delete().eq('id', c.id);
-      if (error) {
-        if (Platform.OS === 'web') (globalThis as any).alert?.(`Couldn't delete ${name}: ${error.message}`);
-        else Alert.alert('Delete failed', error.message);
+      const { data, error } = await supabase
+        .from('contacts')
+        .update({ is_deleted: true, updated_at: new Date().toISOString() })
+        .eq('id', c.id)
+        .eq('is_deleted', false)
+        .select('id')
+        .maybeSingle();
+      if (error || !data) {
+        if (Platform.OS === 'web') (globalThis as any).alert?.(`Couldn't delete ${name}: ${error?.message ?? 'Refresh and try again.'}`);
+        else Alert.alert('Delete failed', error?.message ?? 'Refresh and try again.');
         return;
       }
       // Drop it locally right away so the row disappears even before the refetch.
