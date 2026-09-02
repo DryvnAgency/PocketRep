@@ -14,142 +14,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: fix/referral-cap-atomic
-      - name: Route both reward paths through atomic reservation RPC
+      - name: Route reward paths through atomic reservation RPC
+        env:
+          WEBHOOK_BLOCK_B64: Y29uc3QgUkVGRVJSQUxfUkVXQVJEX0NBUF9NT05USFMgPSAyNDsKCnR5cGUgUmV3YXJkUmVzZXJ2YXRpb24gPSB7CiAgYWxsb3dlZDogYm9vbGVhbjsKICByZXdhcmRfaWQ6IHN0cmluZyB8IG51bGw7CiAgcmV3YXJkX3N0YXR1czogc3RyaW5nIHwgbnVsbDsKICByZWFzb246IHN0cmluZzsKfTsKCmFzeW5jIGZ1bmN0aW9uIHJlc2VydmVSZXdhcmQoYWRtaW46IGFueSwgcmVmZXJyYWxJZDogc3RyaW5nLCByZWNpcGllbnQ6IHN0cmluZyk6IFByb21pc2U8UmV3YXJkUmVzZXJ2YXRpb24gfCBudWxsPiB7CiAgY29uc3QgeyBkYXRhLCBlcnJvciB9ID0gYXdhaXQgYWRtaW4ucnBjKCJyZXNlcnZlX3JlZmVycmFsX3Jld2FyZCIsIHsKICAgIHBfcmVmZXJyYWxfaWQ6IHJlZmVycmFsSWQsCiAgICBwX3JlY2lwaWVudF91c2VyX2lkOiByZWNpcGllbnQsCiAgICBwX2NhcF9tb250aHM6IFJFRkVSUkFMX1JFV0FSRF9DQVBfTU9OVEhTLAogIH0pOwogIGlmIChlcnJvcikgewogICAgY29uc29sZS5lcnJvcigicmVmZXJyYWwgcmV3YXJkIHJlc2VydmF0aW9uIGZhaWxlZCIsIHJlZmVycmFsSWQsIHJlY2lwaWVudCwgZXJyb3IpOwogICAgcmV0dXJuIG51bGw7CiAgfQogIGNvbnN0IHJvdyA9IEFycmF5LmlzQXJyYXkoZGF0YSkgPyBkYXRhWzBdIDogZGF0YTsKICByZXR1cm4gcm93ID8gcm93IGFzIFJld2FyZFJlc2VydmF0aW9uIDogbnVsbDsKfQoKYXN5bmMgZnVuY3Rpb24gcmV3YXJkKGFkbWluOiBhbnksIHJlZmVycmFsOiBhbnkpIHsKICBpZiAoIXJlZmVycmFsPy5pZCB8fCAhcmVmZXJyYWwucmVmZXJyZXJfdXNlcl9pZCB8fCAhcmVmZXJyYWwucmVmZXJyZWRfdXNlcl9pZCB8fCByZWZlcnJhbC5yZWZlcnJlcl91c2VyX2lkID09PSByZWZlcnJhbC5yZWZlcnJlZF91c2VyX2lkIHx8IHJlZmVycmFsLnN0YXR1cyA9PT0gInJld2FyZGVkIikgcmV0dXJuOwogIGNvbnN0IHJlY2lwaWVudHMgPSBbcmVmZXJyYWwucmVmZXJyZXJfdXNlcl9pZCwgcmVmZXJyYWwucmVmZXJyZWRfdXNlcl9pZF07CiAgbGV0IHNldHRsZWQgPSAwOwogIGZvciAoY29uc3QgcmVjaXBpZW50IG9mIHJlY2lwaWVudHMpIHsKICAgIGNvbnN0IHsgZGF0YTogcCB9ID0gYXdhaXQgYWRtaW4uZnJvbSgicHJvZmlsZXMiKS5zZWxlY3QoInN0cmlwZV9jdXN0b21lcl9pZCxzdWJzY3JpcHRpb25fc3RhdHVzIikuZXEoImlkIiwgcmVjaXBpZW50KS5tYXliZVNpbmdsZSgpOwogICAgaWYgKCFwPy5zdHJpcGVfY3VzdG9tZXJfaWQgfHwgIVsiYWN0aXZlIiwgInRyaWFsaW5nIl0uaW5jbHVkZXMocC5zdWJzY3JpcHRpb25fc3RhdHVzID8/ICIiKSkgY29udGludWU7CgogICAgY29uc3QgcmVzZXJ2YXRpb24gPSBhd2FpdCByZXNlcnZlUmV3YXJkKGFkbWluLCByZWZlcnJhbC5pZCwgcmVjaXBpZW50KTsKICAgIGlmICghcmVzZXJ2YXRpb24pIGNvbnRpbnVlOwogICAgaWYgKCFyZXNlcnZhdGlvbi5hbGxvd2VkKSB7CiAgICAgIGlmIChyZXNlcnZhdGlvbi5yZWFzb24gPT09ICJjYXBfcmVhY2hlZCIpIHNldHRsZWQrKzsKICAgICAgY29udGludWU7CiAgICB9CiAgICBpZiAocmVzZXJ2YXRpb24ucmV3YXJkX3N0YXR1cyA9PT0gImFwcGxpZWQiKSB7IHNldHRsZWQrKzsgY29udGludWU7IH0KICAgIGNvbnN0IHJld2FyZElkID0gcmVzZXJ2YXRpb24ucmV3YXJkX2lkOwogICAgaWYgKCFyZXdhcmRJZCkgY29udGludWU7CgogICAgY29uc3Qgc3VicyA9IGF3YWl0IHN0cmlwZShgc3Vic2NyaXB0aW9ucz9jdXN0b21lcj0ke2VuY29kZVVSSUNvbXBvbmVudChwLnN0cmlwZV9jdXN0b21lcl9pZCl9JnN0YXR1cz1hbGwm bGltaXQ9MTBgLnJlcGxhY2UoJyAnLCcnKSwgIkdFVCIpOwogICAgY29uc3Qgc3ViID0gKHN1YnMuZGF0YSA/PyBbXSkuZmluZCgoczogYW55KSA9PiBbImFjdGl2ZSIsICJ0cmlhbGluZyJdLmluY2x1ZGVzKHMuc3RhdHVzKSk7CiAgICBpZiAoIXN1Yj8uaWQpIGNvbnRpbnVlOwogICAgdHJ5IHsKICAgICAgY29uc3QgY291cG9uID0gYXdhaXQgc3RyaXBlKCJjb3Vwb25zIiwgIlBPU1QiLCB7IHBlcmNlbnRfb2ZmOiAxMDAsIGR1cmF0aW9uOiAib25jZSIsIG5hbWU6IGBQb2NrZXRSZXAgcmVmZXJyYWwgJHtyZXdhcmRJZH1gLCBtZXRhZGF0YTogeyBwb2NrZXRyZXBfcmV3YXJkX2lkOiByZXdhcmRJZCB9IH0sIGBwb2NrZXRyZXBfcmVmZXJyYWxfY291cG9uXyR7cmV3YXJkSWR9YCk7CiAgICAgIGF3YWl0IHN0cmlwZShgc3Vic2NyaXB0aW9ucy8ke2VuY29kZVVSSUNvbXBvbmVudChzdWIuaWQpfWAsICJQT1NUIiwgeyAiZGlzY291bnRzWzBdW2NvdXBvbl0iOiBjb3Vwb24uaWQsIHByb3JhdGlvbl9iZWhhdmlvcjogIm5vbmUiLCAibWV0YWRhdGFbcG9ja2V0cmVwX3JlZmVycmFsX3Jld2FyZF9pZF0iOiByZXdhcmRJZCB9LCBgcG9ja2V0cmVwX3JlZmVycmFsX2FwcGx5XyR7cmV3YXJkSWR9YCk7CiAgICAgIGF3YWl0IGFkbWluLmZyb20oInJlZmVycmFsX3Jld2FyZHMiKS51cGRhdGUoeyBzdGF0dXM6ICJhcHBsaWVkIiwgc3RyaXBlX2NyZWRpdF9pZDogY291cG9uLmlkLCBpc3N1ZWRfYXQ6IG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKSwgYXBwbGllZF9hdDogbmV3IERhdGUoKS50b0lTT1N0cmluZygpIH0pLmVxKCJpZCIsIHJld2FyZElkKTsKICAgICAgc2V0dGxlZCsrOwogICAgfSBjYXRjaCAoZSkgewogICAgICBjb25zb2xlLmVycm9yKCJyZXdhcmQgZmFpbGVkIiwgcmV3YXJkSWQsIGUpOwogICAgICBhd2FpdCBhZG1pbi5mcm9tKCJyZWZlcnJhbF9yZXdhcmRzIikudXBkYXRlKHsgc3RhdHVzOiAiZmFpbGVkIiB9KS5lcSgiaWQiLCByZXdhcmRJZCk7CiAgICB9CiAgfQogIGNvbnN0IG5vdyA9IG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKTsKICBhd2FpdCBhZG1pbi5mcm9tKCJyZWZlcnJhbHMiKS51cGRhdGUoeyBzdGF0dXM6IHNldHRsZWQgPT09IDIgPyAicmV3YXJkZWQiIDogInF1YWxpZmllZCIsIHF1YWxpZmllZF9hdDogcmVmZXJyYWwucXVhbGlmaWVkX2F0ID8/IG5vdywgcmV3YXJkZWRfYXQ6IHNldHRsZWQgPT09IDIgPyBub3cgOiByZWZlcnJhbC5yZXdhcmRlZF9hdCB9KS5lcSgiaWQiLCByZWZlcnJhbC5pZCk7Cn0K
+          SCHEDULER_BLOCK_B64: Y29uc3QgUkVGRVJSQUxfUkVXQVJEX0NBUF9NT05USFMgPSAyNDsKCnR5cGUgUmV3YXJkUmVzZXJ2YXRpb24gPSB7CiAgYWxsb3dlZDogYm9vbGVhbjsKICByZXdhcmRfaWQ6IHN0cmluZyB8IG51bGw7CiAgcmV3YXJkX3N0YXR1czogc3RyaW5nIHwgbnVsbDsKICByZWFzb246IHN0cmluZzsKfTsKCmFzeW5jIGZ1bmN0aW9uIHJlc2VydmVSZWZlcnJhbFJld2FyZChhZG1pbjogUmV0dXJuVHlwZTx0eXBlb2YgY3JlYXRlQ2xpZW50PiwgcmVmZXJyYWxJZDogc3RyaW5nLCByZWNpcGllbnQ6IHN0cmluZyk6IFByb21pc2U8UmV3YXJkUmVzZXJ2YXRpb24gfCBudWxsPiB7CiAgY29uc3QgeyBkYXRhLCBlcnJvciB9ID0gYXdhaXQgYWRtaW4ucnBjKCdyZXNlcnZlX3JlZmVycmFsX3Jld2FyZCcsIHsKICAgIHBfcmVmZXJyYWxfaWQ6IHJlZmVycmFsSWQsCiAgICBwX3JlY2lwaWVudF91c2VyX2lkOiByZWNpcGllbnQsCiAgICBwX2NhcF9tb250aHM6IFJFRkVSUkFMX1JFV0FSRF9DQVBfTU9OVEhTL AogIH0pOwogIGlmIChlcnJvcikgewogICAgY29uc29sZS5lcnJvcigncmVjb25jaWxlUmVmZXJyYWxzOiByZXNlcnZhdGlvbiBmYWlsZWQnLCByZWZlcnJhbElkLCByZWNpcGllbnQsIGVycm9yKTsKICAgIHJldHVybiBudWxsOwogIH0KICBjb25zdCByb3cgPSBBcnJheS5pc0FycmF5KGRhdGEpID8gZGF0YVswXSA6IGRhdGE7CiAgcmV0dXJuIHJvdyA/IHJvdyBhcyBSZXdhcmRSZXNlcnZhdGlvbiA6IG51bGw7Cn0KCmFzeW5jIGZ1bmN0aW9uIHJld2FyZFJlZmVycmFsKGFkbWluOiBSZXR1cm5UeXBlPHR5cGVvZiBjcmVhdGVDbGllbnQ+LCByZWZlcnJhbDogYW55KTogUHJvbWlzZTx2b2lkPiB7CiAgaWYgKCFyZWZlcnJhbD8uaWQgfHwgIXJlZmVycmFsLnJlZmVycmVyX3VzZXJfaWQgfHwgIXJlZmVycmFsLnJlZmVycmVkX3VzZXJfaWQgfHwgcmVmZXJyYWwucmVmZXJyZXJfdXNlcl9pZCA9PT0gcmVmZXJyYWwucmVmZXJyZWRfdXNlcl9pZCB8fCByZWZlcnJhbC5zdGF0dXMgPT09ICdyZXdhcmRlZCcpIHJldHVybjsKICBjb25zdCByZWNpcGllbnRzID0gW3JlZmVycmFsLnJlZmVycmVyX3VzZXJfaWQsIHJlZmVycmFsLnJlZmVycmVkX3VzZXJfaWRdOwogIGxldCBzZXR0bGVkID0gMDsKICBmb3IgKGNvbnN0IHJlY2lwaWVudCBvZiByZWNpcGllbnRzKSB7CiAgICBjb25zdCB7IGRhdGE6IHAgfSA9IGF3YWl0IGFkbWluLmZyb20oJ3Byb2ZpbGVzJykuc2VsZWN0KCdzdHJpcGVfY3VzdG9tZXJfaWQsc3Vic2NyaXB0aW9uX3N0YXR1cycpLmVxKCdpZCcsIHJlY2lwaWVudCkubWF5YmVTaW5nbGUoKTsKICAgIGlmICghcD8uc3RyaXBlX2N1c3RvbWVyX2lkIHx8ICFbJ2FjdGl2ZScsICd0cmlhbGluZyddLmluY2x1ZGVzKHAuc3Vic2NyaXB0aW9uX3N0YXR1cyA/PyAnJykpIGNvbnRpbnVlOwoKICAgIGNvbnN0IHJlc2VydmF0aW9uID0gYXdhaXQgcmVzZXJ2ZVJlZmVycmFsUmV3YXJkKGFkbWluLCByZWZlcnJhbC5pZCwgcmVjaXBpZW50KTsKICAgIGlmICghcmVzZXJ2YXRpb24pIGNvbnRpbnVlOwogICAgaWYgKCFyZXNlcnZhdGlvbi5hbGxvd2VkKSB7CiAgICAgIGlmIChyZXNlcnZhdGlvbi5yZWFzb24gPT09ICdjYXBfcmVhY2hlZCcpIHNldHRsZWQrKzsKICAgICAgY29udGludWU7CiAgICB9CiAgICBpZiAocmVzZXJ2YXRpb24ucmV3YXJkX3N0YXR1cyA9PT0gJ2FwcGxpZWQnKSB7IHNldHRsZWQrKzsgY29udGludWU7IH0KICAgIGNvbnN0IHJld2FyZElkID0gcmVzZXJ2YXRpb24ucmV3YXJkX2lkOwogICAgaWYgKCFyZXdhcmRJZCkgY29udGludWU7CgogICAgY29uc3Qgc3VicyA9IGF3YWl0IHN0cmlwZUNhbGwoYHN1YnNjcmlwdGlvbnM/Y3VzdG9tZXI9JHtlbmNvZGVVUklDb21wb25lbnQocC5zdHJpcGVfY3VzdG9tZXJfaWQpfSZzdGF0dXM9YWxsJmxpbWl0PTEwYCwgJ0dFVCcpOwogICAgY29uc3Qgc3ViID0gKHN1YnMuZGF0YSA/PyBbXSkuZmluZCgoczogYW55KSA9PiBbJ2FjdGl2ZScsICd0cmlhbGluZyddLmluY2x1ZGVzKHMuc3RhdHVzKSk7CiAgICBpZiAoIXN1Yj8uaWQpIGNvbnRpbnVlOwogICAgdHJ5IHsKICAgICAgY29uc3QgY291cG9uID0gYXdhaXQgc3RyaXBlQ2FsbCgnY291cG9ucycsICdQT1NUJywgeyBwZXJjZW50X29mZjogMTAwLCBkdXJhdGlvbjogJ29uY2UnLCBuYW1lOiBgUG9ja2V0UmVwIHJlZmVycmFsICR7cmV3YXJkSWR9YCwgbWV0YWRhdGE6IHsgcG9ja2V0cmVwX3Jld2FyZF9pZDogcmV3YXJkSWQgfSB9LCBgcG9ja2V0cmVwX3JlZmVycmFsX2NvdXBvbl8ke3Jld2FyZElkfWApOwogICAgICBhd2FpdCBzdHJpcGVDYWxsKGBzdWJzY3JpcHRpb25zLyR7ZW5jb2RlVVJJQ29tcG9uZW50KHN1Yi5pZCl9YCwgJ1BPU1QnLCB7ICdkaXNjb3VudHNbMF1bY291cG9uXSc6IGNvdXBvbi5pZCwgcHJvcmF0aW9uX2JlaGF2aW9yOiAnbm9uZScsICdtZXRhZGF0YVtwb2NrZXRyZXBfcmVmZXJyYWxfcmV3YXJkX2lkXSc6IHJld2FyZElkIH0sIGBwb2NrZXRyZXBfcmVmZXJyYWxfYXBwbHlfJHtyZXdhcmRJZH1gKTsKICAgICAgYXdhaXQgYWRtaW4uZnJvbSgncmVmZXJyYWxfcmV3YXJkcycpLnVwZGF0ZSh7IHN0YXR1czogJ2FwcGxpZWQnLCBzdHJpcGVfY3JlZGl0X2lkOiBjb3Vwb24uaWQsIGlzc3VlZF9hdDogbmV3IERhdGUoKS50b0lTT1N0cmluZygpLCBhcHBsaWVkX2F0OiBuZXcgRGF0ZSgpLnRvSVNPU3RyaW5nKCkgfSkuZXEoJ2lkJywgcmV3YXJkSWQpOwogICAgICBzZXR0bGVkKys7CiAgICB9IGNhdGNoIChlKSB7CiAgICAgIGNvbnNvbGUuZXJyb3IoJ3JlY29uY2lsZVJlZmVycmFsczogcmV3YXJkIGZhaWxlZCcsIHJld2FyZElkLCBlKTsKICAgICAgYXdhaXQgYWRtaW4uZnJvbSgncmVmZXJyYWxfcmV3YXJkcycpLnVwZGF0ZSh7IHN0YXR1czogJ2ZhaWxlZCcgfSkuZXEoJ2lkJywgcmV3YXJkSWQpOwogICAgfQogIH0KICBjb25zdCBub3cgPSBuZXcgRGF0ZSgpLnRvSVNPU3RyaW5nKCk7CiAgYXdhaXQgYWRtaW4uZnJvbSgncmVmZXJyYWxzJykudXBkYXRlKHsgc3RhdHVzOiBzZXR0bGVkID09PSAyID8gJ3Jld2FyZGVkJyA6ICdxdWFsaWZpZWQnLCByZXdhcmRlZF9hdDogc2V0dGxlZCA9PT0gMiA/IG5vdyA6IHJlZmVycmFsLnJld2FyZGVkX2F0IH0pLmVxKCdpZCcsIHJlZmVycmFsLmlkKTsKfQo=
         run: |
           python3 - <<'PY'
+          import base64, os, re
           from pathlib import Path
-          import re
-
           webhook = Path('PocketRepApp/supabase/functions/stripe-webhook/index.ts')
           s = webhook.read_text()
-          new_webhook = r'''const REFERRAL_REWARD_CAP_MONTHS = 24;
-
-type RewardReservation = {
-  allowed: boolean;
-  reward_id: string | null;
-  reward_status: string | null;
-  reason: string;
-};
-
-async function reserveReward(admin: any, referralId: string, recipient: string): Promise<RewardReservation | null> {
-  const { data, error } = await admin.rpc("reserve_referral_reward", {
-    p_referral_id: referralId,
-    p_recipient_user_id: recipient,
-    p_cap_months: REFERRAL_REWARD_CAP_MONTHS,
-  });
-  if (error) {
-    console.error("referral reward reservation failed", referralId, recipient, error);
-    return null;
-  }
-  const row = Array.isArray(data) ? data[0] : data;
-  return row ? row as RewardReservation : null;
-}
-
-async function reward(admin: any, referral: any) {
-  if (!referral?.id || !referral.referrer_user_id || !referral.referred_user_id || referral.referrer_user_id === referral.referred_user_id || referral.status === "rewarded") return;
-  const recipients = [referral.referrer_user_id, referral.referred_user_id];
-  let settled = 0;
-  for (const recipient of recipients) {
-    const { data: p } = await admin.from("profiles").select("stripe_customer_id,subscription_status").eq("id", recipient).maybeSingle();
-    if (!p?.stripe_customer_id || !["active", "trialing"].includes(p.subscription_status ?? "")) continue;
-
-    const reservation = await reserveReward(admin, referral.id, recipient);
-    if (!reservation) continue;
-    if (!reservation.allowed) {
-      if (reservation.reason === "cap_reached") settled++;
-      continue;
-    }
-    if (reservation.reward_status === "applied") { settled++; continue; }
-    const rewardId = reservation.reward_id;
-    if (!rewardId) continue;
-
-    const subs = await stripe(`subscriptions?customer=${encodeURIComponent(p.stripe_customer_id)}&status=all&limit=10`, "GET");
-    const sub = (subs.data ?? []).find((s: any) => ["active", "trialing"].includes(s.status));
-    if (!sub?.id) continue;
-    try {
-      const coupon = await stripe("coupons", "POST", { percent_off: 100, duration: "once", name: `PocketRep referral ${rewardId}`, metadata: { pocketrep_reward_id: rewardId } }, `pocketrep_referral_coupon_${rewardId}`);
-      await stripe(`subscriptions/${encodeURIComponent(sub.id)}`, "POST", { "discounts[0][coupon]": coupon.id, proration_behavior: "none", "metadata[pocketrep_referral_reward_id]": rewardId }, `pocketrep_referral_apply_${rewardId}`);
-      await admin.from("referral_rewards").update({ status: "applied", stripe_credit_id: coupon.id, issued_at: new Date().toISOString(), applied_at: new Date().toISOString() }).eq("id", rewardId);
-      settled++;
-    } catch (e) {
-      console.error("reward failed", rewardId, e);
-      await admin.from("referral_rewards").update({ status: "failed" }).eq("id", rewardId);
-    }
-  }
-  const now = new Date().toISOString();
-  await admin.from("referrals").update({ status: settled === 2 ? "rewarded" : "qualified", qualified_at: referral.qualified_at ?? now, rewarded_at: settled === 2 ? now : referral.rewarded_at }).eq("id", referral.id);
-}
-'''
+          block = base64.b64decode(os.environ['WEBHOOK_BLOCK_B64'].replace(' ', '')).decode()
           pattern = re.compile(r'const REFERRAL_REWARD_CAP_MONTHS = 24;\n\nasync function reward\(admin: any, referral: any\) \{.*?\n\}\n\n(?=Deno\.serve)', re.S)
-          s2, n = pattern.subn(new_webhook + '\n', s)
-          if n != 1:
-            raise SystemExit(f'webhook reward transform matched {n} blocks')
+          s2, n = pattern.subn(block + '\n', s)
+          if n != 1: raise SystemExit(f'webhook reward transform matched {n}')
           webhook.write_text(s2)
-
           scheduler = Path('PocketRepApp/supabase/functions/nurture-scheduler/index.ts')
           s = scheduler.read_text()
-          new_scheduler = r'''const REFERRAL_REWARD_CAP_MONTHS = 24;
-
-type RewardReservation = {
-  allowed: boolean;
-  reward_id: string | null;
-  reward_status: string | null;
-  reason: string;
-};
-
-async function reserveReferralReward(admin: ReturnType<typeof createClient>, referralId: string, recipient: string): Promise<RewardReservation | null> {
-  const { data, error } = await admin.rpc('reserve_referral_reward', {
-    p_referral_id: referralId,
-    p_recipient_user_id: recipient,
-    p_cap_months: REFERRAL_REWARD_CAP_MONTHS,
-  });
-  if (error) {
-    console.error('reconcileReferrals: reservation failed', referralId, recipient, error);
-    return null;
-  }
-  const row = Array.isArray(data) ? data[0] : data;
-  return row ? row as RewardReservation : null;
-}
-
-async function rewardReferral(admin: ReturnType<typeof createClient>, referral: any): Promise<void> {
-  if (!referral?.id || !referral.referrer_user_id || !referral.referred_user_id || referral.referrer_user_id === referral.referred_user_id || referral.status === 'rewarded') return;
-  const recipients = [referral.referrer_user_id, referral.referred_user_id];
-  let settled = 0;
-  for (const recipient of recipients) {
-    const { data: p } = await admin.from('profiles').select('stripe_customer_id,subscription_status').eq('id', recipient).maybeSingle();
-    if (!p?.stripe_customer_id || !['active', 'trialing'].includes(p.subscription_status ?? '')) continue;
-
-    const reservation = await reserveReferralReward(admin, referral.id, recipient);
-    if (!reservation) continue;
-    if (!reservation.allowed) {
-      if (reservation.reason === 'cap_reached') settled++;
-      continue;
-    }
-    if (reservation.reward_status === 'applied') { settled++; continue; }
-    const rewardId = reservation.reward_id;
-    if (!rewardId) continue;
-
-    const subs = await stripeCall(`subscriptions?customer=${encodeURIComponent(p.stripe_customer_id)}&status=all&limit=10`, 'GET');
-    const sub = (subs.data ?? []).find((s: any) => ['active', 'trialing'].includes(s.status));
-    if (!sub?.id) continue;
-    try {
-      const coupon = await stripeCall('coupons', 'POST', { percent_off: 100, duration: 'once', name: `PocketRep referral ${rewardId}`, metadata: { pocketrep_reward_id: rewardId } }, `pocketrep_referral_coupon_${rewardId}`);
-      await stripeCall(`subscriptions/${encodeURIComponent(sub.id)}`, 'POST', { 'discounts[0][coupon]': coupon.id, proration_behavior: 'none', 'metadata[pocketrep_referral_reward_id]': rewardId }, `pocketrep_referral_apply_${rewardId}`);
-      await admin.from('referral_rewards').update({ status: 'applied', stripe_credit_id: coupon.id, issued_at: new Date().toISOString(), applied_at: new Date().toISOString() }).eq('id', rewardId);
-      settled++;
-    } catch (e) {
-      console.error('reconcileReferrals: reward failed', rewardId, e);
-      await admin.from('referral_rewards').update({ status: 'failed' }).eq('id', rewardId);
-    }
-  }
-  const now = new Date().toISOString();
-  await admin.from('referrals').update({ status: settled === 2 ? 'rewarded' : 'qualified', rewarded_at: settled === 2 ? now : referral.rewarded_at }).eq('id', referral.id);
-}
-'''
+          block = base64.b64decode(os.environ['SCHEDULER_BLOCK_B64'].replace(' ', '')).decode()
           pattern = re.compile(r'const REFERRAL_REWARD_CAP_MONTHS = 24;\n\nasync function rewardReferral\(admin: ReturnType<typeof createClient>, referral: any\): Promise<void> \{.*?\n\}\n\n(?=async function reconcileStuckReferrals)', re.S)
-          s2, n = pattern.subn(new_scheduler + '\n', s)
-          if n != 1:
-            raise SystemExit(f'scheduler reward transform matched {n} blocks')
+          s2, n = pattern.subn(block + '\n', s)
+          if n != 1: raise SystemExit(f'scheduler reward transform matched {n}')
           scheduler.write_text(s2)
           PY
       - name: Commit transformed reward paths
