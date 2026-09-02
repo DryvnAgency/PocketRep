@@ -42,7 +42,7 @@
 <script>
 (function(){
   var SUPABASE_URL="https://fwvrauqdoevwmwwqlfav.supabase.co";
-  var ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3dnJhdXFkb2V2d213d3FsZmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzczOTAsImV4cCI6MjA4OTk1MzM5MH0.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0";
+  var ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJmd3ZyYXVxZG9ldndtd3dxbGZhdiIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzc0Mzc3MzkwLCJleHAiOjIwODk5NTMzOTB9.D0Mu7wWB59NUr7cFtkl_00ijbseSz_SsV86pwJSn0s0";
   var FN=SUPABASE_URL+"/functions/v1/checkout-account";
   var sessionId=new URLSearchParams(location.search).get("session_id");
   var states=["loading","error","formState","done"];
@@ -84,7 +84,13 @@
         document.getElementById("continue").href=link;show("done");
         setTimeout(function(){location.href=link;},800);return;
       }
-      btn.disabled=false;btn.innerHTML="Open my Heat Sheet <span class=\"arrow\">→</span>";err.textContent="We couldn't finish creating your account. Please try again.";err.classList.add("show");
+      btn.disabled=false;btn.innerHTML="Open my Heat Sheet <span class=\"arrow\">→</span>";
+      if(r.status===409&&r.body&&r.body.error==="account_already_billed"){
+        err.textContent="An account already exists for this email with billing attached. Log in to PocketRep and use Billing to manage the existing subscription.";
+      }else{
+        err.textContent="We couldn't finish creating your account. Please try again.";
+      }
+      err.classList.add("show");
     }).catch(function(){btn.disabled=false;btn.innerHTML="Open my Heat Sheet <span class=\"arrow\">→</span>";err.textContent="Connection error. Please try again.";err.classList.add("show");});
   });
   verify();
