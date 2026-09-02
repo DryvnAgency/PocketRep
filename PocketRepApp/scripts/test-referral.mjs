@@ -113,6 +113,32 @@ ok(VALID_STATES.includes('qualified'), 'qualified is valid state');
 ok(VALID_STATES.includes('rewarded'), 'rewarded is valid state');
 ok(!VALID_STATES.includes('paid'), 'paid is not a valid state');
 
+
+
+// ── Atomic 24-month reward cap ─────────────────────────────────────────
+
+const { readFileSync } = await import('node:fs');
+const migrationSource = readFileSync('supabase/migrations/20260902133500_referral_reward_cap_atomic.sql', 'utf8');
+const webhookSource = readFileSync('supabase/functions/stripe-webhook/index.ts', 'utf8');
+const schedulerSource = readFileSync('supabase/functions/nurture-scheduler/index.ts', 'utf8');
+
+ok(migrationSource.includes('pg_advisory_xact_lock'),
+  '24-month cap reservation serializes concurrent rewards per recipient');
+ok(migrationSource.includes("status in ('pending', 'applied')"),
+  'pending reservations count toward the 24-month cap');
+ok(migrationSource.includes("'cap_reached'::text"),
+  'atomic reservation returns an explicit cap-reached result');
+ok(migrationSource.includes("auth.role() <> 'service_role'"),
+  'reward reservation RPC is service-role only');
+ok(webhookSource.includes('admin.rpc("reserve_referral_reward"'),
+  'Stripe webhook uses atomic reward reservation');
+ok(schedulerSource.includes("admin.rpc('reserve_referral_reward'"),
+  'referral reconciliation uses atomic reward reservation');
+ok(!webhookSource.includes('const totalApplied ='),
+  'Stripe webhook no longer performs the race-prone read-then-insert cap check');
+ok(!schedulerSource.includes('const totalApplied ='),
+  'reconciliation no longer performs the race-prone read-then-insert cap check');
+
 // ── Summary ─────────────────────────────────────────────────────────────
 
 console.log();

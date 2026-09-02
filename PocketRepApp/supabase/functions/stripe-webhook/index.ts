@@ -91,7 +91,7 @@ async function reward(admin: any, referral: any) {
     const rewardId = reservation.reward_id;
     if (!rewardId) continue;
 
-    const subs = await stripe(`subscriptions?customer=${encodeURIComponent(p.stripe_customer_id)}&status=all&limit=10`.replace(' ',''), "GET");
+    const subs = await stripe(`subscriptions?customer=${encodeURIComponent(p.stripe_customer_id)}&status=all&limit=10`, "GET");
     const sub = (subs.data ?? []).find((s: any) => ["active", "trialing"].includes(s.status));
     if (!sub?.id) continue;
     try {
