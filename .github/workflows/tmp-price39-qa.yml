@@ -1,0 +1,33 @@
+name: Temporary V1 $39 QA
+
+on:
+  push:
+    branches: [fix/v1-price-39-realign]
+
+permissions:
+  contents: write
+
+jobs:
+  qa:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v1-price-39-realign
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pricing guard
+        run: cd PocketRepApp && npm run test:pricing
+      - name: Full regression suite
+        run: cd PocketRepApp && npm run test:all
+      - name: Remove temporary QA workflow
+        if: success()
+        run: |
+          rm -f .github/workflows/tmp-price39-qa.yml
+          git config user.name "PocketRep QA Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: complete $39 pricing QA"
+          git push origin HEAD:fix/v1-price-39-realign
