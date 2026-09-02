@@ -2,7 +2,8 @@
  * PocketRep AI Proxy — Supabase Edge Function
  *
  * Routes:
- *   /ai-proxy/gemini   → Rex Lens (Anthropic Claude via REXLENS_API_KEY)
+ *   /ai-proxy/gemini   → Rex Lens, with compatibility routing for legacy PocketRep V1 callers
+ *   /ai-proxy/rexlens  → Rex Lens (Anthropic Claude via REXLENS_API_KEY)
  *   /ai-proxy/brain    → PocketRep brain (OpenRouter via POCKETREP_API_KEY)
  *   /ai-proxy/stt      → 501 stub
  *   /ai-proxy/tts      → 501 stub
@@ -14,7 +15,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEEPSEEK_FLASH = 'deepseek/deepseek-v4-flash-0731';
 const DEEPSEEK_PRO = 'deepseek/deepseek-v4-pro-0813';
+const DEEPSEEK_VISION = 'deepseek/deepseek-v4-flash-vision-exp';
+const VISION_FALLBACK = 'google/gemini-2.5-flash';
 const ROLLOUT_FALLBACK = 'x-ai/grok-4.3';
+const LEGACY_POCKETREP_GEMINI = 'gemini-2.5-flash';
 
 function envModels(name: string, fallback: string[]): string[] {
   const configured = (Deno.env.get(name) ?? '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -22,23 +26,51 @@ function envModels(name: string, fallback: string[]): string[] {
 }
 
 // DeepSeek combo: Flash handles routine Rex work; Pro is an explicit,
-// deterministic escalation. Grok remains the temporary outage fallback during
-// rollout and can be removed with env configuration after the eval window.
+// deterministic escalation. Vision is isolated so text work never pays the
+// multimodal premium. Grok remains the temporary text outage fallback.
 const BRAIN_MODELS_FLASH = envModels(
   'BRAIN_MODELS_FLASH',
   envModels('BRAIN_MODELS_FAST', [DEEPSEEK_FLASH, ROLLOUT_FALLBACK]),
 );
 const BRAIN_MODELS_PRO = envModels('BRAIN_MODELS_PRO', [DEEPSEEK_PRO, DEEPSEEK_FLASH, ROLLOUT_FALLBACK]);
+const BRAIN_MODELS_VISION = envModels('BRAIN_MODELS_VISION', [DEEPSEEK_VISION, VISION_FALLBACK]);
 const BRAIN_MODELS = BRAIN_MODELS_FLASH;
 
-type BrainTier = 'flash' | 'pro';
+type BrainTier = 'flash' | 'pro' | 'vision';
 
 function normalizeTier(tier: unknown): BrainTier {
-  return tier === 'pro' ? 'pro' : 'flash';
+  if (tier === 'pro') return 'pro';
+  if (tier === 'vision') return 'vision';
+  return 'flash';
 }
 
 function modelsForTier(tier: unknown): string[] {
-  return normalizeTier(tier) === 'pro' ? BRAIN_MODELS_PRO : BRAIN_MODELS_FLASH;
+  const normalized = normalizeTier(tier);
+  if (normalized === 'pro') return BRAIN_MODELS_PRO;
+  if (normalized === 'vision') return BRAIN_MODELS_VISION;
+  return BRAIN_MODELS_FLASH;
+}
+
+function textFromMessages(messages: Array<{ role: string; content: unknown }>): string {
+  return messages
+    .map((m) => typeof m.content === 'string' ? m.content : '')
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase();
+}
+
+// Old/native V1 callers predate explicit tier routing. Infer Pro only on clear
+// whole-book/weekly strategy language so those clients receive the same model
+// policy as the current RexCoach without escalating routine/background calls.
+function inferTierFromMessages(messages: Array<{ role: string; content: unknown }>): BrainTier {
+  const q = textFromMessages(messages);
+  if (
+    /\b(whole|entire)\s+(book|pipeline)\b/.test(q) ||
+    /\b(all\s+(my\s+)?(customers|contacts|leads|deals))\b/.test(q) ||
+    /\b(rank|prioritize|compare)\b[\s\S]{0,80}\b(customers|contacts|leads|deals|pipeline|book)\b/.test(q) ||
+    /\bweekly\s+(digest|coach|review|game\s*plan)\b/.test(q)
+  ) return 'pro';
+  return 'flash';
 }
 
 // The optional two-pass triad stays off by default in the client. If enabled,
@@ -303,14 +335,113 @@ async function callClaude(key: string, model: string, max: number, sys: string, 
   return { json: null, error: { message: 'Retries exhausted' } };
 }
 
+function isLegacyPocketRepGeminiBody(body: Record<string, unknown>): boolean {
+  return body.model === LEGACY_POCKETREP_GEMINI && !Array.isArray(body.tasks);
+}
+
+function hasLegacyImage(messages: Array<{ role: string; content: unknown }>): boolean {
+  return messages.some((m) => Array.isArray(m.content) && (m.content as any[]).some((p) => p?.type === 'image'));
+}
+
+function normalizeLegacyContent(content: unknown): unknown {
+  if (!Array.isArray(content)) return content;
+  return content.map((part: any) => {
+    if (part?.type === 'image' && part?.source?.type === 'base64' && part.source.data) {
+      const mediaType = String(part.source.media_type || 'image/jpeg');
+      return {
+        type: 'image_url',
+        image_url: { url: `data:${mediaType};base64,${String(part.source.data)}` },
+      };
+    }
+    if (part?.type === 'text') return { type: 'text', text: String(part.text ?? '') };
+    return part;
+  });
+}
+
+// Compatibility for already-installed/native PocketRep V1 builds that still
+// POST `model: gemini-2.5-flash` to the historical /gemini route. That path now
+// belongs to Rex Lens, so without this shim the old model slug is sent to the
+// Anthropic endpoint and fails. Route legacy PocketRep text/actions to the live
+// DeepSeek stack and screenshots to the isolated vision stack, but preserve the
+// Anthropic-shaped response old clients expect (`content[0].text`).
+async function handleLegacyPocketRepGemini(body: Record<string, unknown>, auth: any) {
+  const KEY = Deno.env.get('POCKETREP_API_KEY');
+  if (!KEY) return json({ error: { type: 'server_error', message: 'POCKETREP_API_KEY not configured' } }, 500);
+  const { user, supabase, today } = auth;
+  const requestedMax = typeof body.max_tokens === 'number' ? body.max_tokens : 800;
+  const maxTok = Math.max(16, Math.min(Math.floor(requestedMax), MAX_BRAIN_OUTPUT_TOKENS));
+  const rawMessages = (body.messages as Array<{ role: string; content: unknown }>) || [];
+  const image = hasLegacyImage(rawMessages);
+  const inferredTier = image ? 'vision' : inferTierFromMessages(rawMessages);
+  const models = modelsForTier(inferredTier);
+  const sys = typeof body.system === 'string' ? body.system : '';
+  const normalizedMessages = rawMessages.map((m) => ({ ...m, content: normalizeLegacyContent(m.content) }));
+  const messages = sys ? [{ role: 'system', content: sys }, ...normalizedMessages] : normalizedMessages;
+  const reasoning = inferredTier === 'vision'
+    ? {}
+    : inferredTier === 'pro'
+      ? { reasoning: { enabled: false, exclude: true } }
+      : { reasoning: { effort: 'none', exclude: true } };
+
+  let apiJson: any = null; let lastErr: any = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await fetch(OPENROUTER_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${KEY}`,
+          'HTTP-Referer': 'https://pocketrep.pro',
+          'X-Title': 'PocketRep',
+        },
+        body: JSON.stringify({ models, messages, max_tokens: maxTok, usage: { include: true }, ...reasoning }),
+      });
+      const j = await r.json();
+      if (r.ok && !j.error && j.choices?.length) { apiJson = j; break; }
+      lastErr = { status: r.status, error: j.error ?? j };
+      if (!(r.status === 429 || r.status === 503 || r.status >= 500)) {
+        return json({ error: j.error ?? j }, r.status);
+      }
+      if (i < 2) await sleep(2000 * Math.pow(2, i));
+    } catch (e: unknown) {
+      lastErr = { error: { message: e instanceof Error ? e.message : 'Unknown' } };
+      if (i < 2) await sleep(2000 * Math.pow(2, i));
+    }
+  }
+  if (!apiJson) {
+    return json({ error: { type: 'OVERLOADED', message: 'AI at capacity.', detail: lastErr?.error?.message } }, 503);
+  }
+
+  const text = String(apiJson.choices?.[0]?.message?.content ?? '');
+  if (!text) return json({ error: { type: 'empty_response', message: 'No text returned' } }, 502);
+  const u = apiJson.usage ?? {};
+  const iT = Number(u.prompt_tokens ?? 0);
+  const oT = Number(u.completion_tokens ?? 0);
+  const cost = Number(u.cost ?? 0) * 100;
+  const usedModel = apiJson.model || models[0] || 'unknown';
+  await recordUsage(supabase!, user!.id, today, usedModel, iT, oT, cost);
+  return json({
+    content: [{ type: 'text', text }],
+    usage: { input_tokens: iT, output_tokens: oT },
+    model: usedModel,
+    compatibility: 'legacy-pocketrep-gemini',
+    tier: inferredTier,
+  });
+}
+
 async function handleRexLens(req: Request) {
-  const KEY = Deno.env.get('REXLENS_API_KEY');
-  if (!KEY) return json({ error: { type: 'server_error', message: 'REXLENS_API_KEY not configured' } }, 500);
   const auth = await authAndPlan(req.headers.get('Authorization'));
   if (auth.error) return auth.error;
-  const { user, supabase, today } = auth;
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: { type: 'invalid_request', message: 'Invalid JSON' } }, 400); }
+
+  // Must run before checking REXLENS_API_KEY: legacy PocketRep V1 requests use
+  // POCKETREP_API_KEY and should not depend on the separate Rex Lens provider.
+  if (isLegacyPocketRepGeminiBody(body)) return handleLegacyPocketRepGemini(body, auth);
+
+  const KEY = Deno.env.get('REXLENS_API_KEY');
+  if (!KEY) return json({ error: { type: 'server_error', message: 'REXLENS_API_KEY not configured' } }, 500);
+  const { user, supabase, today } = auth;
   const model = (body.model as string) || REXLENS_DEFAULT_MODEL;
   const maxTok = typeof body.max_tokens === 'number' ? body.max_tokens : 4096;
   const tasks = body.tasks as Array<Record<string, unknown>> | undefined;
@@ -363,7 +494,8 @@ async function handleBrain(req: Request) {
   const msgs = (body.messages as Array<{ role: string; content: unknown }>) || [];
   const sys = typeof body.system === 'string' ? body.system : '';
   const messages = sys ? [{ role: 'system', content: sys }, ...msgs] : msgs;
-  const routing = routingForRequest(body.role, body.tier);
+  const tier = body.tier ?? inferTierFromMessages(msgs);
+  const routing = routingForRequest(body.role, tier);
   const models = routing.models;
   // Routine Flash calls do not spend output tokens on hidden reasoning. Pro is
   // reserved for explicit complex workloads, but disable hidden reasoning on
@@ -463,7 +595,9 @@ Deno.serve(async (req: Request) => {
     brain: BRAIN_MODELS,
     brainFlash: BRAIN_MODELS_FLASH,
     brainPro: BRAIN_MODELS_PRO,
-    routing: 'deepseek-flash-pro',
+    brainVision: BRAIN_MODELS_VISION,
+    routing: 'deepseek-flash-pro-vision',
+    legacyGeminiCompat: true,
     monthlyCapCents: MONTHLY_CAP_CENTS,
     rexlens: REXLENS_DEFAULT_MODEL,
   });
