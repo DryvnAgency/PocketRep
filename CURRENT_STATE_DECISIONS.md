@@ -29,9 +29,9 @@ Intended loop:
 
 ## 2. Verified production baseline
 
-Last verified PocketRep runtime-affecting Git baseline before the V1 pricing cutover branch:
+Last verified PocketRep runtime-affecting Git baseline:
 
-`b7d3e180f5f172811af9968f34b6910e1a966605` — PR #131
+`1aa51de19ff3b8636cebab535c3ff40b19c04f4d` — PR #134
 
 Production surfaces:
 
@@ -54,6 +54,8 @@ Recent PocketRep sequence:
 - **#129** — Game Plan now uses the real rep identity instead of hardcoded “Jake”.
 - **#130** — native Rebuttals narrowed to automotive-only; fabricated/out-of-scope industries removed.
 - **#131** — appointment evidence boundary, cross-customer context isolation, inventory truth rail.
+- **#133** — V1 $29 Founding Rep cutover across landing, app signup, thank-you, checkout validation, AI-readable pricing, and current-state decisions; existing paying $39 subscriptions preserved.
+- **#134** — completed visible landing $29 alignment, removed unsupported demo urgency/value claims, and hardened the pricing/truthfulness regression guard.
 
 Do not infer production from an old PR or preview. Verify `main`, Vercel, Supabase, Stripe, and the relevant runtime surface.
 
@@ -234,6 +236,9 @@ Verified launch-hardening includes:
 - automotive-only Rebuttals (#130);
 - appointment-evidence boundary, cross-customer isolation, and inventory truth rail (#131);
 - checkout-account v15 dual-price compatibility for the $29 cutover.
+- V1 $29 Founding Rep funnel cutover merged and live (#133).
+- remaining stale $39 landing copy and unsupported demo claims removed; regression guard hardened (#134).
+- post-#134 production verification: marketing and app deployments READY on commit `1aa51de19ff3b8636cebab535c3ff40b19c04f4d`; direct production landing fetch showed the $29 offer and new Stripe link; app error/fatal logs were empty for the checked one-hour window.
 
 Continue watching real usage for latency, cost, provider errors, context leakage, monthly-program capture quality, and customer-facing truthfulness. Passing tests alone is not sufficient production proof.
 
@@ -243,12 +248,11 @@ Continue watching real usage for latency, cost, provider errors, context leakage
 
 ### NOW — launch-critical
 
-1. Complete and verify the **$29 V1 founding pricing cutover** end-to-end: landing → Stripe → thank-you → provisioning → login.
-2. Keep adversarial Rex/V1 evaluation running across appointment, trade, ghosted, sold, program, whole-book, malformed/hostile, and legacy-client scenarios.
-3. Premium app aesthetic/microcopy pass without changing workflow architecture.
-4. Final end-to-end launch audit from landing through daily execution and next action.
-5. Verify referral 24-month cap at launch scale.
-6. Keep landing, checkout, thank-you, support, app, and AI-readable claims aligned with V1 reality.
+1. Keep adversarial Rex/V1 evaluation running across appointment, trade, ghosted, sold, program, whole-book, malformed/hostile, and legacy-client scenarios.
+2. Final end-to-end launch audit from landing through checkout/provisioning/login, then daily execution and next action.
+3. Verify referral 24-month cap at launch scale.
+4. Premium app aesthetic/microcopy pass without changing workflow architecture.
+5. Keep landing, checkout, thank-you, support, app, and AI-readable claims aligned with V1 reality.
 
 ### NEXT
 
