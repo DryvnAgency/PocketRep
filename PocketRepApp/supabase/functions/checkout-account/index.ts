@@ -5,7 +5,12 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const STRIPE_PRICE_ID = Deno.env.get("STRIPE_ELITE_PRICE_ID") ?? "";
+const V1_FOUNDING_PRICE_ID = "price_1UBDLeIKMImSDGHZqrYthX3H";
 const APP_URL = Deno.env.get("APP_URL") ?? "https://app.pocketrep.pro";
+
+function allowedStripePriceIds() {
+  return new Set([STRIPE_PRICE_ID, V1_FOUNDING_PRICE_ID].filter(Boolean));
+}
 
 function corsHeaders(origin: string | null) {
   const ok = origin && (
@@ -63,11 +68,13 @@ async function verifySession(id: string): Promise<
   const subscriptionId = typeof s.subscription === "string" ? s.subscription : (s.subscription?.id ?? null);
   const sub = s.subscription && typeof s.subscription === "object" ? s.subscription : null;
 
-  if (!STRIPE_PRICE_ID) {
-    console.error("checkout-account: STRIPE_ELITE_PRICE_ID is not configured — refusing to provision");
+  const allowedPriceIds = allowedStripePriceIds();
+  if (!allowedPriceIds.size) {
+    console.error("checkout-account: no allowed Stripe price is configured — refusing to provision");
     return { ok: false, status: 503, error: "price_not_configured" };
   }
-  if (sub?.items?.data?.[0]?.price?.id !== STRIPE_PRICE_ID) {
+  const checkoutPriceId = sub?.items?.data?.[0]?.price?.id;
+  if (!checkoutPriceId || !allowedPriceIds.has(checkoutPriceId)) {
     return { ok: false, status: 400, error: "unexpected_price" };
   }
 

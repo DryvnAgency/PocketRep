@@ -19,12 +19,12 @@
 <title>Car Sales Follow-Up App | PocketRep</title>
 <script>document.documentElement.className += " js";</script>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"PocketRep","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://pocketrep.pro","description":"Daily sales execution app for automotive salespeople. PocketRep turns an existing book of business into a prioritized daily plan and drafts contextual follow-up for the rep to review and send.","offers":{"@type":"Offer","price":"39.00","priceCurrency":"USD","description":"Founding price is 39.00 USD per month for the first 500 paying reps and stays with an active founding subscription. New-customer pricing is planned at 54.00 USD for reps 501 through 1000 and 69.00 USD thereafter. Includes a 7-day free trial."},"publisher":{"@type":"Organization","name":"PocketRep","url":"https://pocketrep.pro"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"PocketRep","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://pocketrep.pro","description":"Daily sales execution app for automotive salespeople. PocketRep turns an existing book of business into a prioritized daily plan and drafts contextual follow-up for the rep to review and send.","offers":{"@type":"Offer","price":"29.00","priceCurrency":"USD","description":"Founding Rep access is 29.00 USD per month with a 7-day free trial. The founding software subscription rate stays with the rep while the subscription remains continuously active."},"publisher":{"@type":"Organization","name":"PocketRep","url":"https://pocketrep.pro"}}
 </script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
 {"@type":"Question","name":"What is PocketRep?","acceptedAnswer":{"@type":"Answer","text":"PocketRep is a daily sales execution app for car salespeople. It turns your existing book into a prioritized worklist, shows why each customer matters now, and lets Rex draft contextual follow-up. You review and send every message yourself from your phone or browser."}},
-{"@type":"Question","name":"How much does PocketRep cost?","acceptedAnswer":{"@type":"Answer","text":"PocketRep is 39 USD per month for the first 500 paying reps, 54 USD per month for new customers 501 through 1000, and 69 USD per month thereafter. The 39 USD founding rate stays with an active founding subscription. The individual app includes a 7-day free trial. PocketRep Team is not for sale yet."}},
+{"@type":"Question","name":"How much does PocketRep cost?","acceptedAnswer":{"@type":"Answer","text":"PocketRep V1 Founding Rep access is 29 USD per month with a 7-day free trial. The founding software subscription rate stays with the rep while the subscription remains continuously active. PocketRep Team is not for sale yet."}},
 {"@type":"Question","name":"Is PocketRep a CRM for car salesmen?","acceptedAnswer":{"@type":"Answer","text":"PocketRep is a rep-first daily sales execution app, not a replacement for your dealership CRM. It helps you prioritize and work the relationships you are authorized to keep."}},
 {"@type":"Question","name":"Can I import my existing contacts?","acceptedAnswer":{"@type":"Answer","text":"Yes. PocketRep accepts CSV and vCard files exported from most phones and CRMs. You review the parsed contacts before importing them."}},
 {"@type":"Question","name":"Do my customers stay mine if I change dealerships?","acceptedAnswer":{"@type":"Answer","text":"Your PocketRep workspace stays with your account, including the contacts, notes, and history you are authorized to keep. You are responsible for following your employer's policies and applicable law when storing, moving, or contacting customer data."}},
@@ -996,7 +996,7 @@
         <a class="btn btn-primary btn-lg" href="#signup" onclick="prScrollSignup(event)">Work my book free for 7 days <span class="arrow">→</span></a>
         <a class="btn btn-ghost btn-lg" href="#features">See how it works</a>
       </div>
-      <p class="cta-sub reveal d2">Card required · no subscription charge until day 8 · $39/mo founding rate stays locked while your founding subscription is active.</p>
+      <p class="cta-sub reveal d2">Card required · no subscription charge until day 8 · $29/mo founding software rate stays locked while your subscription remains active.</p>
       <div class="hero-trust reveal d3">
         <span><span class="ck">✓</span> Your PocketRep workspace stays with you</span>
         <span><span class="ck">✓</span> Nothing sends until you tap send</span>
@@ -1209,10 +1209,10 @@
       <div class="kind">For automotive sales reps</div>
       <div class="name">PocketRep</div>
       <div class="desc">Your personal follow-up workspace for working the customers and opportunities already in your book.</div>
-      <div class="cost"><span class="now">$39</span><span class="per">/mo</span></div>
-      <div class="was">Next new-customer cohort: $54/mo after the first 500</div>
-      <div class="lock">◆ Founding $39 rate stays with your active founding subscription</div>
-      <div class="spots"><span class="pip"></span> First 500 paying reps</div>
+      <div class="cost"><span class="now">$29</span><span class="per">/mo</span></div>
+      <div class="was">7 days free · card required · no subscription charge until day 8</div>
+      <div class="lock">◆ Keep your founding software rate while your subscription stays active</div>
+      <div class="spots"><span class="pip"></span> Founding Rep access</div>
       <hr>
       <ul>
         <li><span class="tick">✦</span> Heat Sheet, Rex coaching, and Game Plan</li>
@@ -2006,7 +2006,7 @@
 /* PocketRep V1 checkout — direct Stripe handoff with referral attribution. */
 (function () {
   "use strict";
-  var ELITE_STRIPE = "https://buy.stripe.com/cNi4gAbMn4kg9Ax5AucbC06";
+  var ELITE_STRIPE = "https://buy.stripe.com/3cI3cw3fRcQM141bYScbC09";
   var REFERRAL_CODE = (function () {
     try {
       var v = new URLSearchParams(window.location.search).get("ref");
