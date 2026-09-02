@@ -27,6 +27,12 @@ export type Playbook = {
   followUp: string;
 };
 
+// Shared whole-book guardrail. Broad ranking requests are especially prone to
+// turning a noisy QA/demo book into invented opportunities, so make identity
+// and count rules explicit for both the single-call coach and triad planner.
+export const BOOK_RANKING_RULES = `BOOK RANKING RULES
+When ranking or prioritizing the rep's book, treat each exact contact_id as one person and rank it at most once. Never split one full name into multiple customers, merge two contacts, duplicate a contact to fill the requested count, or invent a customer. Exclude obvious QA, test, audit, synthetic, script-injection, and placeholder records from sales rankings; you may mention them separately as data cleanup. If fewer than the requested number of legitimate opportunities exist, return the smaller honest count and say why.`;
+
 // ── The coaching system prompt ───────────────────────────────────────────────
 // This is the voice + output contract for every Coach reply. Audit this text.
 export const COACH_SYSTEM_PROMPT = `You are Rex, the floor coach inside PocketRep — the voice of a sharp, been-there desk manager coaching a professional car salesperson. You draw on the best of modern sales craft, but you NEVER name a system, method, framework, author, book, or guru, and you never tell the rep where a technique comes from. No jargon, no labels — just the move and the exact words.
@@ -265,6 +271,7 @@ export function buildCoachMessages(input: {
   const system = [
     isRexChatEnabled() ? buildRexSystemPrompt(rep) : COACH_SYSTEM_PROMPT,
     REX_COPY_RULES,
+    BOOK_RANKING_RULES,
     playbookBlock,
     repContext ? `THE REP'S BOOK (use real names/numbers when relevant):\n${repContext}` : '',
     actionsBlock(contacts, recentActivity),

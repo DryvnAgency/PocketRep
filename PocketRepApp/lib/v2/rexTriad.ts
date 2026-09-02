@@ -19,7 +19,7 @@
 import { callBrain, callBrainStream, type BrainMessage } from './aiProxy';
 import { REX_COPY_RULES, type RexAction } from './rexActions';
 import {
-  actionsBlock, serializePlaybooks, matchPlaybooks, sanitizeIdentity,
+  actionsBlock, serializePlaybooks, matchPlaybooks, sanitizeIdentity, BOOK_RANKING_RULES,
   type RepIdentity, type CoachContact,
 } from './coachBrain';
 
@@ -123,6 +123,7 @@ export function buildTriadPlannerMessages(input: TriadPlannerInput): BrainMessag
   const { history, text, repContext, contacts = [], recentActivity = '', rep } = input;
   const system = [
     buildPlannerSystem(rep),
+    BOOK_RANKING_RULES,
     serializePlaybooks(matchPlaybooks(text)),
     repContext ? `THE REP'S BOOK (use real names/numbers when relevant):\n${repContext}` : '',
     actionsBlock(contacts, recentActivity),
