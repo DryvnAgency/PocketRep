@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:truth-rails": "node tests/truth-rails.test.mjs"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
