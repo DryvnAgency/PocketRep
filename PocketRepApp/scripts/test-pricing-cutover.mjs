@@ -25,13 +25,18 @@ function requireIncludes(label, source, needles) {
 
 function requireExcludes(label, source, needles) {
   for (const needle of needles) {
-    if (source.includes(needle)) throw new Error(`${label}: stale launch value remains: ${needle}`);
+    if (source.includes(needle)) throw new Error(`${label}: stale/unsupported launch value remains: ${needle}`);
   }
 }
 
 requireIncludes('landing', landing, [
   '"price":"29.00"',
   '<span class="now">$29</span>',
+  'Founding Rep access is $29/month',
+  'Day 8 — $29/mo begins if the subscription is still active',
+  'Is PocketRep worth $29 a month?',
+  '$29/mo Founding Rep rate.',
+  'Founding rate · $29/mo while subscription stays active',
   NEW_URL,
   '7-day free trial',
 ]);
@@ -40,6 +45,18 @@ requireExcludes('landing', landing, [
   'Next new-customer cohort: $54/mo after the first 500',
   'First 500 paying reps',
   '39 USD per month for the first 500',
+  'The first 500 paying reps get the $39 monthly founding rate',
+  'the $39 founding subscription begins on day 8',
+  'Day 8 — $39/mo begins',
+  'Is it really worth $39 a month?',
+  '$39/mo founding rate for the first 500 paying reps',
+  'Founding rate · $39/mo locked forever',
+  'still here with your name on it',
+  'trade at the top of the range',
+  'charging + warranty are no contest',
+  'saved you the 540i',
+  'm340i in portimao is rare',
+  'want me to hold it while you decide',
 ]);
 
 requireIncludes('thankyou', thankyou, ['$29 founding software subscription rate']);
