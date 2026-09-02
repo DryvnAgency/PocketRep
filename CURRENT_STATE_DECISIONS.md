@@ -31,7 +31,7 @@ The intended loop is:
 
 Last runtime-affecting code baseline:
 
-`3c12a7b37da30c58b7058c41e2a3ff5221f12bb4` — PR #126
+`c6e5af4ae9b71fa5b1b52de473314b31b8ba21bd` — PR #127
 
 Documentation-only commits may make Git `main` and Vercel's latest deployment SHA newer than this value without changing runtime behavior. When behavior matters, verify the last runtime-affecting commit plus the live deployment/function version rather than assuming the newest docs commit changed the app.
 
@@ -40,7 +40,7 @@ Production surfaces:
 - Marketing: `https://pocketrep.pro` / `https://www.pocketrep.pro`
 - App: `https://app.pocketrep.pro`
 
-The app production deployment for PR #126 was verified **READY** and aliased to `app.pocketrep.pro`. The marketing Vercel project also passed its check on the same merge commit.
+The app production deployment for PR #127 was verified **READY** and aliased to `app.pocketrep.pro`. PR #127 changes RexLens extension source; a green app deployment proves the repository/app remained healthy but does not by itself prove an already-installed Chrome extension has received a newly packaged build.
 
 Recent production sequence:
 
@@ -56,8 +56,9 @@ Recent production sequence:
 - **PR #123** — Rex/native automotive coaching hardened against fabricated dealership facts while preserving truthful urgency and persuasion.
 - **PR #124** — checkout existing-account rebind protection hardened.
 - **PR #126** — verified monthly program context added to Rex: first-days monthly prompt, conversational mid-month updates, timezone-aware month boundaries, owner-scoped persistence, and prompt injection as facts rather than instructions.
+- **PR #127** — RexLens truthfulness hardening removed automatic repair/resale claims and unsupported incentive, inventory, pricing-flexibility, loyalty, and holiday-sale assumptions while preserving legitimate calendar/customer urgency.
 
-Do not infer that an old PR or green preview is production. Verify `main`, Vercel, and Supabase when behavior matters.
+Do not infer that an old PR or green preview is production. Verify `main`, Vercel, Supabase, and the relevant client/package distribution surface when behavior matters.
 
 ---
 
@@ -98,6 +99,8 @@ Production hardening now includes:
 - reps can give Rex monthly or mid-month program/sale updates conversationally; current-month verified facts are persisted separately from lossy rolling memory;
 - internal planner/executor/parser calls do not consume the once-per-month program prompt;
 - monthly program context is injected as rep-supplied business facts only, not executable instructions, and does not carry into a different month;
+- RexLens source now treats calendar timing as valid urgency while requiring explicit CRM/rep evidence for specific incentives, sale events, inventory movement, pricing flexibility, loyalty offers, rebates, expiration dates, repair predictions, and resale-value claims;
+- holiday timing may be referenced naturally, but RexLens may call it a sale/event only when context confirms one;
 - daily AI caps remain active;
 - monthly AI ceiling remains **$20/account** unless explicitly changed;
 - output is bounded;
@@ -245,10 +248,16 @@ Verified:
 - existing-account checkout rebind protection shipped in PR #124;
 - Rex verified monthly program persistence and first-days prompt shipped in PR #126;
 - `rex_monthly_programs` RLS and owner-scoped policies verified in production;
-- PR #126 app production deployment verified READY and aliased to `app.pocketrep.pro`;
-- no new Supabase security-advisor finding was introduced by the monthly-program table.
+- RexLens truthfulness rails merged in PR #127 across chat, deep review, scan-batch, and customer-detail prompt paths;
+- PR #127 app production deployment verified READY and aliased to `app.pocketrep.pro`;
+- no production Vercel runtime-error clusters were present during the immediate PR #127 hardening window.
 
-Continue watching real usage for latency, cost, provider errors, unexpected context leakage, vision-route behavior, and whether reps naturally phrase program updates in ways the deterministic capture recognizes. Do not call an AI change complete only because tests pass.
+Not yet proven:
+
+- a newly packaged/distributed Chrome extension build containing PR #127 has not been independently verified in this pass;
+- issue #125 remains open for a lightweight regression test preventing the known fabricated-claim patterns from returning.
+
+Continue watching real usage for latency, cost, provider errors, unexpected context leakage, vision-route behavior, whether reps naturally phrase program updates in ways the deterministic capture recognizes, and extension-package drift. Do not call an AI change complete only because tests pass.
 
 ---
 
@@ -257,11 +266,12 @@ Continue watching real usage for latency, cost, provider errors, unexpected cont
 ### NOW — launch-critical
 
 1. **Rex quality first.** Continue adversarial production evaluation across real car-sales scenarios: objection, appointment set, trade, ghosted customer, sold customer, lease/ownership timing, monthly program update, mid-month sale update, pronoun follow-up, whole-book ranking, malformed/hostile context, and screenshot/legacy-client paths.
-2. **Premium app aesthetic/microcopy pass** without changing workflow architecture. Desired feel: a private sales operating system for a serious producer.
-3. **Final end-to-end launch audit:** landing → pricing/trial → Stripe → provisioning → thank-you/setup → login → onboarding → daily list → customer action → outcome → next action.
-4. **Resolve pricing ladder implementation deliberately.**
-5. **Verify referral 24-month cap enforcement at launch scale.**
-6. Keep landing, checkout, thank-you, support, and app claims aligned with what V1 actually does.
+2. **RexLens verification.** Add the narrow truthfulness regression test from issue #125 and verify the packaged/distributed extension path before treating PR #127 as proven in installed-client use.
+3. **Premium app aesthetic/microcopy pass** without changing workflow architecture. Desired feel: a private sales operating system for a serious producer.
+4. **Final end-to-end launch audit:** landing → pricing/trial → Stripe → provisioning → thank-you/setup → login → onboarding → daily list → customer action → outcome → next action.
+5. **Resolve pricing ladder implementation deliberately.**
+6. **Verify referral 24-month cap enforcement at launch scale.**
+7. Keep landing, checkout, thank-you, support, and app claims aligned with what V1 actually does.
 
 ### NEXT — after launch-critical proof
 
