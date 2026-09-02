@@ -77,7 +77,7 @@ Current live Supabase state relevant to launch:
 
 - `ai-proxy` **v44 ACTIVE**
 - `nurture-scheduler` **v17 ACTIVE** — redeployed from bundled repo source carrying the #136 atomic reservation logic; v16 had briefly shipped as a remote-import wrapper pinned to a GitHub raw-content commit instead of bundled source, corrected 2026-09-02.
-- `checkout-account` **v15 ACTIVE** as of the 2026-09-02 pricing cutover preparation; it accepts both the prior live PocketRep price and the new V1 founding price while preserving strict checkout/session/customer-rebind verification.
+- `checkout-account` **v15 ACTIVE**; current public V1 checkout is the $39 price, while retired $29 sessions remain accepted only for safe historical/in-flight provisioning compatibility. Strict checkout/session/customer-rebind verification remains in place.
 - `rex_monthly_programs` exists with RLS enabled and owner-scoped policies.
 
 Routing:
@@ -169,7 +169,8 @@ The old user-count ladder is **killed**. Do not restore `$39 first 500 / $54 nex
 
 Owner-approved product-generation direction:
 
-- **V1 Founding Rep: $29/month** for the current individual product.
+- **V1 Founding Rep: $39/month** for the current individual product.
+- The temporary $29 launch cutover is **retired**; do not advertise or route new customers to the retired $29 Payment Link.
 - **7-day free trial**, card on file; charge begins on day 8 unless canceled.
 - A founding rep keeps the **software subscription rate they joined at while the subscription remains continuously active**.
 - **V2 direction for new customers: $49/month** when V2 materially earns the increase.
@@ -179,9 +180,9 @@ Owner-approved product-generation direction:
 Live Stripe resources prepared for the V1 cutover:
 
 - Product: `prod_UePB5tpacZLwzF`
-- V1 founding price: `price_1UBDLeIKMImSDGHZqrYthX3H` — $29/month
-- V1 founding Payment Link: `plink_1UBDMJIKMImSDGHZWJqPzLRP`
-- Checkout URL: `https://buy.stripe.com/3cI3cw3fRcQM141bYScbC09`
+- Current V1 price: `price_1Tf6MeIKMImSDGHZvYLmeIqS` — $39/month
+- Current V1 Payment Link: `plink_1TfLSuIKMImSDGHZWS0cW3QV`
+- Checkout URL: `https://buy.stripe.com/cNi4gAbMn4kg9Ax5AucbC06`
 
 Existing paying subscriptions must not be bulk-repriced as part of the cutover.
 
@@ -239,7 +240,7 @@ Verified launch-hardening includes:
 - Game Plan real-rep identity (#129);
 - automotive-only Rebuttals (#130);
 - appointment-evidence boundary, cross-customer isolation, and inventory truth rail (#131);
-- checkout-account v15 dual-price compatibility for the $29 cutover.
+- checkout-account v15 dual-price compatibility retained: $39 is current; retired $29 sessions can still complete historical/in-flight provisioning.
 - V1 $29 Founding Rep funnel cutover merged and live (#133).
 - remaining stale $39 landing copy and unsupported demo claims removed; regression guard hardened (#134).
 - post-#134 production verification: marketing and app deployments READY on commit `1aa51de19ff3b8636cebab535c3ff40b19c04f4d`; direct production landing fetch showed the $29 offer and new Stripe link; app error/fatal logs were empty for the checked one-hour window.

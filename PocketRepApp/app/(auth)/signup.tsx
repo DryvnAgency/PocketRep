@@ -9,7 +9,7 @@ import { colors, radius, spacing } from '@/constants/theme';
 
 // The one live, paid PocketRep V1 checkout — same Stripe Payment Link used by
 // the marketing site. V1 is automotive-only and has one founding offer.
-const CHECKOUT_URL = 'https://buy.stripe.com/3cI3cw3fRcQM141bYScbC09';
+const CHECKOUT_URL = 'https://buy.stripe.com/cNi4gAbMn4kg9Ax5AucbC06';
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -62,7 +62,7 @@ export default function SignupScreen() {
               <Text style={s.offerLabel}>FOUNDING REP</Text>
               <Text style={s.offerName}>PocketRep V1</Text>
             </View>
-            <Text style={s.offerPrice}>$29<Text style={s.offerPer}>/mo</Text></Text>
+            <Text style={s.offerPrice}>$39<Text style={s.offerPer}>/mo</Text></Text>
           </View>
           <Text style={s.offerCopy}>7 days free. Keep your founding subscription rate while your subscription stays active.</Text>
           <View style={s.featureRow}><Text style={s.featureCheck}>✓</Text><Text style={s.featureText}>Heat Sheet — know who deserves attention today</Text></View>

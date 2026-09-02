@@ -5,11 +5,12 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const STRIPE_PRICE_ID = Deno.env.get("STRIPE_ELITE_PRICE_ID") ?? "";
-const V1_FOUNDING_PRICE_ID = "price_1UBDLeIKMImSDGHZqrYthX3H";
+const V1_CURRENT_PRICE_ID = "price_1Tf6MeIKMImSDGHZvYLmeIqS";
+const V1_LEGACY_29_PRICE_ID = "price_1UBDLeIKMImSDGHZqrYthX3H";
 const APP_URL = Deno.env.get("APP_URL") ?? "https://app.pocketrep.pro";
 
 function allowedStripePriceIds() {
-  return new Set([STRIPE_PRICE_ID, V1_FOUNDING_PRICE_ID].filter(Boolean));
+  return new Set([STRIPE_PRICE_ID, V1_CURRENT_PRICE_ID, V1_LEGACY_29_PRICE_ID].filter(Boolean));
 }
 
 function corsHeaders(origin: string | null) {
