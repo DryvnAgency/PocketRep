@@ -1,6 +1,6 @@
 # PocketRep — Current State / Decisions
 
-**Last updated:** 2026-08-31
+**Last updated:** 2026-09-02
 
 **Purpose:** Living operational truth for PocketRep. Update this file whenever a product decision changes, a meaningful PR merges, production behavior changes, pricing/referral economics change, or the launch priority changes.
 
@@ -46,7 +46,7 @@ The product should increasingly feel like:
 
 As of this update, `main` HEAD is:
 
-`1bf089ee5fb97b2b927e614bc0b053be12f540f3`
+`7c8c661df40a10386484c307da912529dc4ec16e`
 
 Latest merged launch-polish work on `main` includes:
 
@@ -72,6 +72,13 @@ Production web surfaces:
 - App: `https://app.pocketrep.pro`
 
 Do not infer that an open PR is production merely because its preview deploy is green.
+
+Latest verified production work:
+
+- PR #114: landing SEO foundation, three high-intent automotive pages, sitemap/indexing/performance fixes, and appointment-aware Rex copy;
+- PR #115: deterministic DeepSeek Flash/Pro routing, active-contact Rex memory isolation, constrained Pro repair, and AI cost ceilings;
+- both Vercel production projects reached READY on merge commit `7c8c661`;
+- Supabase `ai-proxy` v39 and `nurture-scheduler` v15 are ACTIVE.
 
 ---
 
@@ -109,7 +116,7 @@ Provider/model selection is an implementation choice, not the product thesis.
 
 Current discussions have considered multiple providers/models, including OpenRouter-based routing, DeepSeek, GLM, Claude, GPT, Grok, Kimi, and others. **Discussion does not equal an approved production migration.**
 
-Owner-approved migration target (2026-09-01): route routine Rex work through DeepSeek V4 Flash and reserve DeepSeek V4 Pro for explicit strategy workloads or one constrained structured-output repair. Keep model IDs configuration-driven, retain a temporary provider fallback, enforce the existing daily limits plus a $20 monthly ceiling, and keep the triad off by default. This is an approved target, **not a production claim**; the live route must not change until the representative eval and rollback checks below pass.
+**Production route (verified 2026-09-02):** `ai-proxy` v39 routes routine Rex work through `deepseek/deepseek-v4-flash-0731` and reserves `deepseek/deepseek-v4-pro-0813` for explicit strategy workloads or one constrained structured-output repair. Grok 4.3 remains a temporary outage fallback. Existing daily limits plus a $20 monthly ceiling are active, output is capped, and the triad remains off by default. `nurture-scheduler` v15 uses the Flash route. Rollback snapshots are `ai-proxy` v38 and `nurture-scheduler` v14.
 
 Before changing the live model/provider stack:
 
@@ -283,27 +290,28 @@ There are multiple older draft PRs in the repository from previous product direc
 
 **Default rule:** treat an old open PR as stale until explicitly reactivated. Do not merge it because it exists.
 
+Explicitly superseded and closed on 2026-09-02: PRs #57, #61, #62, and #67. Their Claude, Grok/Kimi, old privacy-provider, and legacy checkpoint assumptions conflict with the current production route and must not be revived without a fresh review.
+
 ---
 
 ## 10. Immediate launch sequence — NOW
 
 ### #1 NEXT MOVE
 
-**Finish and independently verify PR #107.**
+**Run the post-deploy Rex production evaluation and watch real usage.**
 
 Why it matters:
 
-It contains the active product/admin/UX hardening work and must be resolved before visual polish or launch work is layered on top.
+The DeepSeek route is live with rollback protection. The remaining proof is response quality on the real PocketRep cases: routine objection coaching, appointment-aware follow-up, Jordan/Mike customer isolation, a structured write action, and one whole-book/Weekly Coach Pro escalation.
 
 Complete when:
 
-- scope is reviewed against the current product thesis;
-- code/tests are checked;
-- migrations/edge functions are verified where touched;
-- security/compliance implications are reviewed;
-- the app preview is healthy;
-- production steps are clear;
-- it is merged only if the work is genuinely launch-safe.
+- Flash and Pro return usable PocketRep responses on their intended workloads;
+- the actual model names appear in the AI usage ledger;
+- response latency and cost are acceptable;
+- no customer context crosses between contacts;
+- no unexpected 4xx/5xx or monthly-ledger errors appear in Edge logs;
+- rollback to v38/v14 remains available during the observation window.
 
 ### Secondary priority 1
 
