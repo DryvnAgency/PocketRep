@@ -29,16 +29,18 @@ The intended loop is:
 
 ## 2. Verified production baseline
 
-Current `main` HEAD:
+Last runtime-affecting code baseline:
 
-`04a763c4978c94e1a6a4779a0fe3f74b94d7c40b`
+`04a763c4978c94e1a6a4779a0fe3f74b94d7c40b` — PR #119
+
+Documentation-only commits may make Git `main` and Vercel's latest deployment SHA newer than this value without changing runtime behavior. When behavior matters, verify the last runtime-affecting commit plus the live deployment/function version rather than assuming the newest docs commit changed the app.
 
 Production surfaces:
 
 - Marketing: `https://pocketrep.pro` / `https://www.pocketrep.pro`
 - App: `https://app.pocketrep.pro`
 
-Both Vercel production projects are **READY** on `04a763c`.
+Both Vercel production projects were verified **READY** on the PR #119 runtime baseline; later docs-only builds are expected to remain behavior-identical.
 
 Recent production sequence:
 
@@ -226,7 +228,7 @@ Verified:
 - whole-book duplicate/test-record protection shipped;
 - stale whole-book chat-history contamination reproduced and fixed in PR #117;
 - legacy/native V1 pre-call brief, weekly digest, explicit-action, and screenshot routing regression identified and server-side compatibility restored in PR #119 / `ai-proxy` v43;
-- both production Vercel surfaces READY on #119's merge commit;
+- both production Vercel surfaces READY on #119's runtime-affecting merge commit;
 - no app production error/fatal logs found during the immediate post-deploy check.
 
 Continue watching real usage for latency, cost, provider errors, unexpected context leakage, and vision-route behavior. Do not call an AI change complete only because tests pass.
@@ -284,12 +286,14 @@ Continue watching real usage for latency, cost, provider errors, unexpected cont
 
 Update this file whenever any of these changes:
 
-- meaningful merge to `main`;
+- meaningful **runtime-affecting** merge to `main`;
 - production behavior/deployment;
 - model/provider route;
 - pricing/trial/referral decision;
 - launch priority;
 - a feature moves between NOW/NEXT/LATER;
 - a serious known issue is discovered or resolved.
+
+Documentation-only commits do not require a new baseline entry unless they change a decision.
 
 A future PocketRep session should be able to read this file and know **where production actually stands without reconstructing months of chat history**.
