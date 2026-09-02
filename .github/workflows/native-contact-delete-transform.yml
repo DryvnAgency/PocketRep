@@ -1,0 +1,52 @@
+name: Native contact delete transform
+on:
+  push:
+    branches: [fix/native-contact-delete-soft]
+permissions:
+  contents: write
+jobs:
+  transform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/native-contact-delete-soft
+      - name: Align native contacts with soft-delete semantics
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('PocketRepApp/app/(tabs)/contacts.tsx')
+          s=p.read_text()
+          old="""      supabase.from('contacts')\n        .select('*')\n        .eq('user_id', user.id)\n        .order('last_name', { ascending: true })"""
+          new="""      supabase.from('contacts')\n        .select('*')\n        .eq('user_id', user.id)\n        .eq('is_deleted', false)\n        .order('last_name', { ascending: true })"""
+          if old not in s: raise SystemExit('contact loader block not found')
+          s=s.replace(old,new,1)
+          old2="""    const msg = `Remove ${name} from your book? This can't be undone.`;\n\n    const proceed = async () => {\n      const { error } = await supabase.from('contacts').delete().eq('id', c.id);\n      if (error) {"""
+          new2="""    const msg = `Remove ${name} from your book? Their history stays saved.`;\n\n    const proceed = async () => {\n      const { data, error } = await supabase\n        .from('contacts')\n        .update({ is_deleted: true, updated_at: new Date().toISOString() })\n        .eq('id', c.id)\n        .eq('is_deleted', false)\n        .select('id')\n        .maybeSingle();\n      if (error || !data) {"""
+          if old2 not in s: raise SystemExit('native delete block not found')
+          s=s.replace(old2,new2,1)
+          s=s.replace("`Couldn't delete ${name}: ${error.message}`", "`Couldn't delete ${name}: ${error?.message ?? 'Refresh and try again.'}`",1)
+          s=s.replace("Alert.alert('Delete failed', error.message);", "Alert.alert('Delete failed', error?.message ?? 'Refresh and try again.');",1)
+          p.write_text(s)
+
+          t=Path('PocketRepApp/scripts/test-native-contact-delete.mjs')
+          t.write_text("""import { readFileSync } from 'node:fs';\nconst src = readFileSync('app/(tabs)/contacts.tsx','utf8');\nlet pass=0, fail=0;\nfunction ok(c,l){if(c){pass++;console.log('PASS  '+l)}else{fail++;console.error('FAIL  '+l)}}\nok(src.includes(".eq('user_id', user.id)\\n        .eq('is_deleted', false)"), 'native contacts list excludes deleted rows');\nok(src.includes(".update({ is_deleted: true, updated_at: new Date().toISOString() })"), 'native delete soft-deletes contact');\nok(src.includes(".eq('is_deleted', false)\\n        .select('id')\\n        .maybeSingle()"), 'native delete verifies an owned visible row changed');\nok(!src.includes("supabase.from('contacts').delete().eq('id', c.id)"), 'native contact delete no longer hard-deletes history');\nok(src.includes('Their history stays saved.'), 'delete confirmation matches preserved-history behavior');\nif(fail){console.error(`\\n❌ ${fail} FAILED (${pass} passed)`);process.exit(1)}console.log(`\\n✅ ALL PASSED (${pass} checks)`);\n""")
+          pkg=Path('PocketRepApp/package.json')
+          ps=pkg.read_text()
+          marker='"test:all": "'
+          i=ps.find(marker)
+          if i<0: raise SystemExit('test:all not found')
+          start=i+len(marker); end=ps.find('"',start)
+          cmd=ps[start:end]
+          if 'test-native-contact-delete.mjs' not in cmd:
+            cmd += ' && node scripts/test-native-contact-delete.mjs'
+            ps=ps[:start]+cmd+ps[end:]
+            pkg.write_text(ps)
+          PY
+      - name: Commit changes
+        run: |
+          git config user.name "PocketRep Launch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add PocketRepApp/app/'(tabs)'/contacts.tsx PocketRepApp/scripts/test-native-contact-delete.mjs PocketRepApp/package.json
+          git commit -m "Preserve contact history on native delete"
+          git push origin HEAD:fix/native-contact-delete-soft
