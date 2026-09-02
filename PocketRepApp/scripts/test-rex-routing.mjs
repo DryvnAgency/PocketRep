@@ -26,6 +26,9 @@ function tier({ workload = 'routine', text = '', conflict = false, repair = fals
   if (repair || conflict || proWorkloads.has(workload)) return 'pro';
   return proPatterns.some(p => p.test(text)) ? 'pro' : 'flash';
 }
+function wholeBook(text = '') {
+  return proPatterns.slice(0, 3).some(p => p.test(text));
+}
 function resolve(text, contacts) {
   const h = ` ${text.toLowerCase().replace(/[^a-z0-9áéíóúüñ]+/gi, ' ')} `;
   const full = contacts.filter(c => h.includes(` ${c.name.trim().toLowerCase().replace(/[^a-z0-9áéíóúüñ]+/gi, ' ')} `));
@@ -40,6 +43,8 @@ eq('single-customer appointment stays Flash', tier({ text: 'Jordan is coming Sat
 eq('whole-book request escalates to Pro', tier({ text: 'prioritize my entire book' }), 'pro');
 eq('weekly coach workload escalates to Pro', tier({ workload: 'weekly_coach' }), 'pro');
 eq('validation repair escalates to Pro', tier({ repair: true }), 'pro');
+eq('whole-book detector catches entire book', wholeBook('rank my entire book'), true);
+eq('whole-book detector ignores one customer', wholeBook('rank my next move for Jordan'), false);
 
 const contacts = [
   { id: 'j', name: 'Jordan Weektest' },
@@ -64,6 +69,8 @@ ok('coach carries active contact through pronoun follow-ups', coachSource.includ
 ok('empty or stalled Pro automatically recovers on Flash', coachSource.includes("if (activeTier === 'pro') activeTier = 'flash'"));
 ok('coach presents Rex as live or working, never waking', coachSource.includes("'REX · WORKING' : 'REX · LIVE'") && !coachSource.includes('may be waking up'));
 ok('whole-book rankings cannot duplicate or invent contacts', coachBrainSource.includes('rank it at most once') && coachBrainSource.includes('return the smaller honest count'));
+ok('whole-book turns clear single-contact scope', coachSource.includes("if (wholeBook) activeContactIdRef.current = null"));
+ok('whole-book turns ignore stale chat claims', coachSource.includes("history: wholeBook ? [] : history"));
 ok('router implementation stays deterministic', routingSource.includes('Rex never spends a model call deciding which model to use'));
 ok('malformed fenced actions can receive the one-shot repair', actionsSource.includes('JSON.parse(candidate.trim())'));
 

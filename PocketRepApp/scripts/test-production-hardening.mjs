@@ -66,6 +66,8 @@ ok(rexCoach.includes("if (activeTier === 'pro') activeTier = 'flash'"), 'empty o
 ok(rexCoach.includes("'REX · WORKING' : 'REX · LIVE'"), 'Rex visibly stays live while idle and working in flight');
 ok(!rexCoach.includes('may be waking up'), 'Rex never presents itself as asleep or waking');
 ok(coachBrain.includes('rank it at most once') && coachBrain.includes('return the smaller honest count'), 'whole-book rankings never duplicate contacts to fill a count');
+ok(rexCoach.includes("if (wholeBook) activeContactIdRef.current = null"), 'whole-book ranking clears stale single-customer scope');
+ok(rexCoach.includes("history: wholeBook ? [] : history"), 'whole-book ranking ignores stale conversational claims');
 
 ok(queue.includes('phone,email,vehicle,trim,trade_in,vehicle_year'), 'follow-up queue loads the real email recipient and legacy sequence context');
 ok(queue.includes('async function advanceEnrollment'), 'sent and skipped follow-ups share one guarded enrollment advance');

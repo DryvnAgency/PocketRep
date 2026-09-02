@@ -24,14 +24,22 @@ const PRO_WORKLOADS = new Set<RexWorkload>([
 // These phrases represent an explicitly broad or contradictory request. Normal
 // objections, appointment copy, lease-vs-purchase questions, and single-contact
 // coaching intentionally stay on Flash.
-const PRO_TEXT_PATTERNS = [
+const WHOLE_BOOK_PATTERNS = [
   /\b(?:whole|entire)\s+(?:book|pipeline)\b/i,
   /\ball\s+(?:my\s+)?(?:leads|customers|contacts|deals)\b/i,
+  /\b(?:compare|prioritize|rank)\b[\s\S]{0,48}\b(?:deals|customers|leads|pipeline|book)\b/i,
+];
+
+const PRO_TEXT_PATTERNS = [
+  ...WHOLE_BOOK_PATTERNS,
   /\b(?:plan|map|build)\s+(?:out\s+)?my\s+(?:week|weekly strategy)\b/i,
   /\bweekly\s+(?:coach|strategy|game plan|review)\b/i,
-  /\b(?:compare|prioritize|rank)\b[\s\S]{0,48}\b(?:deals|customers|leads|pipeline|book)\b/i,
   /\b(?:conflicting|contradictory|doesn'?t match|context mix(?:ed|ing)?)\b/i,
 ];
+
+export function isWholeBookRequest(text: string): boolean {
+  return WHOLE_BOOK_PATTERNS.some((pattern) => pattern.test(text));
+}
 
 export function chooseRexTier({
   workload = 'routine',
