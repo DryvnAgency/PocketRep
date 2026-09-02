@@ -1,0 +1,161 @@
+name: Referral cap atomic transform
+
+on:
+  push:
+    branches: [fix/referral-cap-atomic]
+
+permissions:
+  contents: write
+
+jobs:
+  transform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/referral-cap-atomic
+      - name: Route both reward paths through atomic reservation RPC
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          webhook = Path('PocketRepApp/supabase/functions/stripe-webhook/index.ts')
+          s = webhook.read_text()
+          new_webhook = r'''const REFERRAL_REWARD_CAP_MONTHS = 24;
+
+type RewardReservation = {
+  allowed: boolean;
+  reward_id: string | null;
+  reward_status: string | null;
+  reason: string;
+};
+
+async function reserveReward(admin: any, referralId: string, recipient: string): Promise<RewardReservation | null> {
+  const { data, error } = await admin.rpc("reserve_referral_reward", {
+    p_referral_id: referralId,
+    p_recipient_user_id: recipient,
+    p_cap_months: REFERRAL_REWARD_CAP_MONTHS,
+  });
+  if (error) {
+    console.error("referral reward reservation failed", referralId, recipient, error);
+    return null;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? row as RewardReservation : null;
+}
+
+async function reward(admin: any, referral: any) {
+  if (!referral?.id || !referral.referrer_user_id || !referral.referred_user_id || referral.referrer_user_id === referral.referred_user_id || referral.status === "rewarded") return;
+  const recipients = [referral.referrer_user_id, referral.referred_user_id];
+  let settled = 0;
+  for (const recipient of recipients) {
+    const { data: p } = await admin.from("profiles").select("stripe_customer_id,subscription_status").eq("id", recipient).maybeSingle();
+    if (!p?.stripe_customer_id || !["active", "trialing"].includes(p.subscription_status ?? "")) continue;
+
+    const reservation = await reserveReward(admin, referral.id, recipient);
+    if (!reservation) continue;
+    if (!reservation.allowed) {
+      if (reservation.reason === "cap_reached") settled++;
+      continue;
+    }
+    if (reservation.reward_status === "applied") { settled++; continue; }
+    const rewardId = reservation.reward_id;
+    if (!rewardId) continue;
+
+    const subs = await stripe(`subscriptions?customer=${encodeURIComponent(p.stripe_customer_id)}&status=all&limit=10`, "GET");
+    const sub = (subs.data ?? []).find((s: any) => ["active", "trialing"].includes(s.status));
+    if (!sub?.id) continue;
+    try {
+      const coupon = await stripe("coupons", "POST", { percent_off: 100, duration: "once", name: `PocketRep referral ${rewardId}`, metadata: { pocketrep_reward_id: rewardId } }, `pocketrep_referral_coupon_${rewardId}`);
+      await stripe(`subscriptions/${encodeURIComponent(sub.id)}`, "POST", { "discounts[0][coupon]": coupon.id, proration_behavior: "none", "metadata[pocketrep_referral_reward_id]": rewardId }, `pocketrep_referral_apply_${rewardId}`);
+      await admin.from("referral_rewards").update({ status: "applied", stripe_credit_id: coupon.id, issued_at: new Date().toISOString(), applied_at: new Date().toISOString() }).eq("id", rewardId);
+      settled++;
+    } catch (e) {
+      console.error("reward failed", rewardId, e);
+      await admin.from("referral_rewards").update({ status: "failed" }).eq("id", rewardId);
+    }
+  }
+  const now = new Date().toISOString();
+  await admin.from("referrals").update({ status: settled === 2 ? "rewarded" : "qualified", qualified_at: referral.qualified_at ?? now, rewarded_at: settled === 2 ? now : referral.rewarded_at }).eq("id", referral.id);
+}
+'''
+          pattern = re.compile(r'const REFERRAL_REWARD_CAP_MONTHS = 24;\n\nasync function reward\(admin: any, referral: any\) \{.*?\n\}\n\n(?=Deno\.serve)', re.S)
+          s2, n = pattern.subn(new_webhook + '\n', s)
+          if n != 1:
+            raise SystemExit(f'webhook reward transform matched {n} blocks')
+          webhook.write_text(s2)
+
+          scheduler = Path('PocketRepApp/supabase/functions/nurture-scheduler/index.ts')
+          s = scheduler.read_text()
+          new_scheduler = r'''const REFERRAL_REWARD_CAP_MONTHS = 24;
+
+type RewardReservation = {
+  allowed: boolean;
+  reward_id: string | null;
+  reward_status: string | null;
+  reason: string;
+};
+
+async function reserveReferralReward(admin: ReturnType<typeof createClient>, referralId: string, recipient: string): Promise<RewardReservation | null> {
+  const { data, error } = await admin.rpc('reserve_referral_reward', {
+    p_referral_id: referralId,
+    p_recipient_user_id: recipient,
+    p_cap_months: REFERRAL_REWARD_CAP_MONTHS,
+  });
+  if (error) {
+    console.error('reconcileReferrals: reservation failed', referralId, recipient, error);
+    return null;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? row as RewardReservation : null;
+}
+
+async function rewardReferral(admin: ReturnType<typeof createClient>, referral: any): Promise<void> {
+  if (!referral?.id || !referral.referrer_user_id || !referral.referred_user_id || referral.referrer_user_id === referral.referred_user_id || referral.status === 'rewarded') return;
+  const recipients = [referral.referrer_user_id, referral.referred_user_id];
+  let settled = 0;
+  for (const recipient of recipients) {
+    const { data: p } = await admin.from('profiles').select('stripe_customer_id,subscription_status').eq('id', recipient).maybeSingle();
+    if (!p?.stripe_customer_id || !['active', 'trialing'].includes(p.subscription_status ?? '')) continue;
+
+    const reservation = await reserveReferralReward(admin, referral.id, recipient);
+    if (!reservation) continue;
+    if (!reservation.allowed) {
+      if (reservation.reason === 'cap_reached') settled++;
+      continue;
+    }
+    if (reservation.reward_status === 'applied') { settled++; continue; }
+    const rewardId = reservation.reward_id;
+    if (!rewardId) continue;
+
+    const subs = await stripeCall(`subscriptions?customer=${encodeURIComponent(p.stripe_customer_id)}&status=all&limit=10`, 'GET');
+    const sub = (subs.data ?? []).find((s: any) => ['active', 'trialing'].includes(s.status));
+    if (!sub?.id) continue;
+    try {
+      const coupon = await stripeCall('coupons', 'POST', { percent_off: 100, duration: 'once', name: `PocketRep referral ${rewardId}`, metadata: { pocketrep_reward_id: rewardId } }, `pocketrep_referral_coupon_${rewardId}`);
+      await stripeCall(`subscriptions/${encodeURIComponent(sub.id)}`, 'POST', { 'discounts[0][coupon]': coupon.id, proration_behavior: 'none', 'metadata[pocketrep_referral_reward_id]': rewardId }, `pocketrep_referral_apply_${rewardId}`);
+      await admin.from('referral_rewards').update({ status: 'applied', stripe_credit_id: coupon.id, issued_at: new Date().toISOString(), applied_at: new Date().toISOString() }).eq('id', rewardId);
+      settled++;
+    } catch (e) {
+      console.error('reconcileReferrals: reward failed', rewardId, e);
+      await admin.from('referral_rewards').update({ status: 'failed' }).eq('id', rewardId);
+    }
+  }
+  const now = new Date().toISOString();
+  await admin.from('referrals').update({ status: settled === 2 ? 'rewarded' : 'qualified', rewarded_at: settled === 2 ? now : referral.rewarded_at }).eq('id', referral.id);
+}
+'''
+          pattern = re.compile(r'const REFERRAL_REWARD_CAP_MONTHS = 24;\n\nasync function rewardReferral\(admin: ReturnType<typeof createClient>, referral: any\): Promise<void> \{.*?\n\}\n\n(?=async function reconcileStuckReferrals)', re.S)
+          s2, n = pattern.subn(new_scheduler + '\n', s)
+          if n != 1:
+            raise SystemExit(f'scheduler reward transform matched {n} blocks')
+          scheduler.write_text(s2)
+          PY
+      - name: Commit transformed reward paths
+        run: |
+          git config user.name "PocketRep Launch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add PocketRepApp/supabase/functions/stripe-webhook/index.ts PocketRepApp/supabase/functions/nurture-scheduler/index.ts
+          git commit -m "Use atomic referral reward reservation"
+          git push origin HEAD:fix/referral-cap-atomic
