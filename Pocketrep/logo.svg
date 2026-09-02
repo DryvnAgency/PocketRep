@@ -1,0 +1,20 @@
+<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PocketRep">
+  <defs>
+    <linearGradient id="prTile" x1="10" y1="6" x2="86" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f3d27e"/>
+      <stop offset="0.5" stop-color="#e2b552"/>
+      <stop offset="1" stop-color="#f0c060"/>
+    </linearGradient>
+    <radialGradient id="prGloss" cx="0.3" cy="0.22" r="0.9">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="6" y="6" width="84" height="84" rx="24" fill="url(#prTile)"/>
+  <rect x="6" y="6" width="84" height="84" rx="24" fill="url(#prGloss)"/>
+  <rect x="6.75" y="6.75" width="82.5" height="82.5" rx="23.25" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.5"/>
+  <path d="M39 72 V27 H53.5 A12.5 12.5 0 0 1 53.5 52 H39" fill="none" stroke="#0a0c12" stroke-opacity="0.28" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,1.5)"/>
+  <path d="M39 72 V27 H53.5 A12.5 12.5 0 0 1 53.5 52 H39" fill="none" stroke="#ffffff" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="62.5" cy="68" r="5" fill="#0a0c12" fill-opacity="0.25"/>
+  <circle cx="62" cy="67" r="5" fill="#ff7a45"/>
+</svg>
