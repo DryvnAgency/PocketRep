@@ -51,19 +51,22 @@ function modelsForTier(tier: unknown): string[] {
   return BRAIN_MODELS_FLASH;
 }
 
-function textFromMessages(messages: Array<{ role: string; content: unknown }>): string {
-  return messages
-    .map((m) => typeof m.content === 'string' ? m.content : '')
-    .filter(Boolean)
-    .join('\n')
-    .toLowerCase();
+function latestUserText(messages: Array<{ role: string; content: unknown }>): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message?.role === 'user' && typeof message.content === 'string') {
+      return message.content.toLowerCase();
+    }
+  }
+  return '';
 }
 
-// Old/native V1 callers predate explicit tier routing. Infer Pro only on clear
-// whole-book/weekly strategy language so those clients receive the same model
-// policy as the current RexCoach without escalating routine/background calls.
+// Old/native V1 callers predate explicit tier routing. Infer Pro only from the
+// current rep request. Never let a prior whole-book turn, assistant reply, or
+// system/context text pin later routine work to Pro. Modern callers that send an
+// explicit tier are unchanged.
 function inferTierFromMessages(messages: Array<{ role: string; content: unknown }>): BrainTier {
-  const q = textFromMessages(messages);
+  const q = latestUserText(messages);
   if (
     /\b(whole|entire)\s+(book|pipeline)\b/.test(q) ||
     /\b(all\s+(my\s+)?(customers|contacts|leads|deals))\b/.test(q) ||
