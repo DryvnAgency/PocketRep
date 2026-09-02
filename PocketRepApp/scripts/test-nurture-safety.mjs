@@ -41,11 +41,25 @@ console.log('\n--- launchSms re-checks contact safety as close to send as practi
 ok('launchSms queries the contacts table for a live safety check before sending',
   /launchSms[\s\S]*?from\(\s*['"]contacts['"]\s*\)[\s\S]*?is_deleted/.test(launcherSrc));
 ok('launchSms refuses to send when the contact is deleted or do-not-contact',
-  /if\s*\(\s*safety\?\.is_deleted\s*\|\|\s*safety\?\.do_not_contact\s*\)/.test(launcherSrc));
+  /is_deleted\s*\|\|[\s\S]{0,40}do_not_contact/.test(launcherSrc));
 ok('a blocked send returns a distinct result (never silently treated as opened)',
   /'blocked'/.test(launcherSrc) && /SmsLaunchResult\s*=[^;]*'blocked'/.test(launcherSrc));
 ok('a demo/tour contact still bypasses the live check (simulated sends are exempt)',
   /if\s*\(\s*draft\.isDemo\s*\)\s*return\s*'opened'/.test(launcherSrc));
+
+console.log('\n--- the safety gate fails CLOSED, not open, on uncertainty (owner review, PR #141) ---');
+// Isolate the safety-check block itself (from the query to the block
+// decision) so this can't accidentally pass by matching an unrelated part
+// of the file.
+const safetyBlockMatch = launcherSrc.match(/const\s*\{\s*data:\s*safety[\s\S]*?return\s*'blocked';\s*\n\s*\}/);
+ok('the safety-check block is present', !!safetyBlockMatch);
+const safetyBlock = safetyBlockMatch ? safetyBlockMatch[0] : '';
+ok('the safety query captures its own error (not just data)',
+  /const\s*\{\s*data:\s*safety\s*,\s*error:\s*\w+/.test(safetyBlock));
+ok('a query error blocks the send (fails closed, not open)',
+  /if\s*\([^)]*(?:safetyError|error)[^)]*\|\|/.test(safetyBlock) || /if\s*\([^)]*\|\|[^)]*(?:safetyError|error)/.test(safetyBlock));
+ok('an unresolved contact (no row found) also blocks the send',
+  /if\s*\([^)]*!\s*safety\b/.test(safetyBlock));
 
 console.log('\n--- the block is recorded for audit, not just silently dropped ---');
 ok('smsActions records a distinct failure status for a safety-blocked send',

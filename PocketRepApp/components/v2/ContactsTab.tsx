@@ -50,15 +50,27 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
   const textBody = current
     ? `Hey ${current.name.split(' ')[0]}, ${repFirstName ? `it’s ${repFirstName}. ` : ''}Just tried giving you a call. Wanted to catch up with you real quick. Give me a call or text when you get a chance.`
     : '';
-  // Throws if either write fails — callers must not report success (or move
-  // on) when this hasn't actually persisted. Previously both writes were
-  // independently swallowed to console.warn, so a DB failure looked
-  // identical to success and the rep had no way to know their outcome/touch
-  // was never saved.
-  const record = async (type: 'call' | 'text', notes: string, callOutcome?: CallOutcome) => {
-    if (!current) return;
+  // logContactTouch is the PRIMARY, authoritative write — it's the actual
+  // follow-up-scheduling state the Heat Sheet/execution engine reads, so its
+  // failure means the outcome genuinely did not persist and throws through
+  // to the caller. logInteraction is a secondary history/audit row: since
+  // the two writes are sequential, the primary can succeed while this one
+  // fails, and a caller must NOT treat that as "record the outcome again" —
+  // retrying would re-run the already-successful primary write a second
+  // time. So a secondary-only failure is caught here and reported back via
+  // the return value instead of thrown (PR #141 review).
+  const record = async (
+    type: 'call' | 'text', notes: string, callOutcome?: CallOutcome,
+  ): Promise<{ interactionLogFailed: boolean }> => {
+    if (!current) return { interactionLogFailed: false };
     await logContactTouch(current.id, type, notes, callOutcome);
-    await logInteraction(current.id, type, notes, callOutcome);
+    try {
+      await logInteraction(current.id, type, notes, callOutcome);
+      return { interactionLogFailed: false };
+    } catch (e) {
+      console.warn('logInteraction failed after the primary touch succeeded', e);
+      return { interactionLogFailed: true };
+    }
   };
   const openCall = async () => {
     if (!current || actionBusyRef.current) return;
@@ -85,11 +97,17 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
     setQueueError(null);
     setOutcome(next);
     try {
-      await record('call', `Call outcome: ${next.replace('-', ' ')}`, next);
+      const { interactionLogFailed } = await record('call', `Call outcome: ${next.replace('-', ' ')}`, next);
+      if (interactionLogFailed) {
+        // The authoritative write succeeded — keep the recorded outcome and
+        // don't invite a retry that would duplicate it. Only warn about the
+        // secondary history log.
+        setQueueError("Outcome saved, but the interaction log couldn't be recorded.");
+      }
     } catch (e) {
       console.warn('chooseOutcome record failed', e);
-      // Don't let the UI claim an outcome was recorded when it wasn't — put
-      // the outcome buttons back so the rep can retry.
+      // The primary write itself failed — don't let the UI claim an outcome
+      // was recorded; put the outcome buttons back so the rep can retry.
       setOutcome(null);
       setQueueError("Couldn't save that outcome — try again.");
     } finally {
@@ -112,12 +130,14 @@ function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () =
       if (result === 'opened') {
         // The text truly was sent (rep confirmed it in the composer) —
         // that's already true regardless of whether logging it succeeds, so
-        // don't undo it on a record() failure. Do surface the failure rather
-        // than letting it disappear, since record() now throws instead of
-        // swallowing.
+        // don't undo it on a record() failure (primary or secondary). Do
+        // surface either kind of failure rather than letting it disappear.
         setTextOpened(true);
         try {
-          await record('text', 'Text sent after no answer');
+          const { interactionLogFailed } = await record('text', 'Text sent after no answer');
+          if (interactionLogFailed) {
+            setQueueError("Text sent, but the follow-up note couldn't be saved.");
+          }
         } catch (e) {
           console.warn('record text-sent outcome failed', e);
           setQueueError("Text sent, but the follow-up note couldn't be saved.");

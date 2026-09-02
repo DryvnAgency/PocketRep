@@ -66,12 +66,13 @@ export default function NurtureReviewer({
         dropDraft(d.id);
         onChanged();
       } else if (opened === 'blocked') {
-        // Contact was deleted or flagged do-not-contact since this draft was
-        // queued. Retrying won't help — remove it rather than leaving a
-        // permanently-unsendable draft in the queue.
-        setError('This contact was removed or marked do-not-contact. Draft removed.');
-        dropDraft(d.id);
-        onChanged();
+        // The contact may have been deleted/flagged do-not-contact since this
+        // draft was queued, OR the safety check itself couldn't be verified
+        // (launchSms fails closed either way — see PR #141 review). Leave
+        // the draft in place so the rep can retry: a transient lookup
+        // failure will likely resolve on retry, and a genuinely unsafe
+        // contact will keep blocking (harmless — the rep can Skip it).
+        setError("Couldn't confirm it's safe to send to this contact. Try again.");
       } else if (opened === 'unsupported') {
         setError('Open PocketRep on your phone to launch Messages. This draft is still pending.');
       } else if (opened !== 'not_sent') {

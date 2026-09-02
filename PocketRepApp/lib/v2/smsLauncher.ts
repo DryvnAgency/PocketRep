@@ -93,15 +93,19 @@ export async function launchSms(draft: SendableDraft): Promise<SmsLaunchResult> 
   // to delete the contact or flag them do-not-contact after it was queued.
   // The listing screens filter both out, but this is the one check every
   // caller of launchSms shares, so it's the backstop when a listing misses
-  // it. Fails open on a query error (e.g. a transient network blip) rather
-  // than blocking an otherwise-healthy send on this function's own hiccup —
-  // it only blocks on an authoritative "this contact is unsafe" answer.
-  const { data: safety } = await supabase
+  // it. Fails CLOSED: uncertainty about whether this contact is deleted/DNC
+  // must never permit outreach — a transient lookup failure (or the row not
+  // resolving at all) is far less harmful than sending to someone who may be
+  // deleted or do-not-contact. Only an affirmatively-safe row (found, not
+  // deleted, not DNC) allows the send. (Reviewed in PR #141: this previously
+  // failed open on a query error.)
+  const { data: safety, error: safetyError } = await supabase
     .from('contacts')
     .select('is_deleted,do_not_contact')
     .eq('id', draft.contact_id)
     .maybeSingle();
-  if (safety?.is_deleted || safety?.do_not_contact) {
+  if (safetyError || !safety || safety.is_deleted || safety.do_not_contact) {
+    if (safetyError) console.warn('launchSms safety lookup failed, failing closed', safetyError);
     await recordSmsFailure({
       contactId: draft.contact_id,
       message: draft.message,
