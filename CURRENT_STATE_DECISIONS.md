@@ -31,14 +31,14 @@ The intended loop is:
 
 Current `main` HEAD:
 
-`33bf3cc191497b492dc2420003545c837454dd12`
+`04a763c4978c94e1a6a4779a0fe3f74b94d7c40b`
 
 Production surfaces:
 
 - Marketing: `https://pocketrep.pro` / `https://www.pocketrep.pro`
 - App: `https://app.pocketrep.pro`
 
-Both Vercel production projects are **READY** on `33bf3cc`.
+Both Vercel production projects are **READY** on `04a763c`.
 
 Recent production sequence:
 
@@ -49,6 +49,8 @@ Recent production sequence:
 - **PR #115** — deterministic DeepSeek Flash/Pro routing, active-contact memory isolation, output/cost rails.
 - **PR #116** — Pro responsiveness hardening, one-shot Flash recovery, Rex `LIVE` / `WORKING` state, duplicate/test-record whole-book protection.
 - **PR #117** — whole-book turns now clear single-contact scope and ignore stale prior chat claims so current CRM data is the identity source.
+- **PR #118** — current-state source of truth refreshed and stale launch-era branches explicitly retired.
+- **PR #119** — legacy/native V1 Rex calls recovered through the current AI stack without requiring an installed-client update.
 
 Do not infer that an old PR or green preview is production. Verify `main`, Vercel, and Supabase when behavior matters.
 
@@ -60,16 +62,17 @@ PocketRep is **deterministic-first**.
 
 Current live Supabase state:
 
-- `ai-proxy` **v42 ACTIVE**
+- `ai-proxy` **v43 ACTIVE**
 - `nurture-scheduler` **v15 ACTIVE**
 
 Routing:
 
 - Routine Rex coaching/drafting/parsing → `deepseek/deepseek-v4-flash-0731`
 - Explicit whole-book / weekly / strategy workloads → `deepseek/deepseek-v4-pro-0813`
+- Legacy/native screenshot understanding → `deepseek/deepseek-v4-flash-vision-exp`, with `google/gemini-2.5-flash` as the isolated vision fallback.
 - Structured repair may escalate to Pro only where explicitly allowed.
 - Optional triad remains **off by default**.
-- Temporary outage fallback remains `x-ai/grok-4.3`.
+- Temporary text outage fallback remains `x-ai/grok-4.3`.
 
 Production hardening now includes:
 
@@ -80,6 +83,11 @@ Production hardening now includes:
 - whole-book requests clear single-contact scope and exclude stale chat-history identity claims;
 - whole-book rankings may not invent customers, duplicate contacts to fill a count, or rank obvious QA/test/audit records;
 - appointment state must be respected: if an appointment is already set, Rex should reinforce the appointment and relevant prep rather than ask the customer to come in earlier for a redundant step;
+- legacy/native V1 `/gemini` calls using the old `gemini-2.5-flash` signature are intercepted before Rex Lens and routed through PocketRep's current OpenRouter stack;
+- old V1 text/action calls stay on Flash unless a clear whole-book/weekly strategy request merits Pro;
+- old V1 screenshots are converted from the legacy base64 message shape to the current OpenRouter image shape, while preserving the installed client's expected `content[0].text` response;
+- real Rex Lens traffic remains isolated on its Anthropic route;
+- `/brain` callers that omit an explicit tier now receive deterministic whole-book/weekly tier inference; explicit modern-client tiers still win;
 - daily AI caps remain active;
 - monthly AI ceiling remains **$20/account** unless explicitly changed;
 - output is bounded;
@@ -87,7 +95,12 @@ Production hardening now includes:
 
 Verified live model usage on 2026-09-02 UTC shows both DeepSeek Flash and DeepSeek Pro in the AI usage ledger. The immediately prior production usage was Grok, confirming the provider cutover is real rather than configuration-only.
 
-Rollback reference for the Rex stress-test window: `ai-proxy` v39 is the pre-v42 stress-hardening baseline. Do not roll back casually; verify the exact desired behavior first.
+Rollback references for the current Rex stress-test window:
+
+- `ai-proxy` v42 = pre-legacy-V1 compatibility hardening.
+- `ai-proxy` v39 = pre-v42 DeepSeek/Rex stress-hardening baseline.
+
+Do not roll back casually; verify the exact desired behavior first.
 
 ---
 
@@ -212,10 +225,11 @@ Verified:
 - Rex `LIVE` / `WORKING` presentation shipped;
 - whole-book duplicate/test-record protection shipped;
 - stale whole-book chat-history contamination reproduced and fixed in PR #117;
-- both production Vercel surfaces READY on #117;
-- no app runtime error clusters found during the immediate post-deploy check.
+- legacy/native V1 pre-call brief, weekly digest, explicit-action, and screenshot routing regression identified and server-side compatibility restored in PR #119 / `ai-proxy` v43;
+- both production Vercel surfaces READY on #119's merge commit;
+- no app production error/fatal logs found during the immediate post-deploy check.
 
-Continue watching real usage for latency, cost, provider errors, and unexpected context leakage. Do not call an AI change complete only because tests pass.
+Continue watching real usage for latency, cost, provider errors, unexpected context leakage, and vision-route behavior. Do not call an AI change complete only because tests pass.
 
 ---
 
@@ -223,7 +237,7 @@ Continue watching real usage for latency, cost, provider errors, and unexpected 
 
 ### NOW — launch-critical
 
-1. **Rex quality first.** Continue adversarial production evaluation across real car-sales scenarios: objection, appointment set, trade, ghosted customer, sold customer, lease/ownership timing, pronoun follow-up, whole-book ranking, and malformed/hostile context.
+1. **Rex quality first.** Continue adversarial production evaluation across real car-sales scenarios: objection, appointment set, trade, ghosted customer, sold customer, lease/ownership timing, pronoun follow-up, whole-book ranking, malformed/hostile context, and screenshot/legacy-client paths.
 2. **Premium app aesthetic/microcopy pass** without changing workflow architecture. Desired feel: a private sales operating system for a serious producer.
 3. **Final end-to-end launch audit:** landing → pricing/trial → Stripe → provisioning → thank-you/setup → login → onboarding → daily list → customer action → outcome → next action.
 4. **Resolve pricing ladder implementation deliberately.**
