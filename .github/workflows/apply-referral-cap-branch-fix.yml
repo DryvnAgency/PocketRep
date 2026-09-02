@@ -1,0 +1,25 @@
+name: Apply referral cap branch fix
+
+on:
+  push:
+    branches: [fix/referral-cap-atomic]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/referral-cap-atomic
+      - name: Apply branch patch
+        run: node PocketRepApp/scripts/apply-referral-cap-branch-fix.mjs
+      - name: Commit patch
+        run: |
+          git config user.name "PocketRep Launch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Add referral cap regression coverage"
+          git push origin HEAD:fix/referral-cap-atomic
