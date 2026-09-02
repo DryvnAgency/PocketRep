@@ -206,7 +206,7 @@ Current internal planning target is roughly **500 outbound SMS segments for abou
 
 Preserve Stripe-aware qualification, idempotency, reconciliation, and the 24-month cap. Pricing work does not change these economics.
 
-**Enforcement status (verified 2026-09-02, #136):** the 24-month cap and the one-time-per-referral reward are enforced atomically in Postgres via `reserve_referral_reward` (`SECURITY DEFINER`, granted to `service_role` only — confirmed live via `information_schema.routine_privileges`), which advisory-locks and row-locks per recipient before either `stripe-webhook` or `nurture-scheduler` is allowed to issue a Stripe coupon. Retries are idempotent (`already_applied` / `already_reserved` / `cap_reached` / `reserved` outcomes), and a recipient at the cap settles the referral as rewarded instead of retrying forever. This closes the gap this section previously flagged: enforcement is now in the data path, not just a dashboard monitor.
+**Enforcement status (verified 2026-09-02, #136):** the 24-month cap and the one-time-per-referral reward are enforced atomically in Postgres via `reserve_referral_reward` (`SECURITY DEFINER`, granted to `service_role` only — confirmed live via `information_schema.routine_privileges`), which advisory-locks and row-locks per recipient before either `stripe-webhook` or `nurture-scheduler` is allowed to issue a Stripe coupon. Retries are idempotent (`already_applied` / `already_reserved` / `cap_reached` / `reserved` outcomes), and a recipient at the cap settles the referral as rewarded instead of retrying forever. Enforcement is now a verified atomic control in the data path, not merely a stated rule.
 
 ---
 
