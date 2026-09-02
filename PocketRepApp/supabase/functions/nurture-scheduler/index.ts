@@ -195,43 +195,60 @@ async function stripeCall(path: string, method: string, body?: Record<string, un
 
 const REFERRAL_REWARD_CAP_MONTHS = 24;
 
+type RewardReservation = {
+  allowed: boolean;
+  reward_id: string | null;
+  reward_status: string | null;
+  reason: string;
+};
+
+async function reserveReferralReward(admin: ReturnType<typeof createClient>, referralId: string, recipient: string): Promise<RewardReservation | null> {
+  const { data, error } = await admin.rpc('reserve_referral_reward', {
+    p_referral_id: referralId,
+    p_recipient_user_id: recipient,
+    p_cap_months: REFERRAL_REWARD_CAP_MONTHS,
+  });
+  if (error) {
+    console.error('reconcileReferrals: reservation failed', referralId, recipient, error);
+    return null;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? row as RewardReservation : null;
+}
+
 async function rewardReferral(admin: ReturnType<typeof createClient>, referral: any): Promise<void> {
   if (!referral?.id || !referral.referrer_user_id || !referral.referred_user_id || referral.referrer_user_id === referral.referred_user_id || referral.status === 'rewarded') return;
   const recipients = [referral.referrer_user_id, referral.referred_user_id];
-  let applied = 0;
+  let settled = 0;
   for (const recipient of recipients) {
     const { data: p } = await admin.from('profiles').select('stripe_customer_id,subscription_status').eq('id', recipient).maybeSingle();
     if (!p?.stripe_customer_id || !['active', 'trialing'].includes(p.subscription_status ?? '')) continue;
-    const { data: existing } = await admin.from('referral_rewards').select('id,status').eq('referral_id', referral.id).eq('recipient_user_id', recipient).eq('reward_type', 'one_month_free').maybeSingle();
-    if (existing?.status === 'applied') { applied++; continue; }
-    if (!existing) {
-      const { data: totalRows } = await admin.from('referral_rewards').select('reward_months').eq('recipient_user_id', recipient).eq('status', 'applied');
-      const totalApplied = (totalRows ?? []).reduce((sum: number, r: any) => sum + Number(r.reward_months ?? 0), 0);
-      if (totalApplied >= REFERRAL_REWARD_CAP_MONTHS) continue; // lifetime cap reached for this account
+
+    const reservation = await reserveReferralReward(admin, referral.id, recipient);
+    if (!reservation) continue;
+    if (!reservation.allowed) {
+      if (reservation.reason === 'cap_reached') settled++;
+      continue;
     }
+    if (reservation.reward_status === 'applied') { settled++; continue; }
+    const rewardId = reservation.reward_id;
+    if (!rewardId) continue;
+
     const subs = await stripeCall(`subscriptions?customer=${encodeURIComponent(p.stripe_customer_id)}&status=all&limit=10`, 'GET');
     const sub = (subs.data ?? []).find((s: any) => ['active', 'trialing'].includes(s.status));
     if (!sub?.id) continue;
-    let rewardId = existing?.id;
-    if (!rewardId) {
-      const { data: ins, error } = await admin.from('referral_rewards').insert({ referral_id: referral.id, recipient_user_id: recipient, reward_months: 1, reward_type: 'one_month_free', status: 'pending' }).select('id').single();
-      if (error && !String(error.message).toLowerCase().includes('duplicate')) continue;
-      rewardId = ins?.id;
-      if (!rewardId) { const { data: r } = await admin.from('referral_rewards').select('id,status').eq('referral_id', referral.id).eq('recipient_user_id', recipient).eq('reward_type', 'one_month_free').maybeSingle(); rewardId = r?.id; }
-    }
-    if (!rewardId) continue;
     try {
       const coupon = await stripeCall('coupons', 'POST', { percent_off: 100, duration: 'once', name: `PocketRep referral ${rewardId}`, metadata: { pocketrep_reward_id: rewardId } }, `pocketrep_referral_coupon_${rewardId}`);
       await stripeCall(`subscriptions/${encodeURIComponent(sub.id)}`, 'POST', { 'discounts[0][coupon]': coupon.id, proration_behavior: 'none', 'metadata[pocketrep_referral_reward_id]': rewardId }, `pocketrep_referral_apply_${rewardId}`);
       await admin.from('referral_rewards').update({ status: 'applied', stripe_credit_id: coupon.id, issued_at: new Date().toISOString(), applied_at: new Date().toISOString() }).eq('id', rewardId);
-      applied++;
+      settled++;
     } catch (e) {
       console.error('reconcileReferrals: reward failed', rewardId, e);
       await admin.from('referral_rewards').update({ status: 'failed' }).eq('id', rewardId);
     }
   }
   const now = new Date().toISOString();
-  await admin.from('referrals').update({ status: applied === 2 ? 'rewarded' : 'qualified', rewarded_at: applied === 2 ? now : referral.rewarded_at }).eq('id', referral.id);
+  await admin.from('referrals').update({ status: settled === 2 ? 'rewarded' : 'qualified', rewarded_at: settled === 2 ? now : referral.rewarded_at }).eq('id', referral.id);
 }
 
 async function reconcileStuckReferrals(admin: ReturnType<typeof createClient>): Promise<number> {
