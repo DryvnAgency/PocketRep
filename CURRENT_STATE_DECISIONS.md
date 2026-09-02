@@ -31,7 +31,7 @@ Intended loop:
 
 Last verified PocketRep runtime-affecting Git baseline:
 
-`1aa51de19ff3b8636cebab535c3ff40b19c04f4d` — PR #134
+`ae8c3b430bc09724b802ab11155da063646a7993` — PR #136
 
 Production surfaces:
 
@@ -56,6 +56,8 @@ Recent PocketRep sequence:
 - **#131** — appointment evidence boundary, cross-customer context isolation, inventory truth rail.
 - **#133** — V1 $29 Founding Rep cutover across landing, app signup, thank-you, checkout validation, AI-readable pricing, and current-state decisions; existing paying $39 subscriptions preserved.
 - **#134** — completed visible landing $29 alignment, removed unsupported demo urgency/value claims, and hardened the pricing/truthfulness regression guard.
+- **#135** — aligned current-state documentation with verified post-cutover runtime.
+- **#136** — referral 24-month reward cap now reserved and enforced atomically at the database level (`reserve_referral_reward`, service-role only) before either recipient's Stripe coupon is issued, closing a race where concurrent/duplicate settlement attempts could over-grant free months.
 
 Do not infer production from an old PR or preview. Verify `main`, Vercel, Supabase, Stripe, and the relevant runtime surface.
 
@@ -74,7 +76,7 @@ PocketRep is deterministic-first.
 Current live Supabase state relevant to launch:
 
 - `ai-proxy` **v44 ACTIVE**
-- `nurture-scheduler` **v15 ACTIVE**
+- `nurture-scheduler` **v17 ACTIVE** — redeployed from bundled repo source carrying the #136 atomic reservation logic; v16 had briefly shipped as a remote-import wrapper pinned to a GitHub raw-content commit instead of bundled source, corrected 2026-09-02.
 - `checkout-account` **v15 ACTIVE** as of the 2026-09-02 pricing cutover preparation; it accepts both the prior live PocketRep price and the new V1 founding price while preserving strict checkout/session/customer-rebind verification.
 - `rex_monthly_programs` exists with RLS enabled and owner-scoped policies.
 
@@ -204,6 +206,8 @@ Current internal planning target is roughly **500 outbound SMS segments for abou
 
 Preserve Stripe-aware qualification, idempotency, reconciliation, and the 24-month cap. Pricing work does not change these economics.
 
+**Enforcement status (verified 2026-09-02, #136):** the 24-month cap and the one-time-per-referral reward are enforced atomically in Postgres via `reserve_referral_reward` (`SECURITY DEFINER`, granted to `service_role` only — confirmed live via `information_schema.routine_privileges`), which advisory-locks and row-locks per recipient before either `stripe-webhook` or `nurture-scheduler` is allowed to issue a Stripe coupon. Retries are idempotent (`already_applied` / `already_reserved` / `cap_reached` / `reserved` outcomes), and a recipient at the cap settles the referral as rewarded instead of retrying forever. This closes the gap this section previously flagged: enforcement is now in the data path, not just a dashboard monitor.
+
 ---
 
 ## 9. Stale / superseded / disregard — DO NOT REVIVE
@@ -239,6 +243,7 @@ Verified launch-hardening includes:
 - V1 $29 Founding Rep funnel cutover merged and live (#133).
 - remaining stale $39 landing copy and unsupported demo claims removed; regression guard hardened (#134).
 - post-#134 production verification: marketing and app deployments READY on commit `1aa51de19ff3b8636cebab535c3ff40b19c04f4d`; direct production landing fetch showed the $29 offer and new Stripe link; app error/fatal logs were empty for the checked one-hour window.
+- #136 referral-cap launch hardening verified live (2026-09-02): `reserve_referral_reward` migration present in production and confirmed `service_role`-only via `information_schema.routine_privileges` and `pg_get_functiondef`; `stripe-webhook` v29 and `nurture-scheduler` v17 both ACTIVE and confirmed byte-for-byte to contain the atomic-reservation source (nurture-scheduler's v16 had briefly been a remote-import wrapper instead of bundled source — found and corrected during this pass); edge-function logs show zero errors across the verification window; 42/42 referral regression checks pass on current `main`.
 
 Continue watching real usage for latency, cost, provider errors, context leakage, monthly-program capture quality, and customer-facing truthfulness. Passing tests alone is not sufficient production proof.
 
@@ -250,7 +255,7 @@ Continue watching real usage for latency, cost, provider errors, context leakage
 
 1. Keep adversarial Rex/V1 evaluation running across appointment, trade, ghosted, sold, program, whole-book, malformed/hostile, and legacy-client scenarios.
 2. Final end-to-end launch audit from landing through checkout/provisioning/login, then daily execution and next action.
-3. Verify referral 24-month cap at launch scale.
+3. Referral 24-month cap is now atomically enforced in the database (#136, see §8/§10); this was verified by code/DB/log inspection, not live load, so keep watching real referral volume once launch-scale traffic arrives.
 4. Premium app aesthetic/microcopy pass without changing workflow architecture.
 5. Keep landing, checkout, thank-you, support, app, and AI-readable claims aligned with V1 reality.
 
