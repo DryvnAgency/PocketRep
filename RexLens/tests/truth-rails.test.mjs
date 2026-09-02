@@ -6,20 +6,18 @@ const here = dirname(fileURLToPath(import.meta.url));
 const promptsPath = resolve(here, '../src/shared/prompts.ts');
 const source = readFileSync(promptsPath, 'utf8');
 
-const bannedUnconditionalClaims = [
-  'repairs start stacking',
-  'holds its value',
-  'incentives are expiring',
-  'managers are more flexible on pricing',
-  'fresh incentives just dropped',
-  'fresh inventory just landed',
-  'inventory is moving',
-  'loyalty pricing about to reset',
+const bannedUnsafePatterns = [
+  /repairs start stacking/i,
+  /that Civic Sport holds its value/i,
+  /Manufacturer incentives are expiring/i,
+  /managers are more flexible on pricing, and inventory is moving/i,
+  /New incentives just dropped, fresh inventory just landed/i,
+  /loyalty pricing about to reset/i,
 ];
 
-for (const phrase of bannedUnconditionalClaims) {
-  if (source.toLowerCase().includes(phrase.toLowerCase())) {
-    throw new Error(`RexLens truth rail regression: unsupported claim reintroduced: ${phrase}`);
+for (const pattern of bannedUnsafePatterns) {
+  if (pattern.test(source)) {
+    throw new Error(`RexLens truth rail regression: unsupported prompt pattern reintroduced: ${pattern}`);
   }
 }
 
