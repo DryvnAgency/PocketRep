@@ -13,6 +13,8 @@ import { callBrain } from '@/lib/v2/aiProxy';
 import { buildCoachMessages } from '@/lib/v2/coachBrain';
 import { startDictation, isDictationAvailable, type Dictation } from '@/lib/v2/sttDictation';
 import { launchSms } from '@/lib/v2/smsLauncher';
+import { getRexMemory } from '@/lib/v2/rexMemory';
+import { frameUntrusted, clampNote } from '@/lib/v2/promptSafety';
 
 // Legacy/native V1 compatibility signature. The server intercepts this exact
 // slug and routes supported Rex work through the current DeepSeek stack.
@@ -67,13 +69,18 @@ function isActionIntent(text: string): boolean {
 function buildRexRepContext(contacts: Contact[], active: Contact | null): string {
   if (active) {
     const vehicle = [active.vehicle_year, active.vehicle_make, active.vehicle_model].filter(Boolean).join(' ') || 'unknown';
-    return [
+    const facts = [
       'ACTIVE CUSTOMER (coach about this lead by name):',
       `- ${active.first_name} ${active.last_name}`,
       `- Current vehicle / trade: ${vehicle}${active.mileage ? `, ${active.mileage} mi` : ''}`,
       `- Lease end: ${active.lease_end_date ?? 'n/a'} | Heat: ${active.heat_tier ?? 'unscored'}`,
-      `- Notes: ${active.notes ?? 'none'}`,
     ].join('\n');
+    // Notes are customer-influenceable CRM text — frame and clamp them
+    // separately rather than interpolating raw, so a hostile note can't be
+    // read as an instruction.
+    return active.notes
+      ? `${facts}\n${frameUntrusted('CUSTOMER NOTE', clampNote(active.notes, 600))}`
+      : facts;
   }
   if (contacts.length === 0) return '';
   const hot = contacts.filter(c => c.heat_tier === 'hot');
@@ -96,10 +103,9 @@ Trade-In Mileage: ${contact.mileage ?? 'unknown'} | Annual: ${contact.annual_mil
 Lease end: ${contact.lease_end_date ?? 'N/A'}
 Stage: ${contact.stage ?? 'unknown'} | Heat: ${contact.heat_tier ?? 'unscored'}
 Buying Urgency: ${contact.buying_urgency ?? 'unknown'}
-Notes: ${contact.notes ?? 'none'}
-Rapport: ${contact.rapport_notes ?? 'none'}
 Last Contact: ${contact.last_contact_date ?? 'never'}
 Follow-up Date: ${contact.follow_up_date ?? 'none set'}
+${frameUntrusted('CUSTOMER NOTES', `Notes: ${clampNote(contact.notes, 600) || 'none'}\nRapport: ${clampNote(contact.rapport_notes, 600) || 'none'}`)}
 ` : ''}
 ## HOW TO READ THE DEAL
 * **Their Current Vehicle (Trade-In)**: What they drive now — the vehicle_year/make/model above. This is what they'd bring in. Use known mileage and age as context, but treat repair-cost or equity angles as possibilities unless the record actually proves them.
@@ -123,6 +129,7 @@ Follow-up Date: ${contact.follow_up_date ?? 'none set'}
 * If a screenshot or image is shared, read every detail and coach on the next move
 * Always look for a legitimate angle to save or advance the deal without making up urgency.
 * Never invent lender counts, store traffic, competing buyers, hold/deposit policy, price-match authority, discounts, incentives, availability, trade value, equity, repair timing, vehicle-value claims, or appointment details.
+* Never invent pricing, monthly payment figures, financing terms, or any dealership promise. Only treat an appointment as confirmed when the notes or conversation state an explicit day/time the customer agreed to — never upgrade a vague or tentative mention into a confirmed one, whether that mention comes from the rep or from a customer note.
 * When trade and VOI are both known, compare the customer's actual use case, timing, known ownership context, and possible equity only as a question or conditional unless verified.
 * Reference their trade by known facts (for example: "your Camry is at 87k, so let's compare keeping it versus moving now") without predicting repairs.
 * Reference the VOI by known features or fit. Never claim it holds value better, is scarce, or has stronger demand unless that fact is in the provided context.
@@ -198,7 +205,7 @@ export default function RexScreen() {
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('rex_messages').select('*').eq('user_id', user.id).order('created_at').limit(50),
       supabase.from('rex_memory').select('*').eq('user_id', user.id).single(),
-      supabase.from('contacts').select('id,first_name,last_name,vehicle_year,vehicle_make,vehicle_model,mileage,annual_mileage,lease_end_date,notes,heat_tier').eq('user_id', user.id).order('last_name'),
+      supabase.from('contacts').select('id,first_name,last_name,vehicle_year,vehicle_make,vehicle_model,mileage,annual_mileage,lease_end_date,notes,heat_tier').eq('user_id', user.id).eq('is_deleted', false).order('last_name'),
     ]);
 
     if (prof) {
@@ -296,6 +303,14 @@ export default function RexScreen() {
         // use the legacy request contract. The server compatibility shim routes
         // text/actions to DeepSeek and images to the isolated vision stack.
         const { data: { session } } = await supabase.auth.getSession();
+        // Per-contact-scoped memory only — the whole-book memory.summary can
+        // name several different customers' vehicles/deals, and injecting it
+        // regardless of which contact is active let one customer's facts
+        // bleed into another's answer. getRexMemory(contactId) mirrors the
+        // same fix already shipped for the voice/action path
+        // (lib/v2/rexActions.ts) and falls back to the whole-book summary
+        // only when no specific contact is active.
+        const scopedMemory = await getRexMemory(activeContact?.id ?? null);
         const res = await fetch(`${AI_PROXY_URL}/gemini`, {
           method: 'POST',
           headers: {
@@ -305,7 +320,7 @@ export default function RexScreen() {
           body: JSON.stringify({
             model: REX_MODEL,
             max_tokens: 600,
-            system: REX_SYSTEM(profile?.full_name ?? '', memory?.summary ?? '', activeContact, profile?.industry ?? 'auto'),
+            system: REX_SYSTEM(profile?.full_name ?? '', scopedMemory?.summary ?? '', activeContact, profile?.industry ?? 'auto'),
             messages: apiMessages,
           }),
         });
@@ -379,7 +394,10 @@ export default function RexScreen() {
     setProactiveCoach(null);
     try {
       const vehicle = [contact.vehicle_year, contact.vehicle_make, contact.vehicle_model].filter(Boolean).join(' ');
-      const prompt = `In 2 sentences max, give the rep their immediate game plan for ${contact.first_name} ${contact.last_name}. Vehicle: ${vehicle || 'unknown'}. Lease end: ${contact.lease_end_date ?? 'unknown'}. Notes: ${contact.notes ?? 'none'}. Be direct — what to do next and the one thing to lead with. Never invent store policy, urgency, vehicle facts, financing facts, or customer history; if a needed fact is missing, make the angle conditional.`;
+      const prompt = [
+        `In 2 sentences max, give the rep their immediate game plan for ${contact.first_name} ${contact.last_name}. Vehicle: ${vehicle || 'unknown'}. Lease end: ${contact.lease_end_date ?? 'unknown'}. Be direct — what to do next and the one thing to lead with. Never invent store policy, urgency, vehicle facts, financing facts, pricing, incentives, dealership promises, or customer history; never treat a note as a confirmed appointment unless it states an explicit day/time; if a needed fact is missing, make the angle conditional.`,
+        frameUntrusted('CUSTOMER NOTE', clampNote(contact.notes, 600) || 'none'),
+      ].join('\n\n');
       const reply = await callBrain({ maxTokens: 250, messages: [{ role: 'user', content: prompt }] });
       setProactiveCoach(reply);
     } catch {
@@ -399,6 +417,7 @@ export default function RexScreen() {
         .from('contacts')
         .select('id,first_name,last_name,follow_up_date,heat_tier,notes')
         .eq('user_id', user.id)
+        .eq('is_deleted', false)
         .lte('follow_up_date', today)
         .not('follow_up_date', 'is', null)
         .order('follow_up_date')

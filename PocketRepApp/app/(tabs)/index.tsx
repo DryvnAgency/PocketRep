@@ -79,7 +79,7 @@ export default function HeatSheetScreen() {
 
     const [{ data: prof }, { data: contacts }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('contacts').select('*').eq('user_id', user.id),
+      supabase.from('contacts').select('*').eq('user_id', user.id).eq('is_deleted', false),
     ]);
 
     if (prof) setProfile(prof);
@@ -123,7 +123,8 @@ export default function HeatSheetScreen() {
         const { data: contacts } = await supabase
           .from('contacts')
           .select('id, first_name, last_name, follow_up_date, lease_end_date, personal_events')
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .eq('is_deleted', false);
         if (contacts) {
           // scheduleContactReminders takes camelCase params; the DB row is
           // snake_case. The previous `c as any` cast let every field resolve

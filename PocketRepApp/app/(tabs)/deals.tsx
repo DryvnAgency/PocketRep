@@ -60,7 +60,7 @@ export default function DealsScreen() {
 
     const [{ data: d }, { data: c }] = await Promise.all([
       supabase.from('deals').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-      supabase.from('contacts').select('id,first_name,last_name').eq('user_id', user.id).order('last_name'),
+      supabase.from('contacts').select('id,first_name,last_name').eq('user_id', user.id).eq('is_deleted', false).order('last_name'),
     ]);
 
     setDeals(d ?? []);

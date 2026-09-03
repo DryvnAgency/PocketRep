@@ -80,6 +80,58 @@ function parseCsvText(text: string): any[] {
   return results;
 }
 
+// ── Import duplicate prevention ─────────────────────────────────────────────
+// Mirrors lib/v2/updateContact.ts's bulkCreateContacts dedup logic (normalize
+// phone/email, dedupe the incoming batch, then check against the rep's
+// existing active book) so native CSV/device import gets the same protection
+// V2 import already has. A local mirror rather than a shared import: this
+// screen's row shape carries several fields (annual_mileage/purchase_date/
+// follow_up_date/stage/legacy mileage) that lib/v2's ImportContactRow doesn't
+// model, and Batch 2 avoids touching Batch 1 files unless required.
+function phoneKeyV1(value?: string | null): string {
+  const digits = (value ?? '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+function emailKeyV1(value?: string | null): string {
+  return (value ?? '').trim().toLowerCase();
+}
+// Returns only the rows not already known (by phone or email) in the
+// existing set or earlier in this same batch. A match is SKIPPED entirely,
+// never merged/updated — so a blank field on a re-import can never overwrite
+// good existing data on the contact already in the book.
+function dedupeImportRows<T extends { phone?: string | null; email?: string | null }>(
+  rows: T[],
+  existingPhones: Set<string>,
+  existingEmails: Set<string>,
+): T[] {
+  const seenPhones = new Set<string>();
+  const seenEmails = new Set<string>();
+  const fresh: T[] = [];
+  for (const row of rows) {
+    const pk = phoneKeyV1(row.phone);
+    const ek = emailKeyV1(row.email);
+    const dup =
+      (pk && (seenPhones.has(pk) || existingPhones.has(pk))) ||
+      (ek && (seenEmails.has(ek) || existingEmails.has(ek)));
+    if (dup) continue;
+    if (pk) seenPhones.add(pk);
+    if (ek) seenEmails.add(ek);
+    fresh.push(row);
+  }
+  return fresh;
+}
+async function loadExistingContactKeys(userId: string): Promise<{ phones: Set<string>; emails: Set<string> }> {
+  const { data } = await supabase
+    .from('contacts')
+    .select('phone,email')
+    .eq('user_id', userId)
+    .eq('is_deleted', false);
+  return {
+    phones: new Set((data ?? []).map((r: any) => phoneKeyV1(r.phone)).filter(Boolean)),
+    emails: new Set((data ?? []).map((r: any) => emailKeyV1(r.email)).filter(Boolean)),
+  };
+}
+
 // ── Avatar component ──────────────────────────────────────────────────────────
 function Avatar({ first_name, last_name, size = 42 }: { first_name: string; last_name?: string; size?: number }) {
   const initials = `${first_name?.[0] ?? ''}${last_name?.[0] ?? ''}`.toUpperCase();
@@ -507,12 +559,20 @@ export default function ContactsScreen() {
     setImporting(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setImporting(false); return; }
-    const toInsert = deviceContacts
+    const candidates = deviceContacts
       .filter(dc => selectedImport.has(dc.id))
       .map(dc => {
         const parts = (dc.name ?? '').trim().split(' ');
         return { user_id: user.id, first_name: parts[0] ?? '', last_name: parts.slice(1).join(' ') || '', phone: dc.phoneNumbers?.[0]?.number ?? '', email: dc.emails?.[0]?.email ?? null, stage: 'prospect' };
       });
+    const { phones: existingPhones, emails: existingEmails } = await loadExistingContactKeys(user.id);
+    const toInsert = dedupeImportRows(candidates, existingPhones, existingEmails);
+    if (toInsert.length === 0) {
+      setImporting(false);
+      setShowImport(false);
+      Alert.alert('No new contacts', 'Everyone selected is already in your book.');
+      return;
+    }
     try { await supabase.from('contacts').insert(toInsert); await load(); } catch { Alert.alert('Some contacts may not have imported'); }
     setImporting(false);
     setShowImport(false);
@@ -557,7 +617,15 @@ export default function ContactsScreen() {
     setCsvImporting(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setCsvImporting(false); return; }
-    const payload = rows.map((row: any) => ({
+    const { phones: existingPhones, emails: existingEmails } = await loadExistingContactKeys(user.id);
+    const fresh = dedupeImportRows(rows, existingPhones, existingEmails);
+    if (fresh.length === 0) {
+      setCsvImporting(false);
+      setShowCsvModal(false);
+      Alert.alert('No new contacts', 'Everyone in this file is already in your book.');
+      return;
+    }
+    const payload = fresh.map((row: any) => ({
       user_id: user.id,
       first_name: row.first_name ?? '',
       last_name: row.last_name ?? '',
@@ -567,7 +635,12 @@ export default function ContactsScreen() {
       vehicle_year: row.vehicle_year ? parseInt(row.vehicle_year) || null : null,
       vehicle_make: row.vehicle_make ?? null,
       vehicle_model: row.vehicle_model ?? null,
+      // current_mileage is the column Rex/modern data paths actually read;
+      // mileage stays populated too since this screen's own edit form reads
+      // that column — writing both keeps a CSV-imported value usable by Rex
+      // without disturbing the legacy field.
       mileage: row.mileage ? parseInt(row.mileage) || null : null,
+      current_mileage: row.mileage ? parseInt(row.mileage) || null : null,
       annual_mileage: row.annual_mileage ? parseInt(row.annual_mileage) || null : null,
       lease_end_date: row.lease_end_date || null,
       purchase_date: row.purchase_date || null,
@@ -581,7 +654,8 @@ export default function ContactsScreen() {
         else Alert.alert('Import failed', error.message);
       } else {
         await load();
-        Alert.alert('Import complete ✅', `${payload.length} contact${payload.length !== 1 ? 's' : ''} added to your book.`);
+        const skipped = rows.length - fresh.length;
+        Alert.alert('Import complete ✅', `${payload.length} contact${payload.length !== 1 ? 's' : ''} added to your book.${skipped > 0 ? ` ${skipped} already in your book ${skipped === 1 ? 'was' : 'were'} skipped.` : ''}`);
       }
     } catch {
       Alert.alert('Import failed', 'Some contacts may not have imported. Check for duplicate phone numbers.');
