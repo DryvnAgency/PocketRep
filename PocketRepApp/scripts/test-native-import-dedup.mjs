@@ -110,6 +110,15 @@ ok('existing-contact lookup checks Supabase error instead of assuming an empty b
   /const \{ data, error \} = await supabase[\s\S]*?if \(error\) throw new Error\(`Could not verify existing contacts:/.test(src));
 ok('device-contact insert checks the Supabase result error before closing the import flow',
   /const \{ error: insertError \} = await supabase\.from\('contacts'\)\.insert\(toInsert\);[\s\S]*?if \(insertError\)/.test(importSelectedMatch?.[0] ?? ''));
+// The { error } check above (added for the PR #142 review) only covers an
+// ordinary resolved error — it does nothing for a genuinely thrown
+// exception on the same call, which confirmCsvImport()'s sibling insert
+// already guards against with a try/catch backstop. Without the same
+// backstop here, a thrown exception leaves setImporting(true) forever
+// (spinner stuck) with no visible error, which is its own fail-open-ish
+// hazard the review's fix didn't yet close for this path.
+ok("importSelected()'s insert is wrapped in try/catch, so a thrown exception still stops the spinner and shows a visible error (mirrors confirmCsvImport()'s existing backstop)",
+  /try\s*\{\s*\n\s*const \{ error: insertError \} = await supabase\.from\('contacts'\)\.insert\(toInsert\);[\s\S]*?\}\s*catch\s*\{/.test(importSelectedMatch?.[0] ?? ''));
 
 console.log('\n--- CSV-imported mileage becomes usable by Rex without corrupting existing data ---');
 ok('confirmCsvImport() still writes the legacy mileage column (native edit form compatibility)',
