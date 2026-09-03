@@ -158,7 +158,7 @@ export type AiDetail = {
   firstWeekUsers: FirstWeekUser[];
 };
 
-export const FIRST_WEEK_CEILING_CENTS = 2000; // $20
+export const FIRST_WEEK_CEILING_CENTS = 2500; // $25
 
 // ── Growth Calculator ───────────────────────────────────────────────────────
 
