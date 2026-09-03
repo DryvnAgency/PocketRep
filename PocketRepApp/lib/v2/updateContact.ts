@@ -142,6 +142,11 @@ export type ImportContactRow = {
   phone?: string;
   email?: string;
   notes?: string;
+  vehicleYear?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  currentMileage?: string;
+  leaseEndDate?: string;
 };
 
 function normalizePhone(value?: string | null): string {
@@ -163,6 +168,29 @@ function normalizeEmail(value?: string | null): string {
   return (value ?? '').trim().toLowerCase();
 }
 
+// Parse a loose numeric CSV cell (commas/spaces allowed) to an integer within
+// [min,max], or null if missing/unparseable/out of range — used for the
+// vehicle-year and current-mileage import columns so garbage text doesn't
+// reach the DB as a bad int.
+function parseBoundedInt(value: string | undefined, min: number, max: number): number | null {
+  const digits = (value ?? '').replace(/[,\s]/g, '');
+  if (!digits) return null;
+  const n = parseInt(digits, 10);
+  if (!Number.isFinite(n) || n < min || n > max) return null;
+  return n;
+}
+
+// Parse a loose CSV date cell into YYYY-MM-DD, or null if missing/unparseable
+// — used for the lease-end-date import column so an unrecognized format
+// doesn't insert an invalid date.
+function parseDateOnly(value: string | undefined): string | null {
+  const raw = (value ?? '').trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
 // Bulk import is intentionally idempotent by phone/email within the signed-in
 // user's book. The review UI catches obvious duplicates first, but this second
 // check protects against stale lists, repeated imports, and concurrent imports.
@@ -178,6 +206,11 @@ export async function bulkCreateContacts(rows: ImportContactRow[]): Promise<numb
       phone: normalizePhone(r.phone),
       email: normalizeEmail(r.email),
       notes: (r.notes ?? '').trim() || null,
+      vehicleYear: parseBoundedInt(r.vehicleYear, 1900, 2100),
+      vehicleMake: (r.vehicleMake ?? '').trim() ? normalizeVehicle(r.vehicleMake!) : null,
+      vehicleModel: (r.vehicleModel ?? '').trim() ? normalizeVehicle(r.vehicleModel!) : null,
+      currentMileage: parseBoundedInt(r.currentMileage, 0, 1_000_000),
+      leaseEndDate: parseDateOnly(r.leaseEndDate),
     }))
     .filter(r => r.first.length > 0);
 
@@ -221,6 +254,11 @@ export async function bulkCreateContacts(rows: ImportContactRow[]): Promise<numb
     phone: r.phone || null,
     email: r.email || null,
     notes: r.notes,
+    vehicle_year: r.vehicleYear,
+    vehicle_make: r.vehicleMake,
+    vehicle_model: r.vehicleModel,
+    current_mileage: r.currentMileage,
+    lease_end_date: r.leaseEndDate,
     heat_score: 35,
     last_contact_date: today,
     tags: [] as string[],
