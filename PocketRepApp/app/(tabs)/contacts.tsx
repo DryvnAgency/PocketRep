@@ -313,7 +313,9 @@ export default function ContactsScreen() {
 
   const PAGE_SIZE = 50;
 
-  // Plan limits: Pro=50, Elite=100
+  // Batch limit: 50 by default. Historical 'elite' rows keep 100 (backward
+  // compat only — no current signup path assigns 'elite'; the current
+  // 'pocketrep' plan gets the same 50 every other plan value gets).
   const MASS_TEXT_LIMIT = userPlan === 'elite' ? 100 : 50;
 
   async function load(reset = true) {
@@ -863,7 +865,7 @@ export default function ContactsScreen() {
               Sending to{' '}
               <Text style={{ color: colors.gold }}>{massTextCount} contact{massTextCount !== 1 ? 's' : ''}</Text>
               {stageFilter !== 'all' ? ` in ${stageFilter}` : ''}
-              {' '}· <Text style={{ color: colors.grey2 }}>{userPlan === 'elite' ? 'Elite' : 'Pro'} limit: {MASS_TEXT_LIMIT}</Text>
+              {' '}· <Text style={{ color: colors.grey2 }}>Limit: {MASS_TEXT_LIMIT}</Text>
             </Text>
             <Text style={m.label}>Message</Text>
             <TextInput

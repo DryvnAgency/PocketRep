@@ -142,7 +142,11 @@ Never fabricate a contact, number, date, or vehicle. If the record is too thin t
 
 const REXLENS_PRICING = { input: 1.00, output: 5.00, cacheWrite: 1.25, cacheRead: 0.10 };
 
-const DAILY_CAP_CENTS: Record<string, number> = { rex_lens: 75, pro: 75, elite: 125 };
+// 'pocketrep' is the current plan (checkout-account/stripe-webhook write it
+// for every real paying customer) — listed explicitly so its cap is a
+// documented, intended value rather than an accidental DEFAULT_CAP_CENTS
+// fallback. Same 75¢ ceiling as before; not a spend increase.
+const DAILY_CAP_CENTS: Record<string, number> = { pocketrep: 75, rex_lens: 75, pro: 75, elite: 125 };
 const DEFAULT_CAP_CENTS = 75;
 const MONTHLY_CAP_CENTS = Math.max(100, Number(Deno.env.get('AI_MONTHLY_CAP_CENTS') ?? '2000'));
 const MAX_BRAIN_OUTPUT_TOKENS = Math.max(400, Number(Deno.env.get('AI_MAX_BRAIN_OUTPUT_TOKENS') ?? '2000'));
@@ -267,7 +271,7 @@ async function authAndPlan(authHeader: string | null) {
     } catch { /* fail open */ }
   }
   const { data: profile } = await supabase.from('profiles').select('plan, unlimited').eq('id', user.id).single();
-  const plan = profile?.plan || 'pro';
+  const plan = profile?.plan || 'pocketrep';
   const isUnlimited = profile?.unlimited === true;
   const capCents = DAILY_CAP_CENTS[plan] ?? DEFAULT_CAP_CENTS;
   const today = new Date().toISOString().slice(0, 10);

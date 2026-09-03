@@ -176,7 +176,9 @@ export default function ProfileTab({
 
   const fullName = profile?.full_name?.trim() ?? '';
   const displayName = fullName || 'Add your name';
-  const planLabel = (profile?.plan ?? 'pro').toUpperCase();
+  // Single current product — never render the raw profiles.plan value
+  // (would show POCKETREP/PRO/ELITE/REX_LENS verbatim for historical rows).
+  const planLabel = 'PocketRep';
   const dealership = getRepSetting('dealership');
   const title = getRepSetting('title');
   const heroSub = [dealership, title].filter(Boolean).join(' · ') || 'Tap to set up your profile';
