@@ -14,6 +14,7 @@ function check(condition, message) {
 console.log('PocketRep Batch 3 single-plan / entitlement regression');
 const schema = read('sql/schema.sql');
 const migration = read('supabase/migrations/20260903120000_pocketrep_current_plan_default.sql');
+const adminAiMigration = read('supabase/migrations/20260903221500_admin_ai_role_bypass.sql');
 const layout = read('app/_layout.tsx');
 const ai = read('supabase/functions/ai-proxy/index.ts');
 const appJson = read('app.json');
@@ -54,6 +55,8 @@ for (const field of ['subscription_status', 'trial_ends_at', 'entitlement_status
   check(ai.includes(field), `ai-proxy reads ${field}`);
 }
 check(ai.includes('function aiAccessDecision'), 'ai-proxy has explicit server-side entitlement decision');
+check(ai.includes("(profile.role ?? '').toLowerCase() === 'admin'"), 'ai-proxy allows operational admin role without customer billing state');
+check(ai.includes(".select('role, plan, unlimited"), 'ai-proxy loads role for server-side admin access');
 check(ai.includes('if (profileError || !profile)'), 'ai-proxy fails closed on missing/unverifiable profile');
 check(ai.includes("type: 'ACCESS_LOCKED'"), 'ai-proxy denies inactive paid access before model work');
 check(ai.includes("type: 'ACCESS_CHECK_FAILED'"), 'AI preflight failure is fail-closed');
@@ -98,6 +101,9 @@ check(migration.includes('create or replace function public.bump_ai_minute'), 'D
 check(migration.includes('return 2147483647'), 'DB AI preflight returns denied sentinel on invalid/unverifiable access');
 check(migration.includes('revoke all on function public.bump_ai_minute(uuid) from authenticated'), 'AI preflight RPC is not client-callable');
 check(migration.includes('grant execute on function public.bump_ai_minute(uuid) to service_role'), 'AI preflight remains callable by server');
+check(adminAiMigration.includes("v_role = 'admin'"), 'DB AI preflight allows admin role');
+check(adminAiMigration.includes('revoke all on function public.bump_ai_minute(uuid) from public, anon, authenticated'), 'admin AI migration preserves client execute lockdown');
+check(adminAiMigration.includes('grant execute on function public.bump_ai_minute(uuid) to postgres, service_role'), 'admin AI migration preserves server-only execution');
 check(!appJson.includes('Rex Lens'), 'native photo permission no longer mentions Rex Lens');
 check(appJson.includes('share screenshots and photos with Rex'), 'photo permission states verified Rex image-sharing use');
 check(contacts.includes('Limit: {MASS_TEXT_LIMIT}'), 'native mass-text UI no longer advertises Pro/Elite plan name');
