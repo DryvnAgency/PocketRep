@@ -348,8 +348,12 @@ export default function RexScreen() {
         created_at: new Date().toISOString(),
       }]);
 
-      // Elite: update rex memory every 5 messages
-      if (profile?.plan === 'elite') {
+      // Update rex memory every 5 messages — available to every current
+      // PocketRep member. Previously dead-gated behind plan === 'elite', a
+      // tier no current signup path ever assigns (checkout-account and
+      // stripe-webhook write plan: 'pocketrep'), so this complete, working
+      // feature was unreachable for every real customer.
+      {
         const totalMsgs = (memory?.message_count ?? 0) + 2;
         if (totalMsgs % 5 === 0) await buildMemory(user.id, totalMsgs);
         else await supabase.from('rex_memory').upsert({ user_id: user.id, message_count: totalMsgs });
@@ -498,8 +502,6 @@ export default function RexScreen() {
 
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150);
   }
-
-  const isElite = profile?.plan === 'elite';
 
   async function pickImage() {
     if (!ImagePicker) {
@@ -692,8 +694,8 @@ export default function RexScreen() {
         </ScrollView>
       ) : (
         <>
-          {/* Memory banner (Elite) */}
-          {isElite && memory?.summary ? (
+          {/* Memory banner — available to every current PocketRep member */}
+          {memory?.summary ? (
             <View style={s.memBanner}>
               <Text style={s.memText}>🧠 Rex remembers you</Text>
             </View>

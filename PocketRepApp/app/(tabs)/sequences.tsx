@@ -307,7 +307,9 @@ export default function SequencesScreen() {
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [contactSearch, setContactSearch] = useState('');
 
-  // Plan limits: Pro=50, Elite=100
+  // Batch limit: 50 by default. Historical 'elite' rows keep 100 (backward
+  // compat only — no current signup path assigns 'elite'; the current
+  // 'pocketrep' plan gets the same 50 every other plan value gets).
   const MASS_LIMIT = userPlan === 'elite' ? 100 : 50;
 
   useFocusEffect(useCallback(() => {
@@ -509,7 +511,7 @@ export default function SequencesScreen() {
       } else if (next.size < MASS_LIMIT) {
         next.add(id);
       } else {
-        Alert.alert(`Limit reached`, `Your ${userPlan === 'elite' ? 'Elite' : 'Pro'} plan allows up to ${MASS_LIMIT} recipients.`);
+        Alert.alert(`Limit reached`, `Your plan allows up to ${MASS_LIMIT} recipients.`);
       }
       return next;
     });
@@ -794,8 +796,8 @@ export default function SequencesScreen() {
             <Text style={sq.cardCount}>{queueItems.length} message{queueItems.length !== 1 ? 's' : ''} ready to send</Text>
             <Text style={sq.cardSub}>Oldest due: {queueItems[0]?.due_date} · Est. {Math.ceil(queueItems.length * 0.5)} min</Text>
           </View>
-          {userPlan === 'pro' && queueItems.length === 50 && (
-            <Text style={sq.limitNote}>Showing 50 (Pro limit) · Upgrade to Elite for 100/batch</Text>
+          {userPlan !== 'elite' && queueItems.length === 50 && (
+            <Text style={sq.limitNote}>Showing 50 per batch</Text>
           )}
           <View style={sq.cardBtns}>
             <TouchableOpacity style={sq.startBtn} onPress={() => { setQueuePos(0); setShowQueueModal(true); }} activeOpacity={0.85}>
@@ -1026,14 +1028,12 @@ export default function SequencesScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Plan limit badge */}
+            {/* Selection count. No plan badge here — single current
+                product, no tier to differentiate. */}
             <View style={mt.limitRow}>
               <Text style={mt.limitText}>
                 {selectedContactIds.size} / {MASS_LIMIT} selected
               </Text>
-              <View style={mt.planBadge}>
-                <Text style={mt.planBadgeText}>{userPlan === 'elite' ? 'ELITE' : 'PRO'}</Text>
-              </View>
             </View>
 
             {/* Contact search + picker */}

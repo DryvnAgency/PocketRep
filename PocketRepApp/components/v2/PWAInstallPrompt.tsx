@@ -26,6 +26,17 @@ function isAndroid(): boolean {
   return /Android/i.test(navigator.userAgent);
 }
 
+// In-app browsers (Instagram, Facebook, TikTok, etc.) keep the host OS's
+// iOS/Android user agent, so isIOS()/isAndroid() above still match — but
+// beforeinstallprompt never fires inside them and there is no real Safari
+// share sheet or Chrome menu to tap, so the normal instructions below don't
+// apply. Detect the common in-app webview signatures and send these users
+// out to a real browser first instead.
+function isInAppBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Instagram|FBAN|FBAV|TikTok|BytedanceWebview|Line\//i.test(navigator.userAgent);
+}
+
 function wasDismissed(): boolean {
   try { return localStorage.getItem(DISMISSED_KEY) === '1'; } catch { return false; }
 }
@@ -88,6 +99,34 @@ export default function PWAInstallPrompt({
 
   const ios = isIOS();
   const android = isAndroid();
+
+  // In-app browsers first — they'd otherwise fall into the iOS/Android
+  // branches below and show Safari/Chrome steps that don't apply inside
+  // their webview chrome.
+  if (isInAppBrowser()) {
+    return (
+      <View style={StyleSheet.absoluteFillObject as any}>
+        <Pressable style={styles.scrim} onPress={handleDismiss} />
+        <View style={styles.card}>
+          <Text style={styles.appIcon}>📱</Text>
+          <Label color={colors.gold}>OPEN IN YOUR BROWSER</Label>
+          <Text style={styles.title}>Almost there</Text>
+          <Text style={styles.body}>
+            This app's built-in browser can't install PocketRep. Open this page in
+            {ios ? ' Safari' : ' Chrome'} first, then add it to your home screen.
+          </Text>
+          <View style={styles.steps}>
+            <Step n={1} text={'Tap the ••• or ⋮ menu (usually top-right)'} />
+            <Step n={2} text={ios ? 'Choose "Open in Safari"' : 'Choose "Open in Chrome" or "Open in Browser"'} />
+            <Step n={3} text={'Then use the install steps from your browser'} />
+          </View>
+          <Pressable onPress={handleDismiss} style={styles.gotItBtn}>
+            <Text style={styles.gotItText}>Got it</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   // Chrome/Edge/Samsung with native install prompt available
   if (deferredPromptEvent && !ios) {

@@ -2006,7 +2006,7 @@
 /* PocketRep V1 checkout — direct Stripe handoff with referral attribution. */
 (function () {
   "use strict";
-  var ELITE_STRIPE = "https://buy.stripe.com/cNi4gAbMn4kg9Ax5AucbC06";
+  var POCKETREP_STRIPE_URL = "https://buy.stripe.com/cNi4gAbMn4kg9Ax5AucbC06"; // the single current $39/mo V1 plan — not a separate "Elite" tier
   var REFERRAL_CODE = (function () {
     try {
       var v = new URLSearchParams(window.location.search).get("ref");
@@ -2022,7 +2022,7 @@
 
   window.prStartCheckout = function (e) {
     if (e) e.preventDefault();
-    var url = ELITE_STRIPE;
+    var url = POCKETREP_STRIPE_URL;
     if (REFERRAL_CODE) {
       url += "?client_reference_id=" + encodeURIComponent(REFERRAL_CODE);
     }

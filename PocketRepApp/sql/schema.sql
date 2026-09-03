@@ -1,20 +1,17 @@
 -- PocketRep Schema
 -- Run this in Supabase → SQL Editor → New Query
 --
--- ── PLAN MIGRATION (run once to migrate existing users from 5-plan → 3-plan) ─
--- Run these BEFORE applying the new CHECK constraint:
---   update profiles set plan='elite'    where plan in ('pro_bundle','elite_bundle');
---   update profiles set plan='rex_lens' where plan='rex_lens_standalone';
---   alter table profiles drop constraint if exists profiles_plan_check;
---   alter table profiles add  constraint profiles_plan_check
---     check (plan in ('rex_lens','pro','elite'));
+-- ── CURRENT PLAN ─────────────────────────────────────────────────────────────
+-- PocketRep is a single current product. New profiles are always `pocketrep`.
+-- Billing authority comes from subscription/entitlement state, never from plan metadata.
+-- Historical tier names must not be accepted from client-controlled signup metadata.
 
 -- ── PROFILES ─────────────────────────────────────────────────────────────────
 create table if not exists profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
   email        text not null,
   full_name    text not null default '',
-  plan         text not null default 'pro' check (plan in ('rex_lens','pro','elite')),
+  plan         text not null default 'pocketrep' check (plan = 'pocketrep'),
   industry     text not null default 'auto',
   trial_ends_at timestamptz,
   stripe_customer_id text,
@@ -26,31 +23,21 @@ alter table profiles enable row level security;
 create policy "Users manage own profile"
   on profiles for all using (auth.uid() = id);
 
--- Auto-create profile on signup
-create or replace function handle_new_user()
-returns trigger language plpgsql security definer as $$
+-- Auto-create profile on signup. Plan is server-owned and cannot be selected by user metadata.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $$
 declare
   _plan text;
 begin
-  _plan := coalesce(new.raw_user_meta_data->>'plan', 'pro');
-  -- Map legacy plan names to new 3-tier structure
-  if _plan in ('pro_bundle', 'elite_bundle') then
-    _plan := 'elite';
-  elsif _plan = 'rex_lens_standalone' then
-    _plan := 'rex_lens';
-  end if;
-  -- Validate against final plan set
-  if _plan not in ('rex_lens', 'pro', 'elite') then
-    _plan := 'pro';
-  end if;
-
-  insert into profiles (id, email, plan, trial_ends_at)
-  values (
-    new.id,
-    new.email,
-    _plan,
-    now() + interval '7 days'
-  );
+  _plan := 'pocketrep';
+  insert into public.profiles(id, email, plan, trial_ends_at)
+  values (new.id, new.email, _plan, now() + interval '7 days')
+  on conflict(id) do nothing;
+  perform public.seed_demo_customers_for_user(new.id);
   return new;
 end;
 $$;
@@ -58,7 +45,7 @@ $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute procedure handle_new_user();
+  for each row execute function public.handle_new_user();
 
 -- ── CONTACTS ─────────────────────────────────────────────────────────────────
 create table if not exists contacts (

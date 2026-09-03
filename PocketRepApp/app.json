@@ -43,7 +43,7 @@
       ],
       [
         "expo-image-picker",
-        { "photosPermission": "PocketRep needs photo access for Rex Lens." }
+        { "photosPermission": "PocketRep needs photo access so you can share screenshots and photos with Rex." }
       ],
       [
         "expo-location",

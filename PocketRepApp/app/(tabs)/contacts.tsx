@@ -313,7 +313,7 @@ export default function ContactsScreen() {
 
   const PAGE_SIZE = 50;
 
-  // Plan limits: Pro=50, Elite=100
+  // Historical higher-cap rows keep their existing limit; PocketRep is the current product.
   const MASS_TEXT_LIMIT = userPlan === 'elite' ? 100 : 50;
 
   async function load(reset = true) {
@@ -863,7 +863,7 @@ export default function ContactsScreen() {
               Sending to{' '}
               <Text style={{ color: colors.gold }}>{massTextCount} contact{massTextCount !== 1 ? 's' : ''}</Text>
               {stageFilter !== 'all' ? ` in ${stageFilter}` : ''}
-              {' '}· <Text style={{ color: colors.grey2 }}>{userPlan === 'elite' ? 'Elite' : 'Pro'} limit: {MASS_TEXT_LIMIT}</Text>
+              {' '}· <Text style={{ color: colors.grey2 }}>Limit: {MASS_TEXT_LIMIT}</Text>
             </Text>
             <Text style={m.label}>Message</Text>
             <TextInput

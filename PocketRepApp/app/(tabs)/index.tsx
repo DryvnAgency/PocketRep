@@ -6,7 +6,7 @@ import {
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, spacing, heatConfig } from '@/constants/theme';
-import type { Contact, Profile } from '@/lib/types';
+import type { Contact } from '@/lib/types';
 import Onboarding from '@/components/Onboarding';
 import { requestNotificationPermission, scheduleContactReminders } from '@/lib/notifications';
 
@@ -63,7 +63,6 @@ function calcHeatScore(c: Contact): { score: number; tier: 'hot' | 'warm' | 'col
 }
 
 export default function HeatSheetScreen() {
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [followUpContacts, setFollowUpContacts] = useState<Contact[]>([]);
   const [hotContacts, setHotContacts] = useState<Contact[]>([]);
   const [warmContacts, setWarmContacts] = useState<Contact[]>([]);
@@ -77,12 +76,11 @@ export default function HeatSheetScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const [{ data: prof }, { data: contacts }] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('contacts').select('*').eq('user_id', user.id).eq('is_deleted', false),
-    ]);
-
-    if (prof) setProfile(prof);
+    // The profiles query this used to run existed only to feed the plan
+    // badge below — now a static "PocketRep" label (single current
+    // product, no per-plan differentiation), so it's been dropped along
+    // with the redundant network request.
+    const { data: contacts } = await supabase.from('contacts').select('*').eq('user_id', user.id).eq('is_deleted', false);
 
     if (contacts) {
       const today = new Date().toISOString().split('T')[0];
@@ -203,7 +201,9 @@ export default function HeatSheetScreen() {
           <Text style={s.headerSub}>Who to call today</Text>
         </View>
         <View style={s.planBadge}>
-          <Text style={s.planBadgeText}>{(profile?.plan ?? 'pro').toUpperCase()}</Text>
+          {/* Single current product — never render the raw profiles.plan
+              value (would show POCKETREP/PRO/ELITE/REX_LENS verbatim). */}
+          <Text style={s.planBadgeText}>PocketRep</Text>
         </View>
       </View>
 
