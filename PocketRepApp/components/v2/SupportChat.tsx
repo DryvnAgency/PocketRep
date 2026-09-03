@@ -6,9 +6,11 @@ import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
+import * as ImagePicker from 'expo-image-picker';
+import SupportAttachment from './SupportAttachment';
 import { Label } from './atoms';
 import {
-  loadMyTickets, createTicket, loadMessages, sendMessage, reopenTicket,
+  loadMyTickets, createTicket, loadMessages, sendMessage, sendImageMessage, reopenTicket,
   type SupportTicket, type SupportMessage,
 } from '@/lib/v2/supportChat';
 
@@ -44,6 +46,7 @@ export default function SupportChat({
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newCategory, setNewCategory] = useState<string | null>(null);
@@ -133,6 +136,36 @@ export default function SupportChat({
       setError('Could not send - try again');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleAttach = async () => {
+    if (!selectedTicketId || uploading || sending) return;
+    setUploading(true);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) { setError('Photo access is required to attach a screenshot'); return; }
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.85,
+      });
+      if (picked.canceled || !picked.assets?.[0]) return;
+      const asset = picked.assets[0];
+      await sendImageMessage({
+        ticketId: selectedTicketId,
+        senderRole: 'rep',
+        uri: asset.uri,
+        mimeType: asset.mimeType,
+        fileName: asset.fileName,
+        fileSize: asset.fileSize,
+      });
+      setError('');
+      setRefreshKey(k => k + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not attach image - try again');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -241,7 +274,8 @@ export default function SupportChat({
                   {m.sender_role === 'admin' ? 'POCKETREP' : 'SYSTEM'}
                 </Text>
               ) : null}
-              <Text style={styles.bubbleText}>{m.content}</Text>
+              {m.content && m.content !== '[Image attachment]' ? <Text style={styles.bubbleText}>{m.content}</Text> : null}
+              {m.attachment_path ? <SupportAttachment path={m.attachment_path} name={m.attachment_name} /> : null}
               <Text style={styles.time}>
                 {new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
               </Text>
@@ -259,6 +293,14 @@ export default function SupportChat({
       </ScrollView>
       {selectedTicket?.status !== 'resolved' ? (
         <View style={[styles.inputBar, kbInset > 0 && { paddingBottom: 10 }]}>
+          <Pressable
+            style={[styles.sendBtn, (uploading || sending) && { opacity: 0.4 }]}
+            onPress={handleAttach}
+            disabled={uploading || sending}
+            accessibilityLabel="Attach image"
+          >
+            <Text style={styles.sendIcon}>{uploading ? '…' : '📎'}</Text>
+          </Pressable>
           <TextInput
             style={styles.input}
             placeholder="Type a message…"
@@ -267,7 +309,7 @@ export default function SupportChat({
             onChangeText={setInput}
             onSubmitEditing={handleSend}
             returnKeyType="send"
-            editable={!sending}
+            editable={!sending && !uploading}
           />
           <Pressable
             style={[styles.sendBtn, (!input.trim() || sending) && { opacity: 0.4 }]}
