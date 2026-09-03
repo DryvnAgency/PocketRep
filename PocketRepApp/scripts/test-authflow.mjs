@@ -107,6 +107,15 @@ ok('expired/invalid recovery URL has explicit user-facing recovery handling',
 ok('recovery screen keeps mismatch validation',
   recoverySource.includes("if (newPassword !== confirm)"));
 
+// The web root layout intercepts /reset-password and renders ResetPasswordWeb,
+// so guard the actually-reachable production web surface too.
+const recoveryWeb = fs.readFileSync(new URL('../components/ResetPasswordWeb.tsx', import.meta.url), 'utf8');
+ok('web recovery requires PASSWORD_RECOVERY auth event', recoveryWeb.includes("event === 'PASSWORD_RECOVERY'"));
+ok('web recovery requires URL recovery evidence', recoveryWeb.includes('hasRecoveryEvidence'));
+ok('web recovery does not unlock from any ordinary existing session', !recoveryWeb.includes('if (active && data.session) setReady(true)'));
+ok('web recovery verifies recovery user with Supabase Auth', recoveryWeb.includes('supabase.auth.getUser()'));
+ok('web recovery signs temporary recovery session out after password update', recoveryWeb.includes('await supabase.auth.signOut()'));
+
 // --- demo failure surfaces as a real error -------------------------------
 const demoOk = () => Promise.resolve();
 const demoFails = () => Promise.reject(new Error('Invalid login credentials'));
