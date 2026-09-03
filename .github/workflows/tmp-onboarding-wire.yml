@@ -21,19 +21,8 @@ jobs:
           from pathlib import Path
           p = Path('PocketRepApp/components/v2/AppShell.tsx')
           s = p.read_text()
-          old = """      <RexOnboarding
-        open={onboardingOpen}
-        onClose={(completed) => {
-"""
-          new = """      <RexOnboarding
-        open={onboardingOpen}
-        onImport={() => {
-          markOnboardingComplete();
-          setOnboardingOpen(false);
-          setImportOpen(true);
-        }}
-        onClose={(completed) => {
-"""
+          old = "      <RexOnboarding\n        open={onboardingOpen}\n        onClose={(completed) => {\n"
+          new = "      <RexOnboarding\n        open={onboardingOpen}\n        onImport={() => {\n          markOnboardingComplete();\n          setOnboardingOpen(false);\n          setImportOpen(true);\n        }}\n        onClose={(completed) => {\n"
           if old not in s:
               raise SystemExit('RexOnboarding anchor not found')
           p.write_text(s.replace(old, new, 1))
