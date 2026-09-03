@@ -211,9 +211,9 @@ export async function fetchAiDetail(month?: string): Promise<AiDetail> {
 
 /** Color for a first-week AI safety row, per the $25 ceiling. */
 export function firstWeekSeverity(costCents: number): 'green' | 'yellow' | 'orange' | 'red' | 'deepRed' {
-  if (costCents < 500) return 'green';
-  if (costCents < 1000) return 'yellow';
-  if (costCents < 1500) return 'orange';
+  if (costCents < FIRST_WEEK_CEILING_CENTS * 0.25) return 'green';
+  if (costCents < FIRST_WEEK_CEILING_CENTS * 0.50) return 'yellow';
+  if (costCents < FIRST_WEEK_CEILING_CENTS * 0.75) return 'orange';
   if (costCents < FIRST_WEEK_CEILING_CENTS) return 'red';
   return 'deepRed';
 }
