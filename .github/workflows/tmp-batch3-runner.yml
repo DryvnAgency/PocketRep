@@ -56,6 +56,26 @@ jobs:
             GIT_EDITOR=true git cherry-pick --continue
           fi
 
+      - name: Normalize already-clean contact copy for idempotent correction script
+        working-directory: PocketRepApp
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('app/(tabs)/contacts.tsx')
+          s = p.read_text()
+          clean_comment = "  // Batch limit: 50 by default. Historical 'elite' rows keep 100 (backward\n  // compat only — no current signup path assigns 'elite'; the current\n  // 'pocketrep' plan gets the same 50 every other plan value gets).\n"
+          old_comment = "  // Plan limits: Pro=50, Elite=100\n"
+          if clean_comment in s and old_comment not in s:
+              s = s.replace(clean_comment, old_comment, 1)
+          clean_label = "{' '}· <Text style={{ color: colors.grey2 }}>Limit: {MASS_TEXT_LIMIT}</Text>"
+          old_label = "{' '}· <Text style={{ color: colors.grey2 }}>{userPlan === 'elite' ? 'Elite' : 'Pro'} limit: {MASS_TEXT_LIMIT}</Text>"
+          if clean_label in s and old_label not in s:
+              s = s.replace(clean_label, old_label, 1)
+          p.write_text(s)
+          PY
+
       - name: Apply owner-reviewed corrections
         working-directory: PocketRepApp
         shell: bash
