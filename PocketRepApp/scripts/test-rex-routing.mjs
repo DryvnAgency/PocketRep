@@ -59,7 +59,7 @@ ok('source defaults routine Rex to DeepSeek V4 Flash', proxySource.includes("con
 ok('source escalates to DeepSeek V4 Pro', proxySource.includes("const DEEPSEEK_PRO = 'deepseek/deepseek-v4-pro-0813'"));
 ok('source disables reasoning for Flash', proxySource.includes("{ reasoning: { effort: 'none', exclude: true } }"));
 ok('source disables hidden Pro reasoning so visible copy fits', proxySource.includes("{ reasoning: { enabled: false, exclude: true } }"));
-ok('source enforces $20 monthly ceiling', proxySource.includes("AI_MONTHLY_CAP_CENTS') ?? '2000'"));
+ok('source enforces $25 monthly ceiling', proxySource.includes("AI_MONTHLY_CAP_CENTS') ?? '2500'"));
 ok('source caps brain output tokens', proxySource.includes('Math.min(Math.floor(requestedMax), MAX_BRAIN_OUTPUT_TOKENS)'));
 ok('monthly ledger is recorded', proxySource.includes("increment_monthly_ai_usage"));
 ok('monthly ledger writes to the canonical first-of-month bucket', proxySource.includes("p_month: `${date.slice(0, 7)}-01`"));
