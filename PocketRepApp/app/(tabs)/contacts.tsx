@@ -583,13 +583,22 @@ export default function ContactsScreen() {
       Alert.alert('No new contacts', 'Everyone selected is already in your book.');
       return;
     }
-    const { error: insertError } = await supabase.from('contacts').insert(toInsert);
-    if (insertError) {
+    try {
+      const { error: insertError } = await supabase.from('contacts').insert(toInsert);
+      if (insertError) {
+        setImporting(false);
+        Alert.alert('Import failed', insertError.message);
+        return;
+      }
+      await load();
+    } catch {
+      // Mirrors confirmCsvImport()'s backstop: an ordinary { error } result is
+      // handled above, but a genuinely thrown exception here must still stop
+      // the spinner and say so, instead of leaving the import silently stuck.
       setImporting(false);
-      Alert.alert('Import failed', insertError.message);
+      Alert.alert('Some contacts may not have imported');
       return;
     }
-    await load();
     setImporting(false);
     setShowImport(false);
   }
