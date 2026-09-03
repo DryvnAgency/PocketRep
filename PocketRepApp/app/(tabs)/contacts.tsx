@@ -313,9 +313,7 @@ export default function ContactsScreen() {
 
   const PAGE_SIZE = 50;
 
-  // Batch limit: 50 by default. Historical 'elite' rows keep 100 (backward
-  // compat only — no current signup path assigns 'elite'; the current
-  // 'pocketrep' plan gets the same 50 every other plan value gets).
+  // Historical higher-cap rows keep their existing limit; PocketRep is the current product.
   const MASS_TEXT_LIMIT = userPlan === 'elite' ? 100 : 50;
 
   async function load(reset = true) {

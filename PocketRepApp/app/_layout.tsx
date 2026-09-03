@@ -1,5 +1,5 @@
 import { useEffect, useState, Component } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Linking } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { colors, spacing, radius } from '@/constants/theme';
@@ -7,7 +7,9 @@ import { setupNotificationHandler } from '@/lib/notifications';
 import { shouldUseNewUi } from '@/lib/featureFlags';
 import NewUiShell from '@/components/NewUiShell';
 import ResetPasswordWeb from '@/components/ResetPasswordWeb';
+import LockoutScreen from '@/components/v2/LockoutScreen';
 import { supabase } from '@/lib/supabase';
+import { useAccessGate } from '@/lib/v2/accessGate';
 import { clearLocalSessionState } from '@/lib/v2/localSessionClear';
 import { log } from '@/lib/v2/logger';
 
@@ -35,6 +37,8 @@ function V1RootLayout() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
+  const access = useAccessGate(ready && signedIn);
+
   useEffect(() => { setupNotificationHandler(); }, []);
   useEffect(() => {
     let cancelled = false;
@@ -46,8 +50,28 @@ function V1RootLayout() {
     if (!ready) return;
     const inAuth = segments[0] === '(auth)';
     if (!signedIn && !inAuth) router.replace('/(auth)');
-    if (signedIn && inAuth) router.replace('/(tabs)');
-  }, [ready, signedIn, segments, router]);
-  if (!ready) return <ErrorBoundary><StatusBar style="light" backgroundColor={colors.ink} /><View style={eb.wrap}><Text style={eb.msg}>Checking your session…</Text></View></ErrorBoundary>;
+    if (signedIn && inAuth && (access.status === 'allowed' || access.status === 'pending')) router.replace('/(tabs)');
+  }, [ready, signedIn, access.status, segments, router]);
+
+  async function signOutLockedAccount() {
+    await supabase.auth.signOut();
+    try { await clearLocalSessionState(); } catch (error) { log.warn('v1-lockout-clear-session', 'Could not clear local session state', { error: String(error) }); }
+  }
+
+  if (!ready || (signedIn && access.status === 'loading')) {
+    return <ErrorBoundary><StatusBar style="light" backgroundColor={colors.ink} /><View style={eb.wrap}><Text style={eb.msg}>Checking your access…</Text></View></ErrorBoundary>;
+  }
+  if (signedIn && access.status === 'locked') {
+    return (
+      <ErrorBoundary>
+        <StatusBar style="light" backgroundColor={colors.ink} />
+        <LockoutScreen
+          reason={access.reason}
+          onResubscribe={() => { Linking.openURL('https://www.pocketrep.pro').catch(() => undefined); }}
+          onSignOut={signOutLockedAccount}
+        />
+      </ErrorBoundary>
+    );
+  }
   return <ErrorBoundary><StatusBar style="light" backgroundColor={colors.ink} /><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.ink } }}><Stack.Screen name="(auth)" /><Stack.Screen name="(tabs)" /></Stack></ErrorBoundary>;
 }

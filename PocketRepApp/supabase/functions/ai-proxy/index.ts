@@ -254,30 +254,80 @@ async function recordUsage(
   }
 }
 
+type AiBillingProfile = {
+  plan: string | null;
+  unlimited: boolean | null;
+  subscription_status: string | null;
+  trial_ends_at: string | null;
+  entitlement_status: string | null;
+  entitlement_pending_until: string | null;
+};
+
+function aiAccessDecision(profile: AiBillingProfile, nowMs = Date.now()): { allowed: boolean; reason: string } {
+  const subscription = (profile.subscription_status ?? '').toLowerCase();
+  const entitlement = (profile.entitlement_status ?? '').toLowerCase();
+  const trialEndMs = profile.trial_ends_at ? Date.parse(profile.trial_ends_at) : Number.NaN;
+  const pendingUntilMs = profile.entitlement_pending_until ? Date.parse(profile.entitlement_pending_until) : Number.NaN;
+
+  if (entitlement === 'pending') {
+    return Number.isFinite(pendingUntilMs) && pendingUntilMs > nowMs
+      ? { allowed: true, reason: 'entitlement_pending' }
+      : { allowed: false, reason: 'entitlement_unverified' };
+  }
+  if (entitlement === 'locked') return { allowed: false, reason: 'entitlement_unverified' };
+  if (subscription === 'active' || entitlement === 'active') return { allowed: true, reason: 'active' };
+  if (subscription === 'trialing' || entitlement === 'trialing') {
+    if (!profile.trial_ends_at) return { allowed: true, reason: 'trialing' };
+    return Number.isFinite(trialEndMs) && trialEndMs > nowMs
+      ? { allowed: true, reason: 'trialing' }
+      : { allowed: false, reason: 'trial_expired' };
+  }
+  if (subscription === 'canceled' || subscription === 'cancelled') return { allowed: false, reason: 'subscription_canceled' };
+  if (subscription === 'past_due' || subscription === 'unpaid' || subscription === 'incomplete_expired') {
+    return { allowed: false, reason: 'payment_failed' };
+  }
+  if (Number.isFinite(trialEndMs) && trialEndMs > nowMs) return { allowed: true, reason: 'trialing' };
+  return { allowed: false, reason: 'no_subscription' };
+}
+
 async function authAndPlan(authHeader: string | null) {
   if (!authHeader) return { error: json({ error: { type: 'auth_error', message: 'Missing authorization' } }, 401) };
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const { data: { user }, error } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
   if (error || !user) return { error: json({ error: { type: 'auth_error', message: 'Invalid or expired token' } }, 401) };
-  // Per-minute request throttle, before any model work. Fails OPEN so a throttle
-  // hiccup (or an unmigrated DB) never blocks a legitimate request. Applies to all
-  // users incl. unlimited; a batch Rex Lens call counts as one inbound request.
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('plan, unlimited, subscription_status, trial_ends_at, entitlement_status, entitlement_pending_until')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (profileError || !profile) {
+    return { error: json({ error: { type: 'ACCESS_LOCKED', message: 'PocketRep access could not be verified.' } }, 403) };
+  }
+  const access = aiAccessDecision(profile as AiBillingProfile);
+  if (!access.allowed) {
+    return { error: json({ error: { type: 'ACCESS_LOCKED', reason: access.reason, message: 'PocketRep access is not currently active.' } }, 403) };
+  }
+
   if (RATE_PER_MIN > 0) {
     try {
       const { data: rc, error: rErr } = await supabase.rpc('bump_ai_minute', { p_user_id: user.id });
-      if (!rErr && typeof rc === 'number' && rc > RATE_PER_MIN) {
+      if (rErr || typeof rc !== 'number') {
+        return { error: json({ error: { type: 'ACCESS_CHECK_FAILED', message: 'Could not verify AI access. Please try again.' } }, 503) };
+      }
+      if (rc > RATE_PER_MIN) {
         return { error: json({ error: { type: 'RATE_LIMITED', message: 'Too many requests this minute. Slow down a moment and try again.' } }, 429, { 'Retry-After': '60' }) };
       }
-    } catch { /* fail open */ }
+    } catch {
+      return { error: json({ error: { type: 'ACCESS_CHECK_FAILED', message: 'Could not verify AI access. Please try again.' } }, 503) };
+    }
   }
-  const { data: profile } = await supabase.from('profiles').select('plan, unlimited').eq('id', user.id).single();
-  const plan = profile?.plan || 'pocketrep';
-  const isUnlimited = profile?.unlimited === true;
+
+  const plan = profile.plan || 'pocketrep';
+  const isUnlimited = profile.unlimited === true;
   const capCents = DAILY_CAP_CENTS[plan] ?? DEFAULT_CAP_CENTS;
   const today = new Date().toISOString().slice(0, 10);
   if (!isUnlimited) {
-    // One row per model per day now (see 20260828_referral_economics.sql), so
-    // sum across all of today's rows rather than assuming a single row.
     const { data: usageRows } = await supabase.from('daily_ai_usage').select('cost_cents').eq('user_id', user.id).eq('usage_date', today);
     const spentCents = (usageRows ?? []).reduce((sum, r: { cost_cents: number | null }) => sum + Number(r.cost_cents ?? 0), 0);
     if (spentCents >= capCents) {

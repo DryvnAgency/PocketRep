@@ -1,170 +1,122 @@
-// Regression coverage for hostile-audit Batch 3: PocketRep's app-wide Plan
-// type/model, DB defaults, and several customer-facing surfaces still only
-// recognized the retired 3-tier 'rex_lens'/'pro'/'elite' model, while every
-// current paying customer's profiles.plan is actually 'pocketrep' (written
-// by supabase/functions/checkout-account and stripe-webhook). Net effects
-// before this fix: raw plan strings ("POCKETREP", "PRO PLAN") rendered to
-// customers; dead "Upgrade to Elite" CTAs and an ELITE badge with no
-// purchasable tier behind them; Rex Memory and the Weekly Digest — both
-// complete, production-safe features — permanently unreachable because
-// they were gated on plan === 'elite', a value no current signup path ever
-// assigns; a live RexLens promo card and an RexLens-branded iOS permission
-// string inside PocketRep; a stale Team thank-you page claiming "Payment
-// confirmed" with concrete $49/seat pricing while the homepage says Team is
-// waitlist-only; a launch thank-you page pointing at pocketrep.pro instead
-// of app.pocketrep.pro with no noindex/footer; and no in-app-browser
-// (Instagram/Facebook/TikTok) handling in the PWA install prompt.
-//
-// Source-grep guardrails against the real files, matching this repo's
-// established test convention. Covers all 8 items in the Batch 3
-// verification list.
-//
-//   npm run test:pocketrepplan    (from PocketRepApp/)
-
 import fs from 'node:fs';
 import path from 'node:path';
 
-let failures = 0;
-let checks = 0;
-const ok = (name, cond) => { checks++; console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failures++; };
-
-const root = path.resolve(new URL('..', import.meta.url).pathname);
+const root = process.cwd();
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+let checks = 0;
+let failures = 0;
+function check(condition, message) {
+  checks += 1;
+  if (condition) console.log(`  ✓ ${message}`);
+  else { failures += 1; console.error(`  ✗ ${message}`); }
+}
 
-// --- 1. 'pocketrep' is recognized as the current plan -----------------------
-console.log('\n--- "pocketrep" is a first-class current plan (item 1/6) ---');
-const typesSrc = read('lib/types.ts');
-ok('the Plan type includes pocketrep', /export type Plan = [^;]*'pocketrep'/.test(typesSrc));
-ok('the Plan type still preserves the historical values (backward compat)',
-  /'rex_lens'/.test(typesSrc) && /'pro'/.test(typesSrc) && /'elite'/.test(typesSrc));
+console.log('PocketRep Batch 3 single-plan / entitlement regression');
+const schema = read('sql/schema.sql');
+const migration = read('supabase/migrations/20260903120000_pocketrep_current_plan_default.sql');
+const layout = read('app/_layout.tsx');
+const ai = read('supabase/functions/ai-proxy/index.ts');
+const appJson = read('app.json');
+const contacts = read('app/(tabs)/contacts.tsx');
+const more = read('app/(tabs)/more.tsx');
+const rex = read('app/(tabs)/rex.tsx');
+const sequences = read('app/(tabs)/sequences.tsx');
+const home = read('app/(tabs)/index.tsx');
+const profile = read('components/v2/ProfileTab.tsx');
+const pwa = read('components/v2/PWAInstallPrompt.tsx');
+const checkout = read('supabase/functions/checkout-account/index.ts');
+const teams = read('../Pocketrep/thankyou-teams.html');
+const launch = read('../Pocketrep/thankyou-launch.html');
+const vercel = read('../vercel.json');
+const types = read('lib/types.ts');
 
-const migrationFiles = fs.readdirSync(path.join(root, 'supabase/migrations'));
-const planMigrationFile = migrationFiles.find(f => /pocketrep_current_plan/.test(f));
-ok('a new migration exists widening the plan model to pocketrep', !!planMigrationFile);
-const migrationSrc = planMigrationFile ? read(`supabase/migrations/${planMigrationFile}`) : '';
-ok('the migration widens the plan CHECK constraint to include pocketrep',
-  /CHECK \(plan IN \([^)]*'pocketrep'[^)]*\)\)/i.test(migrationSrc));
-ok('the migration keeps the historical values valid too (no existing row is invalidated)',
-  /'pocketrep'[^)]*'rex_lens'[^)]*'pro'[^)]*'elite'/.test(migrationSrc.replace(/\s+/g, ' ')));
-ok('the migration redefines handle_new_user() to default to pocketrep, not the legacy pro',
-  /_plan := coalesce\(new\.raw_user_meta_data->>'plan', 'pocketrep'\)/.test(migrationSrc));
-ok('handle_new_user() still falls back to pocketrep (not pro) for any unrecognized plan string',
-  /IF _plan NOT IN \([^)]*\) THEN _plan := 'pocketrep'; END IF;/.test(migrationSrc));
+check(types.includes("'pocketrep'"), 'Plan model includes current pocketrep product');
+check(schema.includes("default 'pocketrep' check (plan = 'pocketrep')"), 'schema is single-plan pocketrep');
+check(!schema.includes("raw_user_meta_data->>'plan'"), 'schema does not accept client-selected plan metadata');
+check(schema.includes("set search_path to ''"), 'signup trigger uses empty search_path');
+check(schema.includes('insert into public.profiles'), 'signup trigger fully qualifies profiles');
+check(schema.includes("_plan := 'pocketrep'"), 'signup trigger hard-sets pocketrep');
+check(migration.includes("alter column plan set default 'pocketrep'"), 'migration fixes stale production column default');
+check(migration.includes("check (plan = 'pocketrep')"), 'migration preserves single-plan constraint');
+check(!migration.includes("raw_user_meta_data->>'plan'"), 'migration rejects client-controlled plan selection');
+check(!migration.includes("plan in ('rex_lens','pro','elite')"), 'migration does not widen retired tiers');
+check(migration.includes("set search_path to ''"), 'migration preserves hardened signup search_path');
+check(migration.includes('perform public.seed_demo_customers_for_user(new.id)'), 'migration preserves current signup demo seed');
 
-// --- 4. Stripe/entitlement status remains the sole billing authority --------
-console.log('\n--- profile.plan never becomes a billing authority (item 1, item 4 of the 8) ---');
-const accessGateSrc = read('lib/v2/accessGate.ts');
-const selectMatch = accessGateSrc.match(/\.from\('profiles'\)\s*\.select\('([^']*)'\)/);
-ok("accessGate.ts's profile select is present", !!selectMatch);
-ok('accessGate.ts does NOT select plan — Stripe subscription/entitlement status stays authoritative',
-  !!selectMatch && !/\bplan\b/.test(selectMatch[1]));
-ok('accessGate.ts branches only on subscription/entitlement state, never on plan',
-  !/profile\??\.plan/.test(accessGateSrc) && !/\bplan\s*===/.test(accessGateSrc));
+check(layout.includes('useAccessGate(ready && signedIn)'), 'legacy V1 root invokes normal access gate');
+check(layout.includes("access.status === 'loading'"), 'V1 withholds tabs while entitlement is loading');
+check(layout.includes("access.status === 'locked'"), 'V1 handles locked entitlement');
+check(layout.includes('<LockoutScreen'), 'V1 renders shared lockout screen');
+check(layout.includes("access.status === 'allowed' || access.status === 'pending'"), 'V1 routes to tabs only for allowed/current grace');
+check(!layout.includes('if (signedIn && inAuth) router.replace'), 'old auth-only V1 tab bypass is gone');
 
-const aiProxySrc = read('supabase/functions/ai-proxy/index.ts');
-ok('ai-proxy has an explicit pocketrep entry in its daily cap map (not an accidental fallback)',
-  /DAILY_CAP_CENTS[^;]*pocketrep\s*:\s*\d+/.test(aiProxySrc));
-ok("a pocketrep customer's cap is not silently rejected/blank",
-  (() => {
-    const m = aiProxySrc.match(/DAILY_CAP_CENTS:\s*Record<string,\s*number>\s*=\s*\{([^}]*)\}/);
-    if (!m) return false;
-    const map = Function(`return {${m[1]}}`)();
-    return typeof map.pocketrep === 'number' && map.pocketrep > 0;
-  })());
+for (const field of ['subscription_status', 'trial_ends_at', 'entitlement_status', 'entitlement_pending_until']) {
+  check(ai.includes(field), `ai-proxy reads ${field}`);
+}
+check(ai.includes('function aiAccessDecision'), 'ai-proxy has explicit server-side entitlement decision');
+check(ai.includes('if (profileError || !profile)'), 'ai-proxy fails closed on missing/unverifiable profile');
+check(ai.includes("type: 'ACCESS_LOCKED'"), 'ai-proxy denies inactive paid access before model work');
+check(ai.includes("type: 'ACCESS_CHECK_FAILED'"), 'AI preflight failure is fail-closed');
+check(!ai.includes('catch { /* fail open */ }'), 'AI rate/access preflight no longer fails open');
+check(ai.indexOf('aiAccessDecision(profile') < ai.indexOf("supabase.rpc('bump_ai_minute'"), 'billing decision occurs before rate/cost/model preflight');
+check(ai.includes('pocketrep: 75'), 'PocketRep has explicit AI daily cap');
+check(ai.includes("const plan = profile.plan || 'pocketrep'"), 'AI plan fallback is current product name');
 
-// --- 2/3. No raw plan labels, no dead Upgrade-to-Elite flow on live surfaces -
-console.log('\n--- no raw POCKETREP/PRO/ELITE labels on audited live surfaces (item 2) ---');
-const indexTsxSrc = read('app/(tabs)/index.tsx');
-ok('native Heat Sheet plan badge no longer renders the raw plan value',
-  !/\{.*profile\?\.plan.*toUpperCase\(\).*\}/.test(indexTsxSrc));
-ok('native Heat Sheet plan badge shows polished PocketRep copy',
-  /planBadgeText[^>]*>PocketRep</.test(indexTsxSrc) || /planBadgeText\}>\s*PocketRep\s*</.test(indexTsxSrc));
+const now = Date.parse('2026-09-03T12:00:00Z');
+function allowed({ subscription = '', entitlement = '', trial = null, pending = null } = {}) {
+  subscription = subscription.toLowerCase();
+  entitlement = entitlement.toLowerCase();
+  const trialMs = trial ? Date.parse(trial) : Number.NaN;
+  const pendingMs = pending ? Date.parse(pending) : Number.NaN;
+  if (entitlement === 'pending') return Number.isFinite(pendingMs) && pendingMs > now;
+  if (entitlement === 'locked') return false;
+  if (subscription === 'active' || entitlement === 'active') return true;
+  if (subscription === 'trialing' || entitlement === 'trialing') {
+    if (!trial) return true;
+    return Number.isFinite(trialMs) && trialMs > now;
+  }
+  if (['canceled','cancelled','past_due','unpaid','incomplete_expired'].includes(subscription)) return false;
+  if (Number.isFinite(trialMs) && trialMs > now) return true;
+  return false;
+}
+check(allowed({ subscription: 'active' }), 'active subscription allows AI');
+check(allowed({ entitlement: 'active' }), 'active entitlement allows AI');
+check(allowed({ subscription: 'trialing', trial: '2026-09-04T00:00:00Z' }), 'valid trial allows AI');
+check(allowed({ entitlement: 'trialing' }), 'trialing entitlement without end remains allowed per accessGate semantics');
+check(allowed({ entitlement: 'pending', pending: '2026-09-03T13:00:00Z' }), 'current pending grace allows AI');
+check(!allowed({ entitlement: 'pending', pending: '2026-09-03T11:00:00Z' }), 'expired pending grace denies AI');
+check(!allowed({ entitlement: 'locked' }), 'locked entitlement denies AI');
+check(!allowed({ subscription: 'canceled' }), 'canceled subscription denies AI');
+check(!allowed({ subscription: 'cancelled' }), 'cancelled spelling denies AI');
+check(!allowed({ subscription: 'past_due' }), 'past_due denies AI');
+check(!allowed({ subscription: 'unpaid' }), 'unpaid denies AI');
+check(!allowed({ subscription: 'incomplete_expired' }), 'incomplete_expired denies AI');
+check(!allowed({ subscription: 'trialing', trial: '2026-09-03T11:00:00Z' }), 'expired trial denies AI');
+check(!allowed({}), 'missing billing state denies AI');
 
-const profileTabSrc = read('components/v2/ProfileTab.tsx');
-ok('V2 ProfileTab plan label no longer derives from the raw plan value',
-  !/const planLabel = \(profile\?\.plan/.test(profileTabSrc));
-ok('V2 ProfileTab plan label is polished PocketRep copy',
-  /const planLabel = 'PocketRep'/.test(profileTabSrc));
+check(migration.includes('create or replace function public.bump_ai_minute'), 'DB AI preflight is entitlement-aware defense in depth');
+check(migration.includes('return 2147483647'), 'DB AI preflight returns denied sentinel on invalid/unverifiable access');
+check(migration.includes('revoke all on function public.bump_ai_minute(uuid) from authenticated'), 'AI preflight RPC is not client-callable');
+check(migration.includes('grant execute on function public.bump_ai_minute(uuid) to service_role'), 'AI preflight remains callable by server');
+check(!appJson.includes('Rex Lens'), 'native photo permission no longer mentions Rex Lens');
+check(appJson.includes('share screenshots and photos with Rex'), 'photo permission states verified Rex image-sharing use');
+check(contacts.includes('Limit: {MASS_TEXT_LIMIT}'), 'native mass-text UI no longer advertises Pro/Elite plan name');
+check(!contacts.includes('// Plan limits: Pro=50, Elite=100'), 'native contacts plan comment is current');
+check(!more.includes('Upgrade to Elite'), 'dead Upgrade to Elite CTA removed');
+check(!more.includes('PRO PLAN'), 'settings no longer shows stale PRO PLAN badge');
+check(!/if\s*\(\s*profile\?\.plan\s*===\s*['\"]elite['\"]\s*\)/.test(rex) && !/const\s+isElite\s*=/.test(rex), 'Rex Memory is not dead-gated on Elite');
+check(!/if\s*\(\s*profile\?\.plan\s*===\s*['\"]elite['\"]\s*\)/.test(more) && !/const\s+isElite\s*=/.test(more), 'Weekly Digest is not dead-gated on Elite');
+check(!sequences.includes('ELITE'), 'native sequences no longer shows stale ELITE lock copy');
+check(!home.includes('toUpperCase()} PLAN'), 'native home no longer renders raw plan as customer-facing tier');
+check(!profile.includes('toUpperCase()}'), 'V2 profile no longer renders raw plan as customer-facing tier');
+check(checkout.includes('STRIPE_POCKETREP_PRICE_ID'), 'checkout has canonical PocketRep price env name');
+check(checkout.includes('STRIPE_ELITE_PRICE_ID'), 'checkout preserves legacy env fallback');
+check(pwa.includes('Instagram') && pwa.includes('TikTok') && pwa.includes('Facebook'), 'PWA prompt handles major in-app browsers');
+check(teams.toLowerCase().includes('not for sale yet'), 'Team orphan page no longer claims payment confirmation');
+check(launch.includes('noindex'), 'launch thank-you page is noindex');
+check(launch.includes('app.pocketrep.pro'), 'launch thank-you links directly to app subdomain');
+check((JSON.parse(vercel).headers ?? []).some((rule) => { try { const re = new RegExp(rule.source); return re.test('/brand.css') && re.test('/seo-pages.css'); } catch { return false; } }), 'stable CSS files have explicit cache rule');
+check(vercel.includes('must-revalidate'), 'stable CSS revalidates instead of immutable one-year caching');
 
-const moreTsxSrc = read('app/(tabs)/more.tsx');
-ok('native More screen no longer computes a Pro/Elite planLabel',
-  !/const planLabel = isElite/.test(moreTsxSrc));
-ok('native More screen plan badge shows polished PocketRep copy, not PRO PLAN/ELITE PLAN',
-  /planBadgeText\}>PocketRep Plan</.test(moreTsxSrc));
-ok('native More screen no longer references isElite at all (dead once the gates below are removed)',
-  !/isElite/.test(moreTsxSrc));
-
-console.log('\n--- no current user-facing "Upgrade to Elite" flow remains (item 3) ---');
-ok('More screen has no Upgrade-to-Elite CTA', !/Upgrade to Elite/.test(moreTsxSrc));
-ok('More screen has no dead /upgrade link', !/pocketrep\.pro\/upgrade/.test(moreTsxSrc));
-ok('More screen has no ELITE lock badge', !/eliteBadgeText\}>ELITE</.test(moreTsxSrc));
-const sequencesSrc = read('app/(tabs)/sequences.tsx');
-ok('sequences.tsx has no Upgrade-to-Elite copy', !/Upgrade to Elite/.test(sequencesSrc));
-ok('sequences.tsx mass-text modal no longer shows a raw ELITE/PRO plan badge',
-  !/planBadgeText\}>\{userPlan === 'elite' \? 'ELITE' : 'PRO'\}/.test(sequencesSrc));
-const contactsSrc = read('app/(tabs)/contacts.tsx');
-ok("contacts.tsx mass-text sheet no longer labels the limit Elite/Pro",
-  !/\{userPlan === 'elite' \? 'Elite' : 'Pro'\} limit/.test(contactsSrc));
-
-// --- 5. Rex Memory / Weekly Digest cannot silently disappear ----------------
-console.log('\n--- Rex Memory / Weekly Digest ungated — available to every current member (item 4, item 5 of the 8) ---');
-const rexTsxSrc = read('app/(tabs)/rex.tsx');
-ok('rex.tsx no longer gates the memory-build throttle behind plan === elite',
-  !/if \(profile\?\.plan === 'elite'\) \{\s*\n\s*const totalMsgs/.test(rexTsxSrc));
-ok('rex.tsx still runs the every-5-messages memory throttle (cost control preserved, just not plan-gated)',
-  /const totalMsgs = \(memory\?\.message_count \?\? 0\) \+ 2;/.test(rexTsxSrc));
-ok('rex.tsx no longer computes an isElite flag', !/const isElite = profile\?\.plan/.test(rexTsxSrc));
-ok('rex.tsx shows the memory banner whenever a summary exists, not only for isElite',
-  /\{memory\?\.summary \? \(/.test(rexTsxSrc) && !/isElite && memory\?\.summary/.test(rexTsxSrc));
-
-ok('More screen no longer branches Weekly Digest on isElite',
-  !/\{isElite \? \(/.test(moreTsxSrc));
-ok('More screen unconditionally renders "Generate Digest Now"',
-  /Generate Digest Now/.test(moreTsxSrc) && !/Weekly Digest<\/Text>\s*\n\s*<Text style=\{s\.rowSub\}>Rex reviews your week<\/Text>/.test(moreTsxSrc));
-ok('More screen still schedules the Sunday Digest reminder (feature body unchanged, just ungated)',
-  /Sunday Digest/.test(moreTsxSrc) && /scheduleWeeklyDigest|setShowDigestPicker/.test(moreTsxSrc));
-
-// --- 6. RexLens strings gone from PocketRep customer-facing surfaces --------
-console.log('\n--- RexLens branding removed from live PocketRep surfaces (item 8) ---');
-ok('native More screen no longer promotes the Rex Lens Chrome Extension', !/Rex Lens/.test(moreTsxSrc));
-ok('native More screen no longer links to /rex-lens', !/pocketrep\.pro\/rex-lens/.test(moreTsxSrc));
-const appJsonSrc = read('app.json');
-ok("the iOS/Android photo-permission string no longer names Rex Lens", !/for Rex Lens/.test(appJsonSrc));
-ok('the photo-permission string still accurately describes real PocketRep photo use',
-  /photosPermission[^}]*Rex[^}]*contacts/.test(appJsonSrc.replace(/\s+/g, ' ')));
-
-// --- 7. Stale Team confirmation/pricing not publicly presented --------------
-console.log('\n--- Team thank-you page no longer falsely confirms payment or shows stale pricing (item 9, item 7 of the 8) ---');
-const marketingRoot = path.resolve(root, '..', 'Pocketrep');
-const readMarketing = (p) => fs.readFileSync(path.join(marketingRoot, p), 'utf8');
-const teamsSrc = readMarketing('thankyou-teams.html');
-ok('thankyou-teams.html still carries noindex', /<meta name="robots" content="noindex">/.test(teamsSrc));
-ok('thankyou-teams.html no longer claims a payment was confirmed', !/Payment confirmed/.test(teamsSrc));
-ok('thankyou-teams.html no longer shows concrete purchasable Team pricing',
-  !/\$49\/seat\/mo/.test(teamsSrc) && !/\$249/.test(teamsSrc));
-ok('thankyou-teams.html now points to the real, live Team waitlist section instead',
-  /href="\/#teams"/.test(teamsSrc));
-
-// --- 8. Install flow points to app.pocketrep.pro + in-app browser handling -
-console.log('\n--- install/launch flow: app.pocketrep.pro + in-app browser handling (item 10, item 8 of the 8) ---');
-const launchSrc = readMarketing('thankyou-launch.html');
-ok('thankyou-launch.html points directly at app.pocketrep.pro, not pocketrep.pro/app',
-  /href="https:\/\/app\.pocketrep\.pro"/.test(launchSrc) && !/href="https:\/\/pocketrep\.pro\/app"/.test(launchSrc));
-ok('thankyou-launch.html now carries noindex', /<meta name="robots" content="noindex">/.test(launchSrc));
-ok('thankyou-launch.html now has footer legal links',
-  /footer-links[^]*privacy\.html[^]*terms\.html[^]*cancel\.html/.test(launchSrc));
-
-const pwaSrc = read('components/v2/PWAInstallPrompt.tsx');
-ok('PWAInstallPrompt detects common in-app browsers (Instagram/Facebook/TikTok)',
-  /function isInAppBrowser[^{]*\{[^}]*Instagram[^}]*FBAN[^}]*TikTok/.test(pwaSrc.replace(/\s+/g, ' ')));
-ok('PWAInstallPrompt checks isInAppBrowser() before falling into the iOS/Android branches',
-  (() => {
-    const inAppIdx = pwaSrc.indexOf('if (isInAppBrowser())');
-    const iosIdx = pwaSrc.indexOf("if (ios) {");
-    return inAppIdx !== -1 && iosIdx !== -1 && inAppIdx < iosIdx;
-  })());
-ok('the in-app-browser message tells the visitor to open a real browser, not Safari share-sheet steps',
-  /OPEN IN YOUR BROWSER/.test(pwaSrc));
-
-console.log(`\n${failures === 0 ? '✅ ALL PASSED' : `❌ ${failures} FAILED`} (${checks} checks)`);
-process.exit(failures ? 1 : 0);
+console.log(`\n${checks - failures}/${checks} checks passed`);
+if (failures) process.exit(1);

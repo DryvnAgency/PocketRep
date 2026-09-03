@@ -1,82 +1,109 @@
--- Batch 3 hostile-audit remediation: the current PocketRep product writes
--- profiles.plan = 'pocketrep' for every real paying customer (see
--- supabase/functions/checkout-account/index.ts and stripe-webhook/index.ts),
--- but this column's CHECK constraint (sql/schema.sql) and the
--- handle_new_user() trigger only ever recognized the old 3-tier
--- 'rex_lens'/'pro'/'elite' model. Net effect: handle_new_user() silently
--- forced every new signup's initial row to plan='pro' (since 'pocketrep'
--- failed its allowlist and was coerced back to 'pro'), relying entirely on
--- checkout-account's follow-up UPDATE to fix it back to 'pocketrep' — and if
--- that UPDATE fails (checkout-account/index.ts:224-227 does check its
--- error and surfaces a 500, but does not retry or roll back the already-
--- inserted auth.users/profiles rows), the account is permanently stranded
--- on the legacy plan='pro' default with a trigger-assigned trial_ends_at
--- instead of the real Stripe-derived one.
---
--- This migration widens both to recognize 'pocketrep' as a first-class
--- current plan while preserving every historical value already documented
--- as a legacy plan/alias — no existing row's plan value is changed, and old
--- plan strings remain valid (they are simply no longer selectable as a
--- default for a NEW signup). Stripe subscription/entitlement status
--- (lib/v2/accessGate.ts) remains the sole billing authority; this migration
--- does not change that.
---
--- NOT applied by this PR. Added for review only, per the Batch 3 request
--- ("If a migration is required, add it to the PR but do not deploy the
--- migration and do not merge").
+-- PocketRep single-plan source-of-truth reconciliation.
+-- Production already enforces plan='pocketrep' in the CHECK constraint and signup trigger.
+-- This migration is intentionally convergent: it must never widen back to retired tiers
+-- or accept a plan from raw_user_meta_data.
 
--- Widen the plan CHECK constraint. The constraint itself is defined inline
--- in sql/schema.sql (a hand-run "run this in SQL Editor" setup doc, not a
--- tracked migration) as an unnamed column check, which Postgres would name
--- profiles_plan_check by its own default <table>_<column>_check
--- convention — the name assumed below. No migration in this directory ever
--- altered it, so its exact live name/definition cannot be confirmed from
--- source alone; please verify against the live schema before applying.
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.table_constraints
-    WHERE table_schema = 'public' AND table_name = 'profiles' AND constraint_name = 'profiles_plan_check'
-  ) THEN
-    ALTER TABLE public.profiles DROP CONSTRAINT profiles_plan_check;
-  END IF;
-END $$;
+begin;
 
-ALTER TABLE public.profiles
-  ADD CONSTRAINT profiles_plan_check
-  CHECK (plan IN ('pocketrep', 'rex_lens', 'pro', 'elite'));
+update public.profiles
+set plan = 'pocketrep'
+where plan is distinct from 'pocketrep';
 
--- Belt-and-suspenders: handle_new_user() below always supplies an explicit
--- plan on INSERT, so this default is not exercised by that path today, but
--- keeping the column default in sync avoids a future bare INSERT silently
--- landing on the retired 'pro' default.
-ALTER TABLE public.profiles ALTER COLUMN plan SET DEFAULT 'pocketrep';
+alter table public.profiles
+  alter column plan set default 'pocketrep';
 
--- Redefine handle_new_user() to recognize 'pocketrep' and default new,
--- unrecognized, or absent plan metadata to 'pocketrep' instead of the
--- legacy 'pro'. Legacy bundle/standalone aliases are still mapped for
--- backward compatibility, matching every prior definition of this trigger
--- (body otherwise unchanged from
--- 20260813_new_user_demo_onboarding.sql's version, demo-seeding included).
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-DECLARE _plan text;
-BEGIN
-  _plan := coalesce(new.raw_user_meta_data->>'plan', 'pocketrep');
-  IF _plan IN ('pro_bundle','elite_bundle') THEN _plan := 'elite';
-  ELSIF _plan = 'rex_lens_standalone' THEN _plan := 'rex_lens';
-  END IF;
-  IF _plan NOT IN ('rex_lens','pro','elite','pocketrep') THEN _plan := 'pocketrep'; END IF;
+alter table public.profiles
+  drop constraint if exists profiles_plan_check;
 
-  INSERT INTO profiles (id, email, plan, trial_ends_at)
-  VALUES (new.id, new.email, _plan, now() + interval '7 days')
-  ON CONFLICT (id) DO NOTHING;
+alter table public.profiles
+  add constraint profiles_plan_check check (plan = 'pocketrep');
 
-  PERFORM public.seed_demo_customers_for_user(new.id);
-  RETURN new;
-END;
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare
+  _plan text;
+begin
+  _plan := 'pocketrep';
+  insert into public.profiles(id, email, plan, trial_ends_at)
+  values (new.id, new.email, _plan, now() + interval '7 days')
+  on conflict(id) do nothing;
+  perform public.seed_demo_customers_for_user(new.id);
+  return new;
+end;
 $function$;
+
+-- ai-proxy calls this before model work. Keep rate limiting and entitlement
+-- verification in one server-side preflight so a stale/forged client cannot
+-- spend paid AI after access is canceled, expired, locked, or unverifiable.
+create or replace function public.bump_ai_minute(p_user_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare
+  v_minute timestamptz := date_trunc('minute', now());
+  v_count integer;
+  v_subscription text;
+  v_trial_ends timestamptz;
+  v_entitlement text;
+  v_pending_until timestamptz;
+  v_allowed boolean := false;
+begin
+  select lower(coalesce(subscription_status, '')),
+         trial_ends_at,
+         lower(coalesce(entitlement_status, '')),
+         entitlement_pending_until
+    into v_subscription, v_trial_ends, v_entitlement, v_pending_until
+  from public.profiles
+  where id = p_user_id;
+
+  if not found then
+    return 2147483647;
+  end if;
+
+  if v_entitlement = 'pending' then
+    v_allowed := v_pending_until is not null and v_pending_until > now();
+  elsif v_entitlement = 'locked' then
+    v_allowed := false;
+  elsif v_subscription = 'active' or v_entitlement = 'active' then
+    v_allowed := true;
+  elsif v_subscription = 'trialing' or v_entitlement = 'trialing' then
+    v_allowed := v_trial_ends is null or v_trial_ends > now();
+  elsif v_subscription in ('canceled', 'cancelled', 'past_due', 'unpaid', 'incomplete_expired') then
+    v_allowed := false;
+  elsif v_trial_ends is not null and v_trial_ends > now() then
+    v_allowed := true;
+  end if;
+
+  if not v_allowed then
+    return 2147483647;
+  end if;
+
+  insert into public.ai_minute_usage (user_id, minute_start, request_count)
+  values (p_user_id, v_minute, 1)
+  on conflict (user_id, minute_start)
+  do update set request_count = public.ai_minute_usage.request_count + 1
+  returning request_count into v_count;
+
+  delete from public.ai_minute_usage
+  where user_id = p_user_id
+    and minute_start < v_minute - interval '5 minutes';
+
+  return v_count;
+exception
+  when others then
+    return 2147483647;
+end;
+$function$;
+
+revoke all on function public.bump_ai_minute(uuid) from public;
+revoke all on function public.bump_ai_minute(uuid) from anon;
+revoke all on function public.bump_ai_minute(uuid) from authenticated;
+grant execute on function public.bump_ai_minute(uuid) to service_role;
+
+commit;
