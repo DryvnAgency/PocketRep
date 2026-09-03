@@ -158,7 +158,7 @@ export type AiDetail = {
   firstWeekUsers: FirstWeekUser[];
 };
 
-export const FIRST_WEEK_CEILING_CENTS = 2500; // $25
+export const FIRST_WEEK_CEILING_CENTS = 400; // first-week launch guard
 
 // ── Growth Calculator ───────────────────────────────────────────────────────
 
