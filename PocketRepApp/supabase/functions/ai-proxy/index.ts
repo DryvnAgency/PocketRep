@@ -148,7 +148,9 @@ const REXLENS_PRICING = { input: 1.00, output: 5.00, cacheWrite: 1.25, cacheRead
 // fallback. Same 75¢ ceiling as before; not a spend increase.
 const DAILY_CAP_CENTS: Record<string, number> = { pocketrep: 75, rex_lens: 75, pro: 75, elite: 125 };
 const DEFAULT_CAP_CENTS = 75;
-const MONTHLY_CAP_CENTS = Math.max(100, Number(Deno.env.get('AI_MONTHLY_CAP_CENTS') ?? '2000'));
+const MONTHLY_CAP_CENTS = Math.max(100, Number(Deno.env.get('AI_MONTHLY_CAP_CENTS') ?? '2500'));
+const FIRST_WEEK_CAP_CENTS = 400;
+const FIRST_WEEK_DAYS = 7;
 const MAX_BRAIN_OUTPUT_TOKENS = Math.max(400, Number(Deno.env.get('AI_MAX_BRAIN_OUTPUT_TOKENS') ?? '2000'));
 
 // Per-minute request throttle (abuse / cost-runaway rail). Tunable via env; <=0 disables.
@@ -261,6 +263,7 @@ type AiBillingProfile = {
   trial_ends_at: string | null;
   entitlement_status: string | null;
   entitlement_pending_until: string | null;
+  created_at: string | null;
 };
 
 function aiAccessDecision(profile: AiBillingProfile, nowMs = Date.now()): { allowed: boolean; reason: string } {
@@ -298,7 +301,7 @@ async function authAndPlan(authHeader: string | null) {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('plan, unlimited, subscription_status, trial_ends_at, entitlement_status, entitlement_pending_until')
+    .select('plan, unlimited, subscription_status, trial_ends_at, entitlement_status, entitlement_pending_until, created_at')
     .eq('id', user.id)
     .maybeSingle();
   if (profileError || !profile) {
@@ -332,6 +335,17 @@ async function authAndPlan(authHeader: string | null) {
     const spentCents = (usageRows ?? []).reduce((sum, r: { cost_cents: number | null }) => sum + Number(r.cost_cents ?? 0), 0);
     if (spentCents >= capCents) {
       return { error: json({ error: { type: 'DAILY_LIMIT', message: `Daily limit reached ($${(capCents / 100).toFixed(2)}/day). Resets at midnight.` } }, 429) };
+    }
+
+    const createdMs = profile.created_at ? Date.parse(profile.created_at) : Number.NaN;
+    const nowMs = Date.now();
+    if (Number.isFinite(createdMs) && nowMs - createdMs < FIRST_WEEK_DAYS * 24 * 60 * 60 * 1000) {
+      const firstWeekStart = new Date(createdMs).toISOString().slice(0, 10);
+      const { data: firstWeekRows } = await supabase.from('daily_ai_usage').select('cost_cents').eq('user_id', user.id).gte('usage_date', firstWeekStart).lte('usage_date', today);
+      const firstWeekSpentCents = (firstWeekRows ?? []).reduce((sum, r: { cost_cents: number | null }) => sum + Number(r.cost_cents ?? 0), 0);
+      if (firstWeekSpentCents >= FIRST_WEEK_CAP_CENTS) {
+        return { error: json({ error: { type: 'FIRST_WEEK_LIMIT', message: 'First-week AI limit reached. Try again after your first 7 days.' } }, 429) };
+      }
     }
 
     const monthStart = `${today.slice(0, 7)}-01`;

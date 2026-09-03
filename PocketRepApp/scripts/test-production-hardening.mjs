@@ -58,7 +58,7 @@ ok(aiProxy.includes("deepseek/deepseek-v4-flash-0731"), 'routine Rex defaults to
 ok(aiProxy.includes("deepseek/deepseek-v4-pro-0813"), 'complex Rex has DeepSeek V4 Pro escalation');
 ok(aiProxy.includes("effort: 'none'"), 'Flash calls disable unnecessary reasoning');
 ok(aiProxy.includes('enabled: false'), 'hidden Pro reasoning is disabled so it cannot starve visible copy');
-ok(aiProxy.includes("AI_MONTHLY_CAP_CENTS') ?? '2000'"), 'Rex has a $20 default monthly AI ceiling');
+ok(aiProxy.includes("AI_MONTHLY_CAP_CENTS') ?? '2500'"), 'Rex has a $25 default monthly AI ceiling');
 ok(aiProxy.includes('increment_monthly_ai_usage'), 'Rex records the canonical monthly AI ledger');
 ok(rexRouting.includes("'weekly_coach'"), 'weekly coaching deterministically escalates to Pro');
 ok(rexRouting.includes('flashValidationFailed'), 'failed Flash validation can escalate once to Pro');

@@ -209,7 +209,7 @@ export async function fetchAiDetail(month?: string): Promise<AiDetail> {
   return data as AiDetail;
 }
 
-/** Color for a first-week AI safety row, per the $20 ceiling. */
+/** Color for a first-week AI safety row, per the $25 ceiling. */
 export function firstWeekSeverity(costCents: number): 'green' | 'yellow' | 'orange' | 'red' | 'deepRed' {
   if (costCents < 500) return 'green';
   if (costCents < 1000) return 'yellow';
@@ -330,7 +330,7 @@ export function computeAlerts(
   if (overCeiling.length > 0) {
     alerts.push({
       level: 'warning', category: 'AI Cost',
-      message: `${overCeiling.length} new user${overCeiling.length === 1 ? '' : 's'} hit the $20 first-week AI ceiling.`,
+      message: `${overCeiling.length} new user${overCeiling.length === 1 ? '' : 's'} hit the $25 first-week AI ceiling.`,
     });
   }
 
