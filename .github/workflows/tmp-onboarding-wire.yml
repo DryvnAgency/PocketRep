@@ -1,0 +1,45 @@
+name: Temporary onboarding wiring
+on:
+  push:
+    branches: [fix/v1-first-run-activation]
+    paths: ['.github/workflows/tmp-onboarding-wire.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v1-first-run-activation
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Wire onboarding import
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('PocketRepApp/components/v2/AppShell.tsx')
+          s = p.read_text()
+          old = """      <RexOnboarding
+        open={onboardingOpen}
+        onClose={(completed) => {
+"""
+          new = """      <RexOnboarding
+        open={onboardingOpen}
+        onImport={() => {
+          markOnboardingComplete();
+          setOnboardingOpen(false);
+          setImportOpen(true);
+        }}
+        onClose={(completed) => {
+"""
+          if old not in s:
+              raise SystemExit('RexOnboarding anchor not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git config user.name 'DryvnAgency'
+          git config user.email 'dryvnagency@gmail.com'
+          git add PocketRepApp/components/v2/AppShell.tsx
+          git commit -m 'onboarding: open real-book import from first run'
+          git push origin HEAD:fix/v1-first-run-activation
