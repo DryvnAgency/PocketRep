@@ -87,7 +87,8 @@ export default function MoreScreen() {
     const { data: contacts } = await supabase
       .from('contacts')
       .select('first_name,last_name,phone,email,vehicle_year,vehicle_make,vehicle_model,mileage,notes,last_contact_date')
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .eq('is_deleted', false);
 
     if (!contacts?.length) {
       Alert.alert('No contacts', 'Add contacts to your book first.');
@@ -124,7 +125,7 @@ export default function MoreScreen() {
 
     const oneWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
     const [{ data: contacts }, { data: deals }, { data: msgs }] = await Promise.all([
-      supabase.from('contacts').select('id,first_name,last_name,heat_tier').eq('user_id', user.id).gte('created_at', oneWeekAgo),
+      supabase.from('contacts').select('id,first_name,last_name,heat_tier').eq('user_id', user.id).eq('is_deleted', false).gte('created_at', oneWeekAgo),
       supabase.from('deals').select('title,front_gross,back_gross,amount').eq('user_id', user.id).gte('created_at', oneWeekAgo),
       supabase.from('rex_messages').select('id').eq('user_id', user.id).gte('created_at', oneWeekAgo),
     ]);
