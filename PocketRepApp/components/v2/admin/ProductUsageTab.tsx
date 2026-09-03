@@ -1,10 +1,11 @@
 // Owner Control Center — Product Usage tab
-// Feature adoption metrics from existing data — no new instrumentation needed.
+// Feature adoption metrics from existing data — no third-party analytics needed.
 
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { KpiCard, KpiRow, SectionHeader, LoadingState, ErrorState } from './atoms';
+import ActivationFunnel from './ActivationFunnel';
 import { fetchProductUsage, compact } from '@/lib/v2/admin/adminData';
 import type { ProductUsageStats } from '@/lib/v2/admin/adminTypes';
 
@@ -27,6 +28,8 @@ export default function ProductUsageTab() {
 
   return (
     <View style={st.content}>
+      <ActivationFunnel />
+
       <SectionHeader label="CONTACTS" />
       <KpiRow>
         <KpiCard label="Total" value={compact(stats.totalContacts)} />
@@ -59,7 +62,7 @@ export default function ProductUsageTab() {
       <SectionHeader label="DATA UNAVAILABLE" />
       <View style={st.unavailable}>
         <Text style={st.unavailableText}>
-          DAU/WAU/MAU, screen views, session duration, onboarding funnel, and error rates require additional instrumentation and are not yet tracked.
+          Screen views and session duration still require additional instrumentation. The first-250 activation funnel above is derived from PocketRep's existing first-party records.
         </Text>
       </View>
     </View>
