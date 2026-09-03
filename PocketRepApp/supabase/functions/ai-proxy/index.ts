@@ -257,6 +257,7 @@ async function recordUsage(
 }
 
 type AiBillingProfile = {
+  role: string | null;
   plan: string | null;
   unlimited: boolean | null;
   subscription_status: string | null;
@@ -267,6 +268,7 @@ type AiBillingProfile = {
 };
 
 function aiAccessDecision(profile: AiBillingProfile, nowMs = Date.now()): { allowed: boolean; reason: string } {
+  if ((profile.role ?? '').toLowerCase() === 'admin') return { allowed: true, reason: 'admin' };
   const subscription = (profile.subscription_status ?? '').toLowerCase();
   const entitlement = (profile.entitlement_status ?? '').toLowerCase();
   const trialEndMs = profile.trial_ends_at ? Date.parse(profile.trial_ends_at) : Number.NaN;
@@ -301,7 +303,7 @@ async function authAndPlan(authHeader: string | null) {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('plan, unlimited, subscription_status, trial_ends_at, entitlement_status, entitlement_pending_until, created_at')
+    .select('role, plan, unlimited, subscription_status, trial_ends_at, entitlement_status, entitlement_pending_until, created_at')
     .eq('id', user.id)
     .maybeSingle();
   if (profileError || !profile) {
