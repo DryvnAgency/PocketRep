@@ -5,6 +5,9 @@
 import { supabase } from '@/lib/supabase';
 
 const FUNCTIONS_BASE = 'https://fwvrauqdoevwmwwqlfav.supabase.co/functions/v1';
+const SUPPORT_BUCKET = 'support-attachments';
+const MAX_SUPPORT_IMAGE_BYTES = 5 * 1024 * 1024;
+const SUPPORT_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,7 +28,23 @@ export type SupportMessage = {
   ticket_id: string;
   sender_role: 'rep' | 'admin' | 'system';
   content: string;
+  attachment_path?: string | null;
+  attachment_mime?: string | null;
+  attachment_name?: string | null;
+  attachment_size?: number | null;
   created_at: string;
+};
+
+export type SupportImageUpload = {
+  ticketId: string;
+  senderRole: 'rep' | 'admin';
+  uri: string;
+  mimeType?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  /** Required for admin sends; rep sends derive the owner from auth. */
+  ownerUserId?: string | null;
+  caption?: string;
 };
 
 // ── Rep functions ────────────────────────────────────────────────────────────
@@ -76,7 +95,7 @@ export async function loadMessages(ticketId: string): Promise<SupportMessage[]> 
   return (data ?? []) as SupportMessage[];
 }
 
-/** Send a message in an existing ticket. */
+/** Send a text message in an existing ticket. */
 export async function sendMessage(
   ticketId: string,
   content: string,
@@ -87,12 +106,85 @@ export async function sendMessage(
     .insert({ ticket_id: ticketId, sender_role: senderRole, content });
   if (error) throw error;
 
-  // The DB trigger bumps updated_at automatically.
-
-  // Pushover notification only for rep messages (admin doesn't notify themselves)
   if (senderRole === 'rep') {
     notifyAdmin(ticketId).catch(() => undefined);
   }
+}
+
+function safeMime(value?: string | null): string {
+  const mime = String(value || 'image/jpeg').toLowerCase();
+  if (!SUPPORT_IMAGE_MIMES.has(mime)) throw new Error('Only JPG, PNG, WEBP, HEIC, or HEIF images are supported.');
+  return mime;
+}
+
+function extensionForMime(mime: string): string {
+  if (mime === 'image/png') return 'png';
+  if (mime === 'image/webp') return 'webp';
+  if (mime === 'image/heic') return 'heic';
+  if (mime === 'image/heif') return 'heif';
+  return 'jpg';
+}
+
+function randomFileStem(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/** Upload an image to the ticket-private bucket and persist it as a support message. */
+export async function sendImageMessage(input: SupportImageUpload): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+
+  const ownerUserId = input.senderRole === 'rep' ? user.id : String(input.ownerUserId || '');
+  if (!ownerUserId) throw new Error('ticket owner is required');
+
+  const mime = safeMime(input.mimeType);
+  if (input.fileSize && input.fileSize > MAX_SUPPORT_IMAGE_BYTES) {
+    throw new Error('Image must be 5 MB or smaller.');
+  }
+
+  const source = await fetch(input.uri);
+  if (!source.ok) throw new Error('Could not read the selected image.');
+  const bytes = await source.arrayBuffer();
+  if (bytes.byteLength > MAX_SUPPORT_IMAGE_BYTES) throw new Error('Image must be 5 MB or smaller.');
+
+  const ext = extensionForMime(mime);
+  const path = `${ownerUserId}/${input.ticketId}/${randomFileStem()}.${ext}`;
+  const cleanName = String(input.fileName || `support-image.${ext}`).slice(0, 180);
+
+  const { error: uploadError } = await supabase.storage
+    .from(SUPPORT_BUCKET)
+    .upload(path, bytes, { contentType: mime, upsert: false });
+  if (uploadError) throw uploadError;
+
+  const caption = String(input.caption || '').trim().slice(0, 2000);
+  const { error: messageError } = await supabase
+    .from('support_messages')
+    .insert({
+      ticket_id: input.ticketId,
+      sender_role: input.senderRole,
+      content: caption || '[Image attachment]',
+      attachment_path: path,
+      attachment_mime: mime,
+      attachment_name: cleanName,
+      attachment_size: bytes.byteLength,
+    });
+
+  if (messageError) {
+    // Avoid orphaning a private upload when the message insert fails.
+    await supabase.storage.from(SUPPORT_BUCKET).remove([path]).catch(() => undefined);
+    throw messageError;
+  }
+
+  if (input.senderRole === 'rep') {
+    notifyAdmin(input.ticketId).catch(() => undefined);
+  }
+}
+
+/** Generate a short-lived URL after RLS proves the caller can read the object. */
+export async function getSupportAttachmentUrl(path: string): Promise<string> {
+  const { data, error } = await supabase.storage.from(SUPPORT_BUCKET).createSignedUrl(path, 15 * 60);
+  if (error || !data?.signedUrl) throw error ?? new Error('Could not open attachment.');
+  return data.signedUrl;
 }
 
 /** Reopen a resolved ticket. */
@@ -113,7 +205,6 @@ export async function loadAllTickets(): Promise<SupportTicket[]> {
     .select('*, profiles!support_tickets_user_id_fkey(full_name, email)')
     .order('updated_at', { ascending: false });
   if (error) {
-    // Fallback: if the join fails (FK name mismatch), load without join
     const { data: plain, error: plainErr } = await supabase
       .from('support_tickets')
       .select('*')

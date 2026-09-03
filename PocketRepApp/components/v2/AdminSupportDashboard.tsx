@@ -6,8 +6,10 @@ import {
   View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
+import * as ImagePicker from 'expo-image-picker';
+import SupportAttachment from './SupportAttachment';
 import {
-  loadAllTickets, loadMessages, sendMessage, resolveTicket, reopenTicket,
+  loadAllTickets, loadMessages, sendMessage, sendImageMessage, resolveTicket, reopenTicket,
   type SupportTicket, type SupportMessage,
 } from '@/lib/v2/supportChat';
 
@@ -42,6 +44,7 @@ export default function AdminSupportDashboard({
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<FilterMode>('open');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -127,6 +130,38 @@ export default function AdminSupportDashboard({
     }
   };
 
+  const handleAttach = async () => {
+    const ticketOwner = tickets.find(t => t.id === selectedTicketId)?.user_id;
+    if (!selectedTicketId || !ticketOwner || uploading || sending) return;
+    setUploading(true);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) { setError('Photo access is required to attach a screenshot'); return; }
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.85,
+      });
+      if (picked.canceled || !picked.assets?.[0]) return;
+      const asset = picked.assets[0];
+      await sendImageMessage({
+        ticketId: selectedTicketId,
+        senderRole: 'admin',
+        ownerUserId: ticketOwner,
+        uri: asset.uri,
+        mimeType: asset.mimeType,
+        fileName: asset.fileName,
+        fileSize: asset.fileSize,
+      });
+      setError('');
+      setRefreshKey(k => k + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not attach image - try again');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleResolve = async () => {
     if (!selectedTicketId) return;
     try {
@@ -201,7 +236,8 @@ export default function AdminSupportDashboard({
               ) : m.sender_role === 'system' ? (
                 <Text style={[styles.senderLabel, { color: colors.grey2 }]}>SYSTEM</Text>
               ) : null}
-              <Text style={styles.bubbleText}>{m.content}</Text>
+              {m.content && m.content !== '[Image attachment]' ? <Text style={styles.bubbleText}>{m.content}</Text> : null}
+              {m.attachment_path ? <SupportAttachment path={m.attachment_path} name={m.attachment_name} /> : null}
               <Text style={styles.time}>
                 {new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
               </Text>
@@ -213,6 +249,14 @@ export default function AdminSupportDashboard({
       <View style={[styles.inputBar, kbInset > 0 && { paddingBottom: 10 }]}>
         {selectedTicket?.status === 'open' ? (
           <>
+            <Pressable
+              style={[styles.sendBtn, (uploading || sending) && { opacity: 0.4 }]}
+              onPress={handleAttach}
+              disabled={uploading || sending}
+              accessibilityLabel="Attach image"
+            >
+              <Text style={styles.sendIcon}>{uploading ? '…' : '📎'}</Text>
+            </Pressable>
             <TextInput
               style={styles.input}
               placeholder="Reply as admin…"
@@ -221,7 +265,7 @@ export default function AdminSupportDashboard({
               onChangeText={setInput}
               onSubmitEditing={handleSend}
               returnKeyType="send"
-              editable={!sending}
+              editable={!sending && !uploading}
             />
             <Pressable
               style={[styles.sendBtn, (!input.trim() || sending) && { opacity: 0.4 }]}
