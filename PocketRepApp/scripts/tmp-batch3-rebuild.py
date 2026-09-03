@@ -1,0 +1,519 @@
+from pathlib import Path
+
+
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"{label}: expected exactly one match, found {count}")
+    return text.replace(old, new, 1)
+
+
+# Preserve #143's native import try/catch while removing stale plan copy.
+p = Path('app/(tabs)/contacts.tsx')
+s = p.read_text()
+s = replace_once(
+    s,
+    '// Plan limits: Pro=50, Elite=100',
+    '// Historical higher-cap rows keep their existing limit; PocketRep is the current product.',
+    'contacts plan comment',
+)
+s = replace_once(
+    s,
+    "{userPlan === 'elite' ? 'Elite' : 'Pro'} limit: {MASS_TEXT_LIMIT}",
+    'Limit: {MASS_TEXT_LIMIT}',
+    'contacts plan label',
+)
+if 'try {' not in s or 'Could not import contacts' not in s:
+    raise SystemExit('contacts: #143 import exception backstop was lost')
+p.write_text(s)
+
+# Permission copy must describe only verified Rex image sharing.
+p = Path('app.json')
+s = p.read_text()
+s = replace_once(
+    s,
+    'PocketRep needs photo access so you can share screenshots with Rex and add photos to your contacts.',
+    'PocketRep needs photo access so you can share screenshots and photos with Rex.',
+    'photo permission',
+)
+p.write_text(s)
+
+# Standalone schema: hardened single-plan source of truth.
+p = Path('sql/schema.sql')
+s = p.read_text()
+profiles_marker = '-- ── PROFILES ─────────────────────────────────────────────────────────────────\n'
+marker_at = s.index(profiles_marker)
+header = '''-- PocketRep Schema
+-- Run this in Supabase → SQL Editor → New Query
+--
+-- ── CURRENT PLAN ─────────────────────────────────────────────────────────────
+-- PocketRep is a single current product. New profiles are always `pocketrep`.
+-- Billing authority comes from subscription/entitlement state, never from plan metadata.
+-- Historical tier names must not be accepted from client-controlled signup metadata.
+
+'''
+s = header + s[marker_at:]
+s = replace_once(
+    s,
+    "  plan         text not null default 'pocketrep' check (plan in ('pocketrep','rex_lens','pro','elite')),",
+    "  plan         text not null default 'pocketrep' check (plan = 'pocketrep'),",
+    'schema plan constraint',
+)
+start = s.index('-- Auto-create profile on signup\n')
+end = s.index('drop trigger if exists on_auth_user_created on auth.users;')
+hardened_signup = '''-- Auto-create profile on signup. Plan is server-owned and cannot be selected by user metadata.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $$
+declare
+  _plan text;
+begin
+  _plan := 'pocketrep';
+  insert into public.profiles(id, email, plan, trial_ends_at)
+  values (new.id, new.email, _plan, now() + interval '7 days')
+  on conflict(id) do nothing;
+  perform public.seed_demo_customers_for_user(new.id);
+  return new;
+end;
+$$;
+
+'''
+s = s[:start] + hardened_signup + s[end:]
+s = s.replace('for each row execute procedure handle_new_user();', 'for each row execute function public.handle_new_user();')
+p.write_text(s)
+
+# Convergent migration. Never widen the production plan model back to retired tiers.
+migration = r'''-- PocketRep single-plan source-of-truth reconciliation.
+-- Production already enforces plan='pocketrep' in the CHECK constraint and signup trigger.
+-- This migration is intentionally convergent: it must never widen back to retired tiers
+-- or accept a plan from raw_user_meta_data.
+
+begin;
+
+update public.profiles
+set plan = 'pocketrep'
+where plan is distinct from 'pocketrep';
+
+alter table public.profiles
+  alter column plan set default 'pocketrep';
+
+alter table public.profiles
+  drop constraint if exists profiles_plan_check;
+
+alter table public.profiles
+  add constraint profiles_plan_check check (plan = 'pocketrep');
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare
+  _plan text;
+begin
+  _plan := 'pocketrep';
+  insert into public.profiles(id, email, plan, trial_ends_at)
+  values (new.id, new.email, _plan, now() + interval '7 days')
+  on conflict(id) do nothing;
+  perform public.seed_demo_customers_for_user(new.id);
+  return new;
+end;
+$function$;
+
+-- ai-proxy calls this before model work. Keep rate limiting and entitlement
+-- verification in one server-side preflight so a stale/forged client cannot
+-- spend paid AI after access is canceled, expired, locked, or unverifiable.
+create or replace function public.bump_ai_minute(p_user_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare
+  v_minute timestamptz := date_trunc('minute', now());
+  v_count integer;
+  v_subscription text;
+  v_trial_ends timestamptz;
+  v_entitlement text;
+  v_pending_until timestamptz;
+  v_allowed boolean := false;
+begin
+  select lower(coalesce(subscription_status, '')),
+         trial_ends_at,
+         lower(coalesce(entitlement_status, '')),
+         entitlement_pending_until
+    into v_subscription, v_trial_ends, v_entitlement, v_pending_until
+  from public.profiles
+  where id = p_user_id;
+
+  if not found then
+    return 2147483647;
+  end if;
+
+  if v_entitlement = 'pending' then
+    v_allowed := v_pending_until is not null and v_pending_until > now();
+  elsif v_entitlement = 'locked' then
+    v_allowed := false;
+  elsif v_subscription = 'active' or v_entitlement = 'active' then
+    v_allowed := true;
+  elsif v_subscription = 'trialing' or v_entitlement = 'trialing' then
+    v_allowed := v_trial_ends is null or v_trial_ends > now();
+  elsif v_subscription in ('canceled', 'cancelled', 'past_due', 'unpaid', 'incomplete_expired') then
+    v_allowed := false;
+  elsif v_trial_ends is not null and v_trial_ends > now() then
+    v_allowed := true;
+  end if;
+
+  if not v_allowed then
+    return 2147483647;
+  end if;
+
+  insert into public.ai_minute_usage (user_id, minute_start, request_count)
+  values (p_user_id, v_minute, 1)
+  on conflict (user_id, minute_start)
+  do update set request_count = public.ai_minute_usage.request_count + 1
+  returning request_count into v_count;
+
+  delete from public.ai_minute_usage
+  where user_id = p_user_id
+    and minute_start < v_minute - interval '5 minutes';
+
+  return v_count;
+exception
+  when others then
+    return 2147483647;
+end;
+$function$;
+
+revoke all on function public.bump_ai_minute(uuid) from public;
+revoke all on function public.bump_ai_minute(uuid) from anon;
+revoke all on function public.bump_ai_minute(uuid) from authenticated;
+grant execute on function public.bump_ai_minute(uuid) to service_role;
+
+commit;
+'''
+Path('supabase/migrations/20260903120000_pocketrep_current_plan_default.sql').write_text(migration)
+
+# Legacy/native V1 must use the same billing gate as V2 before rendering tabs.
+layout = r'''import { useEffect, useState, Component } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Linking } from 'react-native';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { colors, spacing, radius } from '@/constants/theme';
+import { setupNotificationHandler } from '@/lib/notifications';
+import { shouldUseNewUi } from '@/lib/featureFlags';
+import NewUiShell from '@/components/NewUiShell';
+import ResetPasswordWeb from '@/components/ResetPasswordWeb';
+import LockoutScreen from '@/components/v2/LockoutScreen';
+import { supabase } from '@/lib/supabase';
+import { useAccessGate } from '@/lib/v2/accessGate';
+import { clearLocalSessionState } from '@/lib/v2/localSessionClear';
+import { log } from '@/lib/v2/logger';
+
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: any) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: any) { log.error('error-boundary', error.message, { name: error.name, stack: error.stack, componentStack: info?.componentStack }); }
+  render() {
+    if (this.state.error) return <View style={eb.wrap}><Text style={eb.icon}>⚡</Text><Text style={eb.title}>Something went wrong</Text><Text style={eb.msg}>{this.state.error.message}</Text><TouchableOpacity style={eb.btn} onPress={() => this.setState({ error: null })}><Text style={eb.btnText}>Try again</Text></TouchableOpacity></View>;
+    return this.props.children;
+  }
+}
+const eb = StyleSheet.create({ wrap: { flex: 1, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', padding: spacing.xl }, icon: { fontSize: 40, marginBottom: spacing.md }, title: { fontSize: 20, fontWeight: '700', color: colors.white, marginBottom: spacing.sm }, msg: { fontSize: 13, color: colors.grey2, textAlign: 'center', marginBottom: spacing.xl }, btn: { backgroundColor: colors.gold, borderRadius: radius.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.md }, btnText: { color: colors.ink, fontWeight: '700', fontSize: 15 } });
+
+export default function RootLayout() {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location.pathname === '/reset-password') {
+    return <ErrorBoundary><StatusBar style="light" backgroundColor={colors.ink} /><ResetPasswordWeb /></ErrorBoundary>;
+  }
+  if (shouldUseNewUi()) return <ErrorBoundary><StatusBar style="light" backgroundColor={colors.ink} /><NewUiShell /></ErrorBoundary>;
+  return <V1RootLayout />;
+}
+
+function V1RootLayout() {
+  const segments = useSegments();
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
+  const access = useAccessGate(ready && signedIn);
+
+  useEffect(() => { setupNotificationHandler(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data: { session } }) => { if (!cancelled) { setSignedIn(!!session?.user); setReady(true); } });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => { if (!cancelled) { setSignedIn(!!session?.user); setReady(true); } });
+    return () => { cancelled = true; data.subscription.unsubscribe(); };
+  }, []);
+  useEffect(() => {
+    if (!ready) return;
+    const inAuth = segments[0] === '(auth)';
+    if (!signedIn && !inAuth) router.replace('/(auth)');
+    if (signedIn && inAuth && (access.status === 'allowed' || access.status === 'pending')) router.replace('/(tabs)');
+  }, [ready, signedIn, access.status, segments, router]);
+
+  async function signOutLockedAccount() {
+    await supabase.auth.signOut();
+    try { await clearLocalSessionState(); } catch (error) { log.warn('v1-lockout-clear-session', 'Could not clear local session state', { error: String(error) }); }
+  }
+
+  if (!ready || (signedIn && access.status === 'loading')) {
+    return <ErrorBoundary><StatusBar style="light" backgroundColor={colors.ink} /><View style={eb.wrap}><Text style={eb.msg}>Checking your access…</Text></View></ErrorBoundary>;
+  }
+  if (signedIn && access.status === 'locked') {
+    return (
+      <ErrorBoundary>
+        <StatusBar style="light" backgroundColor={colors.ink} />
+        <LockoutScreen
+          reason={access.reason}
+          onResubscribe={() => { Linking.openURL('https://www.pocketrep.pro').catch(() => undefined); }}
+          onSignOut={signOutLockedAccount}
+        />
+      </ErrorBoundary>
+    );
+  }
+  return <ErrorBoundary><StatusBar style="light" backgroundColor={colors.ink} /><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.ink } }}><Stack.Screen name="(auth)" /><Stack.Screen name="(tabs)" /></Stack></ErrorBoundary>;
+}
+'''
+Path('app/_layout.tsx').write_text(layout)
+
+# ai-proxy: enforce paid access server-side before rate/cost/model work.
+p = Path('supabase/functions/ai-proxy/index.ts')
+s = p.read_text()
+if 'pocketrep: 75' not in s:
+    s = replace_once(
+        s,
+        'const DAILY_CAP_CENTS: Record<string, number> = { rex_lens: 75, pro: 75, elite: 125 };',
+        'const DAILY_CAP_CENTS: Record<string, number> = { pocketrep: 75, rex_lens: 75, pro: 75, elite: 125 };',
+        'ai pocketrep cap',
+    )
+start = s.index('async function authAndPlan(authHeader: string | null) {')
+end = s.index('// Coerce any CRM value to a bounded string.', start)
+auth_block = r'''type AiBillingProfile = {
+  plan: string | null;
+  unlimited: boolean | null;
+  subscription_status: string | null;
+  trial_ends_at: string | null;
+  entitlement_status: string | null;
+  entitlement_pending_until: string | null;
+};
+
+function aiAccessDecision(profile: AiBillingProfile, nowMs = Date.now()): { allowed: boolean; reason: string } {
+  const subscription = (profile.subscription_status ?? '').toLowerCase();
+  const entitlement = (profile.entitlement_status ?? '').toLowerCase();
+  const trialEndMs = profile.trial_ends_at ? Date.parse(profile.trial_ends_at) : Number.NaN;
+  const pendingUntilMs = profile.entitlement_pending_until ? Date.parse(profile.entitlement_pending_until) : Number.NaN;
+
+  if (entitlement === 'pending') {
+    return Number.isFinite(pendingUntilMs) && pendingUntilMs > nowMs
+      ? { allowed: true, reason: 'entitlement_pending' }
+      : { allowed: false, reason: 'entitlement_unverified' };
+  }
+  if (entitlement === 'locked') return { allowed: false, reason: 'entitlement_unverified' };
+  if (subscription === 'active' || entitlement === 'active') return { allowed: true, reason: 'active' };
+  if (subscription === 'trialing' || entitlement === 'trialing') {
+    if (!profile.trial_ends_at) return { allowed: true, reason: 'trialing' };
+    return Number.isFinite(trialEndMs) && trialEndMs > nowMs
+      ? { allowed: true, reason: 'trialing' }
+      : { allowed: false, reason: 'trial_expired' };
+  }
+  if (subscription === 'canceled' || subscription === 'cancelled') return { allowed: false, reason: 'subscription_canceled' };
+  if (subscription === 'past_due' || subscription === 'unpaid' || subscription === 'incomplete_expired') {
+    return { allowed: false, reason: 'payment_failed' };
+  }
+  if (Number.isFinite(trialEndMs) && trialEndMs > nowMs) return { allowed: true, reason: 'trialing' };
+  return { allowed: false, reason: 'no_subscription' };
+}
+
+async function authAndPlan(authHeader: string | null) {
+  if (!authHeader) return { error: json({ error: { type: 'auth_error', message: 'Missing authorization' } }, 401) };
+  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const { data: { user }, error } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+  if (error || !user) return { error: json({ error: { type: 'auth_error', message: 'Invalid or expired token' } }, 401) };
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('plan, unlimited, subscription_status, trial_ends_at, entitlement_status, entitlement_pending_until')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (profileError || !profile) {
+    return { error: json({ error: { type: 'ACCESS_LOCKED', message: 'PocketRep access could not be verified.' } }, 403) };
+  }
+  const access = aiAccessDecision(profile as AiBillingProfile);
+  if (!access.allowed) {
+    return { error: json({ error: { type: 'ACCESS_LOCKED', reason: access.reason, message: 'PocketRep access is not currently active.' } }, 403) };
+  }
+
+  if (RATE_PER_MIN > 0) {
+    try {
+      const { data: rc, error: rErr } = await supabase.rpc('bump_ai_minute', { p_user_id: user.id });
+      if (rErr || typeof rc !== 'number') {
+        return { error: json({ error: { type: 'ACCESS_CHECK_FAILED', message: 'Could not verify AI access. Please try again.' } }, 503) };
+      }
+      if (rc > RATE_PER_MIN) {
+        return { error: json({ error: { type: 'RATE_LIMITED', message: 'Too many requests this minute. Slow down a moment and try again.' } }, 429, { 'Retry-After': '60' }) };
+      }
+    } catch {
+      return { error: json({ error: { type: 'ACCESS_CHECK_FAILED', message: 'Could not verify AI access. Please try again.' } }, 503) };
+    }
+  }
+
+  const plan = profile.plan || 'pocketrep';
+  const isUnlimited = profile.unlimited === true;
+  const capCents = DAILY_CAP_CENTS[plan] ?? DEFAULT_CAP_CENTS;
+  const today = new Date().toISOString().slice(0, 10);
+  if (!isUnlimited) {
+    const { data: usageRows } = await supabase.from('daily_ai_usage').select('cost_cents').eq('user_id', user.id).eq('usage_date', today);
+    const spentCents = (usageRows ?? []).reduce((sum, r: { cost_cents: number | null }) => sum + Number(r.cost_cents ?? 0), 0);
+    if (spentCents >= capCents) {
+      return { error: json({ error: { type: 'DAILY_LIMIT', message: `Daily limit reached ($${(capCents / 100).toFixed(2)}/day). Resets at midnight.` } }, 429) };
+    }
+
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const [monthlyRow, monthDailyRows] = await Promise.all([
+      supabase.from('monthly_ai_usage').select('cost_cents').eq('user_id', user.id).eq('usage_month', monthStart).maybeSingle(),
+      supabase.from('daily_ai_usage').select('cost_cents').eq('user_id', user.id).gte('usage_date', monthStart).lte('usage_date', today),
+    ]);
+    const monthlyLedger = Number(monthlyRow.data?.cost_cents ?? 0);
+    const dailyLedger = (monthDailyRows.data ?? []).reduce((sum, r: { cost_cents: number | null }) => sum + Number(r.cost_cents ?? 0), 0);
+    const monthSpentCents = Math.max(monthlyLedger, dailyLedger);
+    if (monthSpentCents >= MONTHLY_CAP_CENTS) {
+      return { error: json({ error: { type: 'MONTHLY_LIMIT', message: `Monthly AI limit reached ($${(MONTHLY_CAP_CENTS / 100).toFixed(2)}). Resets next month.` } }, 429) };
+    }
+  }
+  return { user, supabase, today };
+}
+
+'''
+s = s[:start] + auth_block + s[end:]
+p.write_text(s)
+
+# Owner-reviewed launch regression guards.
+test = r'''import fs from 'node:fs';
+import path from 'node:path';
+
+const root = process.cwd();
+const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+let checks = 0;
+let failures = 0;
+function check(condition, message) {
+  checks += 1;
+  if (condition) console.log(`  ✓ ${message}`);
+  else { failures += 1; console.error(`  ✗ ${message}`); }
+}
+
+console.log('PocketRep Batch 3 single-plan / entitlement regression');
+const schema = read('sql/schema.sql');
+const migration = read('supabase/migrations/20260903120000_pocketrep_current_plan_default.sql');
+const layout = read('app/_layout.tsx');
+const ai = read('supabase/functions/ai-proxy/index.ts');
+const appJson = read('app.json');
+const contacts = read('app/(tabs)/contacts.tsx');
+const more = read('app/(tabs)/more.tsx');
+const rex = read('app/(tabs)/rex.tsx');
+const sequences = read('app/(tabs)/sequences.tsx');
+const home = read('app/(tabs)/index.tsx');
+const profile = read('components/v2/ProfileTab.tsx');
+const pwa = read('components/v2/PWAInstallPrompt.tsx');
+const checkout = read('supabase/functions/checkout-account/index.ts');
+const teams = read('../Pocketrep/thankyou-teams.html');
+const launch = read('../Pocketrep/thankyou-launch.html');
+const vercel = read('../vercel.json');
+const types = read('lib/types.ts');
+
+check(types.includes("'pocketrep'"), 'Plan model includes current pocketrep product');
+check(schema.includes("default 'pocketrep' check (plan = 'pocketrep')"), 'schema is single-plan pocketrep');
+check(!schema.includes("raw_user_meta_data->>'plan'"), 'schema does not accept client-selected plan metadata');
+check(schema.includes("set search_path to ''"), 'signup trigger uses empty search_path');
+check(schema.includes('insert into public.profiles'), 'signup trigger fully qualifies profiles');
+check(schema.includes("_plan := 'pocketrep'"), 'signup trigger hard-sets pocketrep');
+check(migration.includes("alter column plan set default 'pocketrep'"), 'migration fixes stale production column default');
+check(migration.includes("check (plan = 'pocketrep')"), 'migration preserves single-plan constraint');
+check(!migration.includes("raw_user_meta_data->>'plan'"), 'migration rejects client-controlled plan selection');
+check(!migration.includes("plan in ('rex_lens','pro','elite')"), 'migration does not widen retired tiers');
+check(migration.includes("set search_path to ''"), 'migration preserves hardened signup search_path');
+check(migration.includes('perform public.seed_demo_customers_for_user(new.id)'), 'migration preserves current signup demo seed');
+
+check(layout.includes('useAccessGate(ready && signedIn)'), 'legacy V1 root invokes normal access gate');
+check(layout.includes("access.status === 'loading'"), 'V1 withholds tabs while entitlement is loading');
+check(layout.includes("access.status === 'locked'"), 'V1 handles locked entitlement');
+check(layout.includes('<LockoutScreen'), 'V1 renders shared lockout screen');
+check(layout.includes("access.status === 'allowed' || access.status === 'pending'"), 'V1 routes to tabs only for allowed/current grace');
+check(!layout.includes('if (signedIn && inAuth) router.replace'), 'old auth-only V1 tab bypass is gone');
+
+for (const field of ['subscription_status', 'trial_ends_at', 'entitlement_status', 'entitlement_pending_until']) {
+  check(ai.includes(field), `ai-proxy reads ${field}`);
+}
+check(ai.includes('function aiAccessDecision'), 'ai-proxy has explicit server-side entitlement decision');
+check(ai.includes('if (profileError || !profile)'), 'ai-proxy fails closed on missing/unverifiable profile');
+check(ai.includes("type: 'ACCESS_LOCKED'"), 'ai-proxy denies inactive paid access before model work');
+check(ai.includes("type: 'ACCESS_CHECK_FAILED'"), 'AI preflight failure is fail-closed');
+check(!ai.includes('catch { /* fail open */ }'), 'AI rate/access preflight no longer fails open');
+check(ai.indexOf('aiAccessDecision(profile') < ai.indexOf("supabase.rpc('bump_ai_minute'"), 'billing decision occurs before rate/cost/model preflight');
+check(ai.includes('pocketrep: 75'), 'PocketRep has explicit AI daily cap');
+check(ai.includes("const plan = profile.plan || 'pocketrep'"), 'AI plan fallback is current product name');
+
+const now = Date.parse('2026-09-03T12:00:00Z');
+function allowed({ subscription = '', entitlement = '', trial = null, pending = null } = {}) {
+  subscription = subscription.toLowerCase();
+  entitlement = entitlement.toLowerCase();
+  const trialMs = trial ? Date.parse(trial) : Number.NaN;
+  const pendingMs = pending ? Date.parse(pending) : Number.NaN;
+  if (entitlement === 'pending') return Number.isFinite(pendingMs) && pendingMs > now;
+  if (entitlement === 'locked') return false;
+  if (subscription === 'active' || entitlement === 'active') return true;
+  if (subscription === 'trialing' || entitlement === 'trialing') {
+    if (!trial) return true;
+    return Number.isFinite(trialMs) && trialMs > now;
+  }
+  if (['canceled','cancelled','past_due','unpaid','incomplete_expired'].includes(subscription)) return false;
+  if (Number.isFinite(trialMs) && trialMs > now) return true;
+  return false;
+}
+check(allowed({ subscription: 'active' }), 'active subscription allows AI');
+check(allowed({ entitlement: 'active' }), 'active entitlement allows AI');
+check(allowed({ subscription: 'trialing', trial: '2026-09-04T00:00:00Z' }), 'valid trial allows AI');
+check(allowed({ entitlement: 'trialing' }), 'trialing entitlement without end remains allowed per accessGate semantics');
+check(allowed({ entitlement: 'pending', pending: '2026-09-03T13:00:00Z' }), 'current pending grace allows AI');
+check(!allowed({ entitlement: 'pending', pending: '2026-09-03T11:00:00Z' }), 'expired pending grace denies AI');
+check(!allowed({ entitlement: 'locked' }), 'locked entitlement denies AI');
+check(!allowed({ subscription: 'canceled' }), 'canceled subscription denies AI');
+check(!allowed({ subscription: 'cancelled' }), 'cancelled spelling denies AI');
+check(!allowed({ subscription: 'past_due' }), 'past_due denies AI');
+check(!allowed({ subscription: 'unpaid' }), 'unpaid denies AI');
+check(!allowed({ subscription: 'incomplete_expired' }), 'incomplete_expired denies AI');
+check(!allowed({ subscription: 'trialing', trial: '2026-09-03T11:00:00Z' }), 'expired trial denies AI');
+check(!allowed({}), 'missing billing state denies AI');
+
+check(migration.includes('create or replace function public.bump_ai_minute'), 'DB AI preflight is entitlement-aware defense in depth');
+check(migration.includes('return 2147483647'), 'DB AI preflight returns denied sentinel on invalid/unverifiable access');
+check(migration.includes('revoke all on function public.bump_ai_minute(uuid) from authenticated'), 'AI preflight RPC is not client-callable');
+check(migration.includes('grant execute on function public.bump_ai_minute(uuid) to service_role'), 'AI preflight remains callable by server');
+check(!appJson.includes('Rex Lens'), 'native photo permission no longer mentions Rex Lens');
+check(appJson.includes('share screenshots and photos with Rex'), 'photo permission states verified Rex image-sharing use');
+check(contacts.includes('Limit: {MASS_TEXT_LIMIT}'), 'native mass-text UI no longer advertises Pro/Elite plan name');
+check(!contacts.includes('// Plan limits: Pro=50, Elite=100'), 'native contacts plan comment is current');
+check(!more.includes('Upgrade to Elite'), 'dead Upgrade to Elite CTA removed');
+check(!more.includes('PRO PLAN'), 'settings no longer shows stale PRO PLAN badge');
+check(!rex.includes("plan === 'elite'"), 'Rex Memory is not dead-gated on Elite');
+check(!more.includes("plan === 'elite'"), 'Weekly Digest is not dead-gated on Elite');
+check(!sequences.includes('ELITE'), 'native sequences no longer shows stale ELITE lock copy');
+check(!home.includes('toUpperCase()} PLAN'), 'native home no longer renders raw plan as customer-facing tier');
+check(!profile.includes('toUpperCase()}'), 'V2 profile no longer renders raw plan as customer-facing tier');
+check(checkout.includes('STRIPE_POCKETREP_PRICE_ID'), 'checkout has canonical PocketRep price env name');
+check(checkout.includes('STRIPE_ELITE_PRICE_ID'), 'checkout preserves legacy env fallback');
+check(pwa.includes('Instagram') && pwa.includes('TikTok') && pwa.includes('Facebook'), 'PWA prompt handles major in-app browsers');
+check(teams.toLowerCase().includes('not for sale yet'), 'Team orphan page no longer claims payment confirmation');
+check(launch.includes('noindex'), 'launch thank-you page is noindex');
+check(launch.includes('app.pocketrep.pro'), 'launch thank-you links directly to app subdomain');
+check(vercel.includes('brand.css') && vercel.includes('seo-pages.css'), 'stable CSS files have explicit cache rule');
+check(vercel.includes('must-revalidate'), 'stable CSS revalidates instead of immutable one-year caching');
+
+console.log(`\n${checks - failures}/${checks} checks passed`);
+if (failures) process.exit(1);
+'''
+Path('scripts/test-pocketrep-plan-model.mjs').write_text(test)
+
+print('Batch 3 owner-review corrections applied.')
