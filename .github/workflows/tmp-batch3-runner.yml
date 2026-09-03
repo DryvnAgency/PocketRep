@@ -45,11 +45,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # PR #144 only changes two plan-copy lines in this file. Restore the
-          # current-main/#143 version first so its import error backstop cannot
-          # be silently lost by a clean cherry-pick; the correction script then
-          # reapplies only those two reviewed copy changes.
-          git checkout HEAD^ -- 'PocketRepApp/app/(tabs)/contacts.tsx'
+          git checkout origin/main -- 'PocketRepApp/app/(tabs)/contacts.tsx'
+
+      - name: Refresh guard to current-main import backstops
+        working-directory: PocketRepApp
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('scripts/tmp-batch3-rebuild.py')
+          s = p.read_text()
+          old = "if 'try {' not in s or 'Could not import contacts' not in s:\n    raise SystemExit('contacts: #143 import exception backstop was lost')"
+          new = "if \"Alert.alert('Some contacts may not have imported')\" not in s or \"Alert.alert('Import failed', 'Some contacts may not have imported. Check for duplicate phone numbers.')\" not in s:\n    raise SystemExit('contacts: #143 import exception backstops were lost')"
+          if old not in s:
+              raise SystemExit('could not locate stale #143 assertion in patch script')
+          p.write_text(s.replace(old, new, 1))
+          PY
 
       - name: Apply owner-reviewed corrections
         working-directory: PocketRepApp
