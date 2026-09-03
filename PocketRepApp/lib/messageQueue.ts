@@ -6,7 +6,9 @@
  * is on it and which step is currently due. Messages are always review-first:
  * opening SMS/call/email is still a rep action.
  *
- * Plan limits: Pro = 50 items/batch, Elite = 100 items/batch.
+ * Batch limit: 50 items/batch by default. Historical 'elite' rows keep 100
+ * (backward compat only — no current signup path assigns 'elite'; the
+ * current 'pocketrep' plan gets the same 50 every other plan value gets).
  */
 
 import { supabase } from './supabase';

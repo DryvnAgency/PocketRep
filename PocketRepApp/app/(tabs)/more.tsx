@@ -159,10 +159,6 @@ export default function MoreScreen() {
     setDigestLoading(false);
   }
 
-  // Treat any non-elite as 'pro'
-  const isElite = profile?.plan === 'elite';
-  const planLabel = isElite ? 'Elite' : 'Pro';
-
   return (
     <ScrollView style={s.root} contentContainerStyle={s.content}>
       {/* Header */}
@@ -179,7 +175,7 @@ export default function MoreScreen() {
           <Text style={s.profileName}>{profile?.full_name || 'Your Name'}</Text>
           <Text style={s.profileEmail}>{profile?.email}</Text>
           <View style={s.planBadge}>
-            <Text style={s.planBadgeText}>{planLabel.toUpperCase()} PLAN</Text>
+            <Text style={s.planBadgeText}>PocketRep Plan</Text>
           </View>
         </View>
       </View>
@@ -193,102 +189,54 @@ export default function MoreScreen() {
         </View>
       ) : null}
 
-      {/* Weekly Digest — Elite only */}
+      {/* Weekly Digest — available to every current PocketRep member. This
+          feature is complete and production-safe (real contacts/deals/Rex
+          reads, real AI call, real notification scheduling); it was
+          previously dead-gated behind plan === 'elite', a tier no current
+          signup path ever assigns, so it was unreachable for every real
+          customer. Gate removed rather than replaced with a new tier. */}
       <Text style={s.section}>Performance</Text>
-      {isElite ? (
-        <>
-          <TouchableOpacity style={s.row} onPress={buildDigest} disabled={digestLoading} activeOpacity={0.8}>
-            <View style={s.rowLeft}>
-              <Text style={s.rowIcon}>📊</Text>
-              <View>
-                <Text style={s.rowTitle}>Generate Digest Now</Text>
-                <Text style={s.rowSub}>Rex reviews your week and coaches you</Text>
-              </View>
-            </View>
-            {digestLoading ? <ActivityIndicator color={colors.gold} /> : <Text style={s.rowArrow}>→</Text>}
-          </TouchableOpacity>
-          {digest ? (
-            <View style={s.digestBox}>
-              <Text style={s.digestText}>{digest}</Text>
-            </View>
-          ) : null}
-          {/* Sunday Digest scheduler */}
-          <TouchableOpacity
-            style={s.row}
-            onPress={() => {
-              // Pre-fill picker with saved time if available
-              if (digestTime) {
-                const h = digestTime.hour % 12 || 12;
-                const ampm = digestTime.hour >= 12 ? 'PM' : 'AM';
-                setPickerHour(h);
-                setPickerAmPm(ampm as 'AM' | 'PM');
-                setPickerMinute(digestTime.minute);
-              }
-              setShowDigestPicker(true);
-            }}
-            activeOpacity={0.8}
-          >
-            <View style={s.rowLeft}>
-              <Text style={s.rowIcon}>🔔</Text>
-              <View>
-                <Text style={s.rowTitle}>Sunday Digest</Text>
-                <Text style={s.rowSub}>
-                  {digestTime ? `Scheduled: Sundays at ${formatDigestTime(digestTime)}` : 'Tap to schedule weekly reminder'}
-                </Text>
-              </View>
-            </View>
-            <Text style={s.rowArrow}>→</Text>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <View style={[s.row, s.rowLocked]}>
-          <View style={s.rowLeft}>
-            <Text style={s.rowIcon}>📊</Text>
-            <View>
-              <Text style={s.rowTitle}>Weekly Digest</Text>
-              <Text style={s.rowSub}>Rex reviews your week</Text>
-            </View>
+      <TouchableOpacity style={s.row} onPress={buildDigest} disabled={digestLoading} activeOpacity={0.8}>
+        <View style={s.rowLeft}>
+          <Text style={s.rowIcon}>📊</Text>
+          <View>
+            <Text style={s.rowTitle}>Generate Digest Now</Text>
+            <Text style={s.rowSub}>Rex reviews your week and coaches you</Text>
           </View>
-          <View style={s.eliteBadge}><Text style={s.eliteBadgeText}>ELITE</Text></View>
         </View>
-      )}
-
-      {/* Upgrade CTA — shown to Pro users only */}
-      {!isElite ? (
-        <>
-          <Text style={s.section}>Upgrade</Text>
-          <TouchableOpacity
-            style={s.upgradeRow}
-            onPress={() => Linking.openURL('https://pocketrep.pro/upgrade')}
-            activeOpacity={0.85}
-          >
-            <View style={s.rowLeft}>
-              <Text style={s.rowIcon}>⚡</Text>
-              <View>
-                <Text style={s.upgradeTitle}>Upgrade to Elite</Text>
-                <Text style={s.rowSub}>Rex memory · weekly digest · 100-contact batches</Text>
-              </View>
-            </View>
-            <Text style={s.rowArrow}>→</Text>
-          </TouchableOpacity>
-        </>
+        {digestLoading ? <ActivityIndicator color={colors.gold} /> : <Text style={s.rowArrow}>→</Text>}
+      </TouchableOpacity>
+      {digest ? (
+        <View style={s.digestBox}>
+          <Text style={s.digestText}>{digest}</Text>
+        </View>
       ) : null}
-
-      {/* Rex Lens Chrome Extension promo */}
-      <Text style={s.section}>Tools</Text>
+      {/* Sunday Digest scheduler */}
       <TouchableOpacity
-        style={s.rexLensCard}
-        onPress={() => Linking.openURL('https://pocketrep.pro/rex-lens')}
-        activeOpacity={0.85}
+        style={s.row}
+        onPress={() => {
+          // Pre-fill picker with saved time if available
+          if (digestTime) {
+            const h = digestTime.hour % 12 || 12;
+            const ampm = digestTime.hour >= 12 ? 'PM' : 'AM';
+            setPickerHour(h);
+            setPickerAmPm(ampm as 'AM' | 'PM');
+            setPickerMinute(digestTime.minute);
+          }
+          setShowDigestPicker(true);
+        }}
+        activeOpacity={0.8}
       >
-        <View style={s.rexLensTop}>
-          <Text style={s.rexLensIcon}>🔍</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={s.rexLensTitle}>Rex Lens — Chrome Extension</Text>
-            <Text style={s.rexLensSub}>Works inside Vinsolutions, Gmail, and texting apps. Rex reads your screen and coaches you live.</Text>
+        <View style={s.rowLeft}>
+          <Text style={s.rowIcon}>🔔</Text>
+          <View>
+            <Text style={s.rowTitle}>Sunday Digest</Text>
+            <Text style={s.rowSub}>
+              {digestTime ? `Scheduled: Sundays at ${formatDigestTime(digestTime)}` : 'Tap to schedule weekly reminder'}
+            </Text>
           </View>
         </View>
-        <Text style={s.rexLensLink}>Install Free →</Text>
+        <Text style={s.rowArrow}>→</Text>
       </TouchableOpacity>
 
       {/* Data */}

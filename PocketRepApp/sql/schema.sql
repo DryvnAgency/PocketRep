@@ -8,13 +8,20 @@
 --   alter table profiles drop constraint if exists profiles_plan_check;
 --   alter table profiles add  constraint profiles_plan_check
 --     check (plan in ('rex_lens','pro','elite'));
+--
+-- ── CURRENT PLAN (Batch 3, 2026-09) ───────────────────────────────────────────
+-- PocketRep is now a single product: 'pocketrep'. The three tiers above are
+-- retained only as valid historical values on existing rows — see
+-- supabase/migrations/20260903120000_pocketrep_current_plan_default.sql for
+-- the tracked migration that widens the CHECK constraint and updates
+-- handle_new_user() below on a live database (not applied by that PR).
 
 -- ── PROFILES ─────────────────────────────────────────────────────────────────
 create table if not exists profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
   email        text not null,
   full_name    text not null default '',
-  plan         text not null default 'pro' check (plan in ('rex_lens','pro','elite')),
+  plan         text not null default 'pocketrep' check (plan in ('pocketrep','rex_lens','pro','elite')),
   industry     text not null default 'auto',
   trial_ends_at timestamptz,
   stripe_customer_id text,
@@ -32,16 +39,17 @@ returns trigger language plpgsql security definer as $$
 declare
   _plan text;
 begin
-  _plan := coalesce(new.raw_user_meta_data->>'plan', 'pro');
-  -- Map legacy plan names to new 3-tier structure
+  _plan := coalesce(new.raw_user_meta_data->>'plan', 'pocketrep');
+  -- Map legacy plan names to the historical 3-tier structure (kept for
+  -- backward compatibility only — 'pocketrep' is the current product)
   if _plan in ('pro_bundle', 'elite_bundle') then
     _plan := 'elite';
   elsif _plan = 'rex_lens_standalone' then
     _plan := 'rex_lens';
   end if;
-  -- Validate against final plan set
-  if _plan not in ('rex_lens', 'pro', 'elite') then
-    _plan := 'pro';
+  -- Validate against the full plan set (current + historical)
+  if _plan not in ('rex_lens', 'pro', 'elite', 'pocketrep') then
+    _plan := 'pocketrep';
   end if;
 
   insert into profiles (id, email, plan, trial_ends_at)

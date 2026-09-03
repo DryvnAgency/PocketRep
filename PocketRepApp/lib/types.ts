@@ -1,4 +1,11 @@
-export type Plan = 'rex_lens' | 'pro' | 'elite';
+// 'pocketrep' is the current single PocketRep product (see
+// supabase/functions/checkout-account and stripe-webhook, which write it
+// for every real paying customer today). 'rex_lens'/'pro'/'elite' are
+// preserved only so historical rows still type-check — they are not
+// current, purchasable tiers and must not be treated as one in new code.
+// Stripe subscription/entitlement status remains the sole billing
+// authority (lib/v2/accessGate.ts); this type never gates access.
+export type Plan = 'pocketrep' | 'rex_lens' | 'pro' | 'elite';
 export type HeatTier = 'hot' | 'warm' | 'cold';
 
 export type IndustryKey = 'auto' | 'mortgage' | 'realestate' | 'hvac' | 'staffing' | 'd2d' | 'roofing' | 'fence' | 'insurance' | 'solar' | 'b2b' | 'other';
