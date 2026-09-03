@@ -121,11 +121,13 @@ function dedupeImportRows<T extends { phone?: string | null; email?: string | nu
   return fresh;
 }
 async function loadExistingContactKeys(userId: string): Promise<{ phones: Set<string>; emails: Set<string> }> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('contacts')
     .select('phone,email')
     .eq('user_id', userId)
     .eq('is_deleted', false);
+  // Dedup is a safety guarantee: never treat a failed verification lookup as an empty book.
+  if (error) throw new Error(`Could not verify existing contacts: ${error.message}`);
   return {
     phones: new Set((data ?? []).map((r: any) => phoneKeyV1(r.phone)).filter(Boolean)),
     emails: new Set((data ?? []).map((r: any) => emailKeyV1(r.email)).filter(Boolean)),
@@ -565,7 +567,15 @@ export default function ContactsScreen() {
         const parts = (dc.name ?? '').trim().split(' ');
         return { user_id: user.id, first_name: parts[0] ?? '', last_name: parts.slice(1).join(' ') || '', phone: dc.phoneNumbers?.[0]?.number ?? '', email: dc.emails?.[0]?.email ?? null, stage: 'prospect' };
       });
-    const { phones: existingPhones, emails: existingEmails } = await loadExistingContactKeys(user.id);
+    let existingKeys: { phones: Set<string>; emails: Set<string> };
+    try {
+      existingKeys = await loadExistingContactKeys(user.id);
+    } catch (e: any) {
+      setImporting(false);
+      Alert.alert('Import failed', e?.message ?? 'Could not verify your existing book. Try again.');
+      return;
+    }
+    const { phones: existingPhones, emails: existingEmails } = existingKeys;
     const toInsert = dedupeImportRows(candidates, existingPhones, existingEmails);
     if (toInsert.length === 0) {
       setImporting(false);
@@ -573,7 +583,13 @@ export default function ContactsScreen() {
       Alert.alert('No new contacts', 'Everyone selected is already in your book.');
       return;
     }
-    try { await supabase.from('contacts').insert(toInsert); await load(); } catch { Alert.alert('Some contacts may not have imported'); }
+    const { error: insertError } = await supabase.from('contacts').insert(toInsert);
+    if (insertError) {
+      setImporting(false);
+      Alert.alert('Import failed', insertError.message);
+      return;
+    }
+    await load();
     setImporting(false);
     setShowImport(false);
   }
@@ -617,7 +633,17 @@ export default function ContactsScreen() {
     setCsvImporting(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setCsvImporting(false); return; }
-    const { phones: existingPhones, emails: existingEmails } = await loadExistingContactKeys(user.id);
+    let existingKeys: { phones: Set<string>; emails: Set<string> };
+    try {
+      existingKeys = await loadExistingContactKeys(user.id);
+    } catch (e: any) {
+      setCsvImporting(false);
+      const message = e?.message ?? 'Could not verify your existing book. Try again.';
+      if (Platform.OS === 'web') (globalThis as any).alert?.(`Import failed: ${message}`);
+      else Alert.alert('Import failed', message);
+      return;
+    }
+    const { phones: existingPhones, emails: existingEmails } = existingKeys;
     const fresh = dedupeImportRows(rows, existingPhones, existingEmails);
     if (fresh.length === 0) {
       setCsvImporting(false);

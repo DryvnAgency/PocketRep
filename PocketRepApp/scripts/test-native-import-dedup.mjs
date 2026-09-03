@@ -105,6 +105,12 @@ ok('confirmCsvImport() calls the dedup helper before inserting',
 ok('both import paths query the existing book (is_deleted=false) before dedup',
   (src.match(/\.eq\('is_deleted', false\)/g) || []).length >= 1 && /loadExistingContactKeys/.test(src));
 
+console.log('\n--- import safety fails closed on Supabase errors ---');
+ok('existing-contact lookup checks Supabase error instead of assuming an empty book',
+  /const \{ data, error \} = await supabase[\s\S]*?if \(error\) throw new Error\(`Could not verify existing contacts:/.test(src));
+ok('device-contact insert checks the Supabase result error before closing the import flow',
+  /const \{ error: insertError \} = await supabase\.from\('contacts'\)\.insert\(toInsert\);[\s\S]*?if \(insertError\)/.test(importSelectedMatch?.[0] ?? ''));
+
 console.log('\n--- CSV-imported mileage becomes usable by Rex without corrupting existing data ---');
 ok('confirmCsvImport() still writes the legacy mileage column (native edit form compatibility)',
   /mileage: row\.mileage \? parseInt\(row\.mileage\) \|\| null : null/.test(confirmCsvMatch?.[0] ?? ''));
