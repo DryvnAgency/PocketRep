@@ -82,7 +82,7 @@ jobs:
           s = s.replace(old_digest, new_digest, 1)
 
           old_css = "check(vercel.includes('brand.css') && vercel.includes('seo-pages.css'), 'stable CSS files have explicit cache rule');"
-          new_css = "check(/\\(brand\\|seo-pages\\)\\\\\\.css/.test(vercel), 'stable CSS files have explicit cache rule');"
+          new_css = "check(vercel.includes('(brand|seo-pages)\\\\.css'), 'stable CSS files have explicit cache rule');"
           if old_css not in s:
               raise SystemExit('could not locate naive CSS cache assertion')
           s = s.replace(old_css, new_css, 1)
