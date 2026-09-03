@@ -1,49 +1,27 @@
-// Mock-data verification for the P0-1 real sign-in routing added to
-// AppShell.tsx (the mount effect's session check + onAuthStateChange listener),
-// AuthScreen.tsx's tryDemo wrapper, and lib/v2/localSessionClear.ts. Runs with
-// plain `node` — no test runner, no network, no real credentials.
-//
-//   npm run test:authflow    (from PocketRepApp/)
-//
-// AppShell pulls in react-native/expo-router/supabase, so this mirrors the
-// pure DECISION logic verbatim: given a session-check result or an auth event,
-// what should needsAuth/authReady become, does a demo failure surface as a
-// real error instead of a silent no-op, does a redundant same-user SIGNED_IN
-// re-fire (tab-refocus) get deduped instead of re-running boot, and does the
-// sign-out localStorage sweep clear exactly the per-user keys and nothing
-// else. Keep in sync with the source files if those bodies change.
+// Mock-data verification for PocketRep auth routing and password recovery.
+// Runs with plain `node` — no test runner, no network, no real credentials.
+
+import fs from 'node:fs';
 
 let failures = 0;
 const ok = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failures++; };
 
 // --- mirrored decision logic ---------------------------------------------
-
-// mirrors the .then() callback on supabase.auth.getSession() in AppShell.tsx
 function decideFromInitialSession(session) {
   if (session?.user) return { needsAuth: false, bootShouldRun: true };
   return { needsAuth: true, bootShouldRun: false };
 }
 
-// mirrors the onAuthStateChange callback in AppShell.tsx
 function decideFromAuthEvent(event, session) {
   if (event === 'SIGNED_IN' && session?.user) {
-    return { needsAuth: false, authReady: undefined, bootShouldRun: true, forcesWebReload: false }; // finishBoot() sets authReady=true itself
+    return { needsAuth: false, authReady: undefined, bootShouldRun: true, forcesWebReload: false };
   }
   if (event === 'SIGNED_OUT') {
-    // forcesWebReload: audit finding (HIGH) — AppShell never unmounts across a
-    // sign-out/sign-in transition, so every data hook (contacts/tags/pay
-    // plan/deals/notifications) keeps the PREVIOUS rep's data in memory until
-    // it independently refetches. A shared/kiosk device makes this a real
-    // cross-account leak: rep A signs out, rep B signs in on the same tab and
-    // briefly sees rep A's book. A full reload on web is the fix — must NEVER
-    // regress to a no-op on this event.
     return { needsAuth: true, authReady: false, bootShouldRun: false, forcesWebReload: true };
   }
-  return { needsAuth: undefined, authReady: undefined, bootShouldRun: false, forcesWebReload: false }; // e.g. TOKEN_REFRESHED — no-op
+  return { needsAuth: undefined, authReady: undefined, bootShouldRun: false, forcesWebReload: false };
 }
 
-// mirrors AuthScreen.tsx's tryDemo(): wraps onTryDemo, surfaces a thrown error
-// as a string instead of swallowing it (the demoAuth.ts change this PR makes).
 async function tryDemo(onTryDemo) {
   try {
     await onTryDemo();
@@ -53,22 +31,10 @@ async function tryDemo(onTryDemo) {
   }
 }
 
-// mirrors the lastUserIdRef guard in AppShell.tsx's onAuthStateChange handler
-// (audit finding, MED): Supabase re-fires SIGNED_IN for the SAME user on every
-// tab-visibility-change recovery, not just on a real sign-in. Without this
-// guard, finishBoot()'s network calls (profile sync, warmBrain, timezone
-// capture) would redundantly re-run on every alt-tab.
 function shouldRunBootForSignIn(lastUserId, newUserId) {
   return lastUserId !== newUserId;
 }
 
-// mirrors lib/v2/localSessionClear.ts's clearLocalSessionState() (audit
-// finding, HIGH): the sign-out reload wipes in-memory state but NOT
-// localStorage, where always-listen mic consent / disclosure-seen /
-// onboarding-seen / the coach chat log / rep settings / notification
-// read-state all persist per-device. This is the prefix-filter that decides
-// which keys get removed — swept by PREFIX (not a hand-maintained list) so a
-// future pocketrep:v2:* key is covered automatically.
 function keysToClear(allKeys, prefix = 'pocketrep:v2:') {
   return allKeys.filter(k => k.startsWith(prefix));
 }
@@ -96,7 +62,7 @@ ok('unrelated event (e.g. TOKEN_REFRESHED) -> no-op',
   decideFromAuthEvent('TOKEN_REFRESHED', { user: { id: 'u1' } }).needsAuth === undefined
   && decideFromAuthEvent('TOKEN_REFRESHED', { user: { id: 'u1' } }).forcesWebReload === false);
 
-// --- SIGNED_IN dedup guard (tab-refocus re-fire must not re-run boot) -----
+// --- SIGNED_IN dedup guard ----------------------------------------------
 ok('same user re-signals SIGNED_IN (tab refocus) -> boot does NOT re-run',
   shouldRunBootForSignIn('u1', 'u1') === false);
 ok('a genuinely different user signs in -> boot DOES run',
@@ -104,9 +70,9 @@ ok('a genuinely different user signs in -> boot DOES run',
 ok('first sign-in ever (no prior user) -> boot DOES run',
   shouldRunBootForSignIn(null, 'u1') === true);
 
-// --- sign-out localStorage sweep (must clear per-user keys, nothing else) --
+// --- sign-out localStorage sweep -----------------------------------------
 const ALL_KNOWN_KEYS = [
-  'pocketrep:v2:hey-rex-always-on',      // mic-consent bypass risk if leaked
+  'pocketrep:v2:hey-rex-always-on',
   'pocketrep:v2:hey-rex-disclosure-seen',
   'pocketrep:v2:onboarding-complete',
   'pocketrep:v2:coach-log',
@@ -116,27 +82,42 @@ const ALL_KNOWN_KEYS = [
   'pocketrep:v2:notif-dismissed',
 ];
 const cleared = keysToClear([...ALL_KNOWN_KEYS, 'some-other-app-key', 'pocketrep_mass_text_v1']);
-ok('sweep clears every known pocketrep:v2:* key',
-  ALL_KNOWN_KEYS.every(k => cleared.includes(k)));
-ok('sweep does NOT touch an unrelated key',
-  !cleared.includes('some-other-app-key'));
-ok('sweep does NOT touch the legacy v1 key (different prefix, "pocketrep_" not "pocketrep:v2:")',
-  !cleared.includes('pocketrep_mass_text_v1'));
-ok('sweep automatically covers a FUTURE pocketrep:v2:* key with no code change',
+ok('sweep clears every known pocketrep:v2:* key', ALL_KNOWN_KEYS.every(k => cleared.includes(k)));
+ok('sweep does NOT touch an unrelated key', !cleared.includes('some-other-app-key'));
+ok('sweep does NOT touch the legacy v1 key', !cleared.includes('pocketrep_mass_text_v1'));
+ok('sweep automatically covers a FUTURE pocketrep:v2:* key',
   keysToClear(['pocketrep:v2:some-brand-new-feature']).length === 1);
 
-// --- demo failure surfaces as a real error, not a silent no-op ------------
+// --- password recovery source guards -------------------------------------
+const recoverySource = fs.readFileSync(new URL('../app/(auth)/reset-password.tsx', import.meta.url), 'utf8');
+ok('password reset uses exact production redirect URL',
+  recoverySource.includes("const RESET_REDIRECT_URL = 'https://app.pocketrep.pro/reset-password'"));
+ok('password reset requires PASSWORD_RECOVERY auth event',
+  recoverySource.includes("event === 'PASSWORD_RECOVERY'"));
+ok('password reset does not grant update permission from any ordinary session',
+  !recoverySource.includes('setCanSetPassword(!!data.session)') && !recoverySource.includes('setCanSetPassword(!!session)'));
+ok('recovery fallback requires recovery-token evidence and verifies user with Auth server',
+  recoverySource.includes('hasRecoveryToken') && recoverySource.includes('supabase.auth.getUser()'));
+ok('successful password update uses Supabase Auth updateUser',
+  recoverySource.includes("supabase.auth.updateUser({ password: newPassword })"));
+ok('successful password update signs recovery session out',
+  recoverySource.includes('await supabase.auth.signOut()'));
+ok('expired/invalid recovery URL has explicit user-facing recovery handling',
+  recoverySource.includes('This reset link is invalid or has expired'));
+ok('recovery screen keeps mismatch validation',
+  recoverySource.includes("if (newPassword !== confirm)"));
+
+// --- demo failure surfaces as a real error -------------------------------
 const demoOk = () => Promise.resolve();
 const demoFails = () => Promise.reject(new Error('Invalid login credentials'));
 const demoFailsNoMessage = () => Promise.reject({});
 
-let r1, r2, r3;
 (async () => {
-  r1 = await tryDemo(demoOk);
+  const r1 = await tryDemo(demoOk);
   ok('demo success -> no error', r1.error === null);
-  r2 = await tryDemo(demoFails);
+  const r2 = await tryDemo(demoFails);
   ok('demo failure -> real error message surfaces', r2.error === 'Invalid login credentials');
-  r3 = await tryDemo(demoFailsNoMessage);
+  const r3 = await tryDemo(demoFailsNoMessage);
   ok('demo failure with no message -> falls back to a friendly string', r3.error === 'Could not start the demo. Try again.');
 
   console.log(failures === 0 ? '\nAll auth-flow checks passed.' : `\n${failures} check(s) FAILED.`);
