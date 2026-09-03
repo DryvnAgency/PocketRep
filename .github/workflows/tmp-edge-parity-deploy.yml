@@ -1,0 +1,35 @@
+name: Temporary launch edge parity deploy
+
+on:
+  push:
+    branches:
+      - ops/deploy-launch-edge-parity
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Verify deployment credentials
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo 'SUPABASE_ACCESS_TOKEN secret missing'; exit 2; }
+      - name: Deploy exact merged-main edge functions
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          supabase functions deploy ai-proxy --project-ref fwvrauqdoevwmwwqlfav --no-verify-jwt
+          supabase functions deploy nurture-scheduler --project-ref fwvrauqdoevwmwwqlfav --no-verify-jwt
+          supabase functions deploy checkout-account --project-ref fwvrauqdoevwmwwqlfav --no-verify-jwt
