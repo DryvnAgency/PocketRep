@@ -69,6 +69,24 @@ jobs:
               raise SystemExit('could not locate stale photo source assertion in patch script')
           s = s.replace(old_photo, verified_photo_source, 1)
 
+          old_rex = "check(!rex.includes(\"plan === 'elite'\"), 'Rex Memory is not dead-gated on Elite');"
+          new_rex = "check(!/if\\s*\\(\\s*profile\\?\\.plan\\s*===\\s*['\\\"]elite['\\\"]\\s*\\)/.test(rex) && !/const\\s+isElite\\s*=/.test(rex), 'Rex Memory is not dead-gated on Elite');"
+          if old_rex not in s:
+              raise SystemExit('could not locate naive Rex gate assertion')
+          s = s.replace(old_rex, new_rex, 1)
+
+          old_digest = "check(!more.includes(\"plan === 'elite'\"), 'Weekly Digest is not dead-gated on Elite');"
+          new_digest = "check(!/if\\s*\\(\\s*profile\\?\\.plan\\s*===\\s*['\\\"]elite['\\\"]\\s*\\)/.test(more) && !/const\\s+isElite\\s*=/.test(more), 'Weekly Digest is not dead-gated on Elite');"
+          if old_digest not in s:
+              raise SystemExit('could not locate naive Weekly Digest gate assertion')
+          s = s.replace(old_digest, new_digest, 1)
+
+          old_css = "check(vercel.includes('brand.css') && vercel.includes('seo-pages.css'), 'stable CSS files have explicit cache rule');"
+          new_css = "check(/\\(brand\\|seo-pages\\)\\\\\\.css/.test(vercel), 'stable CSS files have explicit cache rule');"
+          if old_css not in s:
+              raise SystemExit('could not locate naive CSS cache assertion')
+          s = s.replace(old_css, new_css, 1)
+
           p.write_text(s)
           PY
 
