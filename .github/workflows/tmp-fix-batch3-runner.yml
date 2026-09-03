@@ -1,0 +1,37 @@
+name: Temporary Fix Batch 3 Runner
+
+on:
+  push:
+    branches:
+      - fix/batch3-rebuild
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: "${{ github.event.head_commit.message == 'tmp: fix rebuild workflow' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/batch3-rebuild
+      - name: Fix runner condition and retrigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('.github/workflows/tmp-batch3-rebuild.yml')
+          s = p.read_text()
+          old = "    if: github.event.head_commit.message == 'tmp: run Batch 3 rebuild'\n"
+          new = "    if: $" + "{{ startsWith(github.event.head_commit.message, 'tmp: run Batch 3 rebuild') }}\n"
+          if s.count(old) != 1:
+              raise SystemExit(f'expected one bad condition, found {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git config user.name "PocketRep QA"
+          git config user.email "qa@pocketrep.pro"
+          git add .github/workflows/tmp-batch3-rebuild.yml
+          git commit -m "tmp: run Batch 3 rebuild retry"
+          git push origin HEAD:fix/batch3-rebuild
