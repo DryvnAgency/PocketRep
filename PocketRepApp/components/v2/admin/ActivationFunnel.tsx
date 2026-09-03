@@ -51,17 +51,18 @@ export default function ActivationFunnel() {
   const [data, setData] = useState<ActivationData | null>(null);
   const [error, setError] = useState('');
 
-  const load = () => {
+  const load = async () => {
     setError('');
-    supabase.rpc('admin_activation_funnel')
-      .then(({ data: payload, error: rpcError }) => {
-        if (rpcError) throw rpcError;
-        setData(payload as ActivationData);
-      })
-      .catch((e) => setError(String(e)));
+    try {
+      const { data: payload, error: rpcError } = await supabase.rpc('admin_activation_funnel');
+      if (rpcError) throw rpcError;
+      setData(payload as ActivationData);
+    } catch (e: unknown) {
+      setError(String(e));
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, []);
 
   if (error && !data) return <ErrorState message={error} onRetry={load} />;
   if (!data) return <LoadingState />;
