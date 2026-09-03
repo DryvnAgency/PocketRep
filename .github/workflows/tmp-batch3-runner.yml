@@ -1,0 +1,84 @@
+name: Temporary Batch 3 Guarded Runner
+
+on:
+  push:
+    branches:
+      - fix/batch3-rebuild
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/batch3-rebuild
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Stop unless this is the launch commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          msg="$(git log -1 --pretty=%s)"
+          if [ "$msg" != "tmp: launch Batch 3 guarded rebuild" ]; then
+            echo "Not the launch commit; exiting without changes."
+            exit 0
+          fi
+
+      - name: Carry forward reviewed Batch 3 changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "PocketRep QA"
+          git config user.email "qa@pocketrep.pro"
+          git fetch origin claude/quirky-babbage-f0s519-batch3
+          set +e
+          git cherry-pick 0dd8d26f41345d65c49449147a6dd6e300dc5ddb
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            expected='PocketRepApp/app/(tabs)/contacts.tsx'
+            if [ "$conflicts" != "$expected" ]; then
+              echo "Unexpected cherry-pick conflicts:"
+              printf '%s\n' "$conflicts"
+              exit 1
+            fi
+            git checkout --ours -- "$expected"
+            git add "$expected"
+            GIT_EDITOR=true git cherry-pick --continue
+          fi
+
+      - name: Apply owner-reviewed corrections
+        working-directory: PocketRepApp
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tmp-batch3-rebuild.py
+
+      - name: Verify full PocketRep suite
+        working-directory: PocketRepApp
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run typecheck
+          npm run lint
+          npm run test:all
+
+      - name: Commit rebuilt Batch 3 only after green verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm -f PocketRepApp/scripts/tmp-batch3-rebuild.py
+          git add PocketRepApp Pocketrep vercel.json
+          git status --short
+          git commit -m "Rebuild Batch 3 on current main"
+          git push origin HEAD:fix/batch3-rebuild
