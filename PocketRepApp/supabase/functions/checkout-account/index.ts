@@ -11,11 +11,19 @@ const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 // convenient and this reads it first automatically.
 const STRIPE_PRICE_ID = Deno.env.get("STRIPE_POCKETREP_PRICE_ID") ?? Deno.env.get("STRIPE_ELITE_PRICE_ID") ?? "";
 const V1_CURRENT_PRICE_ID = "price_1Tf6MeIKMImSDGHZvYLmeIqS";
+const V1_PRIVATE_BETA_25_PRICE_ID = "price_1UBcFZIKMImSDGHZCssLTTzR";
 const V1_LEGACY_29_PRICE_ID = "price_1UBDLeIKMImSDGHZqrYthX3H";
 const APP_URL = Deno.env.get("APP_URL") ?? "https://app.pocketrep.pro";
 
 function allowedStripePriceIds() {
-  return new Set([STRIPE_PRICE_ID, V1_CURRENT_PRICE_ID, V1_LEGACY_29_PRICE_ID].filter(Boolean));
+  // Public PocketRep remains $39. The $25 ID exists only so the five private,
+  // one-use founder/beta links can complete the same secure provisioning flow.
+  return new Set([
+    STRIPE_PRICE_ID,
+    V1_CURRENT_PRICE_ID,
+    V1_PRIVATE_BETA_25_PRICE_ID,
+    V1_LEGACY_29_PRICE_ID,
+  ].filter(Boolean));
 }
 
 function corsHeaders(origin: string | null) {
