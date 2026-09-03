@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   patch-test-commit:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,153 +20,49 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: PocketRepApp/package-lock.json
 
-      - name: Patch the two reviewed import error paths
+      - name: Patch reviewed import error paths and regression guards
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          contacts_path = Path('PocketRepApp/app/(tabs)/contacts.tsx')
-          src = contacts_path.read_text()
+          p = Path('PocketRepApp/app/(tabs)/contacts.tsx')
+          s = p.read_text()
 
-          old = """async function loadExistingContactKeys(userId: string): Promise<{ phones: Set<string>; emails: Set<string> }> {
-  const { data } = await supabase
-    .from('contacts')
-    .select('phone,email')
-    .eq('user_id', userId)
-    .eq('is_deleted', false);
-  return {
-    phones: new Set((data ?? []).map((r: any) => phoneKeyV1(r.phone)).filter(Boolean)),
-    emails: new Set((data ?? []).map((r: any) => emailKeyV1(r.email)).filter(Boolean)),
-  };
-}"""
-          new = """async function loadExistingContactKeys(userId: string): Promise<{ phones: Set<string>; emails: Set<string> }> {
-  const { data, error } = await supabase
-    .from('contacts')
-    .select('phone,email')
-    .eq('user_id', userId)
-    .eq('is_deleted', false);
-  // Dedup is a safety guarantee, so uncertainty must fail closed. Treating a
-  // failed lookup as an empty book would allow a re-import to create duplicates.
-  if (error) throw new Error(`Could not verify existing contacts: ${error.message}`);
-  return {
-    phones: new Set((data ?? []).map((r: any) => phoneKeyV1(r.phone)).filter(Boolean)),
-    emails: new Set((data ?? []).map((r: any) => emailKeyV1(r.email)).filter(Boolean)),
-  };
-}"""
-          if old not in src:
-              raise SystemExit('loadExistingContactKeys target not found')
-          src = src.replace(old, new, 1)
+          old = "async function loadExistingContactKeys(userId: string): Promise<{ phones: Set<string>; emails: Set<string> }> {\n  const { data } = await supabase\n    .from('contacts')\n    .select('phone,email')\n    .eq('user_id', userId)\n    .eq('is_deleted', false);\n  return {"
+          new = "async function loadExistingContactKeys(userId: string): Promise<{ phones: Set<string>; emails: Set<string> }> {\n  const { data, error } = await supabase\n    .from('contacts')\n    .select('phone,email')\n    .eq('user_id', userId)\n    .eq('is_deleted', false);\n  // Dedup is a safety guarantee: never treat a failed verification lookup as an empty book.\n  if (error) throw new Error(`Could not verify existing contacts: ${error.message}`);\n  return {"
+          if s.count(old) != 1:
+              raise SystemExit('lookup helper target count was not 1')
+          s = s.replace(old, new, 1)
 
-          old = """    const { phones: existingPhones, emails: existingEmails } = await loadExistingContactKeys(user.id);
-    const toInsert = dedupeImportRows(candidates, existingPhones, existingEmails);
-    if (toInsert.length === 0) {
-      setImporting(false);
-      setShowImport(false);
-      Alert.alert('No new contacts', 'Everyone selected is already in your book.');
-      return;
-    }
-    try { await supabase.from('contacts').insert(toInsert); await load(); } catch { Alert.alert('Some contacts may not have imported'); }
-    setImporting(false);
-    setShowImport(false);"""
-          new = """    try {
-      const { phones: existingPhones, emails: existingEmails } = await loadExistingContactKeys(user.id);
-      const toInsert = dedupeImportRows(candidates, existingPhones, existingEmails);
-      if (toInsert.length === 0) {
-        setShowImport(false);
-        Alert.alert('No new contacts', 'Everyone selected is already in your book.');
-        return;
-      }
-      const { error } = await supabase.from('contacts').insert(toInsert);
-      if (error) throw error;
-      await load();
-      setShowImport(false);
-    } catch (e: any) {
-      Alert.alert('Import failed', e?.message ?? 'No contacts were imported. Try again.');
-    } finally {
-      setImporting(false);
-    }"""
-          if old not in src:
-              raise SystemExit('importSelected target not found')
-          src = src.replace(old, new, 1)
+          old = "    const { phones: existingPhones, emails: existingEmails } = await loadExistingContactKeys(user.id);\n    const toInsert = dedupeImportRows(candidates, existingPhones, existingEmails);"
+          new = "    let existingKeys: { phones: Set<string>; emails: Set<string> };\n    try {\n      existingKeys = await loadExistingContactKeys(user.id);\n    } catch (e: any) {\n      setImporting(false);\n      Alert.alert('Import failed', e?.message ?? 'Could not verify your existing book. Try again.');\n      return;\n    }\n    const { phones: existingPhones, emails: existingEmails } = existingKeys;\n    const toInsert = dedupeImportRows(candidates, existingPhones, existingEmails);"
+          if s.count(old) != 1:
+              raise SystemExit('device lookup target count was not 1')
+          s = s.replace(old, new, 1)
 
-          old = """    const { phones: existingPhones, emails: existingEmails } = await loadExistingContactKeys(user.id);
-    const fresh = dedupeImportRows(rows, existingPhones, existingEmails);
-    if (fresh.length === 0) {
-      setCsvImporting(false);
-      setShowCsvModal(false);
-      Alert.alert('No new contacts', 'Everyone in this file is already in your book.');
-      return;
-    }
-    const payload = fresh.map((row: any) => ({"""
-          new = """    try {
-      const { phones: existingPhones, emails: existingEmails } = await loadExistingContactKeys(user.id);
-      const fresh = dedupeImportRows(rows, existingPhones, existingEmails);
-      if (fresh.length === 0) {
-        setShowCsvModal(false);
-        Alert.alert('No new contacts', 'Everyone in this file is already in your book.');
-        return;
-      }
-      const payload = fresh.map((row: any) => ({"""
-          if old not in src:
-              raise SystemExit('confirmCsvImport opening target not found')
-          src = src.replace(old, new, 1)
+          old = "    try { await supabase.from('contacts').insert(toInsert); await load(); } catch { Alert.alert('Some contacts may not have imported'); }\n    setImporting(false);\n    setShowImport(false);"
+          new = "    const { error: insertError } = await supabase.from('contacts').insert(toInsert);\n    if (insertError) {\n      setImporting(false);\n      Alert.alert('Import failed', insertError.message);\n      return;\n    }\n    await load();\n    setImporting(false);\n    setShowImport(false);"
+          if s.count(old) != 1:
+              raise SystemExit('device insert target count was not 1')
+          s = s.replace(old, new, 1)
 
-          old = """    }));
-    try {
-      const { error } = await supabase.from('contacts').insert(payload);
-      if (error) {
-        if (Platform.OS === 'web') (globalThis as any).alert?.(`Import failed: ${error.message}`);
-        else Alert.alert('Import failed', error.message);
-      } else {
-        await load();
-        const skipped = rows.length - fresh.length;
-        Alert.alert('Import complete ✅', `${payload.length} contact${payload.length !== 1 ? 's' : ''} added to your book.${skipped > 0 ? ` ${skipped} already in your book ${skipped === 1 ? 'was' : 'were'} skipped.` : ''}`);
-      }
-    } catch {
-      Alert.alert('Import failed', 'Some contacts may not have imported. Check for duplicate phone numbers.');
-    }
-    setCsvImporting(false);
-    setShowCsvModal(false);"""
-          new = """      }));
-      const { error } = await supabase.from('contacts').insert(payload);
-      if (error) throw error;
-      await load();
-      const skipped = rows.length - fresh.length;
-      Alert.alert('Import complete ✅', `${payload.length} contact${payload.length !== 1 ? 's' : ''} added to your book.${skipped > 0 ? ` ${skipped} already in your book ${skipped === 1 ? 'was' : 'were'} skipped.` : ''}`);
-      setShowCsvModal(false);
-    } catch (e: any) {
-      const message = e?.message ?? 'No contacts were imported. Try again.';
-      if (Platform.OS === 'web') (globalThis as any).alert?.(`Import failed: ${message}`);
-      else Alert.alert('Import failed', message);
-    } finally {
-      setCsvImporting(false);
-    }"""
-          if old not in src:
-              raise SystemExit('confirmCsvImport closing target not found')
-          src = src.replace(old, new, 1)
-          contacts_path.write_text(src)
+          old = "    const { phones: existingPhones, emails: existingEmails } = await loadExistingContactKeys(user.id);\n    const fresh = dedupeImportRows(rows, existingPhones, existingEmails);"
+          new = "    let existingKeys: { phones: Set<string>; emails: Set<string> };\n    try {\n      existingKeys = await loadExistingContactKeys(user.id);\n    } catch (e: any) {\n      setCsvImporting(false);\n      const message = e?.message ?? 'Could not verify your existing book. Try again.';\n      if (Platform.OS === 'web') (globalThis as any).alert?.(`Import failed: ${message}`);\n      else Alert.alert('Import failed', message);\n      return;\n    }\n    const { phones: existingPhones, emails: existingEmails } = existingKeys;\n    const fresh = dedupeImportRows(rows, existingPhones, existingEmails);"
+          if s.count(old) != 1:
+              raise SystemExit('csv lookup target count was not 1')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
 
-          test_path = Path('PocketRepApp/scripts/test-native-import-dedup.mjs')
-          test = test_path.read_text()
-          anchor = """ok('both import paths query the existing book (is_deleted=false) before dedup',
-  (src.match(/\\.eq\\('is_deleted', false\\)/g) || []).length >= 1 && /loadExistingContactKeys/.test(src));
-"""
-          addition = anchor + """
-
-console.log('\\n--- import safety fails closed on Supabase errors ---');
-ok('existing-contact lookup checks Supabase error and aborts instead of assuming an empty book',
-  /const \\{ data, error \\} = await supabase[\\s\\S]*?if \\(error\\) throw new Error\\(`Could not verify existing contacts:/.test(src));
-ok('device-contact insert explicitly checks the returned Supabase error before reporting success',
-  /async function importSelected\\(\\)[\\s\\S]*?const \\{ error \\} = await supabase\\.from\\('contacts'\\)\\.insert\\(toInsert\\);[\\s\\S]*?if \\(error\\) throw error;/.test(src));
-"""
-          if anchor not in test:
-              raise SystemExit('test anchor not found')
-          test = test.replace(anchor, addition, 1)
-          test_path.write_text(test)
+          t = Path('PocketRepApp/scripts/test-native-import-dedup.mjs')
+          q = t.read_text()
+          anchor = "ok('both import paths query the existing book (is_deleted=false) before dedup',\n  (src.match(/\\.eq\\('is_deleted', false\\)/g) || []).length >= 1 && /loadExistingContactKeys/.test(src));"
+          extra = anchor + "\n\nconsole.log('\\n--- import safety fails closed on Supabase errors ---');\nok('existing-contact lookup checks Supabase error instead of assuming an empty book',\n  /const \\{ data, error \\} = await supabase[\\s\\S]*?if \\(error\\) throw new Error\\(`Could not verify existing contacts:/.test(src));\nok('device-contact insert checks the Supabase result error before closing the import flow',\n  /const \\{ error: insertError \\} = await supabase\\.from\\('contacts'\\)\\.insert\\(toInsert\\);[\\s\\S]*?if \\(insertError\\)/.test(importSelectedMatch?.[0] ?? ''));"
+          if q.count(anchor) != 1:
+              raise SystemExit('test anchor count was not 1')
+          q = q.replace(anchor, extra, 1)
+          t.write_text(q)
           PY
 
       - name: Install dependencies
@@ -182,7 +77,7 @@ ok('device-contact insert explicitly checks the returned Supabase error before r
         working-directory: PocketRepApp
         run: npm run test:all
 
-      - name: Commit passing patch and remove one-shot workflow
+      - name: Commit passing fix and remove this temporary workflow
         shell: bash
         run: |
           rm .github/workflows/tmp-pr142-import-hardening.yml
