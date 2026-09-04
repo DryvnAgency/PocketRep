@@ -1018,7 +1018,7 @@ body { overscroll-behavior-x: none; }
     </a>
     <nav class="nav-links">
       <a href="#features">Features</a>
-      <a href="#teams">For teams</a>
+      <a href="#roadmap">Roadmap</a>
       <a href="#pricing">Pricing</a>
     </nav>
     <div class="nav-cta">
@@ -1102,6 +1102,37 @@ body { overscroll-behavior-x: none; }
 .wl-done .btn { margin-top: 18px; }
 .spots { display: inline-flex; align-items: center; gap: 9px; margin-top: 18px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.5px; color: var(--gold); border: 1px solid rgba(255,204,77,0.32); background: rgba(255,204,77,0.06); border-radius: 100px; padding: 8px 14px; }
 .spots .pip { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px var(--gold); }
+
+/* Clickable hero demo radar */
+.radar-link { display: block; color: inherit; text-decoration: none; cursor: pointer; border-radius: 50%; }
+.radar-link .hud { pointer-events: none; }
+.radar-link:focus-visible { outline: 2px solid var(--cyan); outline-offset: 10px; }
+
+/* V1 → V2 → V3 conversion roadmap */
+.roadmap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 46px; }
+.roadmap-card { position: relative; padding: 28px 24px; border-radius: 22px; border: 1px solid var(--line); background: var(--surface); overflow: hidden; }
+.roadmap-card.now { border-color: rgba(212,168,67,.45); background: linear-gradient(155deg, rgba(212,168,67,.14), var(--surface)); box-shadow: 0 34px 80px -56px rgba(212,168,67,.95); }
+.roadmap-card::before { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, rgba(240,192,96,.55), transparent); opacity: .45; }
+.roadmap-status { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--faint); }
+.roadmap-card.now .roadmap-status { color: var(--cyan); }
+.roadmap-status .pip { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+.roadmap-v { margin-top: 16px; font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--gold); }
+.roadmap-card h3 { margin-top: 7px; font-family: var(--display); font-size: 25px; letter-spacing: -.025em; }
+.roadmap-price { margin-top: 18px; font-family: var(--display); font-size: 33px; font-weight: 750; letter-spacing: -.035em; }
+.roadmap-price small { font-family: var(--body); font-size: 12px; font-weight: 500; letter-spacing: 0; color: var(--faint); }
+.roadmap-card p { margin-top: 13px; color: var(--muted); font-size: 14.5px; line-height: 1.65; }
+.roadmap-list { list-style: none; margin-top: 20px; display: grid; gap: 10px; }
+.roadmap-list li { position: relative; padding-left: 20px; color: var(--ink); font-size: 13.5px; line-height: 1.5; }
+.roadmap-list li::before { content: "✦"; position: absolute; left: 0; color: var(--cyan); font-size: 10px; top: 3px; }
+.roadmap-lock { max-width: 920px; margin: 28px auto 0; padding: 20px 22px; border-radius: 16px; border: 1px solid rgba(52,224,161,.28); background: rgba(52,224,161,.055); text-align: center; color: var(--ink); font-size: 15px; line-height: 1.65; }
+.roadmap-lock b { color: var(--green); }
+.roadmap-actions { display: flex; justify-content: center; margin-top: 24px; }
+.roadmap-note { max-width: 900px; margin: 16px auto 0; color: var(--faint); text-align: center; font-size: 11.5px; line-height: 1.6; }
+.price-path { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 15px; font-family: var(--mono); font-size: 11px; color: var(--faint); }
+.price-path .step { padding: 7px 9px; border-radius: 999px; border: 1px solid var(--line-2); background: rgba(255,255,255,.025); }
+.price-path .step.current { color: var(--cyan); border-color: rgba(212,168,67,.4); background: rgba(212,168,67,.08); }
+@media (max-width: 900px) { .roadmap-grid { grid-template-columns: 1fr; max-width: 680px; margin-inline: auto; } }
+@media (max-width: 640px) { .roadmap-card { padding: 24px 20px; } .roadmap-actions .btn { width: 100%; text-align: center; } }
 </style>
 
 
@@ -1126,7 +1157,7 @@ body { overscroll-behavior-x: none; }
     </div>
 
     <div class="hero-stage reveal d2">
-      <div class="radar" id="stage">
+      <a class="radar radar-link" id="stage" href="#try" aria-label="Jump to the interactive PocketRep demo" title="Try the interactive PocketRep demo">
         <div class="radar-glow"></div>
         <div class="radar-face">
           <span class="ring r1"></span>
@@ -1169,7 +1200,7 @@ body { overscroll-behavior-x: none; }
           <div class="hud-k">Commission · YTD</div>
           <div class="hud-v big"><span class="v">$80,670</span><span class="up">▲</span></div>
         </div>
-      </div>
+      </a>
     </div>
   </div>
 </section>
@@ -1317,12 +1348,76 @@ body { overscroll-behavior-x: none; }
   </details>
 </section>
 
+<!-- ============ PRODUCT ROADMAP / FOUNDING RATE ============ -->
+<section class="section wrap" id="roadmap">
+  <div class="head center">
+    <span class="eyebrow center reveal">Why join early</span>
+    <h2 class="h2 reveal d1">V1 is why you buy today. <span class="grad-text">V2 and V3 are why you don't wait.</span></h2>
+    <p class="lead reveal d2">PocketRep already gives you a better way to work the book you earned. As the product gets deeper, planned pricing for new customers rises. Join at the current founding rate and keep your software rate while your subscription stays continuously active.</p>
+  </div>
+
+  <div class="roadmap-grid">
+    <article class="roadmap-card now reveal">
+      <div class="roadmap-status"><span class="pip"></span> Available now</div>
+      <div class="roadmap-v">V1 · Know who to work</div>
+      <h3>Turn your book into today's workday.</h3>
+      <div class="roadmap-price">$39 <small>/mo current founding rate</small></div>
+      <p>Stop relying on memory. PocketRep keeps the relationship context together and turns it into clear next actions you control.</p>
+      <ul class="roadmap-list">
+        <li>Heat Sheet + Work My Book priorities</li>
+        <li>Rex coaching and contextual follow-up drafts</li>
+        <li>Call Queue + Text Queue with rep-controlled sending</li>
+        <li>Sequences, notes, history, deals, and metrics</li>
+        <li>Sold-customer and long-term book follow-up</li>
+      </ul>
+    </article>
+
+    <article class="roadmap-card reveal d1">
+      <div class="roadmap-status"><span class="pip"></span> Building next</div>
+      <div class="roadmap-v">V2 · Know exactly what to do</div>
+      <h3>Rex gets closer to your actual day.</h3>
+      <div class="roadmap-price">$59 <small>planned new-customer rate</small></div>
+      <p>The next generation is about less friction, stronger opportunity detection, and Rex becoming a more capable sales companion.</p>
+      <ul class="roadmap-list">
+        <li>Native PocketRep apps for iPhone and Android</li>
+        <li>Faster customer capture and business-card/intake flows</li>
+        <li>Smarter sold, referral, stalled, and lease opportunities</li>
+        <li>Deeper Rex memory, coaching, and daily Game Plans</li>
+        <li>Verified dealership inventory awareness</li>
+      </ul>
+    </article>
+
+    <article class="roadmap-card reveal d2">
+      <div class="roadmap-status"><span class="pip"></span> The vision</div>
+      <div class="roadmap-v">V3 · Run your business</div>
+      <h3>Your personal sales operating system.</h3>
+      <div class="roadmap-price">$79 <small>planned new-customer rate</small></div>
+      <p>Rex grows from helping with the next touch into intelligence across the book: what changed, what matters, and where your next opportunity is hiding.</p>
+      <ul class="roadmap-list">
+        <li>Proactive whole-book opportunity intelligence</li>
+        <li>Deeper ownership, retention, and referral systems</li>
+        <li>More complete daily execution and performance loops</li>
+        <li>Built-in communications when compliance and economics justify it</li>
+        <li>Expanded rep and team workflows without losing the rep-first experience</li>
+      </ul>
+    </article>
+  </div>
+
+  <div class="roadmap-lock reveal">
+    <b>Join at $39 now.</b> If PocketRep's price for new customers later moves to $59 or $79, your $39 software subscription rate stays with you while your subscription remains continuously active.
+  </div>
+  <div class="roadmap-actions reveal">
+    <a class="btn btn-primary btn-lg" href="#signup" onclick="prScrollSignup(event)">Lock in my founding rate <span class="arrow">→</span></a>
+  </div>
+  <p class="roadmap-note reveal">Roadmap items are current priorities, not promised delivery dates, and may evolve with rep feedback. Future telecom or usage-based services may carry separate usage/add-on pricing.</p>
+</section>
+
 <!-- ============ PRICING ============ -->
 <section class="section wrap" id="pricing">
   <div class="head center">
     <span class="eyebrow center reveal">Launch pricing</span>
-    <h2 class="h2 reveal d1">One individual plan. <span class="grad-text">Everything in V1.</span></h2>
-    <p class="lead reveal d2">Start with 7 days free. Founding Rep access is $39/month, and your founding software rate stays with you while your subscription remains continuously active.</p>
+    <h2 class="h2 reveal d1">Get in at $39. <span class="grad-text">Grow with PocketRep.</span></h2>
+    <p class="lead reveal d2">Start with 7 days free. The current Founding Rep rate is $39/month. Planned new-customer pricing rises to $59, then $79 as PocketRep grows. Your software rate stays with you while your subscription remains continuously active.</p>
   </div>
   <div class="price-grid two">
     <div class="price feat reveal">
@@ -1333,6 +1428,9 @@ body { overscroll-behavior-x: none; }
       <div class="was">7 days free · card required · no subscription charge until day 8</div>
       <div class="lock">◆ Keep your founding software rate while your subscription stays active</div>
       <div class="spots"><span class="pip"></span> Founding Rep access</div>
+      <div class="price-path" aria-label="PocketRep planned new-customer pricing path">
+        <span class="step current">$39 · now</span><span>→</span><span class="step">$59 · next</span><span>→</span><span class="step">$79 · later</span>
+      </div>
       <hr>
       <ul>
         <li><span class="tick">✦</span> Heat Sheet, Rex coaching, and Game Plan</li>
@@ -1411,7 +1509,8 @@ body { overscroll-behavior-x: none; }
     <div class="faq-item"><button class="faq-q">Do I need a new phone number?<span class="pm">＋</span></button><div class="faq-a"><p>No. V1 keeps the rep in control of outreach using the phone's normal communication flow. PocketRep does not silently send customer messages on your behalf.</p></div></div>
     <div class="faq-item"><button class="faq-q">Can I import my existing contacts?<span class="pm">＋</span></button><div class="faq-a"><p>Yes. PocketRep accepts CSV and vCard files exported from most phones and CRMs. You review the parsed contacts before importing them.</p></div></div>
     <div class="faq-item"><button class="faq-q">Is this going to spam my customers?<span class="pm">＋</span></button><div class="faq-a"><p>No. Rex drafts; you review and take the send action through your phone's normal communication flow. You can mark a customer do-not-contact, and you remain responsible for consent, dealership policy, and applicable messaging laws.</p></div></div>
-    <div class="faq-item"><button class="faq-q">Does it work on my phone?<span class="pm">＋</span></button><div class="faq-a"><p>Yes. PocketRep V1 is built to work from a modern phone or desktop browser, so you can keep it with you on the floor without waiting for a native-app launch.</p></div></div>
+    <div class="faq-item"><button class="faq-q">Does it work on my phone?<span class="pm">＋</span></button><div class="faq-a"><p>Yes. PocketRep V1 works from a modern phone or desktop browser today. Native PocketRep apps for iPhone and Android are a V2 priority, without a promised launch date yet.</p></div></div>
+    <div class="faq-item"><button class="faq-q">What happens when PocketRep moves to $59 or $79?<span class="pm">＋</span></button><div class="faq-a"><p>Those are planned future prices for new customers as PocketRep grows. If you join at the current $39 software rate, that software subscription rate stays with you while your subscription remains continuously active. Future telecom or usage-based add-ons may be priced separately.</p></div></div>
     <div class="faq-item"><button class="faq-q">Where can I use PocketRep?<span class="pm">＋</span></button><div class="faq-a"><p>PocketRep is built for sales professionals and can be accessed online from supported locations. Our initial launch and support are focused on the United States, with broader international availability planned as we expand. Features, billing options, and availability may vary by country or region.</p></div></div>
   </div>
 </section>
