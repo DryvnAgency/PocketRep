@@ -1,11 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
 import RadarLoader from './RadarLoader';
 import { colors, radius } from '@/constants/theme';
 import { Label, Pill, HeatStripe } from './atoms';
 import { useSequences, type V2Sequence } from '@/lib/v2/useSequences';
 import SequenceEditor from './SequenceEditor';
-import type { V2Contact } from '@/lib/v2/useContacts';
 
 const CHANNEL_ICON: Record<string, string> = {
   text: '💬',
@@ -52,45 +51,14 @@ function SequenceCard({ s, onPress }: { s: V2Sequence; onPress: () => void }) {
 }
 
 export default function GamePlanSheet({
-  open, onClose, contacts, onStartCallQueue, onStartTextQueue,
+  open, onClose,
 }: {
   open: boolean;
   onClose: () => void;
-  contacts: V2Contact[];
-  onStartCallQueue: (contacts: V2Contact[]) => void;
-  onStartTextQueue: (contacts: V2Contact[]) => void;
 }) {
   const [editorTarget, setEditorTarget] = useState<V2Sequence | null>(null);
   const [refetch, setRefetch] = useState(0);
   const { sequences, error } = useSequences(open ? refetch + 1 : 0);
-  const workBook = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const score = (c: V2Contact) => {
-      let s = 0;
-      if (c.nextFollowupDate && c.nextFollowupDate <= today) s += 120;
-      if (c.tier === 'hot') s += 55;
-      else if (c.tier === 'warm') s += 35;
-      if (!c.isPastCustomer && c.days >= 14) s += 45;
-      if (c.isPastCustomer && c.days >= 30) s += 40;
-      if (c.days >= 90) s += 50;
-      if (c.leaseEndDate) {
-        const remaining = Math.ceil((new Date(c.leaseEndDate + 'T12:00:00').getTime() - Date.now()) / 86_400_000);
-        if (remaining >= 0 && remaining <= 180) s += 60;
-      }
-      return s;
-    };
-    const candidates = contacts
-      .filter(c => !c.doNotContact && !!c.phone)
-      .map(c => ({ c, score: score(c) }))
-      .filter(row => row.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map(row => row.c);
-    const call = candidates
-      .filter(c => c.tier === 'hot' || c.tier === 'warm' || (!!c.nextFollowupDate && c.nextFollowupDate <= today))
-      .slice(0, 25);
-    const text = candidates.slice(0, 25);
-    return { call, text };
-  }, [contacts]);
   if (!open) return null;
 
   return (
@@ -100,44 +68,12 @@ export default function GamePlanSheet({
           <Text style={styles.iconBtnText}>‹</Text>
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Label color={colors.gold}>REX · GAME PLAN</Label>
-          <Text style={styles.topTitle}>Work My Book</Text>
+          <Label color={colors.gold}>GAME PLAN</Label>
+          <Text style={styles.topTitle}>Sequences & templates</Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
-        <View style={styles.workHero}>
-          <Text style={styles.workEyebrow}>TODAY'S EXECUTION</Text>
-          <Text style={styles.workTitle}>Rex sorted the people worth touching.</Text>
-          <Text style={styles.workBody}>Due follow-ups, stalled opportunities, long-dormant customers, sold ownership touches, and lease timing rise to the top.</Text>
-          <View style={styles.workActions}>
-            <Pressable
-              onPress={() => onStartCallQueue(workBook.call)}
-              disabled={workBook.call.length === 0}
-              style={[styles.workCard, workBook.call.length === 0 && { opacity: 0.45 }]}
-            >
-              <Text style={styles.workIcon}>📞</Text>
-              <Text style={styles.workCardTitle}>CALL QUEUE</Text>
-              <Text style={styles.workCardCount}>{workBook.call.length} ready</Text>
-              <Text style={styles.workCardHint}>call → outcome → next</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => onStartTextQueue(workBook.text)}
-              disabled={workBook.text.length === 0}
-              style={[styles.workCard, workBook.text.length === 0 && { opacity: 0.45 }]}
-            >
-              <Text style={styles.workIcon}>💬</Text>
-              <Text style={styles.workCardTitle}>TEXT QUEUE</Text>
-              <Text style={styles.workCardCount}>{workBook.text.length} ready</Text>
-              <Text style={styles.workCardHint}>personalized → review → send</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.sectionDivider}>
-          <Text style={styles.sectionDividerText}>SEQUENCES</Text>
-        </View>
-
         {error ? (
           <Text style={styles.error}>Couldn't load: {error}</Text>
         ) : !sequences ? (
@@ -152,7 +88,7 @@ export default function GamePlanSheet({
         ) : (
           <View>
             <Text style={styles.intro}>
-              Keep long-term follow-up organized after today's work is handled. Enroll from any contact card.
+              Multi-step cadences that text, call, or email contacts on your schedule. Enroll from any contact card.
             </Text>
             {sequences.map(s => (
               <SequenceCard
@@ -201,24 +137,6 @@ const styles = StyleSheet.create({
   topTitle: { fontSize: 16, fontWeight: '700', color: colors.white, letterSpacing: -0.2, marginTop: 2 },
 
   body: { paddingBottom: Platform.OS === 'web' ? ('max(30px, env(safe-area-inset-bottom))' as any) : 30 },
-  workHero: {
-    marginHorizontal: 14, marginTop: 14, padding: 16, borderRadius: radius.lg,
-    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
-  },
-  workEyebrow: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
-  workTitle: { color: colors.white, fontSize: 18, fontWeight: '800', marginTop: 5, letterSpacing: -0.3 },
-  workBody: { color: colors.grey3, fontSize: 12, lineHeight: 17, marginTop: 6 },
-  workActions: { flexDirection: 'row', gap: 9, marginTop: 14 },
-  workCard: {
-    flex: 1, minHeight: 128, padding: 12, borderRadius: radius.md,
-    backgroundColor: colors.ink2, borderWidth: 1, borderColor: colors.ink4,
-  },
-  workIcon: { fontSize: 20 },
-  workCardTitle: { color: colors.gold, fontSize: 11, fontWeight: '900', letterSpacing: 0.7, marginTop: 8 },
-  workCardCount: { color: colors.white, fontSize: 16, fontWeight: '800', marginTop: 4 },
-  workCardHint: { color: colors.grey2, fontSize: 10, lineHeight: 14, marginTop: 4 },
-  sectionDivider: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 4 },
-  sectionDividerText: { color: colors.grey2, fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
   center: { padding: 40, alignItems: 'center' },
   error: { color: colors.red, padding: 16, fontSize: 13 },
   empty: {
