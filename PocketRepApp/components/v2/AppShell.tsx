@@ -4,7 +4,7 @@ import { colors } from '@/constants/theme';
 import CustomNavBar, { TabId } from './CustomNavBar';
 import TabBar from './TabBar';
 import HeatSheetTab from './HeatSheetTab';
-import ContactsTab from './ContactsTab';
+import ContactsTab, { CallQueue } from './ContactsTab';
 import ContactDetail from './ContactDetail';
 import ProfileTab from './ProfileTab';
 import MetricsTab from './MetricsTab';
@@ -16,6 +16,7 @@ import ImportContactsModal from './ImportContactsModal';
 import RexOnboarding from './RexOnboarding';
 import PWAInstallPrompt, { shouldAutoPrompt } from './PWAInstallPrompt';
 import GamePlanSheet from './GamePlanSheet';
+import WorkMyBookSheet from './WorkMyBookSheet';
 import RexActivityViewer from './RexActivityViewer';
 import BlastSequenceDrafter from './BlastSequenceDrafter';
 import StalledLeadsAnalysis from './StalledLeadsAnalysis';
@@ -86,6 +87,8 @@ export default function AppShell() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [installPromptOpen, setInstallPromptOpen] = useState(false);
   const [gamePlanOpen, setGamePlanOpen] = useState(false);
+  const [workBookOpen, setWorkBookOpen] = useState(false);
+  const [callQueueContacts, setCallQueueContacts] = useState<V2Contact[] | null>(null);
   const [rexActivityOpen, setRexActivityOpen] = useState(false);
   const [blastDraft, setBlastDraft] = useState<BlastDraft | null>(null);
   const [stalledOpen, setStalledOpen] = useState(false);
@@ -295,6 +298,8 @@ export default function AppShell() {
         setOnboardingOpen(false);
         setInstallPromptOpen(false);
         setGamePlanOpen(false);
+        setWorkBookOpen(false);
+        setCallQueueContacts(null);
         setRexActivityOpen(false);
         setBlastDraft(null);
         setStalledOpen(false);
@@ -428,6 +433,22 @@ export default function AppShell() {
     }
   };
 
+  const startWorkBookTextQueue = async (selected: V2Contact[]) => {
+    if (selected.length === 0) return;
+    try {
+      const draft = await createBlastDraft({
+        intent: 'Work my book with individualized follow-up based on each customer’s real context, relationship, vehicle, timing, and last-touch history. Create a natural reason to reconnect. Do not repeat one generic message across the list. Do not fabricate promotions or urgency.',
+        filterSummary: `${selected.length} Rex-prioritized customer${selected.length === 1 ? '' : 's'}`,
+        promotion: {},
+        contacts: selected,
+      });
+      setWorkBookOpen(false);
+      setBlastDraft(draft);
+    } catch (e: any) {
+      setRexActionError(e?.message ?? 'Could not build the Text Queue. Try again.');
+    }
+  };
+
   // Pull-to-refresh on the main scroll — reloads the active tab's data.
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -454,8 +475,10 @@ export default function AppShell() {
     if (nurtureReviewerOpen) { setNurtureReviewerOpen(false); return; }
     if (payPlanOpen) { setPayPlanOpen(false); return; }
     if (blastDraft) { setBlastDraft(null); return; }
+    if (callQueueContacts) { setCallQueueContacts(null); return; }
     if (rexActivityOpen) { setRexActivityOpen(false); return; }
     if (gamePlanOpen) { setGamePlanOpen(false); return; }
+    if (workBookOpen) { setWorkBookOpen(false); return; }
     if (addContactOpen) { setAddContactOpen(false); return; }
     if (importOpen) { setImportOpen(false); return; }
     if (vehicleFinderOpen) { setVehicleFinderOpen(false); setVehicleFinderPrefill(null); return; }
@@ -467,7 +490,7 @@ export default function AppShell() {
   const anyOverlayOpen =
     supportChatOpen || adminSupportOpen ||
     rexCoachOpen || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
-    !!blastDraft || gamePlanOpen || rexActivityOpen || addContactOpen || importOpen || vehicleFinderOpen || bulkTagOpen || !!selectedDeal ||
+    !!blastDraft || gamePlanOpen || workBookOpen || !!callQueueContacts || rexActivityOpen || addContactOpen || importOpen || vehicleFinderOpen || bulkTagOpen || !!selectedDeal ||
     dealLoggerOpen || !!selectedId;
   const closeTopRef = useRef(closeTopOverlay);
   closeTopRef.current = closeTopOverlay;
@@ -588,7 +611,7 @@ export default function AppShell() {
           />
         ) : active === 'profile' ? (
           <ProfileTab
-            onOpenGamePlan={() => setGamePlanOpen(true)}
+            onOpenGamePlan={() => setWorkBookOpen(true)}
             onOpenRexActivity={() => setRexActivityOpen(true)}
             onReplayOnboarding={() => setOnboardingOpen(true)}
             onOpenPayPlan={() => setPayPlanOpen(true)}
@@ -758,10 +781,29 @@ export default function AppShell() {
         onClose={() => setInstallPromptOpen(false)}
       />
 
+      <WorkMyBookSheet
+        open={workBookOpen}
+        contacts={contacts ?? []}
+        onClose={() => setWorkBookOpen(false)}
+        onStartCallQueue={(rows) => {
+          setWorkBookOpen(false);
+          setCallQueueContacts(rows);
+        }}
+        onStartTextQueue={startWorkBookTextQueue}
+        onOpenSequences={() => {
+          setWorkBookOpen(false);
+          setGamePlanOpen(true);
+        }}
+      />
+
       <GamePlanSheet
         open={gamePlanOpen}
         onClose={() => setGamePlanOpen(false)}
       />
+
+      {callQueueContacts ? (
+        <CallQueue contacts={callQueueContacts} onClose={() => setCallQueueContacts(null)} />
+      ) : null}
 
       <RexActivityViewer
         open={rexActivityOpen}
