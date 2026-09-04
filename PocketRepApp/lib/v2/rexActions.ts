@@ -80,12 +80,14 @@ export type AddContactPayload = {
   first_name: string;
   last_name?: string;
   phone?: string;
+  email?: string;
   vehicle?: string;
   budget?: string;
   trade_in?: string;
   notes?: string;
   heat_tier?: 'hot' | 'warm' | 'cold';
   plan_label?: string;
+  is_past_customer?: boolean;
 };
 
 export type UpdateNotesPayload = {
@@ -292,7 +294,8 @@ ${frameUntrusted('BOOK STATE', bookSection)}
 Actions you can take, with required + optional payload fields:
 
 1. add_contact — create a brand new contact
-   payload: { first_name (req), last_name?, phone?, vehicle?, budget?, trade_in?, notes?, heat_tier? ("hot"|"warm"|"cold"), plan_label? ("TODAY"|"THIS WEEK"|"THIS MONTH"|"NEXT QTR") }
+   payload: { first_name (req), last_name?, phone?, email?, vehicle?, budget?, trade_in?, notes?, heat_tier? ("hot"|"warm"|"cold"), plan_label? ("TODAY"|"THIS WEEK"|"THIS MONTH"|"NEXT QTR"), is_past_customer? }
+   When the rep explicitly says they SOLD this customer a vehicle, set is_past_customer=true and preserve the sold timing/month in notes.
 
 2. update_notes — append notes to an existing contact
    payload: { contact_id (req), contact_name (req), notes_append (req) }
@@ -648,6 +651,7 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
         firstName: p.first_name,
         lastName: p.last_name ?? '',
         phone: p.phone ?? '',
+        email: p.email ?? '',
         vehicle: p.vehicle ?? '',
         trim: '',
         budget: p.budget ?? '',
@@ -656,6 +660,7 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
         heatScore: HEAT_TIER_SCORE[p.heat_tier ?? 'warm'],
         notes: p.notes ?? '',
         tags: [],
+        isPastCustomer: !!p.is_past_customer,
       });
       return { ok: true, openContactId: id };
     }
