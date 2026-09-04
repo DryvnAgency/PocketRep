@@ -173,9 +173,9 @@ Owner-approved product-generation direction:
 - The temporary $29 launch cutover is **retired**; do not advertise or route new customers to the retired $29 Payment Link.
 - **7-day free trial**, card on file; charge begins on day 8 unless canceled.
 - A founding rep keeps the **software subscription rate they joined at while the subscription remains continuously active**.
-- **V2 direction for new customers: $49/month** when V2 materially earns the increase.
-- **V3 direction for new customers: $69/month** when V3 materially earns the increase.
-- V2/V3 prices are roadmap direction, **not current purchasable offers**.
+- **V2 direction for new customers: $59/month** when traction reaches the owner-defined next pricing cohort.
+- **V3 direction for new customers: $79/month** when traction reaches the owner-defined later pricing cohort.
+- V2/V3 prices are roadmap direction, **not current purchasable offers**. Current desired ladder is **$39 → $59 → $79** for new customers; existing subscribers keep the software rate they joined at while continuously active.
 
 Live Stripe resources prepared for the V1 cutover:
 
