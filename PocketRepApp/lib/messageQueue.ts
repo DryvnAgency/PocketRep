@@ -15,6 +15,7 @@ import { supabase } from './supabase';
 import { getRepSetting } from './v2/repSettings';
 import { inferSequenceColor, renderSequenceTemplate } from './v2/sequenceTemplates';
 import { logInteraction } from './v2/interactions';
+import { logContactTouch, type CallOutcome } from './v2/updateContact';
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
@@ -155,6 +156,7 @@ async function advanceEnrollment(
 export async function markSentAndLog(
   item: QueueItem,
   userId: string,
+  callOutcome?: CallOutcome,
 ): Promise<{ requiresClassification: boolean }> {
   if (item.unresolved_tokens?.length) {
     throw new Error('This follow-up still has unresolved template fields.');
@@ -171,6 +173,37 @@ export async function markSentAndLog(
     message: item.message,
   });
   if (logError) throw logError;
+
+  // The sequence queue must obey the same permanent-memory rule as every other
+  // PocketRep action. Update working-state dates, then append the immutable
+  // customer timeline event. Texts normally already exist in outbound_sms_actions
+  // from launchSms(), so detect that exact recent row and avoid a duplicate.
+  const touchMethod = item.channel === 'call' ? 'call' : item.channel === 'email' ? 'email' : 'text';
+  await logContactTouch(item.contact_id, touchMethod, item.message, item.channel === 'call' ? callOutcome : undefined);
+
+  let hasAuthoritativeSmsRow = false;
+  if (item.channel === 'text') {
+    const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { data: smsRow } = await supabase
+      .from('outbound_sms_actions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('contact_id', item.contact_id)
+      .eq('message_body', item.message)
+      .eq('status', 'confirmed_sent')
+      .gte('created_at', cutoff)
+      .limit(1)
+      .maybeSingle();
+    hasAuthoritativeSmsRow = !!smsRow;
+  }
+  if (!hasAuthoritativeSmsRow) {
+    await logInteraction(
+      item.contact_id,
+      touchMethod,
+      item.message,
+      item.channel === 'call' ? (callOutcome ?? 'completed') : 'confirmed_sent',
+    );
+  }
   return result;
 }
 
