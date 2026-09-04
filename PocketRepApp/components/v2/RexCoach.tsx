@@ -25,6 +25,7 @@ import { getTodayLog, getCarrySummary, appendCoachEntry } from '@/lib/v2/coachLo
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { PayPlan } from '@/lib/v2/payPlan';
 import { chooseRexTier, isWholeBookRequest, resolveMentionedContactId } from '@/lib/v2/rexRouting';
+import { logInteraction } from '@/lib/v2/interactions';
 
 // The coach may emit this narrow action allow-list; destructive batch/delete
 // operations stay voice/UI-only and every listed action still needs Confirm.
@@ -269,6 +270,9 @@ export default function RexCoach({
               setStreamText(null);
               pushRex(line);
               if (actionable) setPending(action!);
+              if (!actionable && turnContactId) {
+                logInteraction(turnContactId, 'game_plan', `Rex game plan: ${line}`).catch(() => undefined);
+              }
               recordRexTurn(text, line, turnContactId).catch(() => undefined);
               return;
             } catch (e: any) {
@@ -320,6 +324,9 @@ export default function RexCoach({
           setStreamText(null); // the final bubble replaces the stream
           pushRex(line);
           if (actionable) setPending(action!);
+          if (!actionable && turnContactId) {
+            logInteraction(turnContactId, 'game_plan', `Rex game plan: ${line}`).catch(() => undefined);
+          }
           // Durable thread: mirror the exchange into rex_messages (fire-and-
           // forget; also feeds the rolling rex_memory summary shared with voice).
           if (REX_CHAT) recordRexTurn(text, line, turnContactId).catch(() => undefined);
