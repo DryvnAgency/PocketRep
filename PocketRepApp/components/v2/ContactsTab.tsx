@@ -20,7 +20,7 @@ const TIER_CHIPS: Extract<FilterTag, { kind: 'tier' }>[] = [
 ];
 const digitsOnly = (s: string | null | undefined) => (s ?? '').replace(/[^\d]/g, '');
 
-function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () => void }) {
+export function CallQueue({ contacts, onClose }: { contacts: V2Contact[]; onClose: () => void }) {
   const queue = useMemo(() => contacts.filter(c => !!digitsOnly(c.phone)), [contacts]);
   const [index, setIndex] = useState(0);
   const [called, setCalled] = useState(false);
