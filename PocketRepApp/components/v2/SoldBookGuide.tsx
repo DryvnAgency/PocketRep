@@ -26,6 +26,7 @@ export default function SoldBookGuide({
 }) {
   const [step, setStep] = useState<'intro' | 'add'>('intro');
   const [addedIds, setAddedIds] = useState<string[]>([]);
+  const [addedPhones, setAddedPhones] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [vehicle, setVehicle] = useState('');
@@ -38,6 +39,7 @@ export default function SoldBookGuide({
     if (!open || !wave) return;
     setStep('intro');
     setAddedIds([]);
+    setAddedPhones([]);
     setName('');
     setPhone('');
     setVehicle('');
@@ -67,8 +69,8 @@ export default function SoldBookGuide({
       return;
     }
     const pk = phoneKey(phoneTrim);
-    if (pk && existingContacts.some(c => phoneKey(c.phone) === pk)) {
-      setError('That phone number is already in your book. Tell Rex if you want to update that customer.');
+    if (pk && (existingContacts.some(c => phoneKey(c.phone) === pk) || addedPhones.includes(pk))) {
+      setError('That phone number is already in this book. Tell Rex if you want to update that customer.');
       return;
     }
     savingRef.current = true;
@@ -92,6 +94,7 @@ export default function SoldBookGuide({
         isPastCustomer: true,
       });
       setAddedIds(prev => [...prev, id]);
+      if (pk) setAddedPhones(prev => [...prev, pk]);
       resetFields();
     } catch (e: any) {
       setError(e?.message ?? "Couldn't add that customer.");
