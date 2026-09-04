@@ -71,7 +71,7 @@ ok(rexCoach.includes("history: wholeBook ? [] : history"), 'whole-book ranking i
 
 ok(queue.includes('phone,email,vehicle,trim,trade_in,vehicle_year'), 'follow-up queue loads the real email recipient and legacy sequence context');
 ok(queue.includes('async function advanceEnrollment'), 'sent and skipped follow-ups share one guarded enrollment advance');
-ok(queue.includes('await advanceEnrollment(item, userId);'), 'skip advances without creating a fake sent interaction');
+ok(queue.includes('return advanceEnrollment(item, userId);'), 'skip advances without creating a fake sent interaction');
 ok(followUpQueue.includes('`mailto:${email}?subject='), 'V2 email follow-up targets the contact email');
 ok(legacySequences.includes('await markSkipped(item, userId)'), 'legacy queue skip also advances the enrollment');
 ok(legacySequences.includes('`mailto:${item.email.trim()}?subject='), 'legacy email follow-up targets the contact email');
