@@ -33,6 +33,11 @@ ok('onboarding no longer contains Eddie Ponce placeholder', !onboarding.includes
 ok('onboarding no longer contains Nissan of Omaha placeholder', !onboarding.includes('Nissan of Omaha'));
 ok('onboarding captures industry', onboarding.includes('industry'));
 ok('automotive remains the default/primary industry', /Automotive|automotive/.test(onboarding));
+ok('Rex identity loads the selected industry', read('lib/v2/coachThread.ts').includes("getRepSetting('industry')"));
+ok('Rex prompt explicitly overrides automotive examples for non-auto users',
+  read('lib/v2/coachBrain.ts').includes('INDUSTRY OVERRIDE') && read('lib/v2/coachBrain.ts').includes('never invent vehicles'));
+ok('triad planner/executor honor the same industry override',
+  read('lib/v2/rexTriad.ts').includes('triadIndustryOverride'));
 ok('demo contacts remain part of onboarding', onboarding.includes('Marcus Holloway') && onboarding.includes('Sarah Thompson'));
 ok('onboarding explicitly avoids forcing import', /practice|demo/i.test(onboarding) && !/Import my real book/.test(onboarding));
 
