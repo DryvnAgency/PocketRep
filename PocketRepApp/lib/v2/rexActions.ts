@@ -20,6 +20,7 @@ import { getRepSetting } from './repSettings';
 import { frameUntrusted } from './promptSafety';
 import type { VehicleRequirements } from './vehicleMatch';
 import { chooseRexTier } from './rexRouting';
+import { logInteraction } from './interactions';
 
 export type RexAction =
   | { type: 'add_contact'; payload: AddContactPayload; say: string }
@@ -680,6 +681,9 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
         ? `${existing}\n\n${p.notes_append}`
         : p.notes_append;
       await updateContactNotes(p.contact_id, joined);
+      // Current contact notes may evolve, but every Rex-authored update also
+      // gets an append-only timestamped timeline event so history is never rewritten.
+      await logInteraction(p.contact_id, 'note', `Rex note update: ${p.notes_append}`);
       return { ok: true, openContactId: p.contact_id };
     }
     case 'delete_contact': {
