@@ -35,7 +35,7 @@ ok('onboarding captures industry', onboarding.includes('industry'));
 ok('automotive remains the default/primary industry', /Automotive|automotive/.test(onboarding));
 ok('Rex identity loads the selected industry', read('lib/v2/coachThread.ts').includes("getRepSetting('industry')"));
 ok('Rex prompt explicitly overrides automotive examples for non-auto users',
-  read('lib/v2/coachBrain.ts').includes('INDUSTRY OVERRIDE') && read('lib/v2/coachBrain.ts').includes('never invent vehicles'));
+  read('lib/v2/coachBrain.ts').includes('INDUSTRY OVERRIDE') && /never invent vehicles/i.test(read('lib/v2/coachBrain.ts')));
 ok('triad planner/executor honor the same industry override',
   read('lib/v2/rexTriad.ts').includes('triadIndustryOverride'));
 ok('demo contacts remain part of onboarding', onboarding.includes('Marcus Holloway') && onboarding.includes('Sarah Thompson'));
@@ -100,8 +100,10 @@ ok('holiday migration keeps commercial intensity low/none',
 
 console.log('\n--- permanent contact history ---');
 ok('interaction type includes game_plan', interactions.includes("'game_plan'"));
-ok('timeline reads outbound_sms_actions', interactions.includes("from('outbound_sms_actions')"));
-ok('timeline merges immutable sources', interactions.includes("source: 'sms_action'"));
+const smsTimelineMigration = read('supabase/migrations/20260821_blast_sms_history.sql');
+ok('timeline reads the unified contact_timeline view', interactions.includes("from('contact_timeline')"));
+ok('contact_timeline includes outbound_sms_actions', smsTimelineMigration.includes('outbound_sms_actions'));
+ok('contact_timeline labels SMS history as sms_action', smsTimelineMigration.includes("'sms_action'"));
 ok('history migration widens game_plan type safely', historyMigration.includes("'game_plan'"));
 ok('history migration blocks owner UPDATE/DELETE by split RLS', historyMigration.includes('interactions_select_own') && historyMigration.includes('interactions_insert_own') && !historyMigration.includes('create policy interactions_update_own'));
 ok('SMS payload mutation is trigger-guarded', historyMigration.includes('guard_outbound_sms_history_payload'));
