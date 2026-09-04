@@ -21,20 +21,18 @@ alter table public.interactions
 -- V1 contact-card history is append-only.
 -- Current editable contact fields may evolve, but historical timeline facts may not be rewritten.
 
-create or replace function public.block_interaction_history_mutation()
-returns trigger
-language plpgsql
-set search_path = public
-as $$
-begin
-  raise exception 'contact interaction history is immutable';
-end;
-$$;
-
-drop trigger if exists interactions_immutable_history on public.interactions;
-create trigger interactions_immutable_history
-before update or delete on public.interactions
-for each row execute function public.block_interaction_history_mutation();
+-- Owners can read and append their own history, but cannot UPDATE or DELETE it.
+-- Use RLS rather than a DELETE trigger so account-level FK cascades and service-
+-- role retention/deletion workflows still work correctly.
+drop policy if exists interactions_all_own on public.interactions;
+drop policy if exists interactions_select_own on public.interactions;
+drop policy if exists interactions_insert_own on public.interactions;
+create policy interactions_select_own on public.interactions
+  for select to authenticated
+  using ((select auth.uid()) = user_id);
+create policy interactions_insert_own on public.interactions
+  for insert to authenticated
+  with check ((select auth.uid()) = user_id);
 
 -- SMS actions legitimately transition status after the rep returns from the
 -- native Messages app, but the original customer/message/source/timestamps
@@ -62,17 +60,25 @@ create trigger outbound_sms_history_payload_guard
 before update on public.outbound_sms_actions
 for each row execute function public.guard_outbound_sms_history_payload();
 
-create or replace function public.block_outbound_sms_history_delete()
-returns trigger
-language plpgsql
-set search_path = public
-as $$
-begin
-  raise exception 'outbound SMS history cannot be deleted';
-end;
-$$;
+-- Split the legacy ALL policy: owners may SELECT/INSERT/UPDATE their rows,
+-- but there is deliberately no DELETE policy. The UPDATE trigger above limits
+-- owner updates to status/completed_at while preserving the original payload.
+drop policy if exists outbound_sms_actions_all_own on public.outbound_sms_actions;
+drop policy if exists outbound_sms_actions_select_own on public.outbound_sms_actions;
+drop policy if exists outbound_sms_actions_insert_own on public.outbound_sms_actions;
+drop policy if exists outbound_sms_actions_update_own on public.outbound_sms_actions;
+create policy outbound_sms_actions_select_own on public.outbound_sms_actions
+  for select to authenticated
+  using ((select auth.uid()) = user_id);
+create policy outbound_sms_actions_insert_own on public.outbound_sms_actions
+  for insert to authenticated
+  with check ((select auth.uid()) = user_id);
+create policy outbound_sms_actions_update_own on public.outbound_sms_actions
+  for update to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
+-- Clean up the obsolete hard-delete trigger/function if an earlier preview of
+-- this migration was ever applied outside production.
 drop trigger if exists outbound_sms_history_delete_guard on public.outbound_sms_actions;
-create trigger outbound_sms_history_delete_guard
-before delete on public.outbound_sms_actions
-for each row execute function public.block_outbound_sms_history_delete();
+drop function if exists public.block_outbound_sms_history_delete();
