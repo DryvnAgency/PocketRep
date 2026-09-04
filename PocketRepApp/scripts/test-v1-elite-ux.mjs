@@ -42,12 +42,12 @@ ok('triad planner/executor honor the same industry override',
 ok('demo contacts remain part of onboarding', onboarding.includes('Marcus Holloway') && onboarding.includes('Sarah Thompson'));
 ok('onboarding explicitly avoids forcing import', /demo/i.test(onboarding) && !/Import my real book/.test(onboarding));
 ok('activation runs a visible demo Text Queue', onboarding.includes('Run demo Text Queue') && onboarding.includes('THE A-HA'));
-ok('demo queue messages are individualized', onboarding.includes('demoMessage') && onboarding.includes('Rex wrote a different message for each demo customer'));
+ok('demo queue messages are individualized', onboarding.includes('demoMessage') && onboarding.includes('demos.slice(0, 3).map'));
 ok('demo reply is animated and visible', onboarding.includes('CUSTOMER REPLIED · DEMO') && onboarding.includes('Animated.spring'));
 ok('activation finishes by handing off to install + 60-day book instead of single-customer capture',
   onboarding.includes('BUILD YOUR 60-DAY BOOK') && onboarding.includes('Install PocketRep, then start with customers you sold last month') && !onboarding.includes('Now add one of my customers'));
 ok('onboarding is a tight 3-step activation', onboarding.includes('((step + 1) / 3) * 100'));
-ok('demo seed failure cannot dead-end activation', onboarding.includes('FALLBACK_DEMOS') && onboarding.includes('setDemos(filtered.length > 0 ? filtered : FALLBACK_DEMOS)'));
+ok('demo seed failure cannot dead-end activation', onboarding.includes('FALLBACK_DEMOS') && onboarding.includes('setDemos(FALLBACK_DEMOS)') && onboarding.includes('if (live.length) setDemos(live.slice(0, 3))'));
 
 console.log('\n--- tap-first 60-day sold-book activation remains available ---');
 ok('SoldBookGuide exists with 60-day framing', soldGuide.includes('BUILD YOUR 60-DAY BOOK'));
