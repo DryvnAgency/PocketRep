@@ -1,5 +1,5 @@
 // V1 elite UX regression guard — first-session activation, Rex quick capture,
- // Work My Book, safe tags, text queue, immutable history, and Fresh Up branch.
+// Work My Book, safe tags, text queue, immutable history, and Fresh Up branch.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -29,7 +29,7 @@ const updateContact = read('lib/v2/updateContact.ts');
 const historyMigration = read('supabase/migrations/20260904003000_v1_immutable_contact_history.sql');
 const sequenceMigration = read('supabase/migrations/20260904000000_v2_canonical_sequence_templates.sql');
 
-console.log('\n--- onboarding is demo-first and generic ---');
+console.log('\n--- onboarding is demo-first, generic, and creates the aha moment ---');
 ok('onboarding no longer contains Eddie Ponce placeholder', !onboarding.includes('Eddie Ponce'));
 ok('onboarding no longer contains Nissan of Omaha placeholder', !onboarding.includes('Nissan of Omaha'));
 ok('onboarding captures industry', onboarding.includes('industry'));
@@ -40,9 +40,15 @@ ok('Rex prompt explicitly overrides automotive examples for non-auto users',
 ok('triad planner/executor honor the same industry override',
   read('lib/v2/rexTriad.ts').includes('triadIndustryOverride'));
 ok('demo contacts remain part of onboarding', onboarding.includes('Marcus Holloway') && onboarding.includes('Sarah Thompson'));
-ok('onboarding explicitly avoids forcing import', /practice|demo/i.test(onboarding) && !/Import my real book/.test(onboarding));
+ok('onboarding explicitly avoids forcing import', /demo/i.test(onboarding) && !/Import my real book/.test(onboarding));
+ok('activation runs a visible demo Text Queue', onboarding.includes('Run demo Text Queue') && onboarding.includes('THE A-HA'));
+ok('demo queue messages are individualized', onboarding.includes('demoMessage') && onboarding.includes('Rex wrote a different message for each demo customer'));
+ok('demo reply is animated and visible', onboarding.includes('CUSTOMER REPLIED · DEMO') && onboarding.includes('Animated.spring'));
+ok('normal activation moves directly from reply to adding a real customer', onboarding.includes('Now add one of my customers') && onboarding.includes('MAKE IT YOUR BOOK'));
+ok('normal activation suppresses the retired 3-minute sold-book nudge', onboarding.includes('markSoldBookNudgeSeen'));
+ok('first activation customer uses shared duplicate-safe createContact path', onboarding.includes('await createContact({'));
 
-console.log('\n--- tap-first 60-day sold-book activation ---');
+console.log('\n--- tap-first 60-day sold-book activation remains available ---');
 ok('SoldBookGuide exists with 60-day framing', soldGuide.includes('BUILD YOUR 60-DAY BOOK'));
 ok('guide starts with last month', soldGuide.includes('Start with last month'));
 ok('guide supports previous-month wave', soldGuide.includes('previous_month'));
