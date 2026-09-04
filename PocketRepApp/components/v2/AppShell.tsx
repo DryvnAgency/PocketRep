@@ -599,6 +599,7 @@ export default function AppShell() {
             nurtureRefetchKey={nurtureRefetchKey}
             onOpenNurture={() => setNurtureReviewerOpen(true)}
             onAnalyzeStalled={() => openStalledAnalysis()}
+            onOpenGamePlan={() => setWorkBookOpen(true)}
           />
         ) : active === 'contacts' ? (
           <ContactsTab
