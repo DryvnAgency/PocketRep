@@ -35,11 +35,7 @@ import { createBlastDraft, type BlastDraft } from '@/lib/v2/blastSequences';
 import { warmBrain } from '@/lib/v2/aiProxy';
 import { rolloverCoachLog } from '@/lib/v2/coachLog';
 import { usePayPlan } from '@/lib/v2/payPlan';
-import {
-  analyzeStalledLeads,
-  type StalledReport,
-  type StalledRecommendation,
-} from '@/lib/v2/stalledLeads';
+import { analyzeStalledLeads, type StalledReport, type StalledRecommendation } from '@/lib/v2/stalledLeads';
 import { useNotifications } from '@/lib/v2/notifications';
 import { ensureDemoSession } from '@/lib/v2/demoAuth';
 import { clearLocalSessionState, signOutAndReset } from '@/lib/v2/localSessionClear';
@@ -50,13 +46,7 @@ import { useContacts, type V2Contact } from '@/lib/v2/useContacts';
 import { useTags } from '@/lib/v2/useTags';
 import { deleteTag } from '@/lib/v2/tagMutations';
 import type { V2DealRich } from '@/lib/v2/useUserDeals';
-import {
-  hasCompletedOnboarding,
-  markOnboardingComplete,
-  syncOnboardingFromProfile,
-  hasSeenSoldBookNudge,
-  markSoldBookNudgeSeen,
-} from '@/lib/v2/rexSettings';
+import { hasCompletedOnboarding, markOnboardingComplete, syncOnboardingFromProfile, hasSeenSoldBookNudge, markSoldBookNudgeSeen } from '@/lib/v2/rexSettings';
 import { isRexOnboardingEnabled, isContactImportEnabled, isVehicleFinderEnabled } from '@/lib/v2/rexFeatureFlags';
 import type { CreateBlastSequencePayload, FindVehiclesPayload } from '@/lib/v2/rexActions';
 import { useAccessGate } from '@/lib/v2/accessGate';
@@ -70,10 +60,6 @@ export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
   const [searchFocusKey, setSearchFocusKey] = useState(0);
   const [authReady, setAuthReady] = useState(false);
-  // True once we've checked for a session and found none — renders AuthScreen
-  // instead of the app shell. Stays false (shell shows "Signing in…") while the
-  // initial session check is still in flight, so there's no AuthScreen flash for
-  // a returning signed-in visitor.
   const [needsAuth, setNeedsAuth] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dealLoggerOpen, setDealLoggerOpen] = useState(false);
@@ -108,6 +94,7 @@ export default function AppShell() {
   const [soldBookMissionIds, setSoldBookMissionIds] = useState<string[]>([]);
   const soldBookNudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const soldBookDraftingRef = useRef(false);
+  const installPromptContinuesOnboardingRef = useRef(false);
   const [supportChatOpen, setSupportChatOpen] = useState(false);
   const [adminSupportOpen, setAdminSupportOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -116,9 +103,6 @@ export default function AppShell() {
   const [contactActionNotice, setContactActionNotice] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const payPlan = usePayPlan(payPlanRefetchKey, authReady);
-  // HARD LOCKOUT gate — inert until Eduardo wires the real subscription read in
-  // accessGate.ts (it returns 'allowed' today, so no behavior change). See the
-  // early return below + docs/MASTER_PLAN.md §"Gated P0 — Eduardo only".
   const access = useAccessGate(authReady);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts(authReady);
@@ -129,9 +113,7 @@ export default function AppShell() {
     if (soldBookNudgeTimerRef.current) clearTimeout(soldBookNudgeTimerRef.current);
     soldBookNudgeTimerRef.current = setTimeout(() => {
       const realContacts = (contactsRef.current ?? []).filter(contact => !contact.isDemo);
-      if (realContacts.length === 0 && !hasSeenSoldBookNudge()) {
-        setSoldBookPromptWave('last_month');
-      }
+      if (realContacts.length === 0 && !hasSeenSoldBookNudge()) setSoldBookPromptWave('last_month');
     }, 3 * 60 * 1000);
   };
 
@@ -145,6 +127,16 @@ export default function AppShell() {
     setSoldBookGuideWave(wave);
   };
 
+  const startFirstRealMission = () => {
+    if (soldBookNudgeTimerRef.current) {
+      clearTimeout(soldBookNudgeTimerRef.current);
+      soldBookNudgeTimerRef.current = null;
+    }
+    const realContacts = (contactsRef.current ?? []).filter(contact => !contact.isDemo);
+    if (realContacts.length > 0 || hasSeenSoldBookNudge()) return;
+    startSoldBookGuide('last_month');
+  };
+
   const finishGuideWithRex = (wave: SoldBookWave, ids: string[]) => {
     setSoldBookGuideWave(null);
     setSoldBookMissionIds(ids);
@@ -156,34 +148,23 @@ export default function AppShell() {
     if (!soldBookMission || soldBookMissionIds.length === 0 || soldBookDraftingRef.current) return;
     soldBookDraftingRef.current = true;
     try {
-      const selected = (contactsRef.current ?? []).filter(contact =>
-        soldBookMissionIds.includes(contact.id)
-        && !contact.isDemo
-        && !contact.doNotContact
-      );
-      if (selected.length === 0) throw new Error('No sendable sold customers were found.');
+      const chosen = (contactsRef.current ?? []).filter(contact => soldBookMissionIds.includes(contact.id) && !contact.isDemo && !contact.doNotContact);
+      if (chosen.length === 0) throw new Error('No sendable sold customers were found.');
       const isLastMonth = soldBookMission === 'sold_book_last_month';
       const draft = await createBlastDraft({
         intent: isLastMonth
           ? 'Warm ownership outreach to customers I sold last month. Check how the vehicle is treating them and offer useful ownership help. Referral language only when context supports it.'
           : 'Warm ownership outreach to customers I sold the month before last. Reconnect around ownership, useful help, second delivery, or a natural referral opportunity when appropriate.',
-        filterSummary: `${selected.length} ${isLastMonth ? 'last-month' : 'previous-month'} sold customer${selected.length === 1 ? '' : 's'}`,
-        promotion: {},
-        contacts: selected,
+        filterSummary: `${chosen.length} ${isLastMonth ? 'last-month' : 'previous-month'} sold customer${chosen.length === 1 ? '' : 's'}`,
+        promotion: {}, contacts: chosen,
       });
       setBlastDraft(draft);
       setRexCoachOpen(false);
     } catch (e: any) {
       setRexActionError(e?.message ?? 'Could not build the sold-customer Text Queue.');
-    } finally {
-      soldBookDraftingRef.current = false;
-    }
+    } finally { soldBookDraftingRef.current = false; }
   };
 
-  // Demo-blast simulation: fire any due simulated replies (15/30/60s after a demo
-  // blast) on mount + a short timer, then refresh the book so they surface on the
-  // Heat Sheet / activity immediately. No-op when no demo blast is pending, and
-  // idempotent across refresh (see demoBlastSim.ts).
   const reloadContactsRef = useRef(reloadContacts);
   reloadContactsRef.current = reloadContacts;
   useEffect(() => {
@@ -196,321 +177,151 @@ export default function AppShell() {
     const iv = setInterval(() => { void tick(); }, 5000);
     return () => { cancelled = true; clearInterval(iv); };
   }, []);
+
   const tags = useTags(tagsRefetchKey, authReady);
-  const { items: notifItems, unread: notifUnread } = useNotifications(
-    contacts,
-    nurtureRefetchKey,
-    authReady,
-  );
-  // "active" = hot + warm leads (the rep's working pipeline).
-  const activeCount = useMemo(
-    () => (contacts ?? []).filter(c => c.tier === 'hot' || c.tier === 'warm').length,
-    [contacts],
-  );
+  const { items: notifItems, unread: notifUnread } = useNotifications(contacts, nurtureRefetchKey, authReady);
+  const activeCount = useMemo(() => (contacts ?? []).filter(c => c.tier === 'hot' || c.tier === 'warm').length, [contacts]);
   const totalCount = contacts?.length ?? 0;
 
-  // P0-1: real sign-in. Every visitor used to be silently auto-signed into one
-  // shared demo account here; now we check for an actual session and, if there
-  // isn't one, render AuthScreen instead (the demo is still reachable, but only
-  // via an explicit "Try the demo" tap — see handleTryDemo). onAuthStateChange
-  // is the single source of truth for session presence, so a real sign-in/up
-  // (AuthScreen's own supabase calls), a demo sign-in (handleTryDemo below), and
-  // a sign-out (LockoutScreen's onSignOut) all flow through the same path.
   useEffect(() => {
     let cancelled = false;
-    // Audit finding (MED): Supabase's onAuthStateChange re-fires SIGNED_IN for
-    // the SAME user on every tab-visibility-change recovery, not just on a real
-    // sign-in — without this guard, finishBoot() (network calls: profile sync,
-    // warmBrain, timezone capture) would redundantly re-run on every alt-tab.
-    // Also closes the cold-boot race where getSession().then() and the listener
-    // can both resolve for the same session near-simultaneously.
     const lastUserIdRef = { current: null as string | null };
     let sessionClear: Promise<void> = Promise.resolve();
-
     const finishBoot = async () => {
-      // A very fast account switch must not hydrate rep B from rep A's device
-      // storage while the asynchronous native sign-out sweep is still running.
       await sessionClear;
       if (cancelled) return;
-      // Native preferences are asynchronous. Hydrate them before authReady so
-      // dealer/name tokens and Profile settings are correct on the first frame.
       await hydrateRepSettings();
       if (cancelled) return;
-      // Hydrate the localStorage cache from the canonical profile flag so a
-      // fresh browser doesn't show the playbook again to a user who already
-      // ran through it on another device.
       await syncOnboardingFromProfile().catch(() => undefined);
       if (cancelled) return;
       setNeedsAuth(false);
-      // Resolve admin role BEFORE setting authReady so the admin shell
-      // renders on the very first frame — no flash of the rep CRM.
       try {
         const admin = await checkIsAdmin();
         if (cancelled) return;
         setIsAdmin(admin);
         if (admin) countOpenTickets().then(c => { if (!cancelled) setAdminOpenTicketCount(c); }).catch(() => {});
-      } catch {
-        // Non-fatal — default to rep view
-      }
+      } catch {}
       if (cancelled) return;
       setAuthReady(true);
-      // Warm the ai-proxy brain on launch so the rep's first Rex coach call
-      // isn't a 30-60s cold start.
       warmBrain();
-      // NEW 6: at the local-day boundary, collapse yesterday's coach log into a
-      // recap summary and start today fresh.
       rolloverCoachLog().catch(() => undefined);
-      if (!hasCompletedOnboarding()) {
-        setOnboardingOpen(true);
-      }
-      // Fire-and-forget — push registration is silent on web/unsupported devices.
+      if (!hasCompletedOnboarding()) setOnboardingOpen(true);
       registerForPush().catch(() => undefined);
-      // Best-effort: record the rep's device timezone on their profile (P2-A3) so
-      // the nurture scheduler can later deliver at their local send hour.
       captureTimezone().catch(() => undefined);
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (cancelled) return;
-      if (session?.user) {
-        lastUserIdRef.current = session.user.id;
-        finishBoot();
-      } else {
-        setNeedsAuth(true);
-      }
+      if (session?.user) { lastUserIdRef.current = session.user.id; finishBoot(); }
+      else setNeedsAuth(true);
     });
 
     const { data: authSub } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       if (event === 'SIGNED_IN' && session?.user) {
-        if (lastUserIdRef.current === session.user.id) return; // redundant re-notify, not a real transition
+        if (lastUserIdRef.current === session.user.id) return;
         lastUserIdRef.current = session.user.id;
         finishBoot();
       } else if (event === 'SIGNED_OUT') {
         lastUserIdRef.current = null;
-        setNeedsAuth(true);
-        setAuthReady(false);
-        // AppShell remains mounted on native, so explicitly discard every
-        // customer-bearing overlay/draft before another rep can authenticate.
-        setActive('heat');
-        setSearchFocusKey(0);
-        setSelectedId(null);
-        setDealLoggerOpen(false);
-        setDealLoggerPrefill(undefined);
-        setSelectedDeal(null);
-        setBulkTagOpen(false);
-        setAddContactOpen(false);
-        setImportOpen(false);
-        setVehicleFinderOpen(false);
-        setVehicleFinderPrefill(null);
-        setOnboardingOpen(false);
-        setInstallPromptOpen(false);
-        setGamePlanOpen(false);
-        setWorkBookOpen(false);
-        setCallQueueContacts(null);
-        setRexActivityOpen(false);
-        setBlastDraft(null);
-        setStalledOpen(false);
-        setStalledReport(null);
-        setStalledLoading(false);
-        setNurtureReviewerOpen(false);
-        setPayPlanOpen(false);
-        setNotifOpen(false);
-        setRexCoachOpen(false);
-        setSoldBookPromptWave(null);
-        setSoldBookGuideWave(null);
-        setSoldBookMission(null);
-        setSoldBookMissionIds([]);
+        installPromptContinuesOnboardingRef.current = false;
+        setNeedsAuth(true); setAuthReady(false); setActive('heat'); setSearchFocusKey(0); setSelectedId(null);
+        setDealLoggerOpen(false); setDealLoggerPrefill(undefined); setSelectedDeal(null); setBulkTagOpen(false);
+        setAddContactOpen(false); setImportOpen(false); setVehicleFinderOpen(false); setVehicleFinderPrefill(null);
+        setOnboardingOpen(false); setInstallPromptOpen(false); setGamePlanOpen(false); setWorkBookOpen(false);
+        setCallQueueContacts(null); setRexActivityOpen(false); setBlastDraft(null); setStalledOpen(false); setStalledReport(null);
+        setStalledLoading(false); setNurtureReviewerOpen(false); setPayPlanOpen(false); setNotifOpen(false); setRexCoachOpen(false);
+        setSoldBookPromptWave(null); setSoldBookGuideWave(null); setSoldBookMission(null); setSoldBookMissionIds([]);
         if (soldBookNudgeTimerRef.current) clearTimeout(soldBookNudgeTimerRef.current);
-        setSupportChatOpen(false);
-        setAdminSupportOpen(false);
-        setIsAdmin(false);
-        setAdminOpenTicketCount(0);
-        setRexActionError(null);
-        setContactActionNotice(null);
-        setRefreshing(false);
-        // Cross-account leak guard (audit finding, HIGH): AppShell never
-        // unmounts across a sign-out/sign-in transition, so useContacts/
-        // useTags/usePayPlan/useUserDeals/useNotifications all keep the
-        // PREVIOUS rep's data in memory until each independently refetches —
-        // a real risk on a shared/kiosk device (rep A signs out, rep B signs
-        // in on the same tab and briefly sees rep A's book). A full reload is
-        // the simplest guarantee that every hook's state starts genuinely empty
-        // on web. Native hooks now clear themselves when authReady becomes false.
-        //
-        // The reload alone isn't enough: several per-user PREFERENCES survive
-        // it in localStorage (onboarding-seen, the coach chat log, per-day
-        // check-in/digest collapse state) — clearLocalSessionState() closes
-        // that (audit finding, HIGH — without it, the next sign-in on this
-        // device could inherit the previous rep's local UI state).
+        setSupportChatOpen(false); setAdminSupportOpen(false); setIsAdmin(false); setAdminOpenTicketCount(0);
+        setRexActionError(null); setContactActionNotice(null); setRefreshing(false);
         sessionClear = clearLocalSessionState().catch(() => undefined);
         void sessionClear.finally(() => {
-          if (Platform.OS === 'web' && typeof window !== 'undefined') {
-            window.location.reload();
-          }
+          if (Platform.OS === 'web' && typeof window !== 'undefined') window.location.reload();
         });
       }
     });
-
-    return () => {
-      cancelled = true;
-      authSub.subscription.unsubscribe();
-    };
+    return () => { cancelled = true; authSub.subscription.unsubscribe(); };
   }, []);
 
-  // The demo stays reachable, but only as an explicit tap on AuthScreen (not an
-  // automatic sign-in) — the resulting SIGNED_IN event is picked up by the
-  // listener above, so this just needs to trigger the sign-in and let a real
-  // failure propagate (AuthScreen shows it) instead of silently doing nothing.
-  const handleTryDemo = async () => {
-    await ensureDemoSession();
-  };
+  const handleTryDemo = async () => { await ensureDemoSession(); };
 
-  // Auto-clear a transient action error (e.g. stalled-leads analysis failure)
-  // so it doesn't pin a banner up indefinitely.
   useEffect(() => {
     if (!rexActionError) return;
     const id = setTimeout(() => setRexActionError(null), 6000);
     return () => clearTimeout(id);
   }, [rexActionError]);
-
   useEffect(() => {
     if (!contactActionNotice) return;
     const id = setTimeout(() => setContactActionNotice(null), 3500);
     return () => clearTimeout(id);
   }, [contactActionNotice]);
 
-  // V1 is text-only: tapping the gold Rex orb just opens the Rex Coach text
-  // chat. No voice/listening path exists in V1 (see AppShell's voice-runtime
-  // disconnect note near the JSX below).
   const handleOrbPress = () => setRexCoachOpen(true);
+  const selected = selectedId ? contacts?.find(c => c.id === selectedId) ?? null : null;
+  const openDealLogger = (prefill?: DealLoggerPrefill) => { setDealLoggerPrefill(prefill); setDealLoggerOpen(true); };
+  const openVehicleFinder = (prefill?: FindVehiclesPayload) => { setVehicleFinderPrefill(prefill ?? null); setVehicleFinderOpen(true); };
 
-  const selected = selectedId
-    ? contacts?.find(c => c.id === selectedId) ?? null
-    : null;
-
-  const openDealLogger = (prefill?: DealLoggerPrefill) => {
-    setDealLoggerPrefill(prefill);
-    setDealLoggerOpen(true);
-  };
-
-  const openVehicleFinder = (prefill?: FindVehiclesPayload) => {
-    setVehicleFinderPrefill(prefill ?? null);
-    setVehicleFinderOpen(true);
-  };
-
-  // Opens the Stalled Leads analysis overlay and runs the analyzer. Reachable
-  // from the Heat Sheet "Review stalled leads" button.
   const openStalledAnalysis = async (opts?: { daysSilentThreshold?: number; includeDead?: boolean }) => {
-    setStalledOpen(true);
-    setStalledReport(null);
-    setStalledLoading(true);
-    try {
-      const report = await analyzeStalledLeads({
-        // 7d (not 14) so a lead that's already flagged "overdue" (4d+) on the
-        // Heat Sheet also surfaces here — keeps the two views consistent.
-        daysSilentThreshold: opts?.daysSilentThreshold ?? 7,
-        includeDead: opts?.includeDead ?? false,
-      });
-      setStalledReport(report);
-    } catch (e) {
-      console.warn('stalled analysis failed', e);
-      setRexActionError('Could not analyze stalled leads. Try again.');
-    } finally {
-      setStalledLoading(false);
-    }
+    setStalledOpen(true); setStalledReport(null); setStalledLoading(true);
+    try { setStalledReport(await analyzeStalledLeads({ daysSilentThreshold: opts?.daysSilentThreshold ?? 7, includeDead: opts?.includeDead ?? false })); }
+    catch (e) { console.warn('stalled analysis failed', e); setRexActionError('Could not analyze stalled leads. Try again.'); }
+    finally { setStalledLoading(false); }
   };
 
-  // Text-only V1 still needs a real Smart Blast entry point. Rex Coach proposes
-  // the segment, the rep confirms, then this creates a per-contact draft and
-  // opens the existing review sheet. Nothing sends without the rep's next tap.
   const openBlastFromRex = async (payload: CreateBlastSequencePayload) => {
-    const selected = (contacts ?? []).filter(contact => payload.contact_ids.includes(contact.id));
-    if (selected.length === 0) throw new Error('No matching contacts were found for that blast.');
+    const chosen = (contacts ?? []).filter(contact => payload.contact_ids.includes(contact.id));
+    if (chosen.length === 0) throw new Error('No matching contacts were found for that blast.');
     try {
-      const draft = await createBlastDraft({
-        intent: payload.intent,
-        filterSummary: payload.filter_summary,
-        promotion: payload.promotion ?? {},
-        contacts: selected,
-      });
-      setBlastDraft(draft);
+      setBlastDraft(await createBlastDraft({ intent: payload.intent, filterSummary: payload.filter_summary, promotion: payload.promotion ?? {}, contacts: chosen }));
       setRexCoachOpen(false);
-    } catch (error: any) {
-      setRexActionError(error?.message ?? 'Could not draft the blast. Try again.');
-      throw error;
-    }
+    } catch (error: any) { setRexActionError(error?.message ?? 'Could not draft the blast. Try again.'); throw error; }
   };
 
   const resolveFreshContact = async (contactId: string): Promise<V2Contact> => {
     let contact = contactsRef.current?.find(c => c.id === contactId) ?? null;
-    if (!contact) {
-      await reloadContacts();
-      await new Promise(resolve => setTimeout(resolve, 75));
-      contact = contactsRef.current?.find(c => c.id === contactId) ?? null;
-    }
+    if (!contact) { await reloadContacts(); await new Promise(resolve => setTimeout(resolve, 75)); contact = contactsRef.current?.find(c => c.id === contactId) ?? null; }
     if (!contact) throw new Error('Customer was saved, but the card is still refreshing. Try again.');
     return contact;
   };
 
   const draftFirstThankYou = async (contactId: string) => {
     const contact = await resolveFreshContact(contactId);
-    const draft = await createBlastDraft({
+    setBlastDraft(await createBlastDraft({
       intent: 'Immediate first thank-you after a new customer interaction. Use the customer’s actual vehicle, trade, timing, notes, and relationship context when present. Sound like a sharp human salesperson, not a CRM. Thank them, reinforce that the rep is their point of contact, and create one natural next step. Do not invent pricing, promotions, urgency, or facts.',
-      filterSummary: `First thank-you · ${contact.name}`,
-      promotion: {},
-      contacts: [contact],
-    });
-    setBlastDraft(draft);
+      filterSummary: `First thank-you · ${contact.name}`, promotion: {}, contacts: [contact],
+    }));
     setRexCoachOpen(false);
   };
 
   const enrollFreshUpFromRex = async (contactId: string) => {
-    const { data: sequence, error: sequenceError } = await supabase
-      .from('sequences')
-      .select('id')
-      .eq('is_template', true)
-      .eq('name', 'Fresh Up - 14 Day')
-      .maybeSingle();
+    const { data: sequence, error: sequenceError } = await supabase.from('sequences').select('id').eq('is_template', true).eq('name', 'Fresh Up - 14 Day').maybeSingle();
     if (sequenceError) throw sequenceError;
     if (!sequence?.id) throw new Error('Fresh Up — 14 Day is not available yet.');
     await enrollContactInSequence(contactId, sequence.id);
     setContactActionNotice('Added to Fresh Up — 14 Day');
   };
 
-  const startWorkBookTextQueue = async (selected: V2Contact[]) => {
-    if (selected.length === 0) return;
+  const startWorkBookTextQueue = async (chosen: V2Contact[]) => {
+    if (chosen.length === 0) return;
     try {
-      const draft = await createBlastDraft({
+      setBlastDraft(await createBlastDraft({
         intent: 'Work my book with individualized follow-up based on each customer’s real context, relationship, vehicle, timing, and last-touch history. Create a natural reason to reconnect. Do not repeat one generic message across the list. Do not fabricate promotions or urgency.',
-        filterSummary: `${selected.length} Rex-prioritized customer${selected.length === 1 ? '' : 's'}`,
-        promotion: {},
-        contacts: selected,
-      });
+        filterSummary: `${chosen.length} Rex-prioritized customer${chosen.length === 1 ? '' : 's'}`, promotion: {}, contacts: chosen,
+      }));
       setWorkBookOpen(false);
-      setBlastDraft(draft);
-    } catch (e: any) {
-      setRexActionError(e?.message ?? 'Could not build the Text Queue. Try again.');
-    }
+    } catch (e: any) { setRexActionError(e?.message ?? 'Could not build the Text Queue. Try again.'); }
   };
 
-  // Pull-to-refresh on the main scroll — reloads the active tab's data.
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (active === 'metrics') {
-        setDealsRefetchKey(k => k + 1);
-      } else if (active === 'profile') {
-        setPayPlanRefetchKey(k => k + 1);
-      } else {
-        await reloadContacts();
-      }
-    } finally {
-      setRefreshing(false);
-    }
+      if (active === 'metrics') setDealsRefetchKey(k => k + 1);
+      else if (active === 'profile') setPayPlanRefetchKey(k => k + 1);
+      else await reloadContacts();
+    } finally { setRefreshing(false); }
   }, [active, reloadContacts]);
 
-  // Web back button → peel the topmost overlay instead of leaving the app.
   const closeTopOverlay = () => {
     if (supportChatOpen) { setSupportChatOpen(false); return; }
     if (adminSupportOpen) { setAdminSupportOpen(false); return; }
@@ -533,567 +344,168 @@ export default function AppShell() {
     if (dealLoggerOpen) { setDealLoggerOpen(false); return; }
     if (selectedId) { setSelectedId(null); return; }
   };
-  const anyOverlayOpen =
-    supportChatOpen || adminSupportOpen ||
-    rexCoachOpen || !!soldBookGuideWave || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
-    !!blastDraft || gamePlanOpen || workBookOpen || !!callQueueContacts || rexActivityOpen || addContactOpen || importOpen || vehicleFinderOpen || bulkTagOpen || !!selectedDeal ||
-    dealLoggerOpen || !!selectedId;
-  const closeTopRef = useRef(closeTopOverlay);
-  closeTopRef.current = closeTopOverlay;
-  const anyOverlayOpenRef = useRef(anyOverlayOpen);
-  anyOverlayOpenRef.current = anyOverlayOpen;
+  const anyOverlayOpen = supportChatOpen || adminSupportOpen || rexCoachOpen || !!soldBookGuideWave || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen || !!blastDraft || gamePlanOpen || workBookOpen || !!callQueueContacts || rexActivityOpen || addContactOpen || importOpen || vehicleFinderOpen || bulkTagOpen || !!selectedDeal || dealLoggerOpen || !!selectedId;
+  const closeTopRef = useRef(closeTopOverlay); closeTopRef.current = closeTopOverlay;
+  const anyOverlayOpenRef = useRef(anyOverlayOpen); anyOverlayOpenRef.current = anyOverlayOpen;
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     const onPop = () => {
-      if (anyOverlayOpenRef.current) {
-        closeTopRef.current();
-        // keep a trap state so the next Back peels the next overlay layer
-        window.history.pushState({ pocketrepOverlay: true }, '');
-      }
+      if (anyOverlayOpenRef.current) { closeTopRef.current(); window.history.pushState({ pocketrepOverlay: true }, ''); }
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
-
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    // One trap when the first overlay opens; onPop re-pushes for deeper layers.
     if (anyOverlayOpen) window.history.pushState({ pocketrepOverlay: true }, '');
   }, [anyOverlayOpen]);
 
-  // P0-1: no session -> real sign-in/up, with the demo as an explicit fallback
-  // (checked before the lockout gate below — an unauthenticated visitor should
-  // see "sign in", not "your subscription lapsed").
-  if (needsAuth) {
-    return (
-      <AuthScreen onTryDemo={Platform.OS === 'web' ? handleTryDemo : undefined} />
-    );
-  }
-
-  // HARD LOCKOUT: when the access gate reports a lapsed OR invalid/deleted
-  // account, block the whole app. The re-subscribe / re-entry CTA routes to the
-  // marketing landing page — the canonical acquisition + re-subscription funnel.
-  if (access.status === 'locked') {
-    return (
-      <LockoutScreen
-        reason={access.reason}
-        onResubscribe={() => openMarketing()}
-        onSignOut={() => { signOutAndReset(); }}
-      />
-    );
-  }
-
-  // ── Admin shell: completely separate from the rep CRM ───────────────────
-  // When the authenticated user has role='admin', render the admin dashboard
-  // hub — no Heat Sheet, Contacts, Metrics, Rex, or tab bar.
-  if (isAdmin && authReady) {
-    return (
-      <View style={styles.root}>
-        <OwnerControlCenter onSignOut={() => signOutAndReset()} />
-      </View>
-    );
-  }
+  if (needsAuth) return <AuthScreen onTryDemo={Platform.OS === 'web' ? handleTryDemo : undefined} />;
+  if (access.status === 'locked') return <LockoutScreen reason={access.reason} onResubscribe={() => openMarketing()} onSignOut={() => { signOutAndReset(); }} />;
+  if (isAdmin && authReady) return <View style={styles.root}><OwnerControlCenter onSignOut={() => signOutAndReset()} /></View>;
 
   return (
     <View style={styles.root}>
-      <CustomNavBar
-        active={active}
-        unread={notifUnread}
-        activeCount={activeCount}
-        totalCount={totalCount}
-        onNotifications={() => setNotifOpen(true)}
-        onSearch={() => {
-          setActive('contacts');
-          setSearchFocusKey(k => k + 1);
-        }}
-        onUpgrade={() => setActive('profile')}
-      />
-
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentInner}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.gold}
-            colors={[colors.gold]}
-          />
-        }
-      >
-        {!authReady ? (
-          <Text style={styles.placeholder}>Signing in…</Text>
-        ) : active === 'heat' ? (
-          <HeatSheetTab
-            contacts={contacts}
-            error={error}
-            onRetry={reloadContacts}
-            onSelect={c => setSelectedId(c.id)}
-            onAddContact={() => setAddContactOpen(true)}
-            onImportContacts={isContactImportEnabled() ? () => setImportOpen(true) : undefined}
-            nurtureRefetchKey={nurtureRefetchKey}
-            onOpenNurture={() => setNurtureReviewerOpen(true)}
-            onAnalyzeStalled={() => openStalledAnalysis()}
-            onOpenGamePlan={() => setWorkBookOpen(true)}
-          />
+      <CustomNavBar active={active} unread={notifUnread} activeCount={activeCount} totalCount={totalCount}
+        onNotifications={() => setNotifOpen(true)} onSearch={() => { setActive('contacts'); setSearchFocusKey(k => k + 1); }} onUpgrade={() => setActive('profile')} />
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.gold} colors={[colors.gold]} />}>
+        {!authReady ? <Text style={styles.placeholder}>Signing in…</Text> : active === 'heat' ? (
+          <HeatSheetTab contacts={contacts} error={error} onRetry={reloadContacts} onSelect={c => setSelectedId(c.id)} onAddContact={() => setAddContactOpen(true)}
+            onImportContacts={isContactImportEnabled() ? () => setImportOpen(true) : undefined} nurtureRefetchKey={nurtureRefetchKey}
+            onOpenNurture={() => setNurtureReviewerOpen(true)} onAnalyzeStalled={() => openStalledAnalysis()} onOpenGamePlan={() => setWorkBookOpen(true)} />
         ) : active === 'contacts' ? (
-          <ContactsTab
-            contacts={contacts}
-            error={error}
-            onRetry={reloadContacts}
-            tags={tags}
-            onSelect={c => setSelectedId(c.id)}
-            onBulkTag={() => setBulkTagOpen(true)}
-            onAddContact={() => setAddContactOpen(true)}
-            onImportContacts={isContactImportEnabled() ? () => setImportOpen(true) : undefined}
-            onFindVehicles={isVehicleFinderEnabled() ? () => openVehicleFinder() : undefined}
-            onDeleteTag={async (name) => {
-              try { await deleteTag(name); } catch (e) { console.warn('deleteTag failed', e); }
-              setTagsRefetchKey(k => k + 1);
-              reloadContacts();
-            }}
-            searchFocusKey={searchFocusKey}
-          />
+          <ContactsTab contacts={contacts} error={error} onRetry={reloadContacts} tags={tags} onSelect={c => setSelectedId(c.id)} onBulkTag={() => setBulkTagOpen(true)}
+            onAddContact={() => setAddContactOpen(true)} onImportContacts={isContactImportEnabled() ? () => setImportOpen(true) : undefined}
+            onFindVehicles={isVehicleFinderEnabled() ? () => openVehicleFinder() : undefined} searchFocusKey={searchFocusKey}
+            onDeleteTag={async (name) => { try { await deleteTag(name); } catch (e) { console.warn('deleteTag failed', e); } setTagsRefetchKey(k => k + 1); reloadContacts(); }} />
         ) : active === 'profile' ? (
-          <ProfileTab
-            onOpenGamePlan={() => setWorkBookOpen(true)}
-            onOpenRexActivity={() => setRexActivityOpen(true)}
-            onReplayOnboarding={() => setOnboardingOpen(true)}
-            onOpenPayPlan={() => setPayPlanOpen(true)}
-            onInstallApp={() => setInstallPromptOpen(true)}
-            onNavigate={setActive}
-            onOpenSupport={() => setSupportChatOpen(true)}
-            isAdmin={isAdmin}
-            onOpenAdminSupport={() => setAdminSupportOpen(true)}
-            adminOpenTicketCount={adminOpenTicketCount}
-            payPlanRefetchKey={payPlanRefetchKey}
-          />
-        ) : (
-          <MetricsTab
-            refetchKey={dealsRefetchKey}
-            onLogDeal={() => openDealLogger()}
-            onSelectDeal={d => setSelectedDeal(d)}
-          />
-        )}
+          <ProfileTab onOpenGamePlan={() => setWorkBookOpen(true)} onOpenRexActivity={() => setRexActivityOpen(true)} onReplayOnboarding={() => setOnboardingOpen(true)}
+            onOpenPayPlan={() => setPayPlanOpen(true)} onInstallApp={() => { installPromptContinuesOnboardingRef.current = false; setInstallPromptOpen(true); }}
+            onNavigate={setActive} onOpenSupport={() => setSupportChatOpen(true)} isAdmin={isAdmin} onOpenAdminSupport={() => setAdminSupportOpen(true)}
+            adminOpenTicketCount={adminOpenTicketCount} payPlanRefetchKey={payPlanRefetchKey} />
+        ) : <MetricsTab refetchKey={dealsRefetchKey} onLogDeal={() => openDealLogger()} onSelectDeal={d => setSelectedDeal(d)} />}
       </ScrollView>
 
-      {/* V1 is text-only — the orb has no listening/thinking/saved states to
-          reflect (those were driven by the now-disconnected voice runtime), so
-          it's passed a static idle visual. TabBar/HeyRexOrb keep their state
-          prop for V2, which will drive it again once voice returns. */}
       <TabBar active={active} onChange={setActive} orbState="idle" onOrbPress={handleOrbPress} />
 
-      {selected ? (
-        <ContactDetail
-          contact={selected}
-          allContacts={contacts ?? []}
-          onOpenContact={(id) => setSelectedId(id)}
-          onClose={() => setSelectedId(null)}
-          onLocalUpdate={(next: V2Contact) => patchLocal(next.id, next)}
-          onDeleted={() => {
-            reloadContacts();
-            setSelectedId(null);
-            setContactActionNotice('Contact removed from your book');
-          }}
-          dealsRefetchKey={dealsRefetchKey}
-          onLogDeal={() => openDealLogger({
-            name: selected.name,
-            vehicle: selected.vehicle,
-            contactId: selected.id,
-          })}
-        />
-      ) : null}
+      {selected ? <ContactDetail contact={selected} allContacts={contacts ?? []} onOpenContact={(id) => setSelectedId(id)} onClose={() => setSelectedId(null)}
+        onLocalUpdate={(next: V2Contact) => patchLocal(next.id, next)} onDeleted={() => { reloadContacts(); setSelectedId(null); setContactActionNotice('Contact removed from your book'); }}
+        dealsRefetchKey={dealsRefetchKey} onLogDeal={() => openDealLogger({ name: selected.name, vehicle: selected.vehicle, contactId: selected.id })} /> : null}
 
-      <DealLogger
-        open={dealLoggerOpen}
-        prefill={dealLoggerPrefill}
-        onClose={() => setDealLoggerOpen(false)}
-        onSaved={() => setDealsRefetchKey(k => k + 1)}
-      />
+      <DealLogger open={dealLoggerOpen} prefill={dealLoggerPrefill} onClose={() => setDealLoggerOpen(false)} onSaved={() => setDealsRefetchKey(k => k + 1)} />
+      <DealDetail deal={selectedDeal} onClose={() => setSelectedDeal(null)} onDeleted={() => setDealsRefetchKey(k => k + 1)} />
+      <BulkTagFlow open={bulkTagOpen} contacts={contacts ?? []} allTags={tags} onClose={() => setBulkTagOpen(false)} onApplied={() => { setTagsRefetchKey(k => k + 1); reloadContacts(); }} />
+      <AddContactModal open={addContactOpen} allContacts={contacts ?? []} onClose={() => setAddContactOpen(false)} onCreated={() => { clearDemoSim(); reloadContacts(); setActive('contacts'); }} />
+      <ImportContactsModal open={importOpen} allContacts={contacts ?? []} onClose={() => setImportOpen(false)} onImported={(count) => { clearDemoSim(); reloadContacts(); setActive('contacts'); setContactActionNotice(`${count} contact${count === 1 ? '' : 's'} imported`); }} />
+      {isVehicleFinderEnabled() ? <VehicleFinderModal open={vehicleFinderOpen} prefill={vehicleFinderPrefill} onClose={() => { setVehicleFinderOpen(false); setVehicleFinderPrefill(null); }} /> : null}
 
-      <DealDetail
-        deal={selectedDeal}
-        onClose={() => setSelectedDeal(null)}
-        onDeleted={() => setDealsRefetchKey(k => k + 1)}
-      />
-
-      <BulkTagFlow
-        open={bulkTagOpen}
-        contacts={contacts ?? []}
-        allTags={tags}
-        onClose={() => setBulkTagOpen(false)}
-        onApplied={() => {
-          setTagsRefetchKey(k => k + 1);
-          reloadContacts();
-        }}
-      />
-
-      <AddContactModal
-        open={addContactOpen}
-        allContacts={contacts ?? []}
-        onClose={() => setAddContactOpen(false)}
-        onCreated={() => { clearDemoSim(); reloadContacts(); setActive('contacts'); }}
-      />
-
-      <ImportContactsModal
-        open={importOpen}
-        allContacts={contacts ?? []}
-        onClose={() => setImportOpen(false)}
-        onImported={(count) => {
-          clearDemoSim();
-          reloadContacts();
-          setActive('contacts');
-          setContactActionNotice(`${count} contact${count === 1 ? '' : 's'} imported`);
-        }}
-      />
-
-      {isVehicleFinderEnabled() ? (
-        <VehicleFinderModal
-          open={vehicleFinderOpen}
-          prefill={vehicleFinderPrefill}
-          onClose={() => { setVehicleFinderOpen(false); setVehicleFinderPrefill(null); }}
-        />
-      ) : null}
-
-      {/* V1 voice-runtime disconnect: RexDisclosure (the "Hey Rex" mic-consent
-          modal) is intentionally not mounted here — V1 is text-only, so there
-          is no mic permission to ask for. The component file is kept for V2,
-          which will restore STT/TTS together. */}
-
-      {/* First-run onboarding: the Rex interview. The old static-carousel
-          duplicate (components/v2/Onboarding.tsx) was removed in the onboarding
-          consolidation, so this is the single onboarding path. */}
-      <RexOnboarding
-        open={onboardingOpen}
-        onClose={(completed) => {
-          if (completed) {
-            void markOnboardingComplete();
-            armSoldBookNudge();
-          }
-          setOnboardingOpen(false);
-          // After onboarding, prompt the user to install the PWA (once per device,
-          // browser-only — the check is inside shouldAutoPrompt).
-          if (completed && shouldAutoPrompt()) {
-            setTimeout(() => setInstallPromptOpen(true), 600);
-          }
-        }}
-      />
+      <RexOnboarding open={onboardingOpen} onClose={(completed) => {
+        if (completed) { void markOnboardingComplete(); armSoldBookNudge(); }
+        setOnboardingOpen(false);
+        if (!completed) return;
+        if (shouldAutoPrompt()) {
+          installPromptContinuesOnboardingRef.current = true;
+          setTimeout(() => setInstallPromptOpen(true), 600);
+        } else {
+          installPromptContinuesOnboardingRef.current = false;
+          setTimeout(startFirstRealMission, 300);
+        }
+      }} />
 
       {soldBookPromptWave ? (
         <View style={styles.soldBookPromptRoot}>
-          <Pressable
-            style={styles.soldBookPromptScrim}
-            onPress={() => {
-              if (soldBookPromptWave === 'last_month') markSoldBookNudgeSeen();
-              setSoldBookPromptWave(null);
-            }}
-          />
+          <Pressable style={styles.soldBookPromptScrim} onPress={() => { if (soldBookPromptWave === 'last_month') markSoldBookNudgeSeen(); setSoldBookPromptWave(null); }} />
           <View style={styles.soldBookPromptCard}>
             <Text style={styles.soldBookPromptKicker}>REX · FIRST REAL MISSION</Text>
-            <Text style={styles.soldBookPromptTitle}>
-              {soldBookPromptWave === 'last_month'
-                ? 'Ready to try this with your customers?'
-                : 'Nice. Now add the month before that.'}
-            </Text>
-            <Text style={styles.soldBookPromptBody}>
-              {soldBookPromptWave === 'last_month'
-                ? 'Start with people you sold last month. Tell Rex the name, number, vehicle and whatever you remember. When you hit Done, Rex builds the Text Queue.'
-                : 'Add the previous month while the first outreach has time to work. Rex will build the next personalized queue the same way.'}
-            </Text>
-            <Pressable
-              onPress={() => startSoldBookGuide(soldBookPromptWave)}
-              style={styles.soldBookPromptPrimary}
-            >
-              <Text style={styles.soldBookPromptPrimaryText}>
-                {soldBookPromptWave === 'last_month' ? 'START WITH LAST MONTH' : 'ADD PREVIOUS MONTH'}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                if (soldBookPromptWave === 'last_month') markSoldBookNudgeSeen();
-                setSoldBookPromptWave(null);
-              }}
-              style={styles.soldBookPromptSecondary}
-            >
-              <Text style={styles.soldBookPromptSecondaryText}>Not now</Text>
-            </Pressable>
+            <Text style={styles.soldBookPromptTitle}>{soldBookPromptWave === 'last_month' ? 'Ready to try this with your customers?' : 'Nice. Now add the month before that.'}</Text>
+            <Text style={styles.soldBookPromptBody}>{soldBookPromptWave === 'last_month'
+              ? 'Start with people you sold last month. Tell Rex the name, number, vehicle and whatever you remember. When you hit Done, Rex builds the Text Queue.'
+              : 'Add the previous month while the first outreach has time to work. Rex will build the next personalized queue the same way.'}</Text>
+            <Pressable onPress={() => startSoldBookGuide(soldBookPromptWave)} style={styles.soldBookPromptPrimary}><Text style={styles.soldBookPromptPrimaryText}>{soldBookPromptWave === 'last_month' ? 'START WITH LAST MONTH' : 'ADD PREVIOUS MONTH'}</Text></Pressable>
+            <Pressable onPress={() => { if (soldBookPromptWave === 'last_month') markSoldBookNudgeSeen(); setSoldBookPromptWave(null); }} style={styles.soldBookPromptSecondary}><Text style={styles.soldBookPromptSecondaryText}>Not now</Text></Pressable>
           </View>
         </View>
       ) : null}
 
-      <SoldBookGuide
-        open={!!soldBookGuideWave}
-        wave={soldBookGuideWave}
-        existingContacts={contacts ?? []}
-        onClose={() => setSoldBookGuideWave(null)}
-        onFinishWithRex={async (ids) => {
-          if (!soldBookGuideWave) return;
-          const wave = soldBookGuideWave;
-          await reloadContacts();
-          // Let the contacts hook commit the fresh rows before Rex receives
-          // the mission, so tapping Done immediately cannot miss guided adds.
-          setTimeout(() => finishGuideWithRex(wave, ids), 50);
-        }}
-      />
+      <SoldBookGuide open={!!soldBookGuideWave} wave={soldBookGuideWave} existingContacts={contacts ?? []} onClose={() => setSoldBookGuideWave(null)} onFinishWithRex={async (ids) => {
+        if (!soldBookGuideWave) return;
+        const wave = soldBookGuideWave;
+        await reloadContacts();
+        setTimeout(() => finishGuideWithRex(wave, ids), 50);
+      }} />
 
-      <PWAInstallPrompt
-        open={installPromptOpen}
-        onClose={() => setInstallPromptOpen(false)}
-      />
+      <PWAInstallPrompt open={installPromptOpen} onClose={() => {
+        setInstallPromptOpen(false);
+        if (!installPromptContinuesOnboardingRef.current) return;
+        installPromptContinuesOnboardingRef.current = false;
+        setTimeout(startFirstRealMission, 150);
+      }} />
 
-      <WorkMyBookSheet
-        open={workBookOpen}
-        contacts={contacts ?? []}
-        onClose={() => setWorkBookOpen(false)}
-        onStartCallQueue={(rows) => {
-          setWorkBookOpen(false);
-          setCallQueueContacts(rows);
-        }}
-        onStartTextQueue={startWorkBookTextQueue}
-        onOpenSequences={() => {
-          setWorkBookOpen(false);
-          setGamePlanOpen(true);
-        }}
-      />
+      <WorkMyBookSheet open={workBookOpen} contacts={contacts ?? []} onClose={() => setWorkBookOpen(false)} onStartCallQueue={(rows) => { setWorkBookOpen(false); setCallQueueContacts(rows); }}
+        onStartTextQueue={startWorkBookTextQueue} onOpenSequences={() => { setWorkBookOpen(false); setGamePlanOpen(true); }} />
+      <GamePlanSheet open={gamePlanOpen} onClose={() => setGamePlanOpen(false)} />
+      {callQueueContacts ? <CallQueue contacts={callQueueContacts} onClose={() => setCallQueueContacts(null)} /> : null}
+      <RexActivityViewer open={rexActivityOpen} contacts={contacts ?? []} onClose={() => setRexActivityOpen(false)} />
 
-      <GamePlanSheet
-        open={gamePlanOpen}
-        onClose={() => setGamePlanOpen(false)}
-      />
+      <BlastSequenceDrafter open={!!blastDraft} draft={blastDraft} contacts={contacts ?? []} onClose={() => {
+        setBlastDraft(null);
+        if (soldBookMission) { setSoldBookMission(null); setSoldBookMissionIds([]); }
+      }} onSent={() => {
+        const finishedMission = soldBookMission;
+        setBlastDraft(null); reloadContacts(); setSoldBookMission(null); setSoldBookMissionIds([]);
+        if (finishedMission === 'sold_book_last_month') setTimeout(() => setSoldBookPromptWave('previous_month'), 500);
+      }} />
 
-      {callQueueContacts ? (
-        <CallQueue contacts={callQueueContacts} onClose={() => setCallQueueContacts(null)} />
-      ) : null}
+      <PayPlanEditor open={payPlanOpen} plan={payPlan} onClose={() => setPayPlanOpen(false)} onSaved={() => setPayPlanRefetchKey(k => k + 1)} />
+      <NurtureReviewer open={nurtureReviewerOpen} onClose={() => setNurtureReviewerOpen(false)} onChanged={() => setNurtureRefetchKey(k => k + 1)} />
+      <NotificationsCenter open={notifOpen} items={notifItems} onClose={() => setNotifOpen(false)} onOpenContact={(id) => setSelectedId(id)} onOpenNurture={() => setNurtureReviewerOpen(true)} onChanged={() => setNurtureRefetchKey(k => k + 1)} />
 
-      <RexActivityViewer
-        open={rexActivityOpen}
-        contacts={contacts ?? []}
-        onClose={() => setRexActivityOpen(false)}
-      />
-
-      {/* V1 voice-runtime disconnect: HeyRexSheet (the listening/thinking/
-          speaking overlay + voice-action confirm card) is intentionally not
-          mounted — V1 has no background listener to drive it, and Rex actions
-          proposed through text go through RexCoach's own confirm flow below.
-          The component file is kept for V2. */}
-
-      <BlastSequenceDrafter
-        open={!!blastDraft}
-        draft={blastDraft}
-        contacts={contacts ?? []}
-        onClose={() => {
-          setBlastDraft(null);
-          if (soldBookMission) {
-            setSoldBookMission(null);
-            setSoldBookMissionIds([]);
-          }
-        }}
-        onSent={() => {
-          const finishedMission = soldBookMission;
-          setBlastDraft(null);
-          reloadContacts();
-          setSoldBookMission(null);
-          setSoldBookMissionIds([]);
-          if (finishedMission === 'sold_book_last_month') {
-            setTimeout(() => setSoldBookPromptWave('previous_month'), 500);
-          }
-        }}
-      />
-
-      <PayPlanEditor
-        open={payPlanOpen}
-        plan={payPlan}
-        onClose={() => setPayPlanOpen(false)}
-        onSaved={() => setPayPlanRefetchKey(k => k + 1)}
-      />
-
-      <NurtureReviewer
-        open={nurtureReviewerOpen}
-        onClose={() => setNurtureReviewerOpen(false)}
-        onChanged={() => setNurtureRefetchKey(k => k + 1)}
-      />
-
-      <NotificationsCenter
-        open={notifOpen}
-        items={notifItems}
-        onClose={() => setNotifOpen(false)}
-        onOpenContact={(id) => { setSelectedId(id); }}
-        onOpenNurture={() => setNurtureReviewerOpen(true)}
-        onChanged={() => setNurtureRefetchKey(k => k + 1)}
-      />
-
-      <RexCoach
-        open={rexCoachOpen}
-        onClose={() => setRexCoachOpen(false)}
-        contacts={contacts ?? []}
-        payPlan={payPlan}
-        mission={soldBookMission}
-        missionCount={soldBookMissionIds.length}
-        onFinishMission={finishSoldBookMission}
-        onOpenContact={(id) => setSelectedId(id)}
-        onDraftFirstText={draftFirstThankYou}
-        onEnrollFreshUp={enrollFreshUpFromRex}
-        onActed={async (action, result) => {
-          // Refresh whichever surface a text-confirmed Rex action touched.
+      <RexCoach open={rexCoachOpen} onClose={() => setRexCoachOpen(false)} contacts={contacts ?? []} payPlan={payPlan} initialContactId={selected?.id ?? null}
+        mission={soldBookMission} missionCount={soldBookMissionIds.length} onFinishMission={finishSoldBookMission} onOpenContact={(id) => setSelectedId(id)}
+        onDraftFirstText={draftFirstThankYou} onEnrollFreshUp={enrollFreshUpFromRex} onActed={async (action, result) => {
           const t = action.type;
-          if (t === 'create_blast_sequence') {
-            await openBlastFromRex(action.payload);
-            return;
-          }
+          if (t === 'create_blast_sequence') { await openBlastFromRex(action.payload); return; }
           if (t === 'log_deal') setDealsRefetchKey(k => k + 1);
-          if (t === 'add_contact' || t === 'update_notes' || t === 'schedule_followup' || t === 'retier_contact') {
-            await reloadContacts();
-          }
-          if (soldBookMission && t === 'add_contact' && result?.openContactId) {
-            setSoldBookMissionIds(prev =>
-              prev.includes(result.openContactId!) ? prev : [...prev, result.openContactId!]
-            );
-          }
-          if (t === 'create_reminder') setNurtureRefetchKey(k => k + 1); // refresh the bell
-          // Vehicle Finder pivot from chat: close the coach and open the finder
-          // pre-filled with the model's extracted requirements. Flag-gated.
-          if (t === 'find_vehicles' && isVehicleFinderEnabled()) {
-            setRexCoachOpen(false);
-            openVehicleFinder(action.payload);
-          }
-        }}
-      />
+          if (t === 'add_contact' || t === 'update_notes' || t === 'schedule_followup' || t === 'retier_contact') await reloadContacts();
+          if (soldBookMission && t === 'add_contact' && result?.openContactId) setSoldBookMissionIds(prev => prev.includes(result.openContactId!) ? prev : [...prev, result.openContactId!]);
+          if (t === 'create_reminder') setNurtureRefetchKey(k => k + 1);
+          if (t === 'find_vehicles' && isVehicleFinderEnabled()) { setRexCoachOpen(false); openVehicleFinder(action.payload); }
+        }} />
 
-      <SupportChat
-        open={supportChatOpen}
-        onClose={() => setSupportChatOpen(false)}
-      />
+      <SupportChat open={supportChatOpen} onClose={() => setSupportChatOpen(false)} />
+      {isAdmin ? <AdminSupportDashboard open={adminSupportOpen} onClose={() => { setAdminSupportOpen(false); countOpenTickets().then(setAdminOpenTicketCount).catch(() => {}); }} /> : null}
+      <StalledLeadsAnalysis open={stalledOpen} report={stalledReport} loading={stalledLoading} onClose={() => { setStalledOpen(false); setStalledReport(null); }} onKilled={() => reloadContacts()}
+        onOpenContact={(id) => { setStalledOpen(false); setStalledReport(null); setSelectedId(id); }} onDispatchBlast={(rows: StalledRecommendation[]) => {
+          setBlastDraft({ sequence_id: '', intent: 'Re-engage stalled leads', filter_summary: `${rows.length} re-engagement${rows.length === 1 ? '' : 's'}`, promotion: {}, drafted_steps: rows.map(r => ({
+            contact_id: r.contact_id, contact_name: r.contact_name, language: r.suggested_language, message: r.suggested_opener, game_plan: r.reason,
+            hook_used: r.recommendation === 'PUSH' ? 'calendar_event' : 'rapport', char_count: r.suggested_opener.length,
+          })) });
+        }} />
 
-      {isAdmin ? (
-        <AdminSupportDashboard
-          open={adminSupportOpen}
-          onClose={() => { setAdminSupportOpen(false); countOpenTickets().then(setAdminOpenTicketCount).catch(() => {}); }}
-        />
-      ) : null}
-
-      <StalledLeadsAnalysis
-        open={stalledOpen}
-        report={stalledReport}
-        loading={stalledLoading}
-        onClose={() => { setStalledOpen(false); setStalledReport(null); }}
-        onKilled={() => { reloadContacts(); }}
-        onOpenContact={(id) => {
-          setStalledOpen(false);
-          setStalledReport(null);
-          setSelectedId(id);
-        }}
-        onDispatchBlast={(rows: StalledRecommendation[]) => {
-          // Use the stalled openers as the starting blast — synthesize a
-          // BlastDraft directly (no second brain call) so the rep can review
-          // + edit + send in the same flow.
-          const draft: BlastDraft = {
-            sequence_id: '',
-            intent: 'Re-engage stalled leads',
-            filter_summary: `${rows.length} re-engagement${rows.length === 1 ? '' : 's'}`,
-            promotion: {},
-            drafted_steps: rows.map(r => ({
-              contact_id: r.contact_id,
-              contact_name: r.contact_name,
-              language: r.suggested_language,
-              message: r.suggested_opener,
-              game_plan: r.reason,
-              hook_used: r.recommendation === 'PUSH' ? 'calendar_event' : 'rapport',
-              char_count: r.suggested_opener.length,
-            })),
-          };
-          setBlastDraft(draft);
-        }}
-      />
-
-      {rexActionError ? (
-        <View style={styles.errorBanner} pointerEvents="box-none">
-          <Text style={styles.errorBannerText}>{rexActionError}</Text>
-        </View>
-      ) : null}
-      {contactActionNotice ? (
-        <View style={styles.noticeBanner} pointerEvents="none" accessibilityLiveRegion="polite">
-          <Text style={styles.noticeBannerText}>✓ {contactActionNotice}</Text>
-        </View>
-      ) : null}
+      {rexActionError ? <View style={styles.errorBanner} pointerEvents="box-none"><Text style={styles.errorBannerText}>{rexActionError}</Text></View> : null}
+      {contactActionNotice ? <View style={styles.noticeBanner} pointerEvents="none" accessibilityLiveRegion="polite"><Text style={styles.noticeBannerText}>✓ {contactActionNotice}</Text></View> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.ink,
-  },
-  content: {
-    flex: 1,
-  },
-  contentInner: {
-    paddingBottom: 20,
-  },
-  placeholder: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.grey2,
-    marginHorizontal: 16,
-    lineHeight: 19,
-    marginTop: 18,
-  },
-  errorBanner: {
-    position: 'absolute',
-    left: 12, right: 12, bottom: 168,
-    backgroundColor: colors.ink2,
-    borderWidth: 1,
-    borderColor: colors.red,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
+  root: { flex: 1, backgroundColor: colors.ink },
+  content: { flex: 1 },
+  contentInner: { paddingBottom: 20 },
+  placeholder: { fontSize: 13, fontWeight: '500', color: colors.grey2, marginHorizontal: 16, lineHeight: 19, marginTop: 18 },
+  errorBanner: { position: 'absolute', left: 12, right: 12, bottom: 168, backgroundColor: colors.ink2, borderWidth: 1, borderColor: colors.red, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14 },
   errorBannerText: { color: colors.red, fontSize: 13, fontWeight: '600' },
-  noticeBanner: {
-    position: 'absolute',
-    left: 12, right: 12, bottom: 168,
-    backgroundColor: colors.ink2,
-    borderWidth: 1,
-    borderColor: colors.goldBorder,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
+  noticeBanner: { position: 'absolute', left: 12, right: 12, bottom: 168, backgroundColor: colors.ink2, borderWidth: 1, borderColor: colors.goldBorder, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14 },
   noticeBannerText: { color: colors.gold, fontSize: 13, fontWeight: '700' },
-  soldBookPromptRoot: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 94,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  } as any,
-  soldBookPromptScrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(5,5,8,0.78)',
-  } as any,
-  soldBookPromptCard: {
-    width: '100%',
-    paddingHorizontal: 22,
-    paddingTop: 22,
-    paddingBottom: Platform.OS === 'web' ? ('max(28px, env(safe-area-inset-bottom))' as any) : 28,
-    backgroundColor: colors.ink2,
-    borderTopWidth: 1,
-    borderTopColor: colors.goldBorder,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
+  soldBookPromptRoot: { ...StyleSheet.absoluteFillObject, zIndex: 94, alignItems: 'center', justifyContent: 'flex-end' } as any,
+  soldBookPromptScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.78)' } as any,
+  soldBookPromptCard: { width: '100%', paddingHorizontal: 22, paddingTop: 22, paddingBottom: Platform.OS === 'web' ? ('max(28px, env(safe-area-inset-bottom))' as any) : 28, backgroundColor: colors.ink2, borderTopWidth: 1, borderTopColor: colors.goldBorder, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   soldBookPromptKicker: { color: colors.gold, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
   soldBookPromptTitle: { color: colors.white, fontSize: 24, lineHeight: 29, fontWeight: '800', marginTop: 8 },
   soldBookPromptBody: { color: colors.grey3, fontSize: 14, lineHeight: 21, marginTop: 10 },
-  soldBookPromptPrimary: {
-    minHeight: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: colors.gold,
-    marginTop: 18,
-  },
+  soldBookPromptPrimary: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: colors.gold, marginTop: 18 },
   soldBookPromptPrimaryText: { color: colors.ink, fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
   soldBookPromptSecondary: { minHeight: 42, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   soldBookPromptSecondaryText: { color: colors.grey2, fontSize: 12, fontWeight: '700' },
