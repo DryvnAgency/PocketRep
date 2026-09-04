@@ -225,24 +225,43 @@ export async function loadPendingSequenceClassifications(
 ): Promise<PendingSequenceClassification[]> {
   const { data, error } = await supabase
     .from('contact_sequences')
-    .select('id,sequence_id,contact_id,classification,sequences!inner(name),contacts!inner(first_name,last_name,is_deleted)')
+    .select('id,sequence_id,contact_id,classification,completed_at,sequences!inner(name)')
     .eq('user_id', userId)
     .eq('status', 'completed')
     .is('classification', null)
     .eq('sequences.name', 'Fresh Up - 14 Day')
-    .eq('contacts.is_deleted', false)
     .order('completed_at', { ascending: false })
     .limit(25);
   if (error) throw error;
+  const rows = data ?? [];
+  if (rows.length === 0) return [];
 
-  return (data ?? []).map((row: any) => ({
-    enrollment_id: row.id,
-    sequence_id: row.sequence_id,
-    sequence_name: row.sequences?.name ?? 'Fresh Up - 14 Day',
-    contact_id: row.contact_id,
-    contact_name: [row.contacts?.first_name, row.contacts?.last_name].filter(Boolean).join(' ') || 'Customer',
-    classification: null,
-  }));
+  // Fetch contacts separately instead of depending on a PostgREST relation
+  // alias from contact_sequences -> contacts. This keeps the recovery prompt
+  // resilient across the repo's known schema/FK naming drift.
+  const contactIds = [...new Set(rows.map((row: any) => row.contact_id).filter(Boolean))];
+  const { data: contacts, error: contactsError } = await supabase
+    .from('contacts')
+    .select('id,first_name,last_name,is_deleted')
+    .in('id', contactIds)
+    .eq('user_id', userId)
+    .eq('is_deleted', false);
+  if (contactsError) throw contactsError;
+  const byId = new Map((contacts ?? []).map((row: any) => [row.id, row]));
+
+  return rows
+    .filter((row: any) => byId.has(row.contact_id))
+    .map((row: any) => {
+      const contact: any = byId.get(row.contact_id);
+      return {
+        enrollment_id: row.id,
+        sequence_id: row.sequence_id,
+        sequence_name: (row as any).sequences?.name ?? 'Fresh Up - 14 Day',
+        contact_id: row.contact_id,
+        contact_name: [contact?.first_name, contact?.last_name].filter(Boolean).join(' ') || 'Customer',
+        classification: null,
+      };
+    });
 }
 
 /**
