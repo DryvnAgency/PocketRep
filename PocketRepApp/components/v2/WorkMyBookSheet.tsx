@@ -11,6 +11,10 @@ function daysUntil(date: string | null): number | null {
   return Math.ceil(ms / 86_400_000);
 }
 
+function hasReferralSignal(c: V2Contact): boolean {
+  return c.tags.some(tag => tag.trim().toLowerCase() === 'referral');
+}
+
 function scoreContact(c: V2Contact, today: string): number {
   let score = 0;
   if (c.nextFollowupDate && c.nextFollowupDate <= today) score += 120;
@@ -19,6 +23,7 @@ function scoreContact(c: V2Contact, today: string): number {
   if (!c.isPastCustomer && c.days >= 14) score += 45;
   if (c.isPastCustomer && c.days >= 30) score += 40;
   if (c.days >= 90) score += 50;
+  if (hasReferralSignal(c)) score += 55;
   const leaseDays = daysUntil(c.leaseEndDate);
   if (leaseDays != null && leaseDays >= 0 && leaseDays <= 180) score += 60;
   return score;
@@ -26,6 +31,7 @@ function scoreContact(c: V2Contact, today: string): number {
 
 function reasonFor(c: V2Contact, today: string): string {
   if (c.nextFollowupDate && c.nextFollowupDate <= today) return 'Follow-up due';
+  if (hasReferralSignal(c)) return 'Referral opportunity';
   const leaseDays = daysUntil(c.leaseEndDate);
   if (leaseDays != null && leaseDays >= 0 && leaseDays <= 180) return 'Lease timing';
   if (c.days >= 90) return `${c.days}d untouched`;
@@ -64,6 +70,7 @@ export default function WorkMyBookSheet({
         c.tier === 'hot'
         || c.tier === 'warm'
         || (!!c.nextFollowupDate && c.nextFollowupDate <= today)
+        || hasReferralSignal(c)
       )
       .slice(0, 25);
 
@@ -89,7 +96,7 @@ export default function WorkMyBookSheet({
           <Text style={styles.eyebrow}>TODAY'S EXECUTION</Text>
           <Text style={styles.title}>Rex sorted the people worth touching.</Text>
           <Text style={styles.bodyText}>
-            Due follow-ups, stalled opportunities, long-dormant customers, sold ownership touches, and lease timing rise to the top.
+            Due follow-ups, stalled opportunities, long-dormant customers, sold ownership touches, referrals, and lease timing rise to the top.
           </Text>
         </View>
 
