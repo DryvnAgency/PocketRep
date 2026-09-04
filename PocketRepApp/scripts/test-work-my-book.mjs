@@ -1,7 +1,6 @@
 // Regression coverage for the Work My Book expansion (lib/v2/workMyBook.ts):
-// two new opportunity sources — real due sequence touches (reusing the
-// actual sequence/enrollment engine) and referral opportunities gated on a
-// real, saved positive relationship signal.
+// real due sequence touches + referral opportunities gated on saved signals,
+// plus the V1 sheet wiring that consumes those authoritative opportunities.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,6 +11,7 @@ const ok = (name, cond) => { checks++; console.log(`${cond ? 'PASS' : 'FAIL'}  $
 
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const src = fs.readFileSync(path.join(root, 'lib/v2/workMyBook.ts'), 'utf8');
+const sheet = fs.readFileSync(path.join(root, 'components/v2/WorkMyBookSheet.tsx'), 'utf8');
 
 console.log('\n--- due sequence touches reuse the real sequence/enrollment engine ---');
 ok('imports generateQueue from the real message queue instead of reinventing it',
@@ -58,6 +58,22 @@ ok('due-sequence contacts are excluded from referral pass',
   /getReferralOpportunities\(userId, dueSequence\.map\(o => o\.contact_id\)\)/.test(src));
 ok('due sequence results are returned before referrals',
   src.indexOf('const dueSequence = await getDueSequenceOpportunities') < src.indexOf('const referral = await getReferralOpportunities'));
+
+console.log('\n--- V1 Work My Book sheet uses authoritative saved state ---');
+ok('sheet imports getWorkMyBookOpportunities', /getWorkMyBookOpportunities/.test(sheet));
+ok('sheet resolves the signed-in rep before loading opportunities', /supabase\.auth\.getSession\(\)/.test(sheet));
+ok('sheet loads the current PocketRep plan through the authoritative aggregator',
+  /getWorkMyBookOpportunities\(session\.user\.id, 'pocketrep'\)/.test(sheet));
+ok('sheet prioritizes due sequence work above heuristic-only signals',
+  /authoritative\?\.source === 'due_sequence'[\s\S]*?score \+= 220/.test(sheet));
+ok('sheet prioritizes legitimate referral opportunities from the data layer',
+  /authoritative\?\.source === 'referral'[\s\S]*?score \+= 170/.test(sheet));
+ok('sheet still fails closed on local DNC state before queue launch',
+  /\.filter\(c => !c\.doNotContact && !!c\.phone\)/.test(sheet));
+ok('sheet uses authoritative reason text when present',
+  /if \(authoritative\) return authoritative\.reason;/.test(sheet));
+ok('sheet preserves review-first queues and never directly sends',
+  !/launchSms\(/.test(sheet) && !/Linking\.openURL/.test(sheet));
 
 console.log('\n--- pure decision mirrors ---');
 const DEAD_DECISIONS = new Set(['dead', 'kill']);
