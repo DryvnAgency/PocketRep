@@ -100,6 +100,7 @@ export type NewContactDraft = {
   birthday?: string | null;
   referredByContactId?: string | null;
   referredByName?: string | null;
+  isPastCustomer?: boolean;
 };
 
 export async function createContact(draft: NewContactDraft): Promise<string> {
@@ -126,6 +127,7 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
       birthday: draft.birthday || null,
       referred_by_contact_id: draft.referredByContactId ?? null,
       referred_by_name: draft.referredByName ?? null,
+      is_past_customer: !!draft.isPastCustomer,
       tags: draft.tags,
       stage: 'active',
       milestones: [],
