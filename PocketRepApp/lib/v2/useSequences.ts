@@ -8,6 +8,12 @@ export type V2SequenceStep = {
   channel: 'text' | 'call' | 'email';
   message_template: string | null;
   ai_personalize: boolean;
+  // True only on a step meant to end in a rep-driven outcome classification
+  // (see the "Fresh Up - 14 Day" template's final step). No code in this
+  // repo sets contact_sequences.classification automatically — a human
+  // picks Sold / Still shopping / No response; this flag only tells a
+  // future UI where that prompt belongs.
+  requires_classification: boolean;
 };
 
 export type V2Sequence = {
@@ -36,7 +42,7 @@ export function useSequences(refetchKey: number = 0) {
       const [seqRes, enrolRes] = await Promise.all([
         supabase
           .from('sequences')
-          .select('id,name,description,sequence_type,is_template,is_custom,is_archived,sequence_steps(id,step_number,delay_days,channel,message_template,ai_personalize)')
+          .select('id,name,description,sequence_type,is_template,is_custom,is_archived,sequence_steps(id,step_number,delay_days,channel,message_template,ai_personalize,requires_classification)')
           .or(`user_id.eq.${user.id},is_template.eq.true`)
           .eq('is_archived', false)
           .order('name'),
