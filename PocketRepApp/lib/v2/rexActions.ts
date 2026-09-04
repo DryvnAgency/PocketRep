@@ -648,6 +648,7 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
   switch (action.type) {
     case 'add_contact': {
       const p = action.payload;
+      const pastCustomer = !!p.is_past_customer;
       const id = await createContact({
         firstName: p.first_name,
         lastName: p.last_name ?? '',
@@ -657,11 +658,14 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
         trim: '',
         budget: p.budget ?? '',
         tradeIn: p.trade_in ?? '',
-        planLabel: (p.plan_label as any) ?? 'THIS WEEK',
-        heatScore: HEAT_TIER_SCORE[p.heat_tier ?? 'warm'],
+        // Sold-book capture is relationship follow-up, not an active-shopping
+        // promise. Keep those contacts out of the rep's hot/warm prospect board
+        // unless Rex/rep explicitly gives them a live heat tier or plan label.
+        planLabel: (p.plan_label as any) ?? (pastCustomer ? '' : 'THIS WEEK'),
+        heatScore: HEAT_TIER_SCORE[p.heat_tier ?? (pastCustomer ? 'cold' : 'warm')],
         notes: p.notes ?? '',
-        tags: [],
-        isPastCustomer: !!p.is_past_customer,
+        tags: pastCustomer ? ['Sold'] : [],
+        isPastCustomer: pastCustomer,
       });
       return { ok: true, openContactId: id };
     }
