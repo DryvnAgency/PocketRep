@@ -48,6 +48,10 @@ ok('AppShell wires the guide before Rex mission', appShell.includes('<SoldBookGu
 console.log('\n--- Rex quick capture turns data into action ---');
 ok('Rex supports add_contact action', rexCoach.includes("action.type === 'add_contact'"));
 ok('Rex keeps sold-book capture inside the mission', rexCoach.includes('Give me the next sold customer'));
+ok('sold Rex captures are marked past-customer', rexCoach.includes('is_past_customer: true'));
+ok('Rex action layer keeps sold customers out of active prospect heat by default',
+  read('lib/v2/rexActions.ts').includes("pastCustomer ? 'cold' : 'warm'"));
+ok('Rex action layer tags sold captures', read('lib/v2/rexActions.ts').includes("pastCustomer ? ['Sold'] : []"));
 ok('new contact exposes immediate thank-you action', rexCoach.includes('DRAFT FIRST THANK-YOU'));
 ok('new contact exposes Fresh Up enrollment', rexCoach.includes('＋ FRESH UP'));
 ok('new contact exposes customer card', rexCoach.includes('OPEN CUSTOMER'));
