@@ -64,6 +64,7 @@ import { supabase } from '@/lib/supabase';
 import { captureTimezone } from '@/lib/v2/sendTime';
 import { checkIsAdmin, countOpenTickets } from '@/lib/v2/supportChat';
 import { hydrateRepSettings } from '@/lib/v2/repSettings';
+import { enrollContactInSequence } from '@/lib/v2/useSequences';
 
 export default function AppShell() {
   const [active, setActive] = useState<TabId>('heat');
@@ -439,6 +440,42 @@ export default function AppShell() {
       setRexActionError(error?.message ?? 'Could not draft the blast. Try again.');
       throw error;
     }
+  };
+
+  const resolveFreshContact = async (contactId: string): Promise<V2Contact> => {
+    let contact = contactsRef.current?.find(c => c.id === contactId) ?? null;
+    if (!contact) {
+      await reloadContacts();
+      await new Promise(resolve => setTimeout(resolve, 75));
+      contact = contactsRef.current?.find(c => c.id === contactId) ?? null;
+    }
+    if (!contact) throw new Error('Customer was saved, but the card is still refreshing. Try again.');
+    return contact;
+  };
+
+  const draftFirstThankYou = async (contactId: string) => {
+    const contact = await resolveFreshContact(contactId);
+    const draft = await createBlastDraft({
+      intent: 'Immediate first thank-you after a new customer interaction. Use the customer’s actual vehicle, trade, timing, notes, and relationship context when present. Sound like a sharp human salesperson, not a CRM. Thank them, reinforce that the rep is their point of contact, and create one natural next step. Do not invent pricing, promotions, urgency, or facts.',
+      filterSummary: `First thank-you · ${contact.name}`,
+      promotion: {},
+      contacts: [contact],
+    });
+    setBlastDraft(draft);
+    setRexCoachOpen(false);
+  };
+
+  const enrollFreshUpFromRex = async (contactId: string) => {
+    const { data: sequence, error: sequenceError } = await supabase
+      .from('sequences')
+      .select('id')
+      .eq('is_template', true)
+      .eq('name', 'Fresh Up - 14 Day')
+      .maybeSingle();
+    if (sequenceError) throw sequenceError;
+    if (!sequence?.id) throw new Error('Fresh Up — 14 Day is not available yet.');
+    await enrollContactInSequence(contactId, sequence.id);
+    setContactActionNotice('Added to Fresh Up — 14 Day');
   };
 
   const startWorkBookTextQueue = async (selected: V2Contact[]) => {
@@ -896,6 +933,8 @@ export default function AppShell() {
         missionCount={soldBookMissionIds.length}
         onFinishMission={finishSoldBookMission}
         onOpenContact={(id) => setSelectedId(id)}
+        onDraftFirstText={draftFirstThankYou}
+        onEnrollFreshUp={enrollFreshUpFromRex}
         onActed={async (action, result) => {
           // Refresh whichever surface a text-confirmed Rex action touched.
           const t = action.type;
