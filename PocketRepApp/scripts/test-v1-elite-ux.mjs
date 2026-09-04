@@ -25,6 +25,7 @@ const workbook = read('components/v2/WorkMyBookSheet.tsx');
 const heat = read('components/v2/HeatSheetTab.tsx');
 const queue = read('lib/messageQueue.ts');
 const interactions = read('lib/v2/interactions.ts');
+const updateContact = read('lib/v2/updateContact.ts');
 const historyMigration = read('supabase/migrations/20260904003000_v1_immutable_contact_history.sql');
 const sequenceMigration = read('supabase/migrations/20260904000000_v2_canonical_sequence_templates.sql');
 
@@ -57,6 +58,8 @@ ok('sold Rex captures are marked past-customer', rexCoach.includes('is_past_cust
 ok('Rex action layer keeps sold customers out of active prospect heat by default',
   read('lib/v2/rexActions.ts').includes("pastCustomer ? 'cold' : 'warm'"));
 ok('Rex action layer tags sold captures', read('lib/v2/rexActions.ts').includes("pastCustomer ? ['Sold'] : []"));
+ok('shared createContact blocks duplicate phone/email before insert',
+  updateContact.includes('That customer is already in your book') && updateContact.includes(".eq('is_deleted', false)"));
 ok('new contact exposes immediate thank-you action', rexCoach.includes('DRAFT FIRST THANK-YOU'));
 ok('new contact exposes Fresh Up enrollment', rexCoach.includes('＋ FRESH UP'));
 ok('new contact exposes customer card', rexCoach.includes('OPEN CUSTOMER'));
