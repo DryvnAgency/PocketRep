@@ -52,6 +52,7 @@ const INTERACTION_META: Record<string, { icon: string; color: string; label: str
   text:         { icon: '💬', color: colors.gold,  label: 'TEXT',    verb: 'Sent a text' },
   email:        { icon: '✉️', color: colors.gold2, label: 'EMAIL',   verb: 'Sent an email' },
   note:         { icon: '📝', color: colors.grey2, label: 'NOTE',    verb: 'Added a note' },
+  game_plan:    { icon: '◆',  color: colors.gold,  label: 'REX GAME PLAN', verb: 'Rex built a game plan' },
   nurture:      { icon: '🤖', color: colors.gold,  label: 'NURTURE', verb: 'Rex nurture sent' },
   reply:        { icon: '↩️', color: colors.green, label: 'REPLY',   verb: 'Customer replied' },
   referral_ask: { icon: '🤝', color: colors.gold2, label: 'REFERRAL', verb: 'Referral ask sent' },
@@ -551,6 +552,16 @@ export default function ContactDetail({
       setAiChannel(result.channel);
       setAiWhy(result.why);
       setAiScript(result.script);
+      // Preserve the ORIGINAL Rex plan before the rep edits or acts on it.
+      // The final sent text/call outcome is logged separately by the channel flow.
+      const planHistory = [
+        `Channel: ${result.channel.toUpperCase()}`,
+        result.why ? `Why: ${result.why}` : '',
+        `Suggested: ${result.script}`,
+      ].filter(Boolean).join('\n');
+      logInteraction(contact.id, 'game_plan', planHistory)
+        .then(() => setInteractionsKey(k => k + 1))
+        .catch(e => console.warn('logInteraction game plan', e));
     } catch (e: any) {
       setAiError(e?.message ?? 'Rex is unreachable');
     } finally {
