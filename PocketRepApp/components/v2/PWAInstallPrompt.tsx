@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 
 const DISMISSED_KEY = 'pocketrep:v2:pwa-install-dismissed';
@@ -230,7 +230,7 @@ function Step({ n, text }: { n: number; text: string }) {
 
 const styles = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.85)' } as any,
-  card: { position: 'absolute', left: 24, right: 24, top: '14%', backgroundColor: colors.ink2, borderWidth: 1, borderColor: colors.goldBorder, borderRadius: radius.xl, padding: 22, maxHeight: '78%' } as any,
+  card: { position: 'absolute', left: 24, right: 24, top: '12%', backgroundColor: colors.ink2, borderWidth: 1, borderColor: colors.goldBorder, borderRadius: radius.xl, padding: 22 } as any,
   appIcon: { fontSize: 36, textAlign: 'center', marginBottom: 10 },
   title: { fontSize: 18, fontWeight: '700', color: colors.white, marginTop: 8, letterSpacing: -0.3 },
   body: { fontSize: 13, color: colors.grey3, marginTop: 8, lineHeight: 19 },
