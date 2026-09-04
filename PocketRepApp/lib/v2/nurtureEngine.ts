@@ -137,9 +137,11 @@ ${customIntent ? `Custom intent: ${customIntent}` : toneGuidance}
 
 Pitch intensity for this trigger: ${pitchIntensity}
 - none = pure relationship, no CTA
-- low = soft mention of the dealership / inventory
-- medium = clear but casual CTA
-- high = direct sale-driving line
+- low = soft conversational CTA with no commercial claim
+- medium = clear but casual appointment/help CTA using only known facts
+- high = direct next-step CTA using only known facts; intensity NEVER authorizes a promotion claim
+
+TRUTH RULE: Holiday/calendar timing is verified context. A holiday name or high pitch intensity does NOT prove a sale, clearance, discount, incentive, rebate, inventory movement, price change, expiring offer, manager flexibility, or special event. Never claim any of those unless explicit verified context is provided for this contact/rep. If the only verified fact is the holiday, reference the holiday naturally and keep the reason relational.
 
 For each contact:
 1. Acknowledge the trigger in ONE line, then pivot to a personal angle.
