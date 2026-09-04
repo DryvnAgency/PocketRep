@@ -175,7 +175,7 @@ Owner-approved product-generation direction:
 - A founding rep keeps the **software subscription rate they joined at while the subscription remains continuously active**.
 - **Reps #501–1,000: $59/month** for new customers after the 500-rep founding cohort fills.
 - **Rep #1,001+: $79/month** for new customers after the first 1,000 paying reps.
-- The new-customer ladder is **#1–500 = $39 → #501–1,000 = $59 → #1,001+ = $79**. Existing subscribers keep the software rate they joined at while continuously active. The cohort cutoffs are pricing rules, not guaranteed V2/V3 delivery dates.
+- The intended new-customer ladder is **first ~500 paying reps = $39 → next ~500 = $59 → then $79**. Cutovers are owner-managed manually, with an alert around 475 paying reps before the $59 switch. A short burst of additional signups at the prior rate during a rush is acceptable. Existing subscribers keep the software rate they joined at while continuously active. These are pricing cohort targets, not exact transactional guarantees or V2/V3 delivery dates.
 
 Live Stripe resources prepared for the V1 cutover:
 
