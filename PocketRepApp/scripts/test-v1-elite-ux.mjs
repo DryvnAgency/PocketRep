@@ -77,7 +77,7 @@ ok('Contacts no longer renders START CALL QUEUE launcher', !contacts.includes('S
 ok('Contacts retains explicit CallQueue implementation for Work My Book reuse', contacts.includes('export function CallQueue'));
 ok('Contacts filter metadata is stable', contacts.includes('bookMeta'));
 ok('Work My Book has paired call and text queues', workbook.includes('CALL QUEUE') && workbook.includes('TEXT QUEUE'));
-ok('Work My Book ranks dormant/stalled/sold/lease context', ['Stalled opportunity','Sold ownership touch','Lease timing'].every(x => workbook.includes(x)));
+ok('Work My Book ranks dormant/stalled/sold/referral/lease context', ['Stalled opportunity','Sold ownership touch','Referral opportunity','Lease timing'].every(x => workbook.includes(x)));
 ok('Heat Sheet has Work My Book CTA', heat.includes('Work My Book'));
 ok('AppShell wires Work My Book to Heat Sheet', appShell.includes('onOpenGamePlan={() => setWorkBookOpen(true)}'));
 
@@ -87,6 +87,7 @@ ok('existing tag chip tap manages instead of deleting', contactDetail.includes('
 ok('tag picker supports explicit REMOVE', contactDetail.includes("'REMOVE'"));
 ok('tag picker supports create-new', contactDetail.includes('Create a new tag'));
 ok('tag picker has useful presets', ['Sold','Fresh Up','Lease','Referral','Service'].every(x => contactDetail.includes(`'${x}'`)));
+ok('Profile exposes Privacy, Terms, and data-deletion trust links', ['Privacy Policy','Terms of Service','Data deletion'].every(x => read('components/v2/ProfileTab.tsx').includes(x)));
 
 console.log('\n--- Text Queue is rep-controlled, never auto-send ---');
 ok('user-facing drafter says TEXT QUEUE', blast.includes('TEXT QUEUE'));
