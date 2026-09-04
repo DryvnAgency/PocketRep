@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, RefreshControl, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, Platform, Pressable } from 'react-native';
 import { colors } from '@/constants/theme';
 import CustomNavBar, { TabId } from './CustomNavBar';
 import TabBar from './TabBar';
@@ -22,7 +22,7 @@ import StalledLeadsAnalysis from './StalledLeadsAnalysis';
 import NurtureReviewer from './NurtureReviewer';
 import PayPlanEditor from './PayPlanEditor';
 import NotificationsCenter from './NotificationsCenter';
-import RexCoach from './RexCoach';
+import RexCoach, { type RexCoachMission } from './RexCoach';
 import SupportChat from './SupportChat';
 import AdminSupportDashboard from './AdminSupportDashboard';
 import OwnerControlCenter from './admin/OwnerControlCenter';
@@ -52,6 +52,8 @@ import {
   hasCompletedOnboarding,
   markOnboardingComplete,
   syncOnboardingFromProfile,
+  hasSeenSoldBookNudge,
+  markSoldBookNudgeSeen,
 } from '@/lib/v2/rexSettings';
 import { isRexOnboardingEnabled, isContactImportEnabled, isVehicleFinderEnabled } from '@/lib/v2/rexFeatureFlags';
 import type { CreateBlastSequencePayload, FindVehiclesPayload } from '@/lib/v2/rexActions';
@@ -95,6 +97,11 @@ export default function AppShell() {
   const [payPlanRefetchKey, setPayPlanRefetchKey] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [rexCoachOpen, setRexCoachOpen] = useState(false);
+  const [soldBookPromptWave, setSoldBookPromptWave] = useState<'last_month' | 'previous_month' | null>(null);
+  const [soldBookMission, setSoldBookMission] = useState<RexCoachMission | null>(null);
+  const [soldBookMissionIds, setSoldBookMissionIds] = useState<string[]>([]);
+  const soldBookNudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const soldBookDraftingRef = useRef(false);
   const [supportChatOpen, setSupportChatOpen] = useState(false);
   const [adminSupportOpen, setAdminSupportOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -109,6 +116,58 @@ export default function AppShell() {
   const access = useAccessGate(authReady);
 
   const { contacts, error, patchLocal, reload: reloadContacts } = useContacts(authReady);
+  const contactsRef = useRef<V2Contact[] | null>(contacts);
+  contactsRef.current = contacts;
+
+  const armSoldBookNudge = () => {
+    if (soldBookNudgeTimerRef.current) clearTimeout(soldBookNudgeTimerRef.current);
+    soldBookNudgeTimerRef.current = setTimeout(() => {
+      const realContacts = (contactsRef.current ?? []).filter(contact => !contact.isDemo);
+      if (realContacts.length === 0 && !hasSeenSoldBookNudge()) {
+        setSoldBookPromptWave('last_month');
+      }
+    }, 3 * 60 * 1000);
+  };
+
+  useEffect(() => () => {
+    if (soldBookNudgeTimerRef.current) clearTimeout(soldBookNudgeTimerRef.current);
+  }, []);
+
+  const startSoldBookMission = (wave: 'last_month' | 'previous_month') => {
+    if (wave === 'last_month') markSoldBookNudgeSeen();
+    setSoldBookPromptWave(null);
+    setSoldBookMissionIds([]);
+    setSoldBookMission(wave === 'last_month' ? 'sold_book_last_month' : 'sold_book_previous_month');
+    setRexCoachOpen(true);
+  };
+
+  const finishSoldBookMission = async () => {
+    if (!soldBookMission || soldBookMissionIds.length === 0 || soldBookDraftingRef.current) return;
+    soldBookDraftingRef.current = true;
+    try {
+      const selected = (contactsRef.current ?? []).filter(contact =>
+        soldBookMissionIds.includes(contact.id)
+        && !contact.isDemo
+        && !contact.doNotContact
+      );
+      if (selected.length === 0) throw new Error('No sendable sold customers were found.');
+      const isLastMonth = soldBookMission === 'sold_book_last_month';
+      const draft = await createBlastDraft({
+        intent: isLastMonth
+          ? 'Warm ownership outreach to customers I sold last month. Check how the vehicle is treating them and offer useful ownership help. Referral language only when context supports it.'
+          : 'Warm ownership outreach to customers I sold the month before last. Reconnect around ownership, useful help, second delivery, or a natural referral opportunity when appropriate.',
+        filterSummary: `${selected.length} ${isLastMonth ? 'last-month' : 'previous-month'} sold customer${selected.length === 1 ? '' : 's'}`,
+        promotion: {},
+        contacts: selected,
+      });
+      setBlastDraft(draft);
+      setRexCoachOpen(false);
+    } catch (e: any) {
+      setRexActionError(e?.message ?? 'Could not build the sold-customer Text Queue.');
+    } finally {
+      soldBookDraftingRef.current = false;
+    }
+  };
 
   // Demo-blast simulation: fire any due simulated replies (15/30/60s after a demo
   // blast) on mount + a short timer, then refresh the book so they surface on the
@@ -245,6 +304,10 @@ export default function AppShell() {
         setPayPlanOpen(false);
         setNotifOpen(false);
         setRexCoachOpen(false);
+        setSoldBookPromptWave(null);
+        setSoldBookMission(null);
+        setSoldBookMissionIds([]);
+        if (soldBookNudgeTimerRef.current) clearTimeout(soldBookNudgeTimerRef.current);
         setSupportChatOpen(false);
         setAdminSupportOpen(false);
         setIsAdmin(false);
@@ -634,13 +697,11 @@ export default function AppShell() {
           consolidation, so this is the single onboarding path. */}
       <RexOnboarding
         open={onboardingOpen}
-        onImport={() => {
-          markOnboardingComplete();
-          setOnboardingOpen(false);
-          setImportOpen(true);
-        }}
         onClose={(completed) => {
-          if (completed) markOnboardingComplete();
+          if (completed) {
+            void markOnboardingComplete();
+            armSoldBookNudge();
+          }
           setOnboardingOpen(false);
           // After onboarding, prompt the user to install the PWA (once per device,
           // browser-only — the check is inside shouldAutoPrompt).
@@ -649,6 +710,48 @@ export default function AppShell() {
           }
         }}
       />
+
+      {soldBookPromptWave ? (
+        <View style={styles.soldBookPromptRoot}>
+          <Pressable
+            style={styles.soldBookPromptScrim}
+            onPress={() => {
+              if (soldBookPromptWave === 'last_month') markSoldBookNudgeSeen();
+              setSoldBookPromptWave(null);
+            }}
+          />
+          <View style={styles.soldBookPromptCard}>
+            <Text style={styles.soldBookPromptKicker}>REX · FIRST REAL MISSION</Text>
+            <Text style={styles.soldBookPromptTitle}>
+              {soldBookPromptWave === 'last_month'
+                ? 'Ready to try this with your customers?'
+                : 'Nice. Now add the month before that.'}
+            </Text>
+            <Text style={styles.soldBookPromptBody}>
+              {soldBookPromptWave === 'last_month'
+                ? 'Start with people you sold last month. Tell Rex the name, number, vehicle and whatever you remember. When you hit Done, Rex builds the Text Queue.'
+                : 'Add the previous month while the first outreach has time to work. Rex will build the next personalized queue the same way.'}
+            </Text>
+            <Pressable
+              onPress={() => startSoldBookMission(soldBookPromptWave)}
+              style={styles.soldBookPromptPrimary}
+            >
+              <Text style={styles.soldBookPromptPrimaryText}>
+                {soldBookPromptWave === 'last_month' ? 'START WITH LAST MONTH' : 'ADD PREVIOUS MONTH'}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                if (soldBookPromptWave === 'last_month') markSoldBookNudgeSeen();
+                setSoldBookPromptWave(null);
+              }}
+              style={styles.soldBookPromptSecondary}
+            >
+              <Text style={styles.soldBookPromptSecondaryText}>Not now</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       <PWAInstallPrompt
         open={installPromptOpen}
@@ -676,10 +779,22 @@ export default function AppShell() {
         open={!!blastDraft}
         draft={blastDraft}
         contacts={contacts ?? []}
-        onClose={() => setBlastDraft(null)}
+        onClose={() => {
+          setBlastDraft(null);
+          if (soldBookMission) {
+            setSoldBookMission(null);
+            setSoldBookMissionIds([]);
+          }
+        }}
         onSent={() => {
+          const finishedMission = soldBookMission;
           setBlastDraft(null);
           reloadContacts();
+          setSoldBookMission(null);
+          setSoldBookMissionIds([]);
+          if (finishedMission === 'sold_book_last_month') {
+            setTimeout(() => setSoldBookPromptWave('previous_month'), 500);
+          }
         }}
       />
 
@@ -710,8 +825,11 @@ export default function AppShell() {
         onClose={() => setRexCoachOpen(false)}
         contacts={contacts ?? []}
         payPlan={payPlan}
+        mission={soldBookMission}
+        missionCount={soldBookMissionIds.length}
+        onFinishMission={finishSoldBookMission}
         onOpenContact={(id) => setSelectedId(id)}
-        onActed={async (action) => {
+        onActed={async (action, result) => {
           // Refresh whichever surface a text-confirmed Rex action touched.
           const t = action.type;
           if (t === 'create_blast_sequence') {
@@ -720,7 +838,12 @@ export default function AppShell() {
           }
           if (t === 'log_deal') setDealsRefetchKey(k => k + 1);
           if (t === 'add_contact' || t === 'update_notes' || t === 'schedule_followup' || t === 'retier_contact') {
-            reloadContacts();
+            await reloadContacts();
+          }
+          if (soldBookMission && t === 'add_contact' && result?.openContactId) {
+            setSoldBookMissionIds(prev =>
+              prev.includes(result.openContactId!) ? prev : [...prev, result.openContactId!]
+            );
           }
           if (t === 'create_reminder') setNurtureRefetchKey(k => k + 1); // refresh the bell
           // Vehicle Finder pivot from chat: close the coach and open the finder
@@ -828,4 +951,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   noticeBannerText: { color: colors.gold, fontSize: 13, fontWeight: '700' },
+  soldBookPromptRoot: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 94,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  } as any,
+  soldBookPromptScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(5,5,8,0.78)',
+  } as any,
+  soldBookPromptCard: {
+    width: '100%',
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: Platform.OS === 'web' ? ('max(28px, env(safe-area-inset-bottom))' as any) : 28,
+    backgroundColor: colors.ink2,
+    borderTopWidth: 1,
+    borderTopColor: colors.goldBorder,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  soldBookPromptKicker: { color: colors.gold, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
+  soldBookPromptTitle: { color: colors.white, fontSize: 24, lineHeight: 29, fontWeight: '800', marginTop: 8 },
+  soldBookPromptBody: { color: colors.grey3, fontSize: 14, lineHeight: 21, marginTop: 10 },
+  soldBookPromptPrimary: {
+    minHeight: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: colors.gold,
+    marginTop: 18,
+  },
+  soldBookPromptPrimaryText: { color: colors.ink, fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
+  soldBookPromptSecondary: { minHeight: 42, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  soldBookPromptSecondaryText: { color: colors.grey2, fontSize: 12, fontWeight: '700' },
 });
