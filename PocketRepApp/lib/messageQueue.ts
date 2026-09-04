@@ -14,6 +14,7 @@
 import { supabase } from './supabase';
 import { getRepSetting } from './v2/repSettings';
 import { inferSequenceColor, renderSequenceTemplate } from './v2/sequenceTemplates';
+import { logInteraction } from './v2/interactions';
 
 let AsyncStorage: any = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch {}
@@ -47,6 +48,7 @@ export interface QueueItem {
   status: 'pending' | 'sent' | 'skipped' | 'saved';
   unresolved_tokens?: string[];
   isDemo?: boolean;
+  requires_classification?: boolean;
 }
 
 export interface QueueState {
@@ -54,6 +56,17 @@ export interface QueueState {
   items: QueueItem[];
   saved_position: number;
 }
+
+export type SequenceClassification = 'sold' | 'still_shopping' | 'no_response';
+
+export type PendingSequenceClassification = {
+  enrollment_id: string;
+  sequence_id: string;
+  sequence_name: string;
+  contact_id: string;
+  contact_name: string;
+  classification: null;
+};
 
 function addDays(date: string, days: number): Date {
   const d = new Date(date);
@@ -80,7 +93,10 @@ export async function clearQueueState(): Promise<void> {
  * kept the sent state only in one device's local storage, which caused duplicate
  * sends and broke across devices.
  */
-async function advanceEnrollment(item: QueueItem, userId: string): Promise<void> {
+async function advanceEnrollment(
+  item: QueueItem,
+  userId: string,
+): Promise<{ requiresClassification: boolean }> {
   const now = new Date().toISOString();
 
   const { data: enrollment, error: enrollmentError } = await supabase
@@ -103,6 +119,7 @@ async function advanceEnrollment(item: QueueItem, userId: string): Promise<void>
     .maybeSingle();
   if (nextStepError) throw nextStepError;
 
+  const requiresClassification = !!item.requires_classification && !nextStep;
   const patch = nextStep
     ? {
         current_step: nextStep.step_number,
@@ -113,6 +130,9 @@ async function advanceEnrollment(item: QueueItem, userId: string): Promise<void>
         next_step_at: null,
         status: 'completed',
         completed_at: now,
+        // A classification step is always human-resolved later. Explicitly
+        // leave classification null here — never infer Sold/Shopping/No response.
+        ...(requiresClassification ? { classification: null } : {}),
       };
 
   // Optimistic lock: if another device already advanced this exact step,
@@ -129,13 +149,17 @@ async function advanceEnrollment(item: QueueItem, userId: string): Promise<void>
   if (!advanced) {
     throw new Error('This follow-up was already worked on another device. Refresh the queue.');
   }
+  return { requiresClassification };
 }
 
-export async function markSentAndLog(item: QueueItem, userId: string): Promise<void> {
+export async function markSentAndLog(
+  item: QueueItem,
+  userId: string,
+): Promise<{ requiresClassification: boolean }> {
   if (item.unresolved_tokens?.length) {
     throw new Error('This follow-up still has unresolved template fields.');
   }
-  await advanceEnrollment(item, userId);
+  const result = await advanceEnrollment(item, userId);
 
   const { error: logError } = await supabase.from('contact_interactions').insert({
     user_id: userId,
@@ -147,11 +171,117 @@ export async function markSentAndLog(item: QueueItem, userId: string): Promise<v
     message: item.message,
   });
   if (logError) throw logError;
+  return result;
 }
 
 /** Mark the current step skipped and advance exactly like a sent step. */
-export async function markSkipped(item: QueueItem, userId: string): Promise<void> {
-  await advanceEnrollment(item, userId);
+export async function markSkipped(
+  item: QueueItem,
+  userId: string,
+): Promise<{ requiresClassification: boolean }> {
+  return advanceEnrollment(item, userId);
+}
+
+/**
+ * Recover Fresh Up customers whose final 14-day step is complete but whose
+ * outcome has not yet been classified by the rep. This makes the branch prompt
+ * durable across refreshes/devices instead of depending on one UI session.
+ */
+export async function loadPendingSequenceClassifications(
+  userId: string,
+): Promise<PendingSequenceClassification[]> {
+  const { data, error } = await supabase
+    .from('contact_sequences')
+    .select('id,sequence_id,contact_id,classification,sequences!inner(name),contacts!inner(first_name,last_name,is_deleted)')
+    .eq('user_id', userId)
+    .eq('status', 'completed')
+    .is('classification', null)
+    .eq('sequences.name', 'Fresh Up - 14 Day')
+    .eq('contacts.is_deleted', false)
+    .order('completed_at', { ascending: false })
+    .limit(25);
+  if (error) throw error;
+
+  return (data ?? []).map((row: any) => ({
+    enrollment_id: row.id,
+    sequence_id: row.sequence_id,
+    sequence_name: row.sequences?.name ?? 'Fresh Up - 14 Day',
+    contact_id: row.contact_id,
+    contact_name: [row.contacts?.first_name, row.contacts?.last_name].filter(Boolean).join(' ') || 'Customer',
+    classification: null,
+  }));
+}
+
+/**
+ * Human-resolve a Fresh Up outcome and branch into the next canonical sequence.
+ * No model inference is accepted here — the classification value comes directly
+ * from the rep's explicit tap.
+ */
+export async function classifyAndBranchSequence(
+  pending: PendingSequenceClassification,
+  classification: SequenceClassification,
+  userId: string,
+): Promise<void> {
+  const destinationName = classification === 'sold'
+    ? 'Sold Customer Ownership'
+    : 'Unsold Long-Term Follow-Up';
+
+  const { data: destination, error: destinationError } = await supabase
+    .from('sequences')
+    .select('id,name')
+    .eq('is_template', true)
+    .eq('name', destinationName)
+    .maybeSingle();
+  if (destinationError) throw destinationError;
+  if (!destination?.id) throw new Error(`${destinationName} is not available yet.`);
+
+  // Optimistic guard: classification must still be unresolved when this tap lands.
+  const { data: source, error: sourceError } = await supabase
+    .from('contact_sequences')
+    .update({ classification })
+    .eq('id', pending.enrollment_id)
+    .eq('user_id', userId)
+    .is('classification', null)
+    .select('id')
+    .maybeSingle();
+  if (sourceError) throw sourceError;
+  if (!source) throw new Error('This sequence outcome was already classified. Refresh the queue.');
+
+  if (classification === 'sold') {
+    const { error: soldError } = await supabase
+      .from('contacts')
+      .update({ is_past_customer: true, updated_at: new Date().toISOString() })
+      .eq('id', pending.contact_id)
+      .eq('user_id', userId);
+    if (soldError) throw soldError;
+  }
+
+  const now = new Date().toISOString();
+  const { error: enrollError } = await supabase
+    .from('contact_sequences')
+    .upsert({
+      user_id: userId,
+      contact_id: pending.contact_id,
+      sequence_id: destination.id,
+      current_step: 1,
+      status: 'active',
+      started_at: now,
+      next_step_at: now,
+      completed_at: null,
+      classification: null,
+    }, { onConflict: 'contact_id,sequence_id' });
+  if (enrollError) throw enrollError;
+
+  const label = classification === 'sold'
+    ? 'Sold'
+    : classification === 'still_shopping'
+      ? 'Still shopping'
+      : 'No response';
+  await logInteraction(
+    pending.contact_id,
+    'note',
+    `Fresh Up outcome: ${label}. Moved to ${destinationName}.`,
+  );
 }
 
 /**
@@ -167,7 +297,7 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
     .from('contact_sequences')
     .select(`
       id,user_id,contact_id,sequence_id,current_step,status,started_at,next_step_at,
-      sequences!inner(id,name,is_archived,sequence_steps(id,step_number,delay_days,channel,message_template,ai_personalize))
+      sequences!inner(id,name,is_archived,sequence_steps(id,step_number,delay_days,channel,message_template,ai_personalize,requires_classification))
     `)
     .eq('user_id', userId)
     .eq('status', 'active')
@@ -240,6 +370,7 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
       channel: step.channel,
       status: 'pending',
       isDemo: Boolean(contact.is_demo),
+      requires_classification: Boolean(step.requires_classification),
     });
     if (items.length >= limit) break;
   }
