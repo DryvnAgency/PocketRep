@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { setRepSetting } from '@/lib/v2/repSettings';
+import { createContact } from '@/lib/v2/updateContact';
+import { markSoldBookNudgeSeen } from '@/lib/v2/rexSettings';
 
 type DemoContact = {
   id: string;
@@ -23,6 +25,19 @@ const TONES = [
   { value: 'Fire', hint: 'high energy closer' },
 ];
 const INDUSTRIES = ['Automotive', 'RV / Marine / Powersports', 'Real Estate', 'Other Sales'];
+const DEMO_REPLIES = [
+  'Yeah I’m still interested. Can I swing by after work?',
+  'Perfect timing — I was actually thinking about this today.',
+  'Appreciate you reaching out. What do you have available right now?',
+];
+
+function demoMessage(contact: DemoContact, index: number): string {
+  const first = contact.first_name || 'there';
+  const vehicle = contact.vehicle || 'the vehicle we talked about';
+  if (index === 0) return `Hey ${first}, quick check-in on the ${vehicle}. Still thinking about making a move?`;
+  if (index === 1) return `Hey ${first}, wanted to circle back while I had a second. Want me to help you map out the next step on the ${vehicle}?`;
+  return `Hey ${first}, I was working through my follow-ups and thought of you. Still want me keeping an eye out around the ${vehicle}?`;
+}
 
 export default function RexOnboarding({
   open,
@@ -37,12 +52,26 @@ export default function RexOnboarding({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [demoBlastSent, setDemoBlastSent] = useState(false);
+  const [demoReplyVisible, setDemoReplyVisible] = useState(false);
+  const [firstCustomerName, setFirstCustomerName] = useState('');
+  const [firstCustomerPhone, setFirstCustomerPhone] = useState('');
+  const [firstCustomerVehicle, setFirstCustomerVehicle] = useState('');
+  const replyAnim = useRef(new Animated.Value(0)).current;
+  const demoReplyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setStep(0);
     setAnswers(EMPTY);
     setError('');
+    setDemoBlastSent(false);
+    setDemoReplyVisible(false);
+    setFirstCustomerName('');
+    setFirstCustomerPhone('');
+    setFirstCustomerVehicle('');
+    replyAnim.setValue(0);
+    if (demoReplyTimerRef.current) clearTimeout(demoReplyTimerRef.current);
     let cancelled = false;
     setLoading(true);
     supabase
@@ -55,8 +84,11 @@ export default function RexOnboarding({
         setDemos(((data ?? []) as DemoContact[]).filter(c => DEMO_NAMES.has(`${c.first_name} ${c.last_name}`)));
         setLoading(false);
       }, () => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [open]);
+    return () => {
+      cancelled = true;
+      if (demoReplyTimerRef.current) clearTimeout(demoReplyTimerRef.current);
+    };
+  }, [open, replyAnim]);
 
   if (!open) return null;
 
@@ -91,10 +123,66 @@ export default function RexOnboarding({
     if (await saveIdentity()) setStep(1);
   };
 
-  const finish = () => onClose(true);
+  const runDemoBlast = () => {
+    if (demoBlastSent) return;
+    setError('');
+    setDemoBlastSent(true);
+    setDemoReplyVisible(false);
+    replyAnim.setValue(0);
+    if (demoReplyTimerRef.current) clearTimeout(demoReplyTimerRef.current);
+    demoReplyTimerRef.current = setTimeout(() => {
+      setDemoReplyVisible(true);
+      Animated.spring(replyAnim, {
+        toValue: 1,
+        friction: 7,
+        tension: 80,
+        useNativeDriver: false,
+      }).start();
+    }, 1200);
+  };
 
-  const progress = ((step + 1) / 3) * 100;
-  const current = demos[0];
+  const saveFirstCustomer = async () => {
+    if (saving) return;
+    const full = firstCustomerName.trim();
+    const phone = firstCustomerPhone.trim();
+    if (!full || !phone) {
+      setError('Name and phone are enough to start.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const [first, ...rest] = full.split(/\s+/);
+      await createContact({
+        firstName: first,
+        lastName: rest.join(' '),
+        phone,
+        email: '',
+        vehicle: firstCustomerVehicle.trim(),
+        trim: '',
+        budget: '',
+        tradeIn: '',
+        planLabel: '',
+        heatScore: 45,
+        notes: 'Added during PocketRep activation',
+        tags: [],
+      });
+      markSoldBookNudgeSeen();
+      onClose(true);
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not add that customer. Try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const finishWithoutCustomer = () => {
+    markSoldBookNudgeSeen();
+    onClose(true);
+  };
+
+  const progress = ((step + 1) / 4) * 100;
+  const replyContact = demos[0];
 
   return (
     <View style={styles.root}>
@@ -149,34 +237,85 @@ export default function RexOnboarding({
 
         {step === 1 ? (
           <>
-            <Text style={styles.eyebrow}>02 · SEE THE LOOP</Text>
-            <Text style={styles.title}>Your sample book is practice. Nothing fake follows you.</Text>
-            <Text style={styles.body}>These 3 customers belong only to your account, are marked DEMO everywhere, and can never receive a real message. The moment you add or import your first real customer, they disappear.</Text>
+            <Text style={styles.eyebrow}>02 · YOUR DEMO BOOK</Text>
+            <Text style={styles.title}>See the value before you add anything.</Text>
+            <Text style={styles.body}>These three customers are safe demo records. We are going to work them exactly like a real book so you can feel the loop before putting your own customers in.</Text>
             <View style={styles.panel}>
               {loading ? <ActivityIndicator color={colors.gold} /> : demos.map(d => <DemoRow key={d.id} contact={d} />)}
             </View>
             <View style={styles.callout}>
-              <Text style={styles.calloutTitle}>THE POCKETREP LOOP</Text>
-              <Text style={styles.calloutText}>Find who matters → open the customer → ask Rex for the next move → take the action → let PocketRep keep the follow-up alive.</Text>
+              <Text style={styles.calloutTitle}>THE LOOP</Text>
+              <Text style={styles.calloutText}>Rex finds the reason → writes each customer differently → you control the action → PocketRep brings the response back into the book.</Text>
             </View>
           </>
         ) : null}
 
         {step === 2 ? (
           <>
-            <Text style={styles.eyebrow}>03 · FIRST MISSION</Text>
-            <Text style={styles.title}>Play with the demo book first.</Text>
-            <Text style={styles.body}>Open a demo customer, ask Rex for the next move, change a heat level, and try the workflow. Nothing real is sent from demo contacts.</Text>
-            {current ? (
-              <View style={styles.panel}>
-                <DemoRow contact={current} />
-                <View style={styles.nextBox}>
-                  <Text style={styles.nextLabel}>THEN REX TAKES OVER</Text>
-                  <Text style={styles.nextText}>After a few minutes, Rex will guide you through adding last month and the month before that, then build your first sold-customer Text Queue.</Text>
+            <Text style={styles.eyebrow}>03 · THE A-HA</Text>
+            <Text style={styles.title}>Run your first Text Queue.</Text>
+            <Text style={styles.body}>Rex wrote a different message for each demo customer. Tap the button and PocketRep will simulate the send — nothing leaves your phone and no real customer is contacted.</Text>
+            <View style={styles.queuePanel}>
+              {demos.slice(0, 3).map((d, index) => (
+                <View key={d.id} style={styles.messageCard}>
+                  <View style={styles.messageHead}>
+                    <Text style={styles.demoName}>{d.first_name} {d.last_name}</Text>
+                    <Text style={styles.demo}>DEMO</Text>
+                  </View>
+                  <Text style={styles.messageText}>{demoMessage(d, index)}</Text>
                 </View>
+              ))}
+            </View>
+            {demoBlastSent && !demoReplyVisible ? (
+              <View style={styles.waitingRow}>
+                <ActivityIndicator color={colors.gold} size="small" />
+                <Text style={styles.waitingText}>PocketRep is watching the demo book…</Text>
               </View>
             ) : null}
-            <Text style={styles.small}>No CSV required. Your first real-book mission starts only after you have seen the demo loop work.</Text>
+            {demoReplyVisible && replyContact ? (
+              <Animated.View
+                style={[
+                  styles.replyToast,
+                  {
+                    opacity: replyAnim,
+                    transform: [{ translateY: replyAnim.interpolate({ inputRange: [0, 1], outputRange: [-18, 0] }) }],
+                  },
+                ]}
+              >
+                <View style={styles.replyDot} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.replyKicker}>CUSTOMER REPLIED · DEMO</Text>
+                  <Text style={styles.replyName}>{replyContact.first_name} {replyContact.last_name}</Text>
+                  <Text style={styles.replyText}>{DEMO_REPLIES[0]}</Text>
+                </View>
+              </Animated.View>
+            ) : null}
+            {demoReplyVisible ? (
+              <View style={styles.ahaBox}>
+                <Text style={styles.ahaTitle}>THAT IS THE POINT.</Text>
+                <Text style={styles.ahaText}>PocketRep does not just store names. It helps you create the reason to reach out, keeps the context, and puts the opportunity back in front of you when the customer moves.</Text>
+              </View>
+            ) : null}
+          </>
+        ) : null}
+
+        {step === 3 ? (
+          <>
+            <Text style={styles.eyebrow}>04 · MAKE IT YOUR BOOK</Text>
+            <Text style={styles.title}>Add one real customer now.</Text>
+            <Text style={styles.body}>Do not build the whole CRM yet. Start with one person you actually need to follow up with. Name and phone are enough; vehicle helps Rex make the first message stronger.</Text>
+            <View style={styles.form}>
+              <Text style={styles.label}>CUSTOMER NAME</Text>
+              <TextInput value={firstCustomerName} onChangeText={setFirstCustomerName} placeholder="Customer name" placeholderTextColor={colors.grey} style={styles.input} autoCapitalize="words" />
+              <Text style={styles.label}>PHONE</Text>
+              <TextInput value={firstCustomerPhone} onChangeText={setFirstCustomerPhone} placeholder="Phone number" placeholderTextColor={colors.grey} style={styles.input} keyboardType="phone-pad" />
+              <Text style={styles.label}>VEHICLE · OPTIONAL</Text>
+              <TextInput value={firstCustomerVehicle} onChangeText={setFirstCustomerVehicle} placeholder="2026 Rogue SV" placeholderTextColor={colors.grey} style={styles.input} />
+            </View>
+            <View style={styles.callout}>
+              <Text style={styles.calloutTitle}>THEN POCKETREP OPENS UP</Text>
+              <Text style={styles.calloutText}>From there: ask Rex for the next move, draft the first text, add Fresh Up if needed, and keep working your real book.</Text>
+            </View>
           </>
         ) : null}
 
@@ -186,16 +325,31 @@ export default function RexOnboarding({
       <View style={styles.bottom}>
         {step === 0 ? (
           <Pressable onPress={() => { void nextFromIdentity(); }} disabled={saving} style={[styles.primary, saving && styles.disabled]}>
-            <Text style={styles.primaryText}>{saving ? 'Saving…' : 'Next · See PocketRep'}</Text>
+            <Text style={styles.primaryText}>{saving ? 'Saving…' : 'Next · See my demo book'}</Text>
           </Pressable>
         ) : step === 1 ? (
           <Pressable onPress={() => setStep(2)} style={styles.primary}>
-            <Text style={styles.primaryText}>Next · Work my book</Text>
+            <Text style={styles.primaryText}>Next · Run the demo Text Queue</Text>
           </Pressable>
+        ) : step === 2 ? (
+          demoReplyVisible ? (
+            <Pressable onPress={() => setStep(3)} style={styles.primary}>
+              <Text style={styles.primaryText}>Now add one of my customers</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={runDemoBlast} disabled={demoBlastSent || demos.length === 0} style={[styles.primary, (demoBlastSent || demos.length === 0) && styles.disabled]}>
+              <Text style={styles.primaryText}>{demoBlastSent ? 'Waiting for the reply…' : `Run demo Text Queue · ${Math.min(demos.length, 3)}`}</Text>
+            </Pressable>
+          )
         ) : (
-          <Pressable onPress={finish} style={styles.primary}>
-            <Text style={styles.primaryText}>Open the Heat Sheet</Text>
-          </Pressable>
+          <>
+            <Pressable onPress={() => { void saveFirstCustomer(); }} disabled={saving} style={[styles.primary, saving && styles.disabled]}>
+              <Text style={styles.primaryText}>{saving ? 'Adding customer…' : 'Add customer + open PocketRep'}</Text>
+            </Pressable>
+            <Pressable onPress={finishWithoutCustomer} style={styles.secondary}>
+              <Text style={styles.secondaryText}>I’ll add customers later</Text>
+            </Pressable>
+          </>
         )}
       </View>
     </View>
@@ -253,10 +407,20 @@ const styles = StyleSheet.create({
   callout: { marginTop: 16, padding: 13, borderRadius: radius.md, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.goldBg },
   calloutTitle: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   calloutText: { color: colors.white, fontSize: 12, lineHeight: 18, marginTop: 5 },
-  nextBox: { padding: 10, borderRadius: radius.md, backgroundColor: colors.goldBg },
-  nextLabel: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
-  nextText: { color: colors.white, fontSize: 12, lineHeight: 18, marginTop: 4 },
-  small: { color: colors.grey2, fontSize: 11, lineHeight: 17, marginTop: 14 },
+  queuePanel: { marginTop: 18, gap: 8 },
+  messageCard: { padding: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.ink2 },
+  messageHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 },
+  messageText: { color: colors.grey3, fontSize: 12, lineHeight: 18 },
+  waitingRow: { marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, padding: 12, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  waitingText: { color: colors.grey3, fontSize: 11, fontWeight: '700' },
+  replyToast: { marginTop: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.gold, backgroundColor: colors.ink2 },
+  replyDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.gold, marginTop: 4 },
+  replyKicker: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  replyName: { color: colors.white, fontSize: 13, fontWeight: '800', marginTop: 4 },
+  replyText: { color: colors.grey3, fontSize: 12, lineHeight: 18, marginTop: 3 },
+  ahaBox: { marginTop: 10, padding: 13, borderRadius: radius.md, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.goldBg },
+  ahaTitle: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  ahaText: { color: colors.white, fontSize: 12, lineHeight: 18, marginTop: 5 },
   error: { color: colors.red, fontSize: 12, lineHeight: 18, marginTop: 14 },
   bottom: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20, gap: 8, borderTopWidth: 1, borderTopColor: colors.ink4 },
   primary: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg, backgroundColor: colors.gold },
