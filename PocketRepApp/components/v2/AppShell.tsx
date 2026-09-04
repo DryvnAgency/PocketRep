@@ -940,6 +940,11 @@ export default function AppShell() {
         loading={stalledLoading}
         onClose={() => { setStalledOpen(false); setStalledReport(null); }}
         onKilled={() => { reloadContacts(); }}
+        onOpenContact={(id) => {
+          setStalledOpen(false);
+          setStalledReport(null);
+          setSelectedId(id);
+        }}
         onDispatchBlast={(rows: StalledRecommendation[]) => {
           // Use the stalled openers as the starting blast — synthesize a
           // BlastDraft directly (no second brain call) so the rep can review
