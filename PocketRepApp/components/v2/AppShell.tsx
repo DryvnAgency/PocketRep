@@ -17,6 +17,7 @@ import RexOnboarding from './RexOnboarding';
 import PWAInstallPrompt, { shouldAutoPrompt } from './PWAInstallPrompt';
 import GamePlanSheet from './GamePlanSheet';
 import WorkMyBookSheet from './WorkMyBookSheet';
+import SoldBookGuide, { type SoldBookWave } from './SoldBookGuide';
 import RexActivityViewer from './RexActivityViewer';
 import BlastSequenceDrafter from './BlastSequenceDrafter';
 import StalledLeadsAnalysis from './StalledLeadsAnalysis';
@@ -100,7 +101,8 @@ export default function AppShell() {
   const [payPlanRefetchKey, setPayPlanRefetchKey] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [rexCoachOpen, setRexCoachOpen] = useState(false);
-  const [soldBookPromptWave, setSoldBookPromptWave] = useState<'last_month' | 'previous_month' | null>(null);
+  const [soldBookPromptWave, setSoldBookPromptWave] = useState<SoldBookWave | null>(null);
+  const [soldBookGuideWave, setSoldBookGuideWave] = useState<SoldBookWave | null>(null);
   const [soldBookMission, setSoldBookMission] = useState<RexCoachMission | null>(null);
   const [soldBookMissionIds, setSoldBookMissionIds] = useState<string[]>([]);
   const soldBookNudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -136,10 +138,15 @@ export default function AppShell() {
     if (soldBookNudgeTimerRef.current) clearTimeout(soldBookNudgeTimerRef.current);
   }, []);
 
-  const startSoldBookMission = (wave: 'last_month' | 'previous_month') => {
+  const startSoldBookGuide = (wave: SoldBookWave) => {
     if (wave === 'last_month') markSoldBookNudgeSeen();
     setSoldBookPromptWave(null);
-    setSoldBookMissionIds([]);
+    setSoldBookGuideWave(wave);
+  };
+
+  const finishGuideWithRex = (wave: SoldBookWave, ids: string[]) => {
+    setSoldBookGuideWave(null);
+    setSoldBookMissionIds(ids);
     setSoldBookMission(wave === 'last_month' ? 'sold_book_last_month' : 'sold_book_previous_month');
     setRexCoachOpen(true);
   };
@@ -310,6 +317,7 @@ export default function AppShell() {
         setNotifOpen(false);
         setRexCoachOpen(false);
         setSoldBookPromptWave(null);
+        setSoldBookGuideWave(null);
         setSoldBookMission(null);
         setSoldBookMissionIds([]);
         if (soldBookNudgeTimerRef.current) clearTimeout(soldBookNudgeTimerRef.current);
@@ -470,6 +478,7 @@ export default function AppShell() {
     if (supportChatOpen) { setSupportChatOpen(false); return; }
     if (adminSupportOpen) { setAdminSupportOpen(false); return; }
     if (rexCoachOpen) { setRexCoachOpen(false); return; }
+    if (soldBookGuideWave) { setSoldBookGuideWave(null); return; }
     if (notifOpen) { setNotifOpen(false); return; }
     if (stalledOpen) { setStalledOpen(false); setStalledReport(null); return; }
     if (nurtureReviewerOpen) { setNurtureReviewerOpen(false); return; }
@@ -489,7 +498,7 @@ export default function AppShell() {
   };
   const anyOverlayOpen =
     supportChatOpen || adminSupportOpen ||
-    rexCoachOpen || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
+    rexCoachOpen || !!soldBookGuideWave || notifOpen || stalledOpen || nurtureReviewerOpen || payPlanOpen ||
     !!blastDraft || gamePlanOpen || workBookOpen || !!callQueueContacts || rexActivityOpen || addContactOpen || importOpen || vehicleFinderOpen || bulkTagOpen || !!selectedDeal ||
     dealLoggerOpen || !!selectedId;
   const closeTopRef = useRef(closeTopOverlay);
@@ -756,7 +765,7 @@ export default function AppShell() {
                 : 'Add the previous month while the first outreach has time to work. Rex will build the next personalized queue the same way.'}
             </Text>
             <Pressable
-              onPress={() => startSoldBookMission(soldBookPromptWave)}
+              onPress={() => startSoldBookGuide(soldBookPromptWave)}
               style={styles.soldBookPromptPrimary}
             >
               <Text style={styles.soldBookPromptPrimaryText}>
@@ -775,6 +784,18 @@ export default function AppShell() {
           </View>
         </View>
       ) : null}
+
+      <SoldBookGuide
+        open={!!soldBookGuideWave}
+        wave={soldBookGuideWave}
+        existingContacts={contacts ?? []}
+        onClose={() => setSoldBookGuideWave(null)}
+        onFinishWithRex={(ids) => {
+          if (!soldBookGuideWave) return;
+          void reloadContacts();
+          finishGuideWithRex(soldBookGuideWave, ids);
+        }}
+      />
 
       <PWAInstallPrompt
         open={installPromptOpen}
