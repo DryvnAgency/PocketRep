@@ -862,6 +862,126 @@
 @media (max-width: 420px) {
   .demo-phone { width: 100%; max-width: 342px; }
 }
+
+/* ---- Mobile funnel polish: native vertical scroll, no sideways drift, tighter luxury spacing ---- */
+.nav-start-mobile { display: none; }
+
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+body { overscroll-behavior-x: none; }
+
+@media (max-width: 640px) {
+  .wrap { padding-left: 18px; padding-right: 18px; }
+
+  .nav-inner {
+    height: 68px;
+    gap: 10px;
+    min-width: 0;
+  }
+  .brand {
+    gap: 8px;
+    min-width: 0;
+    flex-shrink: 0;
+  }
+  .brand-mark { width: 30px; height: 30px; }
+  .brand-name { font-size: 17px; }
+  .nav-cta {
+    gap: 8px;
+    min-width: 0;
+  }
+  .nav-login {
+    font-size: 13.5px;
+    white-space: nowrap;
+  }
+  .nav-start {
+    padding: 11px 14px;
+    border-radius: 11px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .nav-start-desktop { display: none; }
+  .nav-start-mobile { display: inline; }
+
+  main, section, .wrap, .hero-grid, .hero-copy, .hero-stage,
+  .feature, .feat-copy, .feat-visual, .head, .price,
+  .founder-card, .founder-copy, .copy-card, .viz, .teams-band {
+    min-width: 0;
+  }
+
+  .hero {
+    padding-top: 104px;
+    padding-bottom: 30px;
+  }
+  .hero-stage {
+    min-height: 350px;
+    transform: none;
+    overflow: hidden;
+    overflow: clip;
+  }
+  .radar {
+    width: min(300px, 84vw);
+    height: min(300px, 84vw);
+  }
+
+  .section { padding: 72px 0; }
+  .section-sm { padding: 52px 0; }
+  .head p { margin-top: 14px; }
+
+  .hero-actions {
+    gap: 10px;
+    margin-top: 26px;
+  }
+  .hero-actions .btn,
+  #signup .btn {
+    width: 100%;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .price {
+    max-width: 100% !important;
+    padding: 24px 20px;
+    border-radius: 18px;
+  }
+  .price .desc { min-height: 0; }
+
+  .founder-card {
+    max-width: 100%;
+    margin-top: 28px;
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+  .founder-copy p {
+    font-size: 15.5px;
+    line-height: 1.65;
+  }
+  .founder-sig {
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+
+  .count { flex-wrap: wrap; }
+  .count .unit {
+    min-width: 0;
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  input, textarea, select, .input, .sf-input {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .wrap { padding-left: 16px; padding-right: 16px; }
+  .nav-login { display: none; }
+  .nav-start { padding-left: 13px; padding-right: 13px; }
+  .section { padding: 64px 0; }
+  .section-sm { padding: 46px 0; }
+}
 </style>
 </head>
 <body>
@@ -903,7 +1023,7 @@
     </nav>
     <div class="nav-cta">
       <a class="nav-login" href="https://app.pocketrep.pro">Log in</a>
-      <a class="btn btn-primary" href="#signup" onclick="prScrollSignup(event)">Work my book free</a>
+      <a class="btn btn-primary nav-start" href="#signup" onclick="prScrollSignup(event)"><span class="nav-start-desktop">Work my book free</span><span class="nav-start-mobile">Start free</span></a>
     </div>
   </div>
 </header>
@@ -1271,10 +1391,10 @@
     <div class="founder-av" aria-hidden="true">EP</div>
     <div class="founder-copy">
       <span class="eyebrow">Built by a rep</span>
-      <h2 class="h3">I kept dropping the follow-up. So I built PocketRep.</h2>
-      <p>I spent 9 years on the floor at five different stores. Even with a CRM, my follow-up was always sloppy. I would sell someone, save their number, and then forget to reach back out, sometimes not until a couple months later.</p>
-      <p>An up I had just talked to would tell me to follow up in a couple days, and it would get lost in my texting app. I built PocketRep so that never happens again.</p>
-      <div class="founder-sig"><b>Eddie Ponce</b> · Founder · 9 years in car sales, 5 stores</div>
+      <h2 class="h3">I wanted a better way to keep customer relationships working for years. So I built PocketRep.</h2>
+      <p>After 9 years in car sales across four dealerships, every store change reinforced how valuable the relationships we build become over time. The challenge was having one clean place to keep those relationships organized, current, and easy to act on.</p>
+      <p>When I moved stores, I wanted a simple way to let people know where I was, reintroduce myself to customers I hadn't spoken with in years, and stay top of mind long after the sale. PocketRep became that system — a smarter way to work the book, know who deserves attention, and follow up with context.</p>
+      <div class="founder-sig"><b>Eddie P.</b> · Founder · 9 years in car sales · 4 dealerships</div>
     </div>
   </div>
 </section>
