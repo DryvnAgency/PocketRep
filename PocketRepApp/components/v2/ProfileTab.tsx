@@ -374,6 +374,12 @@ export default function ProfileTab({
           onPress={() => editSetting('phone', 'Phone', 'PHONE NUMBER', { keyboardType: 'phone-pad' })} />
         <Row icon="💳" label="Billing" detail={openingBilling ? 'Opening…' : 'Manage subscription'}
           onPress={openBillingPortal} />
+        <Row icon="🔒" label="Privacy Policy" detail="View"
+          onPress={() => void Linking.openURL('https://pocketrep.pro/privacy.html')} />
+        <Row icon="📄" label="Terms of Service" detail="View"
+          onPress={() => void Linking.openURL('https://pocketrep.pro/terms.html')} />
+        <Row icon="🗑️" label="Data deletion" detail="How to request"
+          onPress={() => void Linking.openURL('https://pocketrep.pro/cancel.html')} />
         <Row
           icon="🎁"
           label="Give a Month. Get a Month."
