@@ -14,23 +14,22 @@ type DemoContact = {
   is_demo: boolean;
 };
 
-type Answers = { name: string; dealership: string; title: string; tone: string };
-const EMPTY: Answers = { name: '', dealership: '', title: '', tone: 'Sharp' };
+type Answers = { name: string; dealership: string; industry: string; title: string; tone: string };
+const EMPTY: Answers = { name: '', dealership: '', industry: 'Automotive', title: '', tone: 'Sharp' };
 const DEMO_NAMES = new Set(['Marcus Holloway', 'Sarah Thompson', 'Mike Rodriguez']);
 const TONES = [
   { value: 'Steady', hint: 'calm and trusted' },
   { value: 'Sharp', hint: 'direct and confident' },
   { value: 'Fire', hint: 'high energy closer' },
 ];
+const INDUSTRIES = ['Automotive', 'RV / Marine / Powersports', 'Real Estate', 'Other Sales'];
 
 export default function RexOnboarding({
   open,
   onClose,
-  onImport,
 }: {
   open: boolean;
   onClose: (completed: boolean) => void;
-  onImport?: () => void;
 }) {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>(EMPTY);
@@ -65,7 +64,7 @@ export default function RexOnboarding({
     const name = answers.name.trim();
     const dealership = answers.dealership.trim();
     if (!name || !dealership) {
-      setError('Add your name and dealership so Rex knows who he is working for.');
+      setError('Add your name and store or company so Rex knows who he is working for.');
       return false;
     }
     setSaving(true);
@@ -76,6 +75,7 @@ export default function RexOnboarding({
       const { error: profileError } = await supabase.from('profiles').update({ full_name: name }).eq('id', user.id);
       if (profileError) throw profileError;
       await setRepSetting('dealership', dealership);
+      await setRepSetting('industry', answers.industry || 'Automotive');
       if (answers.title.trim()) await setRepSetting('title', answers.title.trim());
       await setRepSetting('voiceTone', answers.tone || 'Sharp');
       return true;
@@ -92,10 +92,6 @@ export default function RexOnboarding({
   };
 
   const finish = () => onClose(true);
-  const importBook = () => {
-    if (onImport) onImport();
-    else finish();
-  };
 
   const progress = ((step + 1) / 3) * 100;
   const current = demos[0];
@@ -118,12 +114,24 @@ export default function RexOnboarding({
           <>
             <Text style={styles.eyebrow}>01 · MAKE REX YOURS</Text>
             <Text style={styles.title}>Who are we working for?</Text>
-            <Text style={styles.body}>Give Rex the basics first. He uses this to coach you and write like your dealership's salesperson, not a generic bot.</Text>
+            <Text style={styles.body}>Give Rex the basics first. He uses this to coach you and write like someone from your business, not a generic bot.</Text>
             <View style={styles.form}>
               <Text style={styles.label}>YOUR NAME</Text>
-              <TextInput value={answers.name} onChangeText={name => setAnswers(a => ({ ...a, name }))} placeholder="Eddie Ponce" placeholderTextColor={colors.grey} style={styles.input} autoCapitalize="words" />
-              <Text style={styles.label}>DEALERSHIP</Text>
-              <TextInput value={answers.dealership} onChangeText={dealership => setAnswers(a => ({ ...a, dealership }))} placeholder="Nissan of Omaha" placeholderTextColor={colors.grey} style={styles.input} autoCapitalize="words" />
+              <TextInput value={answers.name} onChangeText={name => setAnswers(a => ({ ...a, name }))} placeholder="Your name" placeholderTextColor={colors.grey} style={styles.input} autoCapitalize="words" />
+              <Text style={styles.label}>STORE / COMPANY</Text>
+              <TextInput value={answers.dealership} onChangeText={dealership => setAnswers(a => ({ ...a, dealership }))} placeholder="Your store or company" placeholderTextColor={colors.grey} style={styles.input} autoCapitalize="words" />
+              <Text style={styles.label}>INDUSTRY</Text>
+              <View style={styles.industryWrap}>
+                {INDUSTRIES.map(industry => (
+                  <Pressable
+                    key={industry}
+                    onPress={() => setAnswers(a => ({ ...a, industry }))}
+                    style={[styles.industryChip, answers.industry === industry && styles.industryChipSelected]}
+                  >
+                    <Text style={[styles.industryText, answers.industry === industry && styles.industryTextSelected]}>{industry}</Text>
+                  </Pressable>
+                ))}
+              </View>
               <Text style={styles.label}>ROLE · OPTIONAL</Text>
               <TextInput value={answers.title} onChangeText={title => setAnswers(a => ({ ...a, title }))} placeholder="Sales Consultant" placeholderTextColor={colors.grey} style={styles.input} autoCapitalize="words" />
               <Text style={styles.label}>REX STYLE</Text>
@@ -156,19 +164,19 @@ export default function RexOnboarding({
 
         {step === 2 ? (
           <>
-            <Text style={styles.eyebrow}>03 · WORK YOUR BOOK</Text>
-            <Text style={styles.title}>Your next deal may already be in your phone.</Text>
-            <Text style={styles.body}>Import your real contacts now, start with recent sold customers, open one person, and ask Rex what to do next. That's the fastest way to feel PocketRep working.</Text>
+            <Text style={styles.eyebrow}>03 · FIRST MISSION</Text>
+            <Text style={styles.title}>Play with the demo book first.</Text>
+            <Text style={styles.body}>Open a demo customer, ask Rex for the next move, change a heat level, and try the workflow. Nothing real is sent from demo contacts.</Text>
             {current ? (
               <View style={styles.panel}>
                 <DemoRow contact={current} />
                 <View style={styles.nextBox}>
-                  <Text style={styles.nextLabel}>EXAMPLE NEXT MOVE</Text>
-                  <Text style={styles.nextText}>{current.next_step || 'Open the customer and ask Rex for the next move.'}</Text>
+                  <Text style={styles.nextLabel}>THEN REX TAKES OVER</Text>
+                  <Text style={styles.nextText}>After a few minutes, Rex will guide you through adding last month and the month before that, then build your first sold-customer Text Queue.</Text>
                 </View>
               </View>
             ) : null}
-            <Text style={styles.small}>Not ready to import? Go to the Heat Sheet and practice on the DEMO customers first.</Text>
+            <Text style={styles.small}>No CSV required. Your first real-book mission starts only after you have seen the demo loop work.</Text>
           </>
         ) : null}
 
@@ -185,14 +193,9 @@ export default function RexOnboarding({
             <Text style={styles.primaryText}>Next · Work my book</Text>
           </Pressable>
         ) : (
-          <>
-            <Pressable onPress={importBook} style={styles.primary}>
-              <Text style={styles.primaryText}>Import my real book</Text>
-            </Pressable>
-            <Pressable onPress={finish} style={styles.secondary}>
-              <Text style={styles.secondaryText}>Practice on the Heat Sheet first</Text>
-            </Pressable>
-          </>
+          <Pressable onPress={finish} style={styles.primary}>
+            <Text style={styles.primaryText}>Open the Heat Sheet</Text>
+          </Pressable>
         )}
       </View>
     </View>
@@ -226,7 +229,12 @@ const styles = StyleSheet.create({
   body: { color: colors.grey3, fontSize: 14, lineHeight: 22, marginTop: 12 },
   form: { marginTop: 20, gap: 8 },
   label: { color: colors.grey2, fontSize: 9, fontWeight: '800', letterSpacing: 1, marginTop: 5 },
-  input: { minHeight: 48, color: colors.white, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.md, paddingHorizontal: 13, fontSize: 14 },
+  input: { minHeight: 48, color: colors.white, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.md, paddingHorizontal: 13, fontSize: 16 },
+  industryWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  industryChip: { paddingHorizontal: 11, paddingVertical: 8, borderRadius: radius.full, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface2 },
+  industryChipSelected: { borderColor: colors.gold, backgroundColor: colors.goldBg },
+  industryText: { color: colors.grey2, fontSize: 11, fontWeight: '700' },
+  industryTextSelected: { color: colors.gold },
   tones: { flexDirection: 'row', gap: 8 },
   tone: { flex: 1, padding: 11, borderRadius: radius.md, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface2 },
   toneSelected: { borderColor: colors.gold, backgroundColor: colors.goldBg },
