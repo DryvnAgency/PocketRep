@@ -138,13 +138,20 @@ export default function HeyRexOrb({
         />
       ) : null}
 
+      {state === 'idle' ? (
+        <View style={styles.liveBadge} pointerEvents="none">
+          <View style={styles.liveDot} />
+          <Text style={styles.liveText}>REX LIVE</Text>
+        </View>
+      ) : null}
+
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={
           state === 'listening' ? 'Rex, listening'
           : state === 'processing' ? 'Rex, thinking'
-          : 'Open Rex coach'
+          : 'Rex, live and ready'
         }
       >
         <Animated.View style={[styles.orbShadow, { transform: [{ scale }] }]}>
@@ -183,6 +190,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 30,
   },
+  liveBadge: {
+    position: 'absolute',
+    top: -28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: colors.ink3,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.green },
+  liveText: { color: colors.gold, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
   wave: {
     position: 'absolute',
     width: ORB + 16,
