@@ -48,6 +48,8 @@ const REX_CHAT = isRexChatEnabled();
 const TRIAD = REX_CHAT && isRexTriadEnabled();
 
 type ChatMessage = { from: 'rex' | 'user'; text: string; time: string };
+export type RexCoachMission = 'sold_book_last_month' | 'sold_book_previous_month';
+type ActionResult = { ok: boolean; openContactId?: string; filteredIds?: string[] };
 
 const QUICK_CHIPS = [
   "Payment's too high",
@@ -74,6 +76,9 @@ export default function RexCoach({
   payPlan,
   onActed,
   onOpenContact,
+  mission = null,
+  missionCount = 0,
+  onFinishMission,
 }: {
   open: boolean;
   onClose: () => void;
@@ -81,8 +86,11 @@ export default function RexCoach({
   payPlan: PayPlan | null;
   // Fired after a confirmed action executes so AppShell can refresh the right
   // surface (contacts / deals / notifications) — mirrors handleRexConfirm.
-  onActed?: (action: RexAction) => void | Promise<void>;
+  onActed?: (action: RexAction, result?: ActionResult) => void | Promise<void>;
   onOpenContact?: (id: string) => void;
+  mission?: RexCoachMission | null;
+  missionCount?: number;
+  onFinishMission?: () => void | Promise<void>;
 }) {
   const greeting = useRef(COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -133,11 +141,20 @@ export default function RexCoach({
       const carry = getCarrySummary();
       const today = getTodayLog();
       const seeded: ChatMessage[] = [];
-      if (carry) seeded.push({ from: 'rex', text: `↺ Yesterday — ${carry}`, time: stamp() });
-      if (today.length > 0) {
-        for (const e of today) seeded.push({ from: e.role, text: e.text, time: e.time });
+      if (mission) {
+        const monthLabel = mission === 'sold_book_last_month' ? 'last month' : 'the month before that';
+        seeded.push({
+          from: 'rex',
+          text: `Let’s build your sold book from ${monthLabel}. Tell me one customer’s name, phone, vehicle, and anything you remember. I’ll build the card.`,
+          time: stamp(),
+        });
       } else {
-        seeded.push({ from: 'rex', text: greeting.current, time: stamp() });
+        if (carry) seeded.push({ from: 'rex', text: `↺ Yesterday — ${carry}`, time: stamp() });
+        if (today.length > 0) {
+          for (const e of today) seeded.push({ from: e.role, text: e.text, time: e.time });
+        } else {
+          seeded.push({ from: 'rex', text: greeting.current, time: stamp() });
+        }
       }
       setMessages(seeded);
       setInput('');
@@ -159,22 +176,21 @@ export default function RexCoach({
       if (REX_CHAT) {
         // Who Rex works for (best-effort; prompt falls back to demo defaults).
         loadRepIdentity().then(r => { repIdent.current = r; }).catch(() => undefined);
-        // Durable thread: today's turns from rex_messages beat the local cache —
-        // but never clobber a conversation the rep has already started here.
-        loadTodayServerThread().then(rows => {
-          if (!rows || rows.length === 0 || interactedRef.current) return;
-          // Staleness guard: recordRexTurn is fire-and-forget, so a SELECT can
-          // beat the INSERT on a quick reopen. Only replace the local log when
-          // the server genuinely knows MORE than this device does.
-          if (rows.length <= today.length) return;
-          const restored: ChatMessage[] = [];
-          if (carry) restored.push({ from: 'rex', text: `↺ Yesterday — ${carry}`, time: stamp() });
-          for (const t of rows) restored.push({ from: t.from, text: t.text, time: t.time });
-          setMessages(restored);
-        }).catch(() => undefined);
+        // A guided sold-book mission intentionally starts with a clean mission
+        // thread. Normal Rex opens still restore today's durable conversation.
+        if (!mission) {
+          loadTodayServerThread().then(rows => {
+            if (!rows || rows.length === 0 || interactedRef.current) return;
+            if (rows.length <= today.length) return;
+            const restored: ChatMessage[] = [];
+            if (carry) restored.push({ from: 'rex', text: `↺ Yesterday — ${carry}`, time: stamp() });
+            for (const t of rows) restored.push({ from: t.from, text: t.text, time: t.time });
+            setMessages(restored);
+          }).catch(() => undefined);
+        }
       }
     }
-  }, [open]);
+  }, [open, mission]);
 
   useEffect(() => {
     if (open) requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
@@ -226,7 +242,9 @@ export default function RexCoach({
     // P3-A1: flips to false only if the planner returns an unusable plan, so this
     // turn falls back to the single call without a hard error. Transient failures
     // keep TRIAD on and re-run the two-pass path on the warm retry.
-    let useTriad = TRIAD;
+    // Keep the guided sold-book capture on the proven single-call action path:
+    // the triad planner is optimized for coaching, not structured customer capture.
+    let useTriad = TRIAD && !mission;
     try {
       for (;;) {
         try {
@@ -273,6 +291,9 @@ export default function RexCoach({
               contacts: contacts.map(c => ({ id: c.id, name: c.name, days: c.days })),
               recentActivity: scopedActivity,
               rep: REX_CHAT ? repIdent.current : undefined,
+              missionContext: mission
+                ? `SOLD CUSTOMER CAPTURE MISSION: The rep is entering customers they personally sold ${mission === 'sold_book_last_month' ? 'last month' : 'the month before last'}. When they give enough information to identify one customer, propose add_contact immediately with is_past_customer=true. Capture phone, email, vehicle and any useful context they provide. Put the sold timing/month in notes. Do not ask for optional fields they did not mention. Handle one customer at a time. The app has a separate Done button that builds outreach, so do not create a blast from this mission unless the rep explicitly asks outside the guided flow.`
+                : '',
             }),
           };
           // Rex chat v2 streams tokens into a live bubble; the visible stream
@@ -346,13 +367,27 @@ export default function RexCoach({
   // tap. Reuses the exact engine the voice path uses (executeAction).
   const confirmAction = async () => {
     if (!pending || acting) return;
-    const action = pending;
+    const action: RexAction = mission && pending.type === 'add_contact'
+      ? {
+          ...pending,
+          payload: {
+            ...pending.payload,
+            is_past_customer: true,
+            notes: [
+              pending.payload.notes,
+              mission === 'sold_book_last_month'
+                ? 'Sold customer capture: sold last month.'
+                : 'Sold customer capture: sold the month before last.',
+            ].filter(Boolean).join(' '),
+          },
+        }
+      : pending;
     setActing(true);
     try {
       const result = await executeAction(action, contacts);
       // UI-backed actions such as Smart Blast finish their real work in
       // AppShell. Await that work so the success log and Done message are true.
-      await onActed?.(action);
+      await onActed?.(action, result);
       logRexAction(action, 'success').catch(() => undefined); // audit chat-taken writes too
       pushRex(`✓ Done — ${summarizeAction(action)}`);
       if (result.openContactId) onOpenContact?.(result.openContactId);
@@ -426,24 +461,24 @@ export default function RexCoach({
         const res = await executeAction(add, contacts);
         logRexAction(add, 'success').catch(() => undefined);
         contactId = res.openContactId ?? null;
-        onActed?.(add);
+        onActed?.(add, res);
       } else {
         const upd: RexAction = {
           type: 'update_notes', say: '',
           payload: { contact_id: contactId, contact_name: name, notes_append: r.notes },
         };
-        await executeAction(upd, contacts);
+        const updResult = await executeAction(upd, contacts);
         logRexAction(upd, 'success').catch(() => undefined);
-        onActed?.(upd);
+        onActed?.(upd, updResult);
       }
       if (contactId && r.followup_days && r.followup_days > 0) {
         const fu: RexAction = {
           type: 'schedule_followup', say: '',
           payload: { contact_id: contactId, contact_name: name, days_from_now: r.followup_days, note: r.plan },
         };
-        await executeAction(fu, contacts);
+        const fuResult = await executeAction(fu, contacts);
         logRexAction(fu, 'success').catch(() => undefined);
-        onActed?.(fu);
+        onActed?.(fu, fuResult);
       }
       pushRex(`✓ Saved. ${r.is_new ? 'Added' : 'Updated'} ${name}${r.followup_days ? ` · follow-up in ${r.followup_days}d` : ''}.`);
       if (r.plan) pushRex(`Plan: ${r.plan}`);
@@ -568,18 +603,38 @@ export default function RexCoach({
           ) : null}
         </ScrollView>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipsScroll}
-          contentContainerStyle={styles.chips}
-        >
-          {QUICK_CHIPS.map(chip => (
-            <Pressable key={chip} onPress={() => send(chip)} style={styles.chip} disabled={typing}>
-              <Text style={styles.chipText}>{chip}</Text>
+        {mission ? (
+          <View style={styles.missionBar}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.missionLabel}>BUILD YOUR 60-DAY BOOK</Text>
+              <Text style={styles.missionMeta}>
+                {mission === 'sold_book_last_month' ? 'Last month' : 'Previous month'} · {missionCount} added
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => { void onFinishMission?.(); }}
+              disabled={missionCount === 0 || acting || typing}
+              style={[styles.missionDone, (missionCount === 0 || acting || typing) && { opacity: 0.45 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Done, build outreach"
+            >
+              <Text style={styles.missionDoneText}>DONE · BUILD OUTREACH</Text>
             </Pressable>
-          ))}
-        </ScrollView>
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipsScroll}
+            contentContainerStyle={styles.chips}
+          >
+            {QUICK_CHIPS.map(chip => (
+              <Pressable key={chip} onPress={() => send(chip)} style={styles.chip} disabled={typing}>
+                <Text style={styles.chipText}>{chip}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
 
         <View style={styles.inputBar}>
           <Pressable
@@ -595,7 +650,7 @@ export default function RexCoach({
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder="Ask Rex anything…"
+            placeholder={mission ? "Name, phone, vehicle, sold timing…" : "Ask Rex anything…"}
             placeholderTextColor={colors.grey}
             style={styles.input}
             onSubmitEditing={() => send()}
@@ -704,6 +759,25 @@ const styles = StyleSheet.create({
   parseNotes: { fontSize: 12, color: colors.grey3, lineHeight: 17 },
   parsePlan: { fontSize: 12, color: colors.gold, lineHeight: 17, fontWeight: '600' },
   parseMeta: { fontSize: 11, color: colors.grey2, fontWeight: '600' },
+
+  missionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: colors.ink2,
+    borderTopWidth: 1,
+    borderTopColor: colors.goldBorder,
+  },
+  missionLabel: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
+  missionMeta: { color: colors.white, fontSize: 12, fontWeight: '700', marginTop: 3 },
+  missionDone: {
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderRadius: radius.md,
+    backgroundColor: colors.gold,
+  },
+  missionDoneText: { color: colors.ink, fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
 
   composeBtn: {
     width: 42, height: 42, borderRadius: 21,
