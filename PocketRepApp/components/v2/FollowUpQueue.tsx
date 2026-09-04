@@ -247,7 +247,7 @@ export default function FollowUpQueue() {
                     accessibilityRole="button"
                     accessibilityLabel={openedKey === key ? `Mark follow-up complete for ${item.contact_name}` : `Work ${item.channel} follow-up for ${item.contact_name}`}
                   >
-                    <Text style={styles.workText}>{busy ? 'Working…' : openedKey === key ? 'MARK SENT ✓' : item.isDemo ? 'Simulate' : `Work ${channelLabel(item.channel)}`}</Text>
+                    <Text style={styles.workText}>{busy ? 'Working…' : openedKey === key ? (item.channel === 'text' ? 'MARK SENT ✓' : 'MARK COMPLETE ✓') : item.isDemo ? 'Simulate' : `Work ${channelLabel(item.channel)}`}</Text>
                   </Pressable>
                 )}
               </View>
