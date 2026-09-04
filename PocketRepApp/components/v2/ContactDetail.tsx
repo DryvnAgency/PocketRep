@@ -1475,6 +1475,29 @@ export default function ContactDetail({
                     return;
                   }
                   try {
+                    if (compose.mode === 'text') {
+                      // Route web/PWA text sends through the same authoritative
+                      // launcher as native + Text Queues. It stores the exact
+                      // draft + timestamp when Messages opens, then asks the rep
+                      // to confirm sent/not-sent on return.
+                      const result = await launchSms({
+                        contact_id: contact.id,
+                        contact_name: contact.name,
+                        phone: contact.phone,
+                        message: body ?? '',
+                        isDemo: contact.isDemo,
+                        source: 'manual',
+                      });
+                      if (result === 'opened') {
+                        await recordTouch('text', body);
+                        setCompose(null);
+                      } else if (result === 'not_sent') {
+                        flash('Text kept as not sent');
+                      } else {
+                        flash("Couldn't open Messages");
+                      }
+                      return;
+                    }
                     await Linking.openURL(channelUrl(compose.mode, body || undefined));
                     setCompose(c => c ? { ...c, opened: true } : c);
                   } catch {
