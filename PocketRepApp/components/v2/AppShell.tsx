@@ -790,10 +790,13 @@ export default function AppShell() {
         wave={soldBookGuideWave}
         existingContacts={contacts ?? []}
         onClose={() => setSoldBookGuideWave(null)}
-        onFinishWithRex={(ids) => {
+        onFinishWithRex={async (ids) => {
           if (!soldBookGuideWave) return;
-          void reloadContacts();
-          finishGuideWithRex(soldBookGuideWave, ids);
+          const wave = soldBookGuideWave;
+          await reloadContacts();
+          // Let the contacts hook commit the fresh rows before Rex receives
+          // the mission, so tapping Done immediately cannot miss guided adds.
+          setTimeout(() => finishGuideWithRex(wave, ids), 50);
         }}
       />
 
