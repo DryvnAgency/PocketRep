@@ -77,6 +77,8 @@ export default function RexCoach({
   payPlan,
   onActed,
   onOpenContact,
+  onDraftFirstText,
+  onEnrollFreshUp,
   mission = null,
   missionCount = 0,
   onFinishMission,
@@ -89,6 +91,8 @@ export default function RexCoach({
   // surface (contacts / deals / notifications) — mirrors handleRexConfirm.
   onActed?: (action: RexAction, result?: ActionResult) => void | Promise<void>;
   onOpenContact?: (id: string) => void;
+  onDraftFirstText?: (contactId: string) => void | Promise<void>;
+  onEnrollFreshUp?: (contactId: string) => void | Promise<void>;
   mission?: RexCoachMission | null;
   missionCount?: number;
   onFinishMission?: () => void | Promise<void>;
@@ -103,6 +107,8 @@ export default function RexCoach({
   const [mtd, setMtd] = useState<MtdSummary | null>(null);
   const [activity, setActivity] = useState('');           // recent-activity recall block
   const [pending, setPending] = useState<RexAction | null>(null); // proposed write action
+  const [newContactReady, setNewContactReady] = useState<{ id: string; name: string } | null>(null);
+  const [newContactBusy, setNewContactBusy] = useState<'text' | 'sequence' | null>(null);
   const [acting, setActing] = useState(false);            // executing a confirmed action
   const [parseOpen, setParseOpen] = useState(false);      // conversation composer (NEW 5)
   const [parsing, setParsing] = useState(false);          // extraction in flight
@@ -162,6 +168,8 @@ export default function RexCoach({
       setTyping(false);
       setRetry(null);
       setPending(null);
+      setNewContactReady(null);
+      setNewContactBusy(null);
       setActing(false);
       setParseOpen(false);
       setParsing(false);
@@ -398,10 +406,14 @@ export default function RexCoach({
       logRexAction(action, 'success').catch(() => undefined); // audit chat-taken writes too
       if (mission && action.type === 'add_contact') {
         pushRex(`✓ Added ${action.payload.first_name}${action.payload.last_name ? ` ${action.payload.last_name}` : ''}. Give me the next sold customer, or tap Done when you're ready for the Text Queue.`);
+      } else if (action.type === 'add_contact' && result.openContactId) {
+        const contactName = `${action.payload.first_name}${action.payload.last_name ? ` ${action.payload.last_name}` : ''}`;
+        pushRex(`✓ Added ${contactName}. Customer card is ready — want to send the first thank-you or put them on Fresh Up?`);
+        setNewContactReady({ id: result.openContactId, name: contactName });
       } else {
         pushRex(`✓ Done — ${summarizeAction(action)}`);
+        if (result.openContactId) onOpenContact?.(result.openContactId);
       }
-      if (!mission && result.openContactId) onOpenContact?.(result.openContactId);
       setPending(null);
     } catch (e: any) {
       logRexAction(action, 'failed', { failure_reason: e?.message }).catch(() => undefined);
@@ -583,6 +595,61 @@ export default function RexCoach({
               </View>
             </View>
           ) : null}
+          {newContactReady ? (
+            <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
+              <View style={styles.quickContactCard}>
+                <Text style={styles.quickContactLabel}>NEW CUSTOMER READY</Text>
+                <Text style={styles.quickContactName}>{newContactReady.name}</Text>
+                <Text style={styles.quickContactHint}>Rex can turn the card into the first move without making you retype anything.</Text>
+                <Pressable
+                  disabled={!!newContactBusy}
+                  onPress={async () => {
+                    setNewContactBusy('text');
+                    try {
+                      await onDraftFirstText?.(newContactReady.id);
+                      setNewContactReady(null);
+                    } catch (e: any) {
+                      setMessages(m => [...m, { from: 'rex', text: e?.message ?? "Couldn't draft that text yet.", time: stamp() }]);
+                    } finally {
+                      setNewContactBusy(null);
+                    }
+                  }}
+                  style={styles.quickContactPrimary}
+                >
+                  <Text style={styles.quickContactPrimaryText}>{newContactBusy === 'text' ? 'DRAFTING…' : '💬 DRAFT FIRST THANK-YOU'}</Text>
+                </Pressable>
+                <View style={styles.quickContactActions}>
+                  <Pressable
+                    disabled={!!newContactBusy}
+                    onPress={async () => {
+                      setNewContactBusy('sequence');
+                      try {
+                        await onEnrollFreshUp?.(newContactReady.id);
+                        pushRex(`✓ ${newContactReady.name} is on Fresh Up — 14 Day.`);
+                      } catch (e: any) {
+                        setMessages(m => [...m, { from: 'rex', text: e?.message ?? "Couldn't enroll that customer yet.", time: stamp() }]);
+                      } finally {
+                        setNewContactBusy(null);
+                      }
+                    }}
+                    style={styles.quickContactSecondary}
+                  >
+                    <Text style={styles.quickContactSecondaryText}>{newContactBusy === 'sequence' ? 'ADDING…' : '＋ FRESH UP'}</Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={!!newContactBusy}
+                    onPress={() => {
+                      onOpenContact?.(newContactReady.id);
+                      onClose();
+                    }}
+                    style={styles.quickContactSecondary}
+                  >
+                    <Text style={styles.quickContactSecondaryText}>OPEN CUSTOMER</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          ) : null}
           {parseResult ? (
             <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
               <View style={styles.proposeCard}>
@@ -744,6 +811,25 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.goldBorder,
   },
   retryText: { fontSize: 12, fontWeight: '700', color: colors.gold, letterSpacing: 0.3 },
+
+  quickContactCard: {
+    width: '94%', marginTop: 4, padding: 14, borderRadius: radius.lg,
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder, gap: 7,
+  },
+  quickContactLabel: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.0 },
+  quickContactName: { color: colors.white, fontSize: 15, fontWeight: '800' },
+  quickContactHint: { color: colors.grey3, fontSize: 11, lineHeight: 16 },
+  quickContactPrimary: {
+    minHeight: 42, borderRadius: radius.md, backgroundColor: colors.gold,
+    alignItems: 'center', justifyContent: 'center', marginTop: 3,
+  },
+  quickContactPrimaryText: { color: colors.ink, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  quickContactActions: { flexDirection: 'row', gap: 7 },
+  quickContactSecondary: {
+    flex: 1, minHeight: 38, borderRadius: radius.md, borderWidth: 1, borderColor: colors.goldBorder,
+    backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center',
+  },
+  quickContactSecondaryText: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
 
   proposeCard: {
     maxWidth: '92%',
