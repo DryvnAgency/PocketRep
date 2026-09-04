@@ -1,7 +1,7 @@
 // Demo-blast simulation. Demo/tour contacts never send a real SMS (see
 // smsLauncher.launchSms) — instead, when the rep "sends" a blast to the 3 demo
-// customers, we schedule realistic inbound replies at 15s / 30s / 60s so the
-// tour shows a live conversation without touching a carrier.
+// customers, we schedule realistic inbound replies so the tour shows a live
+// conversation without touching a carrier.
 //
 // Each reply, when due, is written exactly like a real inbound reply:
 //   • logInteraction(contactId,'text',reply)  → activity timeline + Daily Check-In
@@ -22,9 +22,9 @@ import { markNurtureReply } from './manualReplyTracker';
 
 const KEY = 'pocketrep:v2:demo-blast-sim';
 
-// Response #1 at 15s, #2 at 30s, #3 at 60s (by send order). Extra recipients
-// clamp to the last offset.
-const OFFSETS_MS = [15_000, 30_000, 60_000];
+// Activation should show the payoff quickly. The first demo reply lands fast
+// enough to create the aha moment; later replies keep the book feeling alive.
+const OFFSETS_MS = [5_000, 18_000, 40_000];
 
 // Realistic, positive-leaning replies — obviously a warm demo, not cartoonish.
 const REPLIES = [
@@ -36,7 +36,7 @@ const REPLIES = [
 type SimEntry = {
   contactId: string;
   nurtureMessageId: string;
-  sentAt: number;      // ms epoch
+  sentAt: number;
   offsetMs: number;
   replyText: string;
   responded: boolean;
@@ -62,8 +62,6 @@ function write(val: SimStore): void {
   }
 }
 
-// Register one simulated demo send. `index` is the send order (0-based) → picks
-// the 15/30/60s offset + reply. Idempotent per nurtureMessageId.
 export function registerDemoSend(contactId: string, nurtureMessageId: string, index: number): void {
   if (!nurtureMessageId) return;
   const store = read();
@@ -86,8 +84,6 @@ export function hasPendingDemoResponses(): boolean {
 
 let materializing = false;
 
-// Fire any replies whose delay has elapsed, exactly once each. Returns how many
-// fired (so the caller can refresh the book). Safe to call repeatedly.
 export async function materializeDueResponses(): Promise<number> {
   if (materializing) return 0;
   materializing = true;
@@ -107,7 +103,7 @@ export async function materializeDueResponses(): Promise<number> {
           replyText: e.replyText,
         });
         e.responded = true;
-        write(store); // persist immediately so a reload can't re-fire this reply
+        write(store);
         fired++;
       } catch {
         // leave unresponded — retried on the next tick
@@ -119,7 +115,6 @@ export async function materializeDueResponses(): Promise<number> {
   return fired;
 }
 
-// Called when demo contacts are cleared (first real import) — drops the store.
 export function clearDemoSim(): void {
   write({ entries: [] });
   if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
@@ -127,7 +122,6 @@ export function clearDemoSim(): void {
   }
 }
 
-// Pure helper exported for the mirror test: which entries are due at `now`.
 export function dueEntries(store: SimStore, now: number): SimEntry[] {
   return store.entries.filter(e => !e.responded && now - e.sentAt >= e.offsetMs);
 }
