@@ -1,3 +1,23 @@
+-- Align the interaction enums with the actions PocketRep already records.
+-- Production's legacy checks reject current call outcomes (answered/no-answer/
+-- wrong-number) and the new Rex game_plan event type, which makes the timeline
+-- silently lose valid history. Keep the type controlled while widening the
+-- legitimate V1 vocabulary.
+alter table public.interactions drop constraint if exists interactions_type_check;
+alter table public.interactions
+  add constraint interactions_type_check
+  check (type in ('call','text','email','visit','note','game_plan'));
+
+alter table public.interactions drop constraint if exists interactions_outcome_check;
+alter table public.interactions
+  add constraint interactions_outcome_check
+  check (
+    outcome is null or outcome in (
+      'connected','voicemail','no_answer','replied','no_reply','deal_closed',
+      'answered','no-answer','wrong-number','confirmed_sent','completed','not_sent'
+    )
+  );
+
 -- V1 contact-card history is append-only.
 -- Current editable contact fields may evolve, but historical timeline facts may not be rewritten.
 
