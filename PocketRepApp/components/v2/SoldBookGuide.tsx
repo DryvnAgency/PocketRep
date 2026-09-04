@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Platform } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { createContact } from '@/lib/v2/updateContact';
@@ -33,6 +33,19 @@ export default function SoldBookGuide({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const savingRef = useRef(false);
+
+  useEffect(() => {
+    if (!open || !wave) return;
+    setStep('intro');
+    setAddedIds([]);
+    setName('');
+    setPhone('');
+    setVehicle('');
+    setSoldTiming('');
+    setSaving(false);
+    setError(null);
+    savingRef.current = false;
+  }, [open, wave]);
 
   if (!open || !wave) return null;
 
