@@ -61,7 +61,7 @@ TONE: a confident manager on the floor talking to a pro — direct, specific, wa
 // on mass-outreach asks. The formatting rules and the never-send boundary are
 // verbatim from the spec and win over anything that conflicts.
 
-export type RepIdentity = { name?: string; dealership?: string };
+export type RepIdentity = { name?: string; dealership?: string; industry?: string };
 
 // Demo-account defaults per the owner: the shared web demo IS Eddie's book.
 const DEFAULT_REP_NAME = 'Eddie';
@@ -73,6 +73,13 @@ const DEFAULT_DEALERSHIP = 'Nissan of Omaha';
 // mirrored in scripts/test-rexchat.mjs.
 export function sanitizeIdentity(v: string | undefined | null, max = 40): string {
   return String(v ?? '').replace(/[\r\n`]+/g, ' ').trim().slice(0, max).trim();
+}
+
+function industryOverride(industryRaw?: string): string {
+  const industry = sanitizeIdentity(industryRaw || getRepSetting('industry')) || 'Automotive';
+  if (industry.toLowerCase() === 'automotive') return '';
+  return `INDUSTRY OVERRIDE
+The rep explicitly selected ${industry}. This overrides car-dealership-specific examples and terminology above. Coach the same disciplined relationship sales process in the rep's actual industry. Use neutral terms like customer, product or service, appointment, follow-up, ownership or client relationship where appropriate. Never invent vehicles, trades, leases, dealership inventory, or automotive facts unless the rep actually provides them. Keep PocketRep's action and follow-up behavior the same.`;
 }
 
 const TONE_DIRECTIVES: Record<string, string> = {
@@ -110,6 +117,8 @@ Never use em dashes, en dashes, or hyphens as punctuation anywhere in any output
 
 HARD BOUNDARY
 You never send anything. You give ${name} the copy-and-paste words and every message is sent by ${name}. If asked to send, remind ${name} in one line that they tap send, then hand over the message anyway.
+
+${industryOverride(rep?.industry)}
 
 ${toneDirective}`;
 }
@@ -238,7 +247,8 @@ Respond with your short natural spoken line FIRST, then ONE \`\`\`json fenced bl
 Never invent a contact_id: use one from CONTACT IDS. If no existing contact clearly matches for an update / follow-up / tier change / reminder-about-someone, ask which one in plain text instead of guessing. The app shows the rep a Confirm button before anything is written, so propose — never claim it's already done.
 
 Actions:
-1. add_contact — create a new contact. payload: { first_name (req), last_name?, phone?, vehicle?, budget?, trade_in?, notes?, heat_tier? ("hot"|"warm"|"cold") }
+1. add_contact — create a new contact. payload: { first_name (req), last_name?, phone?, email?, vehicle?, budget?, trade_in?, notes?, heat_tier? ("hot"|"warm"|"cold"), is_past_customer? }
+   If the rep explicitly says they previously SOLD this customer a vehicle, set is_past_customer=true and preserve the sold timing/month in notes.
 2. update_notes — append a note to an existing contact. payload: { contact_id (req), contact_name (req), notes_append (req) }
 3. schedule_followup — set a follow-up N days out. payload: { contact_id (req), contact_name (req), days_from_now (req number), note? }
 4. retier_contact — move an existing contact UP a tier when they're heating up/reviving. payload: { contact_id (req), contact_name (req), tier ("hot"|"warm"|"cold"), reason? }
@@ -264,8 +274,9 @@ export function buildCoachMessages(input: {
   recentActivity?: string;
   // Rex chat v2 only: who Rex works for. Ignored when the flag is off.
   rep?: RepIdentity;
+  missionContext?: string;
 }): BrainMessage[] {
-  const { history, text, repContext, contacts = [], recentActivity = '', rep } = input;
+  const { history, text, repContext, contacts = [], recentActivity = '', rep, missionContext = '' } = input;
   const playbookBlock = serializePlaybooks(matchPlaybooks(text));
 
   const system = [
@@ -273,6 +284,7 @@ export function buildCoachMessages(input: {
     REX_COPY_RULES,
     BOOK_RANKING_RULES,
     playbookBlock,
+    missionContext,
     repContext ? `THE REP'S BOOK (use real names/numbers when relevant):\n${repContext}` : '',
     actionsBlock(contacts, recentActivity),
   ]

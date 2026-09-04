@@ -5,9 +5,10 @@ import { supabase } from '@/lib/supabase';
 // public.interactions; the read-side useInteractions queries the unified
 // public.contact_timeline view.
 export type InteractionType = 'call' | 'text' | 'email' | 'note';
+export type InteractionWriteType = InteractionType | 'game_plan';
 
 export type TimelineEventType =
-  | InteractionType
+  | InteractionWriteType
   | 'nurture'
   | 'reply'
   | 'referral_ask'
@@ -24,7 +25,7 @@ export type Interaction = {
 
 export async function logInteraction(
   contactId: string,
-  type: InteractionType,
+  type: InteractionWriteType,
   notes?: string | null,
   outcome?: string | null,
 ): Promise<void> {

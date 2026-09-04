@@ -14,7 +14,6 @@ import {
   updateContactTags,
   deleteContact,
   updateContactTier,
-  updateContactPreferredLanguage,
   updateContactBirthday,
   updateContactReferredBy,
   updateContactName,
@@ -33,8 +32,8 @@ import {
 } from '@/lib/v2/smsCapability';
 import { pickAndUploadContactPhoto } from '@/lib/v2/contactPhoto';
 import { formatBirthday, parseBirthdayInput } from '@/lib/v2/birthday';
-import LanguageToggle from './LanguageToggle';
 import MarkReplyButton from './MarkReplyButton';
+import { createTag } from '@/lib/v2/tagMutations';
 import FollowupCard from './FollowupCard';
 import { isRexFollowupEnabled } from '@/lib/v2/rexFeatureFlags';
 
@@ -52,6 +51,7 @@ const INTERACTION_META: Record<string, { icon: string; color: string; label: str
   text:         { icon: '💬', color: colors.gold,  label: 'TEXT',    verb: 'Sent a text' },
   email:        { icon: '✉️', color: colors.gold2, label: 'EMAIL',   verb: 'Sent an email' },
   note:         { icon: '📝', color: colors.grey2, label: 'NOTE',    verb: 'Added a note' },
+  game_plan:    { icon: '◆',  color: colors.gold,  label: 'REX GAME PLAN', verb: 'Rex built a game plan' },
   nurture:      { icon: '🤖', color: colors.gold,  label: 'NURTURE', verb: 'Rex nurture sent' },
   reply:        { icon: '↩️', color: colors.green, label: 'REPLY',   verb: 'Customer replied' },
   referral_ask: { icon: '🤝', color: colors.gold2, label: 'REFERRAL', verb: 'Referral ask sent' },
@@ -106,7 +106,8 @@ export default function ContactDetail({
   onOpenContact?: (id: string) => void;
 }) {
   const tier = TIERS[contact.tier];
-  const allTags = useTags();
+  const [tagRefetchKey, setTagRefetchKey] = useState(0);
+  const allTags = useTags(tagRefetchKey);
   const { sequences, reload: reloadSequences } = useSequences();
   const { deals, error: dealsError } = useDeals(contact.id, dealsRefetchKey);
   const [nurtureRefetchKey, setNurtureRefetchKey] = useState(0);
@@ -125,6 +126,8 @@ export default function ContactDetail({
   const [savingBday, setSavingBday] = useState(false);
   const [stepView, setStepView] = useState<'latest' | 'next'>('latest');
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [creatingTag, setCreatingTag] = useState(false);
   const [seqPickerOpen, setSeqPickerOpen] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
 
@@ -386,6 +389,34 @@ export default function ContactDetail({
     }
   };
 
+  const addTagFromPicker = async (name: string) => {
+    const clean = name.trim();
+    if (!clean || tagToggleRef.current) return;
+    if (!allTags.some(t => t.name.toLowerCase() === clean.toLowerCase())) {
+      try {
+        await createTag(clean, colors.gold);
+        setTagRefetchKey(k => k + 1);
+      } catch (e) {
+        console.warn('createTag failed', e);
+        flash("Couldn't create that tag");
+        return;
+      }
+    }
+    if (!contact.tags.includes(clean)) await toggleTag(clean);
+  };
+
+  const createAndApplyTag = async () => {
+    const clean = newTagName.trim();
+    if (!clean || creatingTag) return;
+    setCreatingTag(true);
+    try {
+      await addTagFromPicker(clean);
+      setNewTagName('');
+    } finally {
+      setCreatingTag(false);
+    }
+  };
+
   // Tap the tier pill to cycle Hot → Warm → Cold. Saved as a manual override
   // that sticks regardless of the auto heat score.
   const cycleTier = async () => {
@@ -551,6 +582,16 @@ export default function ContactDetail({
       setAiChannel(result.channel);
       setAiWhy(result.why);
       setAiScript(result.script);
+      // Preserve the ORIGINAL Rex plan before the rep edits or acts on it.
+      // The final sent text/call outcome is logged separately by the channel flow.
+      const planHistory = [
+        `Channel: ${result.channel.toUpperCase()}`,
+        result.why ? `Why: ${result.why}` : '',
+        `Suggested: ${result.script}`,
+      ].filter(Boolean).join('\n');
+      logInteraction(contact.id, 'game_plan', planHistory)
+        .then(() => setInteractionsKey(k => k + 1))
+        .catch(e => console.warn('logInteraction game plan', e));
     } catch (e: any) {
       setAiError(e?.message ?? 'Rex is unreachable');
     } finally {
@@ -731,18 +772,6 @@ export default function ContactDetail({
                 <Pill color={tier.color}>{tier.icon} {tier.label}</Pill>
               </Pressable>
               {contact.planLabel ? <Pill color={colors.gold}>{contact.planLabel}</Pill> : null}
-              <LanguageToggle
-                value={contact.preferredLanguage}
-                onChange={async (next) => {
-                  onLocalUpdate({ ...contact, preferredLanguage: next });
-                  try {
-                    await updateContactPreferredLanguage(contact.id, next);
-                  } catch (e) {
-                    onLocalUpdate({ ...contact, preferredLanguage: contact.preferredLanguage });
-                    console.warn('language toggle failed', e);
-                  }
-                }}
-              />
             </View>
           </View>
         </View>
@@ -773,13 +802,13 @@ export default function ContactDetail({
             return (
               <Pressable
                 key={t}
-                onPress={() => toggleTag(t)}
+                onPress={() => setTagPickerOpen(true)}
                 style={[
                   styles.tagChip,
                   { backgroundColor: rgbaTint(col, 0.12), borderColor: rgbaTint(col, 0.35) },
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel={`Remove tag ${t}`}
+                accessibilityLabel={`Manage tag ${t}`}
               >
                 <View style={[styles.tagDot, { backgroundColor: col }]} />
                 <Text style={[styles.tagText, { color: col }]}>{t}</Text>
@@ -1364,8 +1393,13 @@ export default function ContactDetail({
           contactTags={contact.tags}
           allTags={allTags}
           contactName={contact.name}
+          newTagName={newTagName}
+          creatingTag={creatingTag}
+          onChangeNewTag={setNewTagName}
+          onCreateTag={createAndApplyTag}
           onClose={() => setTagPickerOpen(false)}
-          onToggle={toggleTag}
+          onAdd={addTagFromPicker}
+          onRemove={toggleTag}
         />
       ) : null}
 
@@ -1441,6 +1475,29 @@ export default function ContactDetail({
                     return;
                   }
                   try {
+                    if (compose.mode === 'text') {
+                      // Route web/PWA text sends through the same authoritative
+                      // launcher as native + Text Queues. It stores the exact
+                      // draft + timestamp when Messages opens, then asks the rep
+                      // to confirm sent/not-sent on return.
+                      const result = await launchSms({
+                        contact_id: contact.id,
+                        contact_name: contact.name,
+                        phone: contact.phone,
+                        message: body ?? '',
+                        isDemo: contact.isDemo,
+                        source: 'manual',
+                      });
+                      if (result === 'opened') {
+                        await recordTouch('text', body);
+                        setCompose(null);
+                      } else if (result === 'not_sent') {
+                        flash('Text kept as not sent');
+                      } else {
+                        flash("Couldn't open Messages");
+                      }
+                      return;
+                    }
                     await Linking.openURL(channelUrl(compose.mode, body || undefined));
                     setCompose(c => c ? { ...c, opened: true } : c);
                   } catch {
@@ -1499,14 +1556,31 @@ function DealRow({ d, last }: { d: V2Deal; last: boolean }) {
 }
 
 function TagPicker({
-  contactTags, allTags, contactName, onClose, onToggle,
+  contactTags, allTags, contactName, newTagName, creatingTag,
+  onChangeNewTag, onCreateTag, onClose, onAdd, onRemove,
 }: {
   contactTags: string[];
   allTags: Array<{ name: string; color: string }>;
   contactName: string;
+  newTagName: string;
+  creatingTag: boolean;
+  onChangeNewTag: (value: string) => void;
+  onCreateTag: () => void;
   onClose: () => void;
-  onToggle: (name: string) => void;
+  onAdd: (name: string) => void;
+  onRemove: (name: string) => void;
 }) {
+  const PRESETS = ['Sold', 'Fresh Up', 'Lease', 'Referral', 'Service'];
+  const merged = [
+    ...allTags,
+    ...PRESETS
+      .filter(name => !allTags.some(t => t.name.toLowerCase() === name.toLowerCase()))
+      .map(name => ({ name, color: colors.gold })),
+    ...contactTags
+      .filter(name => !allTags.some(t => t.name.toLowerCase() === name.toLowerCase()) && !PRESETS.some(p => p.toLowerCase() === name.toLowerCase()))
+      .map(name => ({ name, color: colors.gold })),
+  ];
+
   return (
     <View style={StyleSheet.absoluteFillObject}>
       <Pressable style={styles.scrim} onPress={onClose} />
@@ -1514,15 +1588,32 @@ function TagPicker({
         <View style={styles.sheetHandle} />
         <View style={styles.sheetHead}>
           <Label color={colors.gold}>TAGS FOR {contactName.toUpperCase()}</Label>
-          <Text style={styles.sheetSub}>Tap to toggle a tag on or off.</Text>
+          <Text style={styles.sheetSub}>Add from the library or explicitly remove one already attached.</Text>
+        </View>
+        <View style={styles.tagCreateRow}>
+          <TextInput
+            value={newTagName}
+            onChangeText={onChangeNewTag}
+            placeholder="Create a new tag"
+            placeholderTextColor={colors.grey}
+            style={styles.tagCreateInput}
+            returnKeyType="done"
+            onSubmitEditing={onCreateTag}
+          />
+          <Pressable
+            onPress={onCreateTag}
+            disabled={!newTagName.trim() || creatingTag}
+            style={[styles.tagCreateBtn, (!newTagName.trim() || creatingTag) && { opacity: 0.45 }]}
+          >
+            <Text style={styles.tagCreateBtnText}>{creatingTag ? '…' : 'ADD'}</Text>
+          </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.sheetTags}>
-          {allTags.map(t => {
+          {merged.map(t => {
             const active = contactTags.includes(t.name);
             return (
-              <Pressable
+              <View
                 key={t.name}
-                onPress={() => onToggle(t.name)}
                 style={[
                   styles.sheetTag,
                   active
@@ -1530,16 +1621,28 @@ function TagPicker({
                     : { backgroundColor: colors.surface2, borderColor: colors.ink4 },
                 ]}
               >
-                <Text style={[
-                  styles.sheetTagText,
-                  { color: active ? t.color : colors.grey3 },
-                ]}>
-                  {active ? '✓ ' : ''}{t.name}
+                <View style={[styles.tagDot, { backgroundColor: t.color }]} />
+                <Text style={[styles.sheetTagText, { color: active ? t.color : colors.grey3, flex: 1 }]}>
+                  {t.name}
                 </Text>
-              </Pressable>
+                <Pressable
+                  onPress={() => active ? onRemove(t.name) : onAdd(t.name)}
+                  hitSlop={6}
+                  style={active ? styles.tagRemoveBtn : styles.tagApplyBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={active ? `Remove tag ${t.name}` : `Add tag ${t.name}`}
+                >
+                  <Text style={active ? styles.tagRemoveText : styles.tagApplyText}>
+                    {active ? 'REMOVE' : 'ADD'}
+                  </Text>
+                </Pressable>
+              </View>
             );
           })}
         </ScrollView>
+        <Pressable onPress={onClose} style={styles.sheetDone}>
+          <Text style={styles.sheetDoneText}>DONE</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -2084,14 +2187,32 @@ const styles = StyleSheet.create({
   },
   sheetHead: { paddingHorizontal: 18, paddingBottom: 14 },
   sheetSub: { fontSize: 11, color: colors.grey2, marginTop: 4 },
-  sheetTags: { paddingHorizontal: 14, gap: 6, flexDirection: 'row', flexWrap: 'wrap' },
+  tagCreateRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
+  tagCreateInput: {
+    flex: 1, minHeight: 44, borderRadius: radius.md, borderWidth: 1, borderColor: colors.ink4,
+    backgroundColor: colors.surface2, color: colors.white, paddingHorizontal: 12, fontSize: 16,
+  },
+  tagCreateBtn: {
+    minWidth: 62, minHeight: 44, borderRadius: radius.md, backgroundColor: colors.gold,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tagCreateBtnText: { color: colors.ink, fontSize: 11, fontWeight: '900', letterSpacing: 0.7 },
+  sheetTags: { paddingHorizontal: 14, paddingBottom: 12, gap: 7 },
   sheetTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.full,
-    borderWidth: 1.5,
+    minHeight: 46, paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: radius.md, borderWidth: 1.5,
+    flexDirection: 'row', alignItems: 'center', gap: 9,
   },
   sheetTagText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+  tagApplyBtn: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.gold },
+  tagApplyText: { color: colors.ink, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  tagRemoveBtn: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: radius.full, borderWidth: 1, borderColor: colors.red },
+  tagRemoveText: { color: colors.red, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  sheetDone: {
+    marginHorizontal: 14, minHeight: 44, borderRadius: radius.md,
+    backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center',
+  },
+  sheetDoneText: { color: colors.ink, fontSize: 11, fontWeight: '900', letterSpacing: 0.7 },
 
   composeCard: {
     position: 'absolute',

@@ -20,6 +20,7 @@ import { getRepSetting } from './repSettings';
 import { frameUntrusted } from './promptSafety';
 import type { VehicleRequirements } from './vehicleMatch';
 import { chooseRexTier } from './rexRouting';
+import { logInteraction } from './interactions';
 
 export type RexAction =
   | { type: 'add_contact'; payload: AddContactPayload; say: string }
@@ -80,12 +81,14 @@ export type AddContactPayload = {
   first_name: string;
   last_name?: string;
   phone?: string;
+  email?: string;
   vehicle?: string;
   budget?: string;
   trade_in?: string;
   notes?: string;
   heat_tier?: 'hot' | 'warm' | 'cold';
   plan_label?: string;
+  is_past_customer?: boolean;
 };
 
 export type UpdateNotesPayload = {
@@ -292,7 +295,8 @@ ${frameUntrusted('BOOK STATE', bookSection)}
 Actions you can take, with required + optional payload fields:
 
 1. add_contact — create a brand new contact
-   payload: { first_name (req), last_name?, phone?, vehicle?, budget?, trade_in?, notes?, heat_tier? ("hot"|"warm"|"cold"), plan_label? ("TODAY"|"THIS WEEK"|"THIS MONTH"|"NEXT QTR") }
+   payload: { first_name (req), last_name?, phone?, email?, vehicle?, budget?, trade_in?, notes?, heat_tier? ("hot"|"warm"|"cold"), plan_label? ("TODAY"|"THIS WEEK"|"THIS MONTH"|"NEXT QTR"), is_past_customer? }
+   When the rep explicitly says they SOLD this customer a vehicle, set is_past_customer=true and preserve the sold timing/month in notes.
 
 2. update_notes — append notes to an existing contact
    payload: { contact_id (req), contact_name (req), notes_append (req) }
@@ -644,18 +648,24 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
   switch (action.type) {
     case 'add_contact': {
       const p = action.payload;
+      const pastCustomer = !!p.is_past_customer;
       const id = await createContact({
         firstName: p.first_name,
         lastName: p.last_name ?? '',
         phone: p.phone ?? '',
+        email: p.email ?? '',
         vehicle: p.vehicle ?? '',
         trim: '',
         budget: p.budget ?? '',
         tradeIn: p.trade_in ?? '',
-        planLabel: (p.plan_label as any) ?? 'THIS WEEK',
-        heatScore: HEAT_TIER_SCORE[p.heat_tier ?? 'warm'],
+        // Sold-book capture is relationship follow-up, not an active-shopping
+        // promise. Keep those contacts out of the rep's hot/warm prospect board
+        // unless Rex/rep explicitly gives them a live heat tier or plan label.
+        planLabel: (p.plan_label as any) ?? (pastCustomer ? '' : 'THIS WEEK'),
+        heatScore: HEAT_TIER_SCORE[p.heat_tier ?? (pastCustomer ? 'cold' : 'warm')],
         notes: p.notes ?? '',
-        tags: [],
+        tags: pastCustomer ? ['Sold'] : [],
+        isPastCustomer: pastCustomer,
       });
       return { ok: true, openContactId: id };
     }
@@ -675,6 +685,9 @@ export async function executeAction(action: RexAction, contacts: V2Contact[] = [
         ? `${existing}\n\n${p.notes_append}`
         : p.notes_append;
       await updateContactNotes(p.contact_id, joined);
+      // Current contact notes may evolve, but every Rex-authored update also
+      // gets an append-only timestamped timeline event so history is never rewritten.
+      await logInteraction(p.contact_id, 'note', `Rex note update: ${p.notes_append}`);
       return { ok: true, openContactId: p.contact_id };
     }
     case 'delete_contact': {

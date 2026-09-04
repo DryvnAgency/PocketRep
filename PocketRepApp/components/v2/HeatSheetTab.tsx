@@ -73,6 +73,7 @@ export default function HeatSheetTab({
   nurtureRefetchKey = 0,
   onOpenNurture,
   onAnalyzeStalled,
+  onOpenGamePlan,
 }: {
   contacts: V2Contact[] | null;
   error: string | null;
@@ -83,6 +84,7 @@ export default function HeatSheetTab({
   nurtureRefetchKey?: number;
   onOpenNurture?: () => void;
   onAnalyzeStalled?: () => void;
+  onOpenGamePlan?: () => void;
 }) {
   const [hotOnly, setHotOnly] = useState(false);
 
@@ -154,6 +156,17 @@ export default function HeatSheetTab({
       ) : null}
 
       <FollowUpQueue />
+
+      {onOpenGamePlan ? (
+        <Pressable onPress={onOpenGamePlan} style={styles.gamePlanBtn} accessibilityRole="button" accessibilityLabel="Open Rex Game Plan">
+          <View style={styles.gamePlanOrb}><Text style={styles.gamePlanOrbText}>R</Text></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.gamePlanTitle}>Work My Book</Text>
+            <Text style={styles.gamePlanSub}>Rex sorted today’s call and text opportunities</Text>
+          </View>
+          <Text style={styles.gamePlanChev}>›</Text>
+        </Pressable>
+      ) : null}
 
       {onAnalyzeStalled ? (
         <Pressable onPress={onAnalyzeStalled} style={styles.stalledBtn} accessibilityRole="button" accessibilityLabel="Review stalled leads with Rex">
@@ -241,6 +254,28 @@ const styles = StyleSheet.create({
   daysWrap: { alignItems: 'flex-end' },
   daysNum: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5, lineHeight: 18 },
   daysLabel: { fontSize: 9, fontWeight: '700', color: colors.grey, marginTop: 4, letterSpacing: 0.6 },
+  gamePlanBtn: {
+    marginHorizontal: 14,
+    marginTop: 6,
+    marginBottom: 3,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    backgroundColor: colors.goldBg,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+  },
+  gamePlanOrb: {
+    width: 30, height: 30, borderRadius: 15, backgroundColor: colors.gold,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  gamePlanOrbText: { color: colors.ink, fontSize: 12, fontWeight: '900' },
+  gamePlanTitle: { fontSize: 14, fontWeight: '800', color: colors.white, letterSpacing: -0.2 },
+  gamePlanSub: { fontSize: 11, color: colors.grey2, marginTop: 2 },
+  gamePlanChev: { fontSize: 16, color: colors.gold },
   stalledBtn: {
     marginHorizontal: 14,
     marginTop: 6,

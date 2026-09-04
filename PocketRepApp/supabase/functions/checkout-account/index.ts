@@ -11,16 +11,27 @@ const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 // convenient and this reads it first automatically.
 const STRIPE_PRICE_ID = Deno.env.get("STRIPE_POCKETREP_PRICE_ID") ?? Deno.env.get("STRIPE_ELITE_PRICE_ID") ?? "";
 const V1_CURRENT_PRICE_ID = "price_1Tf6MeIKMImSDGHZvYLmeIqS";
+// Founding pricing is owner-cut over manually. These future prices are
+// allowlisted now so a later marketing/checkout switch cannot successfully
+// charge a rep and then fail secure provisioning with unexpected_price.
+// Existing subscriptions are never migrated here, preserving their joined rate.
+const V2_NEXT_500_PRICE_ID = "price_1UBrcqIKMImSDGHZTIB9MiOP";
+const V3_1001_PLUS_PRICE_ID = "price_1UBrcwIKMImSDGHZjS7vKvY9";
 const V1_PRIVATE_BETA_25_PRICE_ID = "price_1UBcFZIKMImSDGHZCssLTTzR";
 const V1_LEGACY_29_PRICE_ID = "price_1UBDLeIKMImSDGHZqrYthX3H";
 const APP_URL = Deno.env.get("APP_URL") ?? "https://app.pocketrep.pro";
 
 function allowedStripePriceIds() {
-  // Public PocketRep remains $39. The $25 ID exists only so the five private,
-  // one-use founder/beta links can complete the same secure provisioning flow.
+  // $39 remains the active public price until the owner manually changes the
+  // checkout. $59/$79 are accepted provisioning prices only; this function
+  // does not choose a cohort, count subscribers, or change anyone's price.
+  // The $25 ID exists only so the five private, one-use founder/beta links can
+  // complete the same secure provisioning flow; $29 remains legacy compat.
   return new Set([
     STRIPE_PRICE_ID,
     V1_CURRENT_PRICE_ID,
+    V2_NEXT_500_PRICE_ID,
+    V3_1001_PLUS_PRICE_ID,
     V1_PRIVATE_BETA_25_PRICE_ID,
     V1_LEGACY_29_PRICE_ID,
   ].filter(Boolean));

@@ -14,7 +14,8 @@ export type RepSettingKey =
   | 'customPrompts'
   | 'phone'
   | 'security'
-  | 'inventoryFeed';
+  | 'inventoryFeed'
+  | 'industry';
 
 const KEY = 'pocketrep:v2:rep-settings';
 const EVENT = 'pocketrep:rep-settings-changed';
@@ -31,6 +32,7 @@ const DEFAULTS: Record<RepSettingKey, string> = {
   phone: '',
   security: '',
   inventoryFeed: '',
+  industry: 'Automotive',
 };
 
 let mem: Partial<Record<RepSettingKey, string>> = {};

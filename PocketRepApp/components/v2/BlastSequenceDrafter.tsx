@@ -175,8 +175,8 @@ export default function BlastSequenceDrafter({
             <Text style={styles.headerBtnText}>Cancel</Text>
           </Pressable>
           <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={styles.headerKicker}>BLAST DRAFT · {steps.length}</Text>
-            <Text style={styles.headerTitle}>{draft.filter_summary || 'Review drafts'}</Text>
+            <Text style={styles.headerKicker}>TEXT QUEUE · {steps.length}</Text>
+            <Text style={styles.headerTitle}>{draft.filter_summary || 'Review personalized drafts'}</Text>
           </View>
           <Pressable
             onPress={handleSendAll}
@@ -187,11 +187,15 @@ export default function BlastSequenceDrafter({
               styles.headerBtnText,
               (toSend.length === 0 || sending || anyTranslating) ? { color: colors.grey } : { color: colors.ink },
             ]}>
-              {sending ? 'Sending…' : anyTranslating ? 'Translating…' : `Send ${toSend.length}`}
+              {sending ? 'Working…' : anyTranslating ? 'Translating…' : `Start ${toSend.length}`}
             </Text>
           </Pressable>
         </View>
 
+        <View style={styles.queueNotice}>
+          <Text style={styles.queueNoticeTitle}>ONE CUSTOMER AT A TIME</Text>
+          <Text style={styles.queueNoticeText}>Review each message. PocketRep opens Messages for you; nothing is auto-sent.</Text>
+        </View>
         <ScrollView contentContainerStyle={styles.body}>
           {steps.length === 0 ? (
             <View style={styles.empty}>
@@ -336,6 +340,12 @@ const styles = StyleSheet.create({
   headerKicker: { fontSize: 10, fontWeight: '700', color: colors.gold, letterSpacing: 1.4 },
   headerTitle: { fontSize: 14, fontWeight: '700', color: colors.white, marginTop: 2, letterSpacing: -0.2 },
 
+  queueNotice: {
+    marginHorizontal: 14, marginTop: 12, paddingHorizontal: 12, paddingVertical: 10,
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.goldBg,
+  },
+  queueNoticeTitle: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.0 },
+  queueNoticeText: { color: colors.grey3, fontSize: 11, lineHeight: 16, marginTop: 3 },
   body: { padding: 14, gap: 12 },
   empty: { padding: 40, alignItems: 'center', gap: 12 },
   emptyText: { color: colors.grey2, fontSize: 13 },

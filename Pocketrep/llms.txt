@@ -27,7 +27,8 @@
 - PocketRep Team is future work and is not currently for sale.
 
 ## Pricing
-- Current individual founding offer: $39 per month with a 7-day free trial. The founding software subscription rate stays with the rep while that subscription remains continuously active.
+- Current individual founding offer: $39 per month with a 7-day free trial, for the first wave of paying reps. The rate a rep joins at stays with them while that subscription remains continuously active.
+- Pricing for new customers rises in later cohorts ($59/month, then $79/month) as PocketRep grows. This never changes the rate on an existing subscription.
 
 ## Important
 - Nothing sends automatically. PocketRep drafts; the rep reviews and takes the send action.

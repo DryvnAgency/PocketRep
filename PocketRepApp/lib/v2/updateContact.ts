@@ -100,11 +100,37 @@ export type NewContactDraft = {
   birthday?: string | null;
   referredByContactId?: string | null;
   referredByName?: string | null;
+  isPastCustomer?: boolean;
 };
 
 export async function createContact(draft: NewContactDraft): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not signed in');
+
+  const normalizedPhone = normalizePhone(draft.phone);
+  const normalizedEmail = normalizeEmail(draft.email);
+
+  // Single-contact capture is used by both the manual Add Contact flow and Rex.
+  // Keep it idempotent by phone/email just like bulk import: a duplicate is
+  // blocked, never merged, so a quick capture can never overwrite or fork the
+  // customer's existing notes/history. Soft-deleted rows do not block a new add.
+  if (normalizedPhone || normalizedEmail) {
+    const { data: existing, error: existingError } = await supabase
+      .from('contacts')
+      .select('id,phone,email')
+      .eq('user_id', user.id)
+      .eq('is_deleted', false);
+    if (existingError) throw existingError;
+
+    const duplicate = (existing ?? []).find(row => {
+      const samePhone = normalizedPhone && phoneKey(row.phone) === phoneKey(normalizedPhone);
+      const sameEmail = normalizedEmail && normalizeEmail(row.email) === normalizedEmail;
+      return !!samePhone || !!sameEmail;
+    });
+    if (duplicate) {
+      throw new Error('That customer is already in your book. Open the existing contact instead of creating a duplicate.');
+    }
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await supabase
@@ -113,8 +139,8 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
       user_id: user.id,
       first_name: titleCase(draft.firstName),
       last_name: titleCase(draft.lastName) || null,
-      phone: normalizePhone(draft.phone) || null,
-      email: normalizeEmail(draft.email) || null,
+      phone: normalizedPhone || null,
+      email: normalizedEmail || null,
       vehicle: normalizeVehicle(draft.vehicle) || null,
       trim: normalizeVehicle(draft.trim) || null,
       budget: draft.budget.trim() || null,
@@ -126,6 +152,7 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
       birthday: draft.birthday || null,
       referred_by_contact_id: draft.referredByContactId ?? null,
       referred_by_name: draft.referredByName ?? null,
+      is_past_customer: !!draft.isPastCustomer,
       tags: draft.tags,
       stage: 'active',
       milestones: [],

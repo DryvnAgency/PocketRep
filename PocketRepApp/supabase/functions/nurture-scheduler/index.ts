@@ -413,6 +413,8 @@ ${toneGuidance}
 
 Pitch intensity: ${pitchIntensity}
 
+TRUTH RULE: Holiday/calendar timing is verified context. A holiday name or pitch intensity does NOT prove a sale, clearance, discount, incentive, rebate, inventory movement, price change, expiring offer, manager flexibility, or special event. Never claim those unless explicit verified rep/customer context supplies them. If the holiday is the only verified fact, reference it naturally and keep the message relational.
+
 For each contact:
 1. Acknowledge the trigger in ONE line, then pivot to a personal angle.
 2. Hook into ONE of: personal_detail, vehicle_interest, calendar_event, past_purchase, holiday, rapport.

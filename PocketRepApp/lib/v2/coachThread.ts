@@ -97,5 +97,12 @@ export async function loadRepIdentity(): Promise<RepIdentity> {
   } catch {
     // fall through to defaults
   }
-  return { name, dealership };
+  let industry: string | undefined;
+  try {
+    const i = getRepSetting('industry').trim();
+    if (i) industry = i;
+  } catch {
+    // fall through to Automotive in the prompt
+  }
+  return { name, dealership, industry };
 }

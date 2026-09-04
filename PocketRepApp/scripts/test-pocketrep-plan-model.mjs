@@ -117,7 +117,14 @@ check(!home.includes('toUpperCase()} PLAN'), 'native home no longer renders raw 
 check(!profile.includes('toUpperCase()}'), 'V2 profile no longer renders raw plan as customer-facing tier');
 check(checkout.includes('STRIPE_POCKETREP_PRICE_ID'), 'checkout has canonical PocketRep price env name');
 check(checkout.includes('STRIPE_ELITE_PRICE_ID'), 'checkout preserves legacy env fallback');
-check(pwa.includes('Instagram') && pwa.includes('TikTok') && pwa.includes('Facebook'), 'PWA prompt handles major in-app browsers');
+check(
+  pwa.includes('Instagram')
+    && pwa.includes('TikTok')
+    && (pwa.includes('FBAN') || pwa.includes('FBAV') || pwa.includes('Facebook'))
+    && pwa.includes('Open in Safari')
+    && (pwa.includes('Open in Chrome') || pwa.includes('Open in Browser')),
+  'PWA prompt handles major in-app browsers and routes them to a real browser first',
+);
 check(teams.toLowerCase().includes('not for sale yet'), 'Team orphan page no longer claims payment confirmation');
 check(launch.includes('noindex'), 'launch thank-you page is noindex');
 check(launch.includes('app.pocketrep.pro'), 'launch thank-you links directly to app subdomain');

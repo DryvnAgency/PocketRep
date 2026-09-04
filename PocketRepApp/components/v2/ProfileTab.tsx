@@ -222,7 +222,7 @@ export default function ProfileTab({
     }
     try {
       await Share.share({
-        message: `Give a Month. Get a Month. Sign up for PocketRep with my link and we both get a free month: ${referLink}`,
+        message: `Give a Month. Get a Month. Sign up for PocketRep with my link and you’ll get whatever new-member offer is live when you join. Once you activate after the trial, we both get a free month: ${referLink}`,
       });
     } catch { /* user cancelled share sheet */ }
   };
@@ -374,10 +374,16 @@ export default function ProfileTab({
           onPress={() => editSetting('phone', 'Phone', 'PHONE NUMBER', { keyboardType: 'phone-pad' })} />
         <Row icon="💳" label="Billing" detail={openingBilling ? 'Opening…' : 'Manage subscription'}
           onPress={openBillingPortal} />
+        <Row icon="🔒" label="Privacy Policy" detail="View"
+          onPress={() => void Linking.openURL('https://pocketrep.pro/privacy.html')} />
+        <Row icon="📄" label="Terms of Service" detail="View"
+          onPress={() => void Linking.openURL('https://pocketrep.pro/terms.html')} />
+        <Row icon="🗑️" label="Data deletion" detail="How to request"
+          onPress={() => void Linking.openURL('https://pocketrep.pro/cancel.html')} />
         <Row
           icon="🎁"
           label="Give a Month. Get a Month."
-          detail={referralCount > 0 ? `${referralCount} referred · tap to copy` : 'Tap to copy referral link'}
+          detail={referralCount > 0 ? `${referralCount} referred · live offer follows this link` : 'Share once · live offer follows this link'}
           onPress={shareReferral}
         />
       </View>

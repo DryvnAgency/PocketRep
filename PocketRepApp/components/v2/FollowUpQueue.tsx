@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius } from '@/constants/theme';
-import { generateQueue, markSentAndLog, markSkipped, type QueueItem } from '@/lib/messageQueue';
+import {
+  generateQueue,
+  markSentAndLog,
+  markSkipped,
+  loadPendingSequenceClassifications,
+  classifyAndBranchSequence,
+  type QueueItem,
+  type PendingSequenceClassification,
+  type SequenceClassification,
+} from '@/lib/messageQueue';
 import { launchSms } from '@/lib/v2/smsLauncher';
 import { isCurrentWebRuntimeNativeProtocolCapable } from '@/lib/v2/smsCapability';
 import { formatSequenceTemplateTokens } from '@/lib/v2/sequenceTemplates';
 import { supabase } from '@/lib/supabase';
+import type { CallOutcome } from '@/lib/v2/updateContact';
 
 function channelLabel(channel: QueueItem['channel']) {
   if (channel === 'text') return 'TEXT';
@@ -57,6 +67,8 @@ export default function FollowUpQueue() {
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [openedKey, setOpenedKey] = useState<string | null>(null);
+  const [pendingClassifications, setPendingClassifications] = useState<PendingSequenceClassification[]>([]);
+  const [classifyingId, setClassifyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const busyRef = useRef(false);
 
@@ -67,8 +79,12 @@ export default function FollowUpQueue() {
       if (!user) { setItems([]); return; }
       const { data: profile } = await supabase.from('profiles').select('plan').eq('id', user.id).maybeSingle();
       const plan = String(profile?.plan ?? 'pro');
-      const next = await generateQueue(user.id, plan);
+      const [next, classifications] = await Promise.all([
+        generateQueue(user.id, plan),
+        loadPendingSequenceClassifications(user.id),
+      ]);
       setItems(next);
+      setPendingClassifications(classifications);
     } catch (e: any) {
       setError(e?.message ?? 'Could not load follow-ups.');
       setItems([]);
@@ -77,7 +93,11 @@ export default function FollowUpQueue() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const act = async (item: QueueItem, action: 'work' | 'complete' | 'skip') => {
+  const act = async (
+    item: QueueItem,
+    action: 'work' | 'complete' | 'skip',
+    callOutcome?: CallOutcome,
+  ) => {
     if (busyRef.current) return;
     busyRef.current = true;
     const key = `${item.contact_id}:${item.sequence_id}:${item.step_number}`;
@@ -110,15 +130,43 @@ export default function FollowUpQueue() {
       }
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('You are signed out.');
-      if (action === 'skip') await markSkipped(item, user.id);
-      else await markSentAndLog(item, user.id);
+      if (action === 'complete' && item.channel === 'call' && !callOutcome) {
+        throw new Error('Pick the call outcome before completing this step.');
+      }
+      const result = action === 'skip'
+        ? await markSkipped(item, user.id)
+        : await markSentAndLog(item, user.id, callOutcome);
       setOpenedKey(null);
       setItems(prev => (prev ?? []).filter(x => x !== item));
+      if (result.requiresClassification) {
+        const classifications = await loadPendingSequenceClassifications(user.id);
+        setPendingClassifications(classifications);
+      }
     } catch (e: any) {
       setError(e?.message ?? 'That follow-up could not be completed.');
     } finally {
       busyRef.current = false;
       setBusyKey(null);
+    }
+  };
+
+  const classify = async (
+    pending: PendingSequenceClassification,
+    classification: SequenceClassification,
+  ) => {
+    if (classifyingId) return;
+    setClassifyingId(pending.enrollment_id);
+    setError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('You are signed out.');
+      await classifyAndBranchSequence(pending, classification, user.id);
+      setPendingClassifications(prev => prev.filter(row => row.enrollment_id !== pending.enrollment_id));
+      await load();
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not save that sequence outcome.');
+    } finally {
+      setClassifyingId(null);
     }
   };
 
@@ -137,6 +185,29 @@ export default function FollowUpQueue() {
       </View>
 
       {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+
+      {pendingClassifications.map(pending => {
+        const busy = classifyingId === pending.enrollment_id;
+        return (
+          <View key={pending.enrollment_id} style={styles.classifyCard}>
+            <Text style={styles.classifyKicker}>FRESH UP · 14 DAYS COMPLETE</Text>
+            <Text style={styles.classifyTitle}>What happened with {pending.contact_name}?</Text>
+            <Text style={styles.classifyBody}>You decide the outcome. PocketRep will move them into the right long-term sequence.</Text>
+            <View style={styles.classifyActions}>
+              <Pressable disabled={busy} onPress={() => void classify(pending, 'sold')} style={[styles.classifyBtn, styles.classifyPrimary]}>
+                <Text style={styles.classifyPrimaryText}>SOLD</Text>
+              </Pressable>
+              <Pressable disabled={busy} onPress={() => void classify(pending, 'still_shopping')} style={styles.classifyBtn}>
+                <Text style={styles.classifyText}>STILL SHOPPING</Text>
+              </Pressable>
+              <Pressable disabled={busy} onPress={() => void classify(pending, 'no_response')} style={styles.classifyBtn}>
+                <Text style={styles.classifyText}>NO RESPONSE</Text>
+              </Pressable>
+            </View>
+            {busy ? <Text style={styles.classifySaving}>Saving outcome…</Text> : null}
+          </View>
+        );
+      })}
 
       {items.length === 0 ? (
         <Text style={styles.empty}>Enroll customers in a sequence and their due steps will appear here.</Text>
@@ -164,17 +235,45 @@ export default function FollowUpQueue() {
                 <Pressable disabled={busy} onPress={() => void act(item, 'skip')} style={styles.skip} accessibilityRole="button" accessibilityLabel={`Skip follow-up for ${item.contact_name}`}>
                   <Text style={styles.skipText}>Skip</Text>
                 </Pressable>
-                <Pressable
-                  disabled={busy}
-                  onPress={() => void act(item, openedKey === key ? 'complete' : 'work')}
-                  style={styles.work}
-                  accessibilityRole="button"
-                  accessibilityLabel={openedKey === key ? `Mark follow-up complete for ${item.contact_name}` : `Work ${item.channel} follow-up for ${item.contact_name}`}
-                >
-                  <Text style={styles.workText}>{busy ? 'Working…' : openedKey === key ? 'MARK COMPLETE ✓' : item.isDemo ? 'Simulate' : `Work ${channelLabel(item.channel)}`}</Text>
-                </Pressable>
+                {openedKey === key && item.channel === 'call' ? (
+                  <View style={styles.callOpened}>
+                    <Text style={styles.callOpenedText}>CALL OPENED · RECORD OUTCOME</Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    disabled={busy}
+                    onPress={() => void act(item, openedKey === key ? 'complete' : 'work')}
+                    style={styles.work}
+                    accessibilityRole="button"
+                    accessibilityLabel={openedKey === key ? `Mark follow-up complete for ${item.contact_name}` : `Work ${item.channel} follow-up for ${item.contact_name}`}
+                  >
+                    <Text style={styles.workText}>{busy ? 'Working…' : openedKey === key ? (item.channel === 'text' ? 'MARK SENT ✓' : 'MARK COMPLETE ✓') : item.isDemo ? 'Simulate' : `Work ${channelLabel(item.channel)}`}</Text>
+                  </Pressable>
+                )}
               </View>
-              {openedKey === key ? <Text style={styles.openedHint}>Finish the {item.channel}, then mark this step complete.</Text> : null}
+              {openedKey === key && item.channel === 'call' ? (
+                <View style={styles.callOutcomes}>
+                  {([
+                    ['answered', 'Answered'],
+                    ['no-answer', 'No answer'],
+                    ['voicemail', 'Left VM'],
+                    ['wrong-number', 'Wrong #'],
+                  ] as Array<[CallOutcome, string]>).map(([value, label]) => (
+                    <Pressable
+                      key={value}
+                      disabled={busy}
+                      onPress={() => void act(item, 'complete', value)}
+                      style={styles.callOutcomeBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Record ${label} for ${item.contact_name}`}
+                    >
+                      <Text style={styles.callOutcomeText}>{label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : openedKey === key ? (
+                <Text style={styles.openedHint}>Finish the {item.channel}, then mark this step sent.</Text>
+              ) : null}
             </View>
           );
         })
@@ -191,6 +290,23 @@ const styles = StyleSheet.create({
   refresh: { width: 36, height: 36, borderRadius: radius.full, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4, alignItems: 'center', justifyContent: 'center' },
   refreshText: { color: colors.gold, fontSize: 20, fontWeight: '700' },
   error: { color: colors.red, fontSize: 11, marginBottom: 8 },
+  classifyCard: {
+    marginBottom: 10, padding: 14, borderRadius: radius.md,
+    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
+  },
+  classifyKicker: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.0 },
+  classifyTitle: { color: colors.white, fontSize: 15, fontWeight: '800', marginTop: 5 },
+  classifyBody: { color: colors.grey3, fontSize: 11, lineHeight: 16, marginTop: 5 },
+  classifyActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 12 },
+  classifyBtn: {
+    minHeight: 38, paddingHorizontal: 12, borderRadius: radius.full,
+    borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface2,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  classifyPrimary: { backgroundColor: colors.gold, borderColor: colors.gold },
+  classifyPrimaryText: { color: colors.ink, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  classifyText: { color: colors.grey3, fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  classifySaving: { color: colors.gold, fontSize: 10, fontWeight: '700', marginTop: 8 },
   empty: { color: colors.grey2, fontSize: 12, lineHeight: 18, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.md, padding: 14 },
   card: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.md, padding: 14, marginBottom: 7 },
   topRow: { flexDirection: 'row', alignItems: 'center' },
@@ -204,5 +320,18 @@ const styles = StyleSheet.create({
   skipText: { color: colors.grey2, fontSize: 12, fontWeight: '700' },
   work: { flex: 1, backgroundColor: colors.gold, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 9, alignItems: 'center' },
   workText: { color: colors.ink, fontSize: 12, fontWeight: '800' },
+  callOpened: {
+    flex: 1, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 9,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldBg,
+    borderWidth: 1, borderColor: colors.goldBorder,
+  },
+  callOpenedText: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+  callOutcomes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8, justifyContent: 'flex-end' },
+  callOutcomeBtn: {
+    minHeight: 34, paddingHorizontal: 10, borderRadius: radius.full,
+    borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.ink2,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  callOutcomeText: { color: colors.grey3, fontSize: 10, fontWeight: '800' },
   openedHint: { color: colors.gold, fontSize: 10, lineHeight: 15, marginTop: 8, textAlign: 'right' },
 });

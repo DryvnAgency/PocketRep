@@ -67,16 +67,32 @@ export function markDisclosureSeen(): void {
 // (follows the user across devices); localStorage is just a fast read-through
 // cache so onboarding does not flash again after completion.
 const ONBOARDING_KEY = 'pocketrep:v2:onboarding-complete';
+const SOLD_BOOK_NUDGE_KEY = 'pocketrep:v2:sold-book-nudge-seen';
 let memOnboarding = false;
+let memSoldBookNudge = false;
 
 export function resetRexSettingsCache(): void {
   mem = false;
   memOnboarding = false;
+  memSoldBookNudge = false;
 }
 
 export function hasCompletedOnboarding(): boolean {
   if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return memOnboarding;
   return localStorage.getItem(ONBOARDING_KEY) === '1';
+}
+
+
+export function hasSeenSoldBookNudge(): boolean {
+  if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return memSoldBookNudge;
+  return localStorage.getItem(SOLD_BOOK_NUDGE_KEY) === '1';
+}
+
+export function markSoldBookNudgeSeen(): void {
+  memSoldBookNudge = true;
+  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+    localStorage.setItem(SOLD_BOOK_NUDGE_KEY, '1');
+  }
 }
 
 export async function markOnboardingComplete(): Promise<void> {

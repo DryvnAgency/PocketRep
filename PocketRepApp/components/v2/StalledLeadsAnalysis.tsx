@@ -16,19 +16,35 @@ const REC_META: Record<StalledRecommendation['recommendation'], { color: string;
 };
 
 function Card({
-  r, picked, onTogglePick,
+  r, picked, onTogglePick, onOpen,
 }: {
   r: StalledRecommendation;
   picked: boolean;
   onTogglePick: () => void;
+  // Opens this contact. A normal tap on the card is no longer an ambiguous
+  // selection toggle — it's always a real, non-destructive "go look at this
+  // lead" action, which is exactly the next step WATCH was missing. Optional
+  // until the caller wires it (see StalledLeadsAnalysis's own prop below and
+  // the PR notes on AppShell wiring); the tap is a safe no-op until then.
+  onOpen?: () => void;
 }) {
   const meta = REC_META[r.recommendation];
   return (
-    <Pressable onPress={onTogglePick} style={[
+    <Pressable onPress={onOpen} disabled={!onOpen} style={[
       styles.card,
       picked && { borderColor: meta.color, backgroundColor: colors.goldBg },
     ]}>
       <View style={styles.cardHead}>
+        <Pressable
+          onPress={(e) => { e.stopPropagation?.(); onTogglePick(); }}
+          hitSlop={8}
+          style={[styles.checkbox, picked && { backgroundColor: meta.color, borderColor: meta.color }]}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: picked }}
+          accessibilityLabel={picked ? `Deselect ${r.contact_name}` : `Select ${r.contact_name}`}
+        >
+          {picked ? <Text style={styles.checkboxMark}>✓</Text> : null}
+        </Pressable>
         <Avatar name={r.contact_name} size={32} />
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{r.contact_name}</Text>
@@ -57,6 +73,7 @@ export default function StalledLeadsAnalysis({
   onClose,
   onDispatchBlast,
   onKilled,
+  onOpenContact,
 }: {
   open: boolean;
   report: StalledReport | null;
@@ -66,6 +83,11 @@ export default function StalledLeadsAnalysis({
   // off to BlastSequenceDrafter with the pre-drafted openers.
   onDispatchBlast: (rows: StalledRecommendation[]) => void;
   onKilled: () => void;
+  // NEW (Issue #160): tapping a card now opens the contact instead of
+  // toggling selection, so WATCH — which has no batch action — still gets a
+  // real next step. Optional and not yet wired by AppShell; see PR notes for
+  // exactly how AppShell should wire this (this lane does not edit AppShell).
+  onOpenContact?: (contactId: string) => void;
 }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [working, setWorking] = useState<'kill' | 'push' | null>(null);
@@ -147,6 +169,7 @@ export default function StalledLeadsAnalysis({
                 r={r}
                 picked={picked.has(r.contact_id)}
                 onTogglePick={() => togglePick(r.contact_id)}
+                onOpen={onOpenContact ? () => onOpenContact(r.contact_id) : undefined}
               />
             ))
           )}
@@ -236,6 +259,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  checkbox: {
+    width: 22, height: 22, borderRadius: radius.sm,
+    borderWidth: 1.5, borderColor: colors.ink4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxMark: { color: colors.ink, fontSize: 13, fontWeight: '800' },
   name: { fontSize: 14, fontWeight: '700', color: colors.white },
   meta: { fontSize: 11, color: colors.grey2, marginTop: 2 },
   reason: { fontSize: 12, color: colors.grey3, fontStyle: 'italic' },
