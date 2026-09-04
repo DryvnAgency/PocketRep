@@ -27,25 +27,13 @@ import type { PayPlan } from '@/lib/v2/payPlan';
 import { chooseRexTier, isWholeBookRequest, resolveMentionedContactId } from '@/lib/v2/rexRouting';
 import { logInteraction } from '@/lib/v2/interactions';
 
-// The coach may emit this narrow action allow-list; destructive batch/delete
-// operations stay voice/UI-only and every listed action still needs Confirm.
-// find_vehicles (read-only pivot) joins the list only when its flag is on — off
-// → the model isn't taught the action and the set is unchanged, so a stray
-// find_vehicles degrades to plain text like any non-allowed action.
 const COACH_ACTIONS = new Set<RexAction['type']>([
   'add_contact', 'update_notes', 'schedule_followup', 'retier_contact', 'log_deal', 'create_reminder',
   'create_blast_sequence',
   ...(isVehicleFinderEnabled() ? (['find_vehicles'] as RexAction['type'][]) : []),
 ]);
 
-// Rex chat v2 (EXPO_PUBLIC_REX_CHAT): closer persona + token streaming + durable
-// cross-device thread. Build-time env, so this is constant for the app's life;
-// OFF → every path below behaves byte-identically to before.
 const REX_CHAT = isRexChatEnabled();
-
-// P3-A1: the two-pass planner→executor triad. Requires REX_CHAT (it upgrades the
-// same chat path) AND its own flag. Build-time constant → OFF makes deliver()
-// take the exact single-call path it takes today.
 const TRIAD = REX_CHAT && isRexTriadEnabled();
 
 type ChatMessage = { from: 'rex' | 'user'; text: string; time: string };
@@ -79,6 +67,7 @@ export default function RexCoach({
   onOpenContact,
   onDraftFirstText,
   onEnrollFreshUp,
+  initialContactId = null,
   mission = null,
   missionCount = 0,
   onFinishMission,
@@ -87,12 +76,11 @@ export default function RexCoach({
   onClose: () => void;
   contacts: V2Contact[];
   payPlan: PayPlan | null;
-  // Fired after a confirmed action executes so AppShell can refresh the right
-  // surface (contacts / deals / notifications) — mirrors handleRexConfirm.
   onActed?: (action: RexAction, result?: ActionResult) => void | Promise<void>;
   onOpenContact?: (id: string) => void;
   onDraftFirstText?: (contactId: string) => void | Promise<void>;
   onEnrollFreshUp?: (contactId: string) => void | Promise<void>;
+  initialContactId?: string | null;
   mission?: RexCoachMission | null;
   missionCount?: number;
   onFinishMission?: () => void | Promise<void>;
@@ -101,31 +89,22 @@ export default function RexCoach({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
-  // On a transient failure we keep the text so a Retry button can re-send it.
-
   const [retry, setRetry] = useState<{ text: string; history: ChatMessage[] } | null>(null);
   const [mtd, setMtd] = useState<MtdSummary | null>(null);
-  const [activity, setActivity] = useState('');           // recent-activity recall block
-  const [pending, setPending] = useState<RexAction | null>(null); // proposed write action
+  const [activity, setActivity] = useState('');
+  const [pending, setPending] = useState<RexAction | null>(null);
   const [newContactReady, setNewContactReady] = useState<{ id: string; name: string } | null>(null);
   const [newContactBusy, setNewContactBusy] = useState<'text' | 'sequence' | null>(null);
-  const [acting, setActing] = useState(false);            // executing a confirmed action
-  const [parseOpen, setParseOpen] = useState(false);      // conversation composer (NEW 5)
-  const [parsing, setParsing] = useState(false);          // extraction in flight
+  const [acting, setActing] = useState(false);
+  const [parseOpen, setParseOpen] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [parseResult, setParseResult] = useState<ConversationParse | null>(null);
-  // Rex chat v2: the in-flight streamed reply (null = not streaming), who Rex
-  // works for, and whether the rep has interacted since open (guards the async
-  // server-thread restore from clobbering a conversation already in progress).
   const [streamText, setStreamText] = useState<string | null>(null);
   const repIdent = useRef<RepIdentity>({});
   const activeContactIdRef = useRef<string | null>(null);
   const interactedRef = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
 
-  // Web keyboard-avoidance: iOS Safari doesn't shrink the layout viewport for
-  // the on-screen keyboard, so the bottom-pinned input gets covered. Track the
-  // keyboard height via visualViewport and lift the sheet's bottom by it. 0 on
-  // native and whenever the keyboard is closed.
   const [kbInset, setKbInset] = useState(0);
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
@@ -138,13 +117,9 @@ export default function RexCoach({
     return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
   }, []);
 
-  // Seed a fresh greeting each time the sheet opens, and refresh month-to-date
-  // numbers so coaching reflects the rep's current standing.
   useEffect(() => {
     if (open) {
       greeting.current = COACH_OPENERS[Math.floor(Math.random() * COACH_OPENERS.length)];
-      // NEW 6: restore today's logged thread; carry yesterday's recap on top.
-      // A fresh day (no entries) just shows the recap + greeting.
       const carry = getCarrySummary();
       const today = getTodayLog();
       const seeded: ChatMessage[] = [];
@@ -176,17 +151,14 @@ export default function RexCoach({
       setParseResult(null);
       setStreamText(null);
       interactedRef.current = false;
-      activeContactIdRef.current = null;
-      // Warm the brain function while the rep reads the greeting + types, so the
-      // first real send lands on a warm container instead of a cold start.
+      activeContactIdRef.current = initialContactId && contacts.some(c => c.id === initialContactId)
+        ? initialContactId
+        : null;
       warmBrain();
       loadMtdSummary().then(setMtd).catch(() => setMtd(null));
       loadRecentActivity().then(setActivity).catch(() => setActivity(''));
       if (REX_CHAT) {
-        // Who Rex works for (best-effort; prompt falls back to demo defaults).
         loadRepIdentity().then(r => { repIdent.current = r; }).catch(() => undefined);
-        // A guided sold-book mission intentionally starts with a clean mission
-        // thread. Normal Rex opens still restore today's durable conversation.
         if (!mission) {
           loadTodayServerThread().then(rows => {
             if (!rows || rows.length === 0 || interactedRef.current) return;
@@ -207,9 +179,6 @@ export default function RexCoach({
 
   if (!open) return null;
 
-  // Append to the visible thread AND persist to today's coach log (NEW 6), so
-  // the day's real turns/actions survive a reopen. Transient system bubbles
-  // (errors, cancels) stay setMessages-only and aren't logged.
   const pushUser = (text: string) => {
     setMessages(m => [...m, { from: 'user', text, time: stamp() }]);
     appendCoachEntry({ role: 'user', text, time: stamp() });
@@ -222,18 +191,15 @@ export default function RexCoach({
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
     if (!text || typing) return;
-    interactedRef.current = true; // a live conversation beats the async restore
+    interactedRef.current = true;
     setRetry(null);
-    setPending(null); // a new message supersedes any un-confirmed proposal
+    setPending(null);
     const history = messages;
     pushUser(text);
     setInput('');
     await deliver(text, history);
   };
 
-  // Runs one coach turn with cold-start resilience: on a transient (timeout/network)
-  // failure warms the function and retries once — the retry lands on the now-warm
-  // container. On final failure it stores the turn so the Retry button can re-send.
   const deliver = async (text: string, history: ChatMessage[]) => {
     setTyping(true);
     const repContext = serializeRepContext({ contacts, payPlan, mtd });
@@ -248,18 +214,10 @@ export default function RexCoach({
       : activity;
     let activeTier = chooseRexTier({ workload: 'routine', text });
     let attempt = 0;
-    // P3-A1: flips to false only if the planner returns an unusable plan, so this
-    // turn falls back to the single call without a hard error. Transient failures
-    // keep TRIAD on and re-run the two-pass path on the warm retry.
-    // Keep the guided sold-book capture on the proven single-call action path:
-    // the triad planner is optimized for coaching, not structured customer capture.
     let useTriad = TRIAD && !mission;
     try {
       for (;;) {
         try {
-          // P3-A1 triad: PLANNER (diagnose → JSON plan) then EXECUTOR (stream the
-          // words). Only a plan-parse miss falls through to the single call below;
-          // transient errors rethrow into the same warm-and-retry loop as always.
           if (useTriad) {
             try {
               const { reply, action } = await runTriadCoach({
@@ -284,17 +242,12 @@ export default function RexCoach({
               recordRexTurn(text, line, turnContactId).catch(() => undefined);
               return;
             } catch (e: any) {
-              // A bad/unparseable plan is not worth erroring on — quietly use the
-              // single-call path this same attempt. Anything else (timeout,
-              // network, empty) propagates to the transient handler below.
               if (!String(e?.message ?? '').includes('triad plan')) throw e;
               useTriad = false;
               setStreamText(null);
             }
           }
 
-          // 1200 (was 700) so a complete, structured coaching answer never gets
-          // cut off mid-sentence — the prompt still asks Rex to stay tight.
           const brainOpts = {
             maxTokens: 1200,
             tier: activeTier,
@@ -308,51 +261,34 @@ export default function RexCoach({
                 : '',
             }),
           };
-          // Rex chat v2 streams tokens into a live bubble; the visible stream
-          // stops at the first fenced block so a trailing action JSON never
-          // flashes on screen. Flag off → the original one-shot call, untouched.
           const reply = REX_CHAT
             ? (await callBrainStream({
                 ...brainOpts,
-                // Parity with callBrain's total budget: the stream path's idle
-                // timer resets per chunk, but the non-SSE JSON fallback needs
-                // the full 60s (cold starts run 30-60s).
                 timeoutMs: 60_000,
-                // Trim a partially-arrived fence so 1-2 backticks never flash.
                 onDelta: (full) => setStreamText(full.split('```')[0].replace(/`{1,2}\s*$/, '')),
               })).trim()
             : (await callBrain(brainOpts)).trim();
           if (!reply) throw new Error('empty');
-          // The reply is coaching text, optionally followed by a structured
-          // action when the rep asked Rex to DO something. Show the spoken line;
-          // if an allowed write-action came back, queue the Confirm card.
           const { spoken, action } = parseCoachReply(reply);
           const actionable = !!action && COACH_ACTIONS.has(action.type);
           const line = spoken || (actionable ? summarizeAction(action!) : reply);
-          setStreamText(null); // the final bubble replaces the stream
+          setStreamText(null);
           pushRex(line);
           if (actionable) setPending(action!);
           if (!actionable && turnContactId) {
             logInteraction(turnContactId, 'game_plan', `Rex game plan: ${line}`).catch(() => undefined);
           }
-          // Durable thread: mirror the exchange into rex_messages (fire-and-
-          // forget; also feeds the rolling rex_memory summary shared with voice).
           if (REX_CHAT) recordRexTurn(text, line, turnContactId).catch(() => undefined);
           return;
         } catch (e: any) {
           const msg = String(e?.message ?? '');
-          // An empty Pro result usually means hidden reasoning consumed the
-          // output ceiling before visible copy began. Recover once on Flash
-          // instead of spending a second Pro call or making Rex appear asleep.
           const transient = msg.includes('timeout') || msg.includes('network') || msg.includes('empty');
           if (attempt === 0 && transient) {
             attempt++;
             if (activeTier === 'pro') activeTier = 'flash';
-            // If the optional planner was the failing Pro call, the recovery is
-            // the proven single-call coach path, not another planner attempt.
             useTriad = false;
             setStreamText(null);
-            await warmBrain();   // boot the container, then retry once
+            await warmBrain();
             continue;
           }
           throw e;
@@ -367,7 +303,7 @@ export default function RexCoach({
       setRetry({ text, history });
     } finally {
       setTyping(false);
-      setStreamText(null); // clear any partial stream on success OR failure
+      setStreamText(null);
     }
   };
 
@@ -378,8 +314,6 @@ export default function RexCoach({
     deliver(r.text, r.history);
   };
 
-  // Confirm-before-write: the proposed action only executes here, on an explicit
-  // tap. Reuses the exact engine the voice path uses (executeAction).
   const confirmAction = async () => {
     if (!pending || acting) return;
     const action: RexAction = mission && pending.type === 'add_contact'
@@ -400,10 +334,8 @@ export default function RexCoach({
     setActing(true);
     try {
       const result = await executeAction(action, contacts);
-      // UI-backed actions such as Smart Blast finish their real work in
-      // AppShell. Await that work so the success log and Done message are true.
       await onActed?.(action, result);
-      logRexAction(action, 'success').catch(() => undefined); // audit chat-taken writes too
+      logRexAction(action, 'success').catch(() => undefined);
       if (mission && action.type === 'add_contact') {
         pushRex(`✓ Added ${action.payload.first_name}${action.payload.last_name ? ` ${action.payload.last_name}` : ''}. Give me the next sold customer, or tap Done when you're ready for the Text Queue.`);
       } else if (action.type === 'add_contact' && result.openContactId) {
@@ -433,10 +365,8 @@ export default function RexCoach({
     setMessages(m => [...m, { from: 'rex', text: 'Okay, holding off — nothing saved.', time: stamp() }]);
   };
 
-  // NEW 5 — parse a whole conversation into a proposed CRM update (extraction is
-  // read-only; the write still waits for Confirm below).
   const runParse = async (transcript: string) => {
-    interactedRef.current = true; // a parse in progress beats the async restore
+    interactedRef.current = true;
     setParseOpen(false);
     setPending(null);
     setParseResult(null);
@@ -458,8 +388,6 @@ export default function RexCoach({
     }
   };
 
-  // Confirm the parse: add (or update) the contact, then optionally set the
-  // suggested follow-up. Reuses executeAction for each write.
   const confirmParse = async () => {
     if (!parseResult || acting) return;
     const r = parseResult;
@@ -537,16 +465,11 @@ export default function RexCoach({
 
         <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={styles.messages}>
           {messages.map((m, i) => (
-            <View
-              key={i}
-              style={[styles.bubbleRow, { justifyContent: m.from === 'user' ? 'flex-end' : 'flex-start' }]}
-            >
+            <View key={i} style={[styles.bubbleRow, { justifyContent: m.from === 'user' ? 'flex-end' : 'flex-start' }]}>
               <View style={{ maxWidth: '84%' }}>
                 {m.from === 'rex' ? <Label color={colors.gold}>REX · COACH</Label> : null}
                 <View style={[styles.bubble, m.from === 'user' ? styles.bubbleUser : styles.bubbleRex]}>
-                  <Text style={[styles.bubbleText, m.from === 'user' && { color: colors.white }]}>
-                    {m.text}
-                  </Text>
+                  <Text style={[styles.bubbleText, m.from === 'user' && { color: colors.white }]}>{m.text}</Text>
                 </View>
                 <Text style={[styles.time, { textAlign: m.from === 'user' ? 'right' : 'left' }]}>{m.time}</Text>
               </View>
@@ -556,9 +479,7 @@ export default function RexCoach({
             <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
               <View style={{ maxWidth: '84%' }}>
                 <Label color={colors.gold}>REX · COACH</Label>
-                <View style={[styles.bubble, styles.bubbleRex]}>
-                  <Text style={styles.bubbleText}>{streamText}</Text>
-                </View>
+                <View style={[styles.bubble, styles.bubbleRex]}><Text style={styles.bubbleText}>{streamText}</Text></View>
               </View>
             </View>
           ) : null}
@@ -566,18 +487,12 @@ export default function RexCoach({
             <View style={styles.bubbleRow}>
               <View style={[styles.bubble, styles.bubbleRex, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
                 <RadarLoader size={16} />
-                <Text style={styles.bubbleText} accessibilityLiveRegion="polite">
-                  Rex is working the board…
-                </Text>
+                <Text style={styles.bubbleText} accessibilityLiveRegion="polite">Rex is working the board…</Text>
               </View>
             </View>
           ) : null}
           {retry && !typing ? (
-            <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
-              <Pressable onPress={doRetry} style={styles.retryBtn}>
-                <Text style={styles.retryText}>↻ Retry</Text>
-              </Pressable>
-            </View>
+            <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}><Pressable onPress={doRetry} style={styles.retryBtn}><Text style={styles.retryText}>↻ Retry</Text></Pressable></View>
           ) : null}
           {pending ? (
             <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
@@ -585,12 +500,8 @@ export default function RexCoach({
                 <Text style={styles.proposeLabel}>PROPOSED · CONFIRM TO SAVE</Text>
                 <Text style={styles.proposeText}>{summarizeAction(pending)}</Text>
                 <View style={styles.proposeActions}>
-                  <Pressable onPress={cancelAction} disabled={acting} style={styles.proposeCancel}>
-                    <Text style={styles.proposeCancelText}>Cancel</Text>
-                  </Pressable>
-                  <Pressable onPress={confirmAction} disabled={acting} style={styles.proposeConfirm}>
-                    <Text style={styles.proposeConfirmText}>{acting ? 'Saving…' : 'Confirm'}</Text>
-                  </Pressable>
+                  <Pressable onPress={cancelAction} disabled={acting} style={styles.proposeCancel}><Text style={styles.proposeCancelText}>Cancel</Text></Pressable>
+                  <Pressable onPress={confirmAction} disabled={acting} style={styles.proposeConfirm}><Text style={styles.proposeConfirmText}>{acting ? 'Saving…' : 'Confirm'}</Text></Pressable>
                 </View>
               </View>
             </View>
@@ -601,51 +512,22 @@ export default function RexCoach({
                 <Text style={styles.quickContactLabel}>NEW CUSTOMER READY</Text>
                 <Text style={styles.quickContactName}>{newContactReady.name}</Text>
                 <Text style={styles.quickContactHint}>Rex can turn the card into the first move without making you retype anything.</Text>
-                <Pressable
-                  disabled={!!newContactBusy}
-                  onPress={async () => {
-                    setNewContactBusy('text');
-                    try {
-                      await onDraftFirstText?.(newContactReady.id);
-                      setNewContactReady(null);
-                    } catch (e: any) {
-                      setMessages(m => [...m, { from: 'rex', text: e?.message ?? "Couldn't draft that text yet.", time: stamp() }]);
-                    } finally {
-                      setNewContactBusy(null);
-                    }
-                  }}
-                  style={styles.quickContactPrimary}
-                >
+                <Pressable disabled={!!newContactBusy} onPress={async () => {
+                  setNewContactBusy('text');
+                  try { await onDraftFirstText?.(newContactReady.id); setNewContactReady(null); }
+                  catch (e: any) { setMessages(m => [...m, { from: 'rex', text: e?.message ?? "Couldn't draft that text yet.", time: stamp() }]); }
+                  finally { setNewContactBusy(null); }
+                }} style={styles.quickContactPrimary}>
                   <Text style={styles.quickContactPrimaryText}>{newContactBusy === 'text' ? 'DRAFTING…' : '💬 DRAFT FIRST THANK-YOU'}</Text>
                 </Pressable>
                 <View style={styles.quickContactActions}>
-                  <Pressable
-                    disabled={!!newContactBusy}
-                    onPress={async () => {
-                      setNewContactBusy('sequence');
-                      try {
-                        await onEnrollFreshUp?.(newContactReady.id);
-                        pushRex(`✓ ${newContactReady.name} is on Fresh Up — 14 Day.`);
-                      } catch (e: any) {
-                        setMessages(m => [...m, { from: 'rex', text: e?.message ?? "Couldn't enroll that customer yet.", time: stamp() }]);
-                      } finally {
-                        setNewContactBusy(null);
-                      }
-                    }}
-                    style={styles.quickContactSecondary}
-                  >
-                    <Text style={styles.quickContactSecondaryText}>{newContactBusy === 'sequence' ? 'ADDING…' : '＋ FRESH UP'}</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={!!newContactBusy}
-                    onPress={() => {
-                      onOpenContact?.(newContactReady.id);
-                      onClose();
-                    }}
-                    style={styles.quickContactSecondary}
-                  >
-                    <Text style={styles.quickContactSecondaryText}>OPEN CUSTOMER</Text>
-                  </Pressable>
+                  <Pressable disabled={!!newContactBusy} onPress={async () => {
+                    setNewContactBusy('sequence');
+                    try { await onEnrollFreshUp?.(newContactReady.id); pushRex(`✓ ${newContactReady.name} is on Fresh Up — 14 Day.`); }
+                    catch (e: any) { setMessages(m => [...m, { from: 'rex', text: e?.message ?? "Couldn't enroll that customer yet.", time: stamp() }]); }
+                    finally { setNewContactBusy(null); }
+                  }} style={styles.quickContactSecondary}><Text style={styles.quickContactSecondaryText}>{newContactBusy === 'sequence' ? 'ADDING…' : '＋ FRESH UP'}</Text></Pressable>
+                  <Pressable disabled={!!newContactBusy} onPress={() => { onOpenContact?.(newContactReady.id); onClose(); }} style={styles.quickContactSecondary}><Text style={styles.quickContactSecondaryText}>OPEN CUSTOMER</Text></Pressable>
                 </View>
               </View>
             </View>
@@ -653,28 +535,14 @@ export default function RexCoach({
           {parseResult ? (
             <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
               <View style={styles.proposeCard}>
-                <Text style={styles.proposeLabel}>
-                  {parseResult.is_new ? 'NEW CONTACT · CONFIRM TO SAVE' : 'UPDATE CONTACT · CONFIRM TO SAVE'}
-                </Text>
-                <Text style={styles.proposeText}>
-                  {(`${parseResult.first_name ?? ''} ${parseResult.last_name ?? ''}`.trim() || 'Unnamed lead')}
-                  {parseResult.vehicle ? ` · ${parseResult.vehicle}` : ''}
-                  {parseResult.phone ? ` · ${parseResult.phone}` : ''}
-                </Text>
+                <Text style={styles.proposeLabel}>{parseResult.is_new ? 'NEW CONTACT · CONFIRM TO SAVE' : 'UPDATE CONTACT · CONFIRM TO SAVE'}</Text>
+                <Text style={styles.proposeText}>{(`${parseResult.first_name ?? ''} ${parseResult.last_name ?? ''}`.trim() || 'Unnamed lead')}{parseResult.vehicle ? ` · ${parseResult.vehicle}` : ''}{parseResult.phone ? ` · ${parseResult.phone}` : ''}</Text>
                 {parseResult.notes ? <Text style={styles.parseNotes}>📝 {parseResult.notes}</Text> : null}
                 {parseResult.plan ? <Text style={styles.parsePlan}>▶ {parseResult.plan}</Text> : null}
-                {parseResult.followup_days ? (
-                  <Text style={styles.parseMeta}>
-                    Follow-up in {parseResult.followup_days} day{parseResult.followup_days === 1 ? '' : 's'}
-                  </Text>
-                ) : null}
+                {parseResult.followup_days ? <Text style={styles.parseMeta}>Follow-up in {parseResult.followup_days} day{parseResult.followup_days === 1 ? '' : 's'}</Text> : null}
                 <View style={styles.proposeActions}>
-                  <Pressable onPress={cancelParse} disabled={acting} style={styles.proposeCancel}>
-                    <Text style={styles.proposeCancelText}>Discard</Text>
-                  </Pressable>
-                  <Pressable onPress={confirmParse} disabled={acting} style={styles.proposeConfirm}>
-                    <Text style={styles.proposeConfirmText}>{acting ? 'Saving…' : 'Save it'}</Text>
-                  </Pressable>
+                  <Pressable onPress={cancelParse} disabled={acting} style={styles.proposeCancel}><Text style={styles.proposeCancelText}>Discard</Text></Pressable>
+                  <Pressable onPress={confirmParse} disabled={acting} style={styles.proposeConfirm}><Text style={styles.proposeConfirmText}>{acting ? 'Saving…' : 'Save it'}</Text></Pressable>
                 </View>
               </View>
             </View>
@@ -683,243 +551,77 @@ export default function RexCoach({
 
         {mission ? (
           <View style={styles.missionBar}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.missionLabel}>BUILD YOUR 60-DAY BOOK</Text>
-              <Text style={styles.missionMeta}>
-                {mission === 'sold_book_last_month' ? 'Last month' : 'Previous month'} · {missionCount} added
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => { void onFinishMission?.(); }}
-              disabled={missionCount === 0 || acting || typing}
-              style={[styles.missionDone, (missionCount === 0 || acting || typing) && { opacity: 0.45 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Done, build outreach"
-            >
-              <Text style={styles.missionDoneText}>DONE · BUILD OUTREACH</Text>
-            </Pressable>
+            <View style={{ flex: 1 }}><Text style={styles.missionLabel}>BUILD YOUR 60-DAY BOOK</Text><Text style={styles.missionMeta}>{mission === 'sold_book_last_month' ? 'Last month' : 'Previous month'} · {missionCount} added</Text></View>
+            <Pressable onPress={() => { void onFinishMission?.(); }} disabled={missionCount === 0 || acting || typing} style={[styles.missionDone, (missionCount === 0 || acting || typing) && { opacity: 0.45 }]} accessibilityRole="button" accessibilityLabel="Done, build outreach"><Text style={styles.missionDoneText}>DONE · BUILD OUTREACH</Text></Pressable>
           </View>
         ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipsScroll}
-            contentContainerStyle={styles.chips}
-          >
-            {QUICK_CHIPS.map(chip => (
-              <Pressable key={chip} onPress={() => send(chip)} style={styles.chip} disabled={typing}>
-                <Text style={styles.chipText}>{chip}</Text>
-              </Pressable>
-            ))}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chips}>
+            {QUICK_CHIPS.map(chip => <Pressable key={chip} onPress={() => send(chip)} style={styles.chip} disabled={typing}><Text style={styles.chipText}>{chip}</Text></Pressable>)}
           </ScrollView>
         )}
 
         <View style={styles.inputBar}>
-          <Pressable
-            onPress={() => setParseOpen(true)}
-            disabled={typing}
-            style={styles.composeBtn}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel="Parse a conversation"
-          >
-            <Text style={styles.composeIcon}>🎙</Text>
-          </Pressable>
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder={mission ? "Name, phone, vehicle, sold timing…" : "Ask Rex anything…"}
-            placeholderTextColor={colors.grey}
-            style={styles.input}
-            onSubmitEditing={() => send()}
-            returnKeyType="send"
-            editable={!typing}
-          />
-          <Pressable
-            onPress={() => send()}
-            disabled={!input.trim() || typing}
-            style={[styles.sendBtn, (!input.trim() || typing) && { opacity: 0.5 }]}
-          >
-            <Text style={styles.sendIcon}>➤</Text>
-          </Pressable>
+          <Pressable onPress={() => setParseOpen(true)} disabled={typing} style={styles.composeBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Parse a conversation"><Text style={styles.composeIcon}>🎙</Text></Pressable>
+          <TextInput value={input} onChangeText={setInput} placeholder={mission ? "Name, phone, vehicle, sold timing…" : "Ask Rex anything…"} placeholderTextColor={colors.grey} style={styles.input} onSubmitEditing={() => send()} returnKeyType="send" editable={!typing} />
+          <Pressable onPress={() => send()} disabled={!input.trim() || typing} style={[styles.sendBtn, (!input.trim() || typing) && { opacity: 0.5 }]}><Text style={styles.sendIcon}>➤</Text></Pressable>
         </View>
       </View>
 
-      <ConversationComposer
-        open={parseOpen}
-        busy={parsing}
-        onClose={() => setParseOpen(false)}
-        onSubmit={runParse}
-      />
+      <ConversationComposer open={parseOpen} busy={parsing} onClose={() => setParseOpen(false)} onSubmit={runParse} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.8)' },
-  sheet: {
-    position: 'absolute',
-    left: 0, right: 0, bottom: 0, top: '6%',
-    backgroundColor: colors.ink,
-    borderTopWidth: 1,
-    borderTopColor: colors.goldBorder,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-  } as any,
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: colors.ink2,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.ink4,
-  },
-  live: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: colors.green,
-  },
+  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, top: '6%', backgroundColor: colors.ink, borderTopWidth: 1, borderTopColor: colors.goldBorder, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' } as any,
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: colors.ink2, borderBottomWidth: 1, borderBottomColor: colors.ink4 },
+  live: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green },
   headerLabel: { fontSize: 11, fontWeight: '800', color: colors.gold, letterSpacing: 1.4 },
-  closeBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: colors.surface2,
-    borderWidth: 1, borderColor: colors.ink4,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4, alignItems: 'center', justifyContent: 'center' },
   closeText: { color: colors.grey2, fontSize: 14 },
-
   messages: { padding: 14, gap: 4 },
   bubbleRow: { flexDirection: 'row', paddingVertical: 6 },
-  bubble: {
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginTop: 4,
-  },
+  bubble: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16, borderWidth: 1, marginTop: 4 },
   bubbleRex: { backgroundColor: colors.surface2, borderColor: colors.ink4, borderTopLeftRadius: 4 },
   bubbleUser: { backgroundColor: colors.goldBg, borderColor: colors.goldBorder, borderBottomRightRadius: 4 },
   bubbleText: { fontSize: 14, color: colors.grey3, lineHeight: 20, letterSpacing: -0.15 },
   time: { fontSize: 10, color: colors.grey, marginTop: 4 },
-
-  retryBtn: {
-    marginTop: 4,
-    paddingHorizontal: 16, paddingVertical: 9,
-    borderRadius: radius.full,
-    backgroundColor: colors.goldBg,
-    borderWidth: 1, borderColor: colors.goldBorder,
-  },
+  retryBtn: { marginTop: 4, paddingHorizontal: 16, paddingVertical: 9, borderRadius: radius.full, backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder },
   retryText: { fontSize: 12, fontWeight: '700', color: colors.gold, letterSpacing: 0.3 },
-
-  quickContactCard: {
-    width: '94%', marginTop: 4, padding: 14, borderRadius: radius.lg,
-    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder, gap: 7,
-  },
+  quickContactCard: { width: '94%', marginTop: 4, padding: 14, borderRadius: radius.lg, backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder, gap: 7 },
   quickContactLabel: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.0 },
   quickContactName: { color: colors.white, fontSize: 15, fontWeight: '800' },
   quickContactHint: { color: colors.grey3, fontSize: 11, lineHeight: 16 },
-  quickContactPrimary: {
-    minHeight: 42, borderRadius: radius.md, backgroundColor: colors.gold,
-    alignItems: 'center', justifyContent: 'center', marginTop: 3,
-  },
+  quickContactPrimary: { minHeight: 42, borderRadius: radius.md, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center', marginTop: 3 },
   quickContactPrimaryText: { color: colors.ink, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   quickContactActions: { flexDirection: 'row', gap: 7 },
-  quickContactSecondary: {
-    flex: 1, minHeight: 38, borderRadius: radius.md, borderWidth: 1, borderColor: colors.goldBorder,
-    backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center',
-  },
+  quickContactSecondary: { flex: 1, minHeight: 38, borderRadius: radius.md, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
   quickContactSecondaryText: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
-
-  proposeCard: {
-    maxWidth: '92%',
-    marginTop: 4,
-    backgroundColor: colors.goldBg,
-    borderWidth: 1, borderColor: colors.goldBorder,
-    borderRadius: radius.lg,
-    paddingHorizontal: 14, paddingVertical: 12,
-    gap: 8,
-  },
+  proposeCard: { maxWidth: '92%', marginTop: 4, backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder, borderRadius: radius.lg, paddingHorizontal: 14, paddingVertical: 12, gap: 8 },
   proposeLabel: { fontSize: 9, fontWeight: '800', color: colors.gold, letterSpacing: 1.0 },
   proposeText: { fontSize: 14, fontWeight: '600', color: colors.white, lineHeight: 19 },
   proposeActions: { flexDirection: 'row', gap: 8, marginTop: 2 },
-  proposeCancel: {
-    flex: 1, paddingVertical: 10, borderRadius: radius.md, alignItems: 'center',
-    backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
-  },
+  proposeCancel: { flex: 1, paddingVertical: 10, borderRadius: radius.md, alignItems: 'center', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4 },
   proposeCancelText: { fontSize: 13, fontWeight: '700', color: colors.grey2 },
-  proposeConfirm: {
-    flex: 1.2, paddingVertical: 10, borderRadius: radius.md, alignItems: 'center',
-    backgroundColor: colors.gold,
-  },
+  proposeConfirm: { flex: 1.2, paddingVertical: 10, borderRadius: radius.md, alignItems: 'center', backgroundColor: colors.gold },
   proposeConfirmText: { fontSize: 13, fontWeight: '800', color: colors.ink, letterSpacing: 0.2 },
   parseNotes: { fontSize: 12, color: colors.grey3, lineHeight: 17 },
   parsePlan: { fontSize: 12, color: colors.gold, lineHeight: 17, fontWeight: '600' },
   parseMeta: { fontSize: 11, color: colors.grey2, fontWeight: '600' },
-
-  missionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: colors.ink2,
-    borderTopWidth: 1,
-    borderTopColor: colors.goldBorder,
-  },
+  missionBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.ink2, borderTopWidth: 1, borderTopColor: colors.goldBorder },
   missionLabel: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
   missionMeta: { color: colors.white, fontSize: 12, fontWeight: '700', marginTop: 3 },
-  missionDone: {
-    paddingHorizontal: 12, paddingVertical: 10,
-    borderRadius: radius.md,
-    backgroundColor: colors.gold,
-  },
+  missionDone: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: radius.md, backgroundColor: colors.gold },
   missionDoneText: { color: colors.ink, fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
-
-  composeBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.surface2,
-    borderWidth: 1, borderColor: colors.goldBorder,
-  },
+  composeBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.goldBorder },
   composeIcon: { fontSize: 18 },
-
   chipsScroll: { flexGrow: 0, flexShrink: 0 },
   chips: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6, gap: 8, alignItems: 'center' },
-  chip: {
-    alignSelf: 'center',
-    paddingHorizontal: 12, paddingVertical: 8,
-    backgroundColor: colors.surface2,
-    borderWidth: 1, borderColor: colors.goldBorder,
-    borderRadius: radius.full,
-  },
+  chip: { alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.goldBorder, borderRadius: radius.full },
   chipText: { fontSize: 12, fontWeight: '600', color: colors.gold },
-
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    // Home-indicator inset on installed web (keyboard-up reports inset 0, so no
-    // double gap when the sheet is already lifted by kbInset).
-    paddingBottom: Platform.OS === 'web' ? ('max(24px, env(safe-area-inset-bottom))' as any) : 24,
-    backgroundColor: colors.ink2,
-    borderTopWidth: 1,
-    borderTopColor: colors.ink4,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: colors.ink3,
-    borderWidth: 1, borderColor: colors.ink4,
-    borderRadius: 22,
-    paddingHorizontal: 16, paddingVertical: 11,
-    color: colors.white, fontSize: 14,
-  },
-  sendBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: colors.gold,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  inputBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: 10, paddingBottom: Platform.OS === 'web' ? ('max(24px, env(safe-area-inset-bottom))' as any) : 24, backgroundColor: colors.ink2, borderTopWidth: 1, borderTopColor: colors.ink4 },
+  input: { flex: 1, backgroundColor: colors.ink3, borderWidth: 1, borderColor: colors.ink4, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 11, color: colors.white, fontSize: 14 },
+  sendBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   sendIcon: { color: colors.ink, fontSize: 16, fontWeight: '800' },
 });
