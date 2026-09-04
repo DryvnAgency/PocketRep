@@ -85,6 +85,19 @@ ok('drafter says one customer at a time', blast.includes('ONE CUSTOMER AT A TIME
 ok('drafter states nothing is auto-sent', blast.includes('nothing is auto-sent'));
 ok('AppShell Work My Book creates individualized drafts', appShell.includes('Do not repeat one generic message across the list'));
 
+console.log('\n--- automatic holiday nurture stays truth-safe ---');
+const nurtureEngine = read('lib/v2/nurtureEngine.ts');
+const scheduler = read('supabase/functions/nurture-scheduler/index.ts');
+const holidayMigration = read('supabase/migrations/20260904005000_holiday_truth_safe_reference.sql');
+ok('client nurture prompt forbids unverified holiday sale claims',
+  nurtureEngine.includes('Holiday/calendar timing is verified context') && nurtureEngine.includes('Never claim any of those unless explicit verified context'));
+ok('scheduler prompt carries the same holiday truth rail',
+  scheduler.includes('Holiday/calendar timing is verified context') && scheduler.includes('Never claim those unless explicit verified rep/customer context'));
+ok('Labor Day reference data no longer seeds clearance/best-deal claims',
+  holidayMigration.includes('End-of-summer holiday timing only') && !holidayMigration.includes('Model year clearance. Best deals.'));
+ok('holiday migration keeps commercial intensity low/none',
+  holidayMigration.includes("else 'low'") && holidayMigration.includes("then 'none'"));
+
 console.log('\n--- permanent contact history ---');
 ok('interaction type includes game_plan', interactions.includes("'game_plan'"));
 ok('timeline reads outbound_sms_actions', interactions.includes("from('outbound_sms_actions')"));
