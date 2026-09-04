@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 // A single entry in a contact's activity timeline. Write-side entries go to
 // public.interactions; the read-side useInteractions queries the unified
 // public.contact_timeline view.
-export type InteractionType = 'call' | 'text' | 'email' | 'note';
+export type InteractionType = 'call' | 'text' | 'email' | 'note' | 'game_plan';
 
 export type TimelineEventType =
   | InteractionType
