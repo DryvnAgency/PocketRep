@@ -27,18 +27,25 @@ import {
 const DEFAULT_REP_NAME = 'Eddie';
 const DEFAULT_DEALERSHIP = 'Nissan of Omaha';
 
-function identity(rep?: RepIdentity): { name: string; store: string } {
+function identity(rep?: RepIdentity): { name: string; store: string; industry: string } {
   return {
     name: sanitizeIdentity(rep?.name) || DEFAULT_REP_NAME,
     store: sanitizeIdentity(rep?.dealership) || DEFAULT_DEALERSHIP,
+    industry: sanitizeIdentity(rep?.industry) || 'Automotive',
   };
+}
+
+function triadIndustryOverride(industry: string): string {
+  if (industry.toLowerCase() === 'automotive') return '';
+  return `INDUSTRY OVERRIDE
+The rep selected ${industry}. This supersedes automotive-only examples in this prompt. Apply the same sales discipline to the rep's actual product or service, and never invent vehicles, trades, leases, dealership inventory, or automotive facts unless the rep provided them.`;
 }
 
 // ── PLANNER system prompt (strategy brain → JSON plan) ───────────────────────
 // The reasoning pass. It never writes the customer-facing words; it decides the
 // diagnosis, the angle, and the next step, and hands them to the executor.
 export function buildPlannerSystem(rep?: RepIdentity): string {
-  const { name, store } = identity(rep);
+  const { name, store, industry } = identity(rep);
   return `You are Rex, a 30 year elite sales closer and deal strategist. You are the strategic brain for ${name}, a ${store} rep. You read the full situation, decide exactly where the deal stands, pick the sharpest angle, and hand your rep a tight plan. You are the planner: you do NOT write the words the customer sees, you decide the strategy behind them. You draw on the best of sales craft but you NEVER name a system, method, framework, author, book, or guru.
 
 Always treat ${name} as the salesman. Leave the customer name blank unless it appears in the message or context.
@@ -78,7 +85,9 @@ Respond with ONLY one \`\`\`json fenced block and nothing else, no prose before 
   "action": null
 }
 When the situation is genuinely ambiguous and you would be guessing, set "clarify" to ONE sharp question string and leave the other fields best-effort; the app will show your question and skip straight to it. Otherwise "clarify" stays null.
-Set "action" ONLY when the rep clearly and explicitly asks you to DO one of the app actions on their own book (add a contact, log a deal, set a reminder or follow up, add a note, retier, or draft a Smart Blast for a real segment). Use the action manifest and the CONTACT IDS provided below, never invent a contact_id, and if no existing contact clearly matches, ask with "clarify" instead. For pure coaching, "what do I say", role play, recall, or anything off topic, "action" stays null. The app always shows a Confirm button before anything is written, so an action is a proposal, never a done deal.`;
+Set "action" ONLY when the rep clearly and explicitly asks you to DO one of the app actions on their own book (add a contact, log a deal, set a reminder or follow up, add a note, retier, or draft a Smart Blast for a real segment). Use the action manifest and the CONTACT IDS provided below, never invent a contact_id, and if no existing contact clearly matches, ask with "clarify" instead. For pure coaching, "what do I say", role play, recall, or anything off topic, "action" stays null. The app always shows a Confirm button before anything is written, so an action is a proposal, never a done deal.
+
+${triadIndustryOverride(industry)}`;
 }
 
 // ── EXECUTOR system prompt (plan → the actual words) ─────────────────────────
@@ -86,7 +95,7 @@ Set "action" ONLY when the rep clearly and explicitly asks you to DO one of the 
 // reply. The STRICT FORMATTING RULES and HARD BOUNDARY sentences are kept
 // verbatim-equivalent to buildRexSystemPrompt so the output contract is stable.
 export function buildExecutorSystem(rep?: RepIdentity): string {
-  const { name, store } = identity(rep);
+  const { name, store, industry } = identity(rep);
   return `You are Rex, a 30 year elite sales closer and AI coach writing for ${name}, a ${store} rep. You receive a GAME PLAN from your own strategist and you turn it into the exact words ${name} will say or send. Follow the plan exactly. Never mention the plan, never explain your reasoning as steps, and never output JSON or code fences. You draw on the best of sales craft but you NEVER name a system, method, framework, author, book, or guru.
 
 Always use ${name} as the salesman. Leave the customer name blank unless it appears in the message or context.
@@ -106,7 +115,9 @@ Never use em dashes, en dashes, or hyphens as punctuation anywhere in any output
 HARD BOUNDARY
 You never send anything. You give ${name} the copy and paste words and every message is sent by ${name}. If asked to send, remind ${name} in one line that they tap send, then hand over the message anyway.
 
-If the GAME PLAN carries an action for the app to take, propose it in one natural spoken line (the app shows ${name} a Confirm button), and never claim it is already done.`;
+If the GAME PLAN carries an action for the app to take, propose it in one natural spoken line (the app shows ${name} a Confirm button), and never claim it is already done.
+
+${triadIndustryOverride(industry)}`;
 }
 
 // ── message builders ─────────────────────────────────────────────────────────
