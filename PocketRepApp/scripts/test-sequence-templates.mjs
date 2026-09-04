@@ -121,9 +121,27 @@ ok('has a ~2-days-after-that (delay_days=6) service-recovery check', /\(v_seq_id
 ok('the service-recovery step explicitly forbids mentioning a survey score',
   /Do not mention or reference a survey or a survey score/.test(nvd));
 ok('has a second-delivery invitation step', /second vehicle for your household/.test(nvd));
-ok('the referral ask is conditioned on a positive experience, not presumed', /if the \{\{vehicle\}\} has been treating you right/.test(nvd));
+ok('the referral ask is explicitly rep-gated on a genuine positive ownership signal',
+  /REP CHECK: only use this referral ask after \{\{first_name\}\} has given you a genuinely positive ownership signal/.test(nvd));
+ok('referral ask tells the rep to help first when the experience is not clearly positive',
+  /If the experience is not clearly positive yet, skip this step and help first/.test(nvd));
 ok('referral ask is a separate, later step than the second-delivery invitation',
-  nvd.indexOf('second vehicle for your household') < nvd.indexOf('I would really appreciate the referral'));
+  nvd.indexOf('second vehicle for your household') < nvd.indexOf('REP CHECK: only use this referral ask'));
+
+console.log('\n--- all prospect templates avoid fabricated inventory, pricing, and urgency ---');
+const prospectSafety = blocks['Fresh Up - 14 Day'] + '\n' + blocks['Unsold Long-Term Follow-Up'];
+ok('prospect templates never claim unverified inventory availability',
+  !/still holding a couple|picked up some new inventory|we have got new .* inventory/i.test(prospectSafety));
+ok('prospect templates never claim pricing can be locked without verified facts',
+  !/lock in today''s numbers|today only|price expires|deal ends/i.test(prospectSafety));
+ok('prospect templates never invent a fake close-out deadline',
+  !/one more day before I close out your file|last chance|act now|hurry/i.test(prospectSafety));
+
+console.log('\n--- migration insert columns match both tracked schema and verified production ---');
+ok('sequence inserts do not rely on legacy-only contact_id',
+  !/INSERT INTO public\.sequences \([^)]*contact_id/.test(src));
+ok('sequence inserts do not rely on legacy-only is_ai_generated',
+  !/INSERT INTO public\.sequences \([^)]*is_ai_generated/.test(src));
 
 console.log('\n--- Holiday Check-In has no fabricated promotions or urgency ---');
 const holiday = blocks['Holiday Check-In'];
