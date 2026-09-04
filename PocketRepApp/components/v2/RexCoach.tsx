@@ -389,8 +389,12 @@ export default function RexCoach({
       // AppShell. Await that work so the success log and Done message are true.
       await onActed?.(action, result);
       logRexAction(action, 'success').catch(() => undefined); // audit chat-taken writes too
-      pushRex(`✓ Done — ${summarizeAction(action)}`);
-      if (result.openContactId) onOpenContact?.(result.openContactId);
+      if (mission && action.type === 'add_contact') {
+        pushRex(`✓ Added ${action.payload.first_name}${action.payload.last_name ? ` ${action.payload.last_name}` : ''}. Give me the next sold customer, or tap Done when you're ready for the Text Queue.`);
+      } else {
+        pushRex(`✓ Done — ${summarizeAction(action)}`);
+      }
+      if (!mission && result.openContactId) onOpenContact?.(result.openContactId);
       setPending(null);
     } catch (e: any) {
       logRexAction(action, 'failed', { failure_reason: e?.message }).catch(() => undefined);
