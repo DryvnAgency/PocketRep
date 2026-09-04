@@ -24,7 +24,7 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
 {"@type":"Question","name":"What is PocketRep?","acceptedAnswer":{"@type":"Answer","text":"PocketRep is a daily sales execution app for car salespeople. It turns your existing book into a prioritized worklist, shows why each customer matters now, and lets Rex draft contextual follow-up. You review and send every message yourself from your phone or browser."}},
-{"@type":"Question","name":"How much does PocketRep cost?","acceptedAnswer":{"@type":"Answer","text":"PocketRep V1 Founding Rep access is 39 USD per month with a 7-day free trial. The founding software subscription rate stays with the rep while the subscription remains continuously active. PocketRep Team is not for sale yet."}},
+{"@type":"Question","name":"How much does PocketRep cost?","acceptedAnswer":{"@type":"Answer","text":"PocketRep V1 Founding Rep access is 39 USD per month with a 7-day free trial, for the first wave of paying reps. Whatever rate a rep joins at stays theirs while the subscription remains continuously active; pricing for new customers rises for later cohorts but never changes an existing rep's rate. PocketRep Team is not for sale yet."}},
 {"@type":"Question","name":"Is PocketRep a CRM for car salesmen?","acceptedAnswer":{"@type":"Answer","text":"PocketRep is a rep-first daily sales execution app, not a replacement for your dealership CRM. It helps you prioritize and work the relationships you are authorized to keep."}},
 {"@type":"Question","name":"Can I import my existing contacts?","acceptedAnswer":{"@type":"Answer","text":"Yes. PocketRep accepts CSV and vCard files exported from most phones and CRMs. You review the parsed contacts before importing them."}},
 {"@type":"Question","name":"Do my customers stay mine if I change dealerships?","acceptedAnswer":{"@type":"Answer","text":"Your PocketRep workspace stays with your account, including the contacts, notes, and history you are authorized to keep. You are responsible for following your employer's policies and applicable law when storing, moving, or contacting customer data."}},
@@ -86,9 +86,13 @@
 @keyframes float { 0%,100% { transform: translate(-50%,-50%) translateY(0); } 50% { transform: translate(-50%,-50%) translateY(-12px); } }
 @keyframes pulse { 0%,100% { opacity: 0.7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
 .radar {
-  position: relative; width: 462px; height: 462px; max-width: 90vw;
-  transform-style: preserve-3d; will-change: transform;
+  display: block; position: relative; width: 462px; height: 462px; max-width: 90vw;
+  transform-style: preserve-3d; will-change: transform; cursor: pointer;
+  transition: transform .3s cubic-bezier(.2,.7,.3,1);
 }
+.radar:hover { transform: scale(1.015); }
+.radar:hover .radar-glow { animation-duration: 2.4s; }
+.radar:focus-visible { outline: 2px solid var(--cyan); outline-offset: 10px; border-radius: 50%; }
 .radar-glow {
   position: absolute; inset: -14%; border-radius: 50%;
   background: radial-gradient(circle, rgba(212,168,67,0.3), rgba(240,192,96,0.08) 50%, transparent 72%);
@@ -499,6 +503,19 @@
 @media (max-width: 880px) { .price-grid { grid-template-columns: 1fr; max-width: 440px; margin-inline: auto; } }
 .price-grid.two { grid-template-columns: repeat(2, 1fr); max-width: 760px; margin-inline: auto; }
 @media (max-width: 880px) { .price-grid.two { grid-template-columns: 1fr; max-width: 440px; } }
+
+/* ---------- founding-rate ladder ---------- */
+.ladder { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
+.ladder-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--faint); margin-bottom: 12px; }
+.ladder-rows { display: flex; flex-direction: column; gap: 8px; }
+.ladder-row { display: flex; align-items: center; gap: 12px; padding: 10px 13px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,0.02); }
+.ladder-row .lr-cohort { font-size: 12.5px; color: var(--muted); flex: 1; }
+.ladder-row .lr-price { font-family: var(--display); font-weight: 700; font-size: 16px; color: var(--muted); }
+.ladder-row.active { border-color: rgba(212,168,67,0.45); background: rgba(212,168,67,0.08); }
+.ladder-row.active .lr-cohort { color: var(--ink); font-weight: 600; }
+.ladder-row.active .lr-price { color: var(--cyan); font-size: 18px; }
+.ladder-row.active .lr-cohort b { color: var(--cyan); }
+.ladder-foot { font-size: 12.5px; color: var(--faint); line-height: 1.6; margin-top: 12px; }
 
 /* ---------- countdown ---------- */
 .count { display: flex; gap: 12px; justify-content: center; margin-top: 30px; }
@@ -1018,7 +1035,7 @@ body { overscroll-behavior-x: none; }
     </a>
     <nav class="nav-links">
       <a href="#features">Features</a>
-      <a href="#roadmap">Roadmap</a>
+      <a href="#teams">For teams</a>
       <a href="#pricing">Pricing</a>
     </nav>
     <div class="nav-cta">
@@ -1054,6 +1071,29 @@ body { overscroll-behavior-x: none; }
 .proof-trust b { color: var(--green); margin-right: 5px; }
 @media (max-width: 760px) { .copy-proof { grid-template-columns: 1fr; } .proof-trust { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 480px) { .proof-trust { grid-template-columns: 1fr; } }
+.roadmap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 50px; align-items: stretch; }
+@media (max-width: 980px) { .roadmap-grid { grid-template-columns: 1fr; max-width: 560px; margin-inline: auto; } }
+.roadmap-card { display: flex; flex-direction: column; padding: 28px 26px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); }
+.roadmap-card .rm-status { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.6px; text-transform: uppercase; width: fit-content; border-radius: 100px; padding: 6px 13px; }
+.roadmap-card .rm-status .pip { width: 7px; height: 7px; border-radius: 50%; }
+.roadmap-card h3 { font-size: 21px; margin-top: 16px; letter-spacing: -0.01em; }
+.roadmap-card .rm-body { margin-top: 10px; color: var(--muted); font-size: 14.5px; line-height: 1.6; }
+.roadmap-card ul { list-style: none; display: flex; flex-direction: column; gap: 9px; margin-top: 18px; flex: 1; }
+.roadmap-card li { display: flex; gap: 9px; font-size: 13.5px; line-height: 1.5; align-items: flex-start; }
+.roadmap-card li .tick { flex-shrink: 0; margin-top: 1px; }
+.roadmap-card.now { background: linear-gradient(180deg, var(--surface-2), var(--surface)); border-color: rgba(212,168,67,0.4); box-shadow: 0 0 0 1px rgba(212,168,67,0.2), 0 40px 90px -40px rgba(212,168,67,0.45); }
+.roadmap-card.now .rm-status { color: var(--green); background: rgba(52,224,161,0.1); border: 1px solid rgba(52,224,161,0.3); }
+.roadmap-card.now .rm-status .pip { background: var(--green); box-shadow: 0 0 10px var(--green); }
+.roadmap-card.now li .tick { color: var(--green); }
+.roadmap-card.next .rm-status { color: var(--gold); background: rgba(255,204,77,0.08); border: 1px solid rgba(255,204,77,0.32); }
+.roadmap-card.next .rm-status .pip { background: var(--gold); box-shadow: 0 0 10px var(--gold); }
+.roadmap-card.next li .tick { color: var(--cyan); }
+.roadmap-card.vision { background: transparent; border-style: dashed; border-color: var(--line-2); }
+.roadmap-card.vision .rm-status { color: var(--faint); background: rgba(255,255,255,0.03); border: 1px solid var(--line-2); }
+.roadmap-card.vision .rm-status .pip { background: var(--faint); }
+.roadmap-card.vision h3, .roadmap-card.vision .rm-body { color: var(--muted); }
+.roadmap-card.vision li .tick { color: var(--faint); }
+.roadmap-note { text-align: center; margin-top: 26px; font-size: 13px; color: var(--faint); }
 .fgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 50px; }
 @media (max-width: 980px) { .fgrid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 640px) { .fgrid { grid-template-columns: 1fr; } }
@@ -1102,37 +1142,6 @@ body { overscroll-behavior-x: none; }
 .wl-done .btn { margin-top: 18px; }
 .spots { display: inline-flex; align-items: center; gap: 9px; margin-top: 18px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.5px; color: var(--gold); border: 1px solid rgba(255,204,77,0.32); background: rgba(255,204,77,0.06); border-radius: 100px; padding: 8px 14px; }
 .spots .pip { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px var(--gold); }
-
-/* Clickable hero demo radar */
-.radar-link { display: block; color: inherit; text-decoration: none; cursor: pointer; border-radius: 50%; }
-.radar-link .hud { pointer-events: none; }
-.radar-link:focus-visible { outline: 2px solid var(--cyan); outline-offset: 10px; }
-
-/* V1 → V2 → V3 conversion roadmap */
-.roadmap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 46px; }
-.roadmap-card { position: relative; padding: 28px 24px; border-radius: 22px; border: 1px solid var(--line); background: var(--surface); overflow: hidden; }
-.roadmap-card.now { border-color: rgba(212,168,67,.45); background: linear-gradient(155deg, rgba(212,168,67,.14), var(--surface)); box-shadow: 0 34px 80px -56px rgba(212,168,67,.95); }
-.roadmap-card::before { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, rgba(240,192,96,.55), transparent); opacity: .45; }
-.roadmap-status { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--faint); }
-.roadmap-card.now .roadmap-status { color: var(--cyan); }
-.roadmap-status .pip { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
-.roadmap-v { margin-top: 16px; font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--gold); }
-.roadmap-card h3 { margin-top: 7px; font-family: var(--display); font-size: 25px; letter-spacing: -.025em; }
-.roadmap-price { margin-top: 18px; font-family: var(--display); font-size: 33px; font-weight: 750; letter-spacing: -.035em; }
-.roadmap-price small { font-family: var(--body); font-size: 12px; font-weight: 500; letter-spacing: 0; color: var(--faint); }
-.roadmap-card p { margin-top: 13px; color: var(--muted); font-size: 14.5px; line-height: 1.65; }
-.roadmap-list { list-style: none; margin-top: 20px; display: grid; gap: 10px; }
-.roadmap-list li { position: relative; padding-left: 20px; color: var(--ink); font-size: 13.5px; line-height: 1.5; }
-.roadmap-list li::before { content: "✦"; position: absolute; left: 0; color: var(--cyan); font-size: 10px; top: 3px; }
-.roadmap-lock { max-width: 920px; margin: 28px auto 0; padding: 20px 22px; border-radius: 16px; border: 1px solid rgba(52,224,161,.28); background: rgba(52,224,161,.055); text-align: center; color: var(--ink); font-size: 15px; line-height: 1.65; }
-.roadmap-lock b { color: var(--green); }
-.roadmap-actions { display: flex; justify-content: center; margin-top: 24px; }
-.roadmap-note { max-width: 900px; margin: 16px auto 0; color: var(--faint); text-align: center; font-size: 11.5px; line-height: 1.6; }
-.price-path { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 15px; font-family: var(--mono); font-size: 11px; color: var(--faint); }
-.price-path .step { padding: 7px 9px; border-radius: 999px; border: 1px solid var(--line-2); background: rgba(255,255,255,.025); }
-.price-path .step.current { color: var(--cyan); border-color: rgba(212,168,67,.4); background: rgba(212,168,67,.08); }
-@media (max-width: 900px) { .roadmap-grid { grid-template-columns: 1fr; max-width: 680px; margin-inline: auto; } }
-@media (max-width: 640px) { .roadmap-card { padding: 24px 20px; } .roadmap-actions .btn { width: 100%; text-align: center; } }
 </style>
 
 
@@ -1147,7 +1156,7 @@ body { overscroll-behavior-x: none; }
         <a class="btn btn-primary btn-lg" href="#signup" onclick="prScrollSignup(event)">Work my book free for 7 days <span class="arrow">→</span></a>
         <a class="btn btn-ghost btn-lg" href="#features">See how it works</a>
       </div>
-      <p class="cta-sub reveal d2">Card required · no subscription charge until day 8 · $39/mo founding software rate stays locked while your subscription remains active.</p>
+      <p class="cta-sub reveal d2">Card required · no subscription charge until day 8 · $39/mo founding rate for the first wave of reps, locked in for as long as you stay active.</p>
       <div class="hero-trust reveal d3">
         <span><span class="ck">✓</span> Your PocketRep workspace stays with you</span>
         <span><span class="ck">✓</span> Nothing sends until you tap send</span>
@@ -1157,7 +1166,7 @@ body { overscroll-behavior-x: none; }
     </div>
 
     <div class="hero-stage reveal d2">
-      <a class="radar radar-link" id="stage" href="#try" aria-label="Jump to the interactive PocketRep demo" title="Try the interactive PocketRep demo">
+      <a class="radar" id="stage" href="#try" aria-label="Play with the interactive PocketRep demo">
         <div class="radar-glow"></div>
         <div class="radar-face">
           <span class="ring r1"></span>
@@ -1177,7 +1186,7 @@ body { overscroll-behavior-x: none; }
           <div class="radar-core">
             <svg viewBox="0 0 96 96" aria-hidden="true" class="core-mark"><use href="#prmark"></use></svg>
           </div>
-          <div class="core-label">INTERACTIVE DEMO</div>
+          <div class="core-label">▶ LIVE DEMO</div>
         </div>
 
         <!-- floating HUD: live scan status -->
@@ -1335,89 +1344,61 @@ body { overscroll-behavior-x: none; }
       <p>Build planned follow-up and review queued nurture drafts instead of trusting yourself to remember every future touch.</p>
     </div>
   </div>
-  <details class="more-features">
-    <summary>See 6 more V1 tools</summary>
-    <div class="fgrid">
-      <div class="fcard reveal"><div class="ficon" aria-hidden="true">✍️</div><div class="fname">Rex Reads Your Notes</div><h3>Give Rex the context that matters.</h3><p>Add the details you don't want to forget. Rex can use that context when drafting future follow-up.</p></div>
-      <div class="fcard reveal d1"><div class="ficon" aria-hidden="true">🧭</div><div class="fname">Game Plan</div><h3>Know what to do next.</h3><p>Open a customer and get a suggested move, timing, and message angle based on the context in PocketRep.</p></div>
-      <div class="fcard reveal"><div class="ficon" aria-hidden="true">🚦</div><div class="fname">Stalled Lead Triage</div><h3>Separate dead weight from real opportunity.</h3><p>Use Rex to sort stale leads into who to push, who to fence for later, and who to stop spending time on.</p></div>
-      <div class="fcard reveal d1"><div class="ficon" aria-hidden="true">🛡️</div><div class="fname">Objection Prep</div><h3>Walk in with another angle.</h3><p>Ask Rex for natural responses to payment, price, trade, spouse, timing, and other common objections.</p></div>
-      <div class="fcard reveal d2"><div class="ficon" aria-hidden="true">🗓️</div><div class="fname">Weekly Recap</div><h3>See what moved and what didn't.</h3><p>Review your recent activity, deals, and follow-up priorities without rebuilding the week from memory.</p></div>
-      <div class="fcard reveal"><div class="ficon" aria-hidden="true">🌎</div><div class="fname">English + Spanish</div><h3>Write naturally in both languages.</h3><p>Rex can draft follow-up in English or natural Mexican Spanish based on the customer and your direction.</p></div>
-    </div>
-  </details>
+  <p class="roadmap-note">Plus Game Plan, stalled-lead triage, objection prep, weekly recap, and English/Spanish drafting, all included in V1.</p>
 </section>
 
-<!-- ============ PRODUCT ROADMAP / FOUNDING RATE ============ -->
-<section class="section wrap" id="roadmap">
+<!-- ============ ROADMAP: NOW / NEXT / VISION ============ -->
+<section class="section-sm wrap" id="roadmap">
   <div class="head center">
-    <span class="eyebrow center reveal">Why join early</span>
-    <h2 class="h2 reveal d1">V1 is why you buy today. <span class="grad-text">V2 and V3 are why you don't wait.</span></h2>
-    <p class="lead reveal d2">PocketRep already gives you a better way to work the book you earned. As the product gets deeper, planned pricing for new customers rises. Join at the current founding rate and keep your software rate while your subscription stays continuously active.</p>
+    <span class="eyebrow center reveal">Where PocketRep is headed</span>
+    <h2 class="h2 reveal d1">Not a finished app. <span class="grad-text">A growing execution system.</span></h2>
+    <p class="lead reveal d2">V1 already ships the daily workflow below. Here's what's real today, what we're building next, and the direction we're building toward.</p>
   </div>
-
   <div class="roadmap-grid">
-    <article class="roadmap-card now reveal">
-      <div class="roadmap-status"><span class="pip"></span> Available now</div>
-      <div class="roadmap-v">V1 · Know who to work</div>
-      <h3>Turn your book into today's workday.</h3>
-      <div class="roadmap-price">$39 <small>/mo · reps 1–500</small></div>
-      <p>Stop relying on memory. PocketRep keeps the relationship context together and turns it into clear next actions you control.</p>
-      <ul class="roadmap-list">
-        <li>Heat Sheet + Work My Book priorities</li>
-        <li>Rex coaching and contextual follow-up drafts</li>
-        <li>Call Queue + Text Queue with rep-controlled sending</li>
-        <li>Sequences, notes, history, deals, and metrics</li>
-        <li>Sold-customer and long-term book follow-up</li>
+    <div class="roadmap-card now reveal">
+      <span class="rm-status"><span class="pip"></span> Available now · V1</span>
+      <h3>Work your book, today.</h3>
+      <p class="rm-body">The daily execution engine, live and billable right now.</p>
+      <ul>
+        <li><span class="tick">✦</span> Rex prioritizes who deserves attention next</li>
+        <li><span class="tick">✦</span> A legitimate, specific reason to reach out, not a generic nudge</li>
+        <li><span class="tick">✦</span> Customer context remembered between touches</li>
+        <li><span class="tick">✦</span> Personalized Text Queue you review one send at a time</li>
+        <li><span class="tick">✦</span> Helps you move deals and relationships forward</li>
+        <li><span class="tick">✦</span> You control every send, always</li>
       </ul>
-    </article>
-
-    <article class="roadmap-card reveal d1">
-      <div class="roadmap-status"><span class="pip"></span> Building next</div>
-      <div class="roadmap-v">V2 · Know exactly what to do</div>
-      <h3>Rex gets closer to your actual day.</h3>
-      <div class="roadmap-price">$59 <small>/mo · reps 501–1,000</small></div>
-      <p>The next generation is about less friction, stronger opportunity detection, and Rex becoming a more capable sales companion.</p>
-      <ul class="roadmap-list">
-        <li>Native PocketRep apps for iPhone and Android</li>
-        <li>Faster customer capture and business-card/intake flows</li>
-        <li>Smarter sold, referral, stalled, and lease opportunities</li>
-        <li>Deeper Rex memory, coaching, and daily Game Plans</li>
-        <li>Verified dealership inventory awareness</li>
+    </div>
+    <div class="roadmap-card next reveal d1">
+      <span class="rm-status"><span class="pip"></span> Building next · V2</span>
+      <h3>What we're building next.</h3>
+      <p class="rm-body">In active development. No promised dates.</p>
+      <ul>
+        <li><span class="tick">✦</span> Native iPhone and Android apps</li>
+        <li><span class="tick">✦</span> Deeper Rex coaching and recall</li>
+        <li><span class="tick">✦</span> Business-card and intake capture workflow</li>
+        <li><span class="tick">✦</span> Inventory-link intelligence</li>
+        <li><span class="tick">✦</span> Richer coaching and outbound recommendations</li>
       </ul>
-    </article>
-
-    <article class="roadmap-card reveal d2">
-      <div class="roadmap-status"><span class="pip"></span> The vision</div>
-      <div class="roadmap-v">V3 · Run your business</div>
+    </div>
+    <div class="roadmap-card vision reveal d2">
+      <span class="rm-status"><span class="pip"></span> The vision · V3</span>
       <h3>Your personal sales operating system.</h3>
-      <div class="roadmap-price">$79 <small>/mo · rep 1,001+</small></div>
-      <p>Rex grows from helping with the next touch into intelligence across the book: what changed, what matters, and where your next opportunity is hiding.</p>
-      <ul class="roadmap-list">
-        <li>Proactive whole-book opportunity intelligence</li>
-        <li>Deeper ownership, retention, and referral systems</li>
-        <li>More complete daily execution and performance loops</li>
-        <li>Built-in communications when compliance and economics justify it</li>
-        <li>Expanded rep and team workflows without losing the rep-first experience</li>
+      <p class="rm-body">The direction we're building toward. Not a current feature, not a promised date, not something you can buy today.</p>
+      <ul>
+        <li><span class="tick">✦</span> PocketRep as the rep's own sales operating system</li>
+        <li><span class="tick">✦</span> Built from where V1 and V2 prove out with real reps</li>
       </ul>
-    </article>
+    </div>
   </div>
-
-  <div class="roadmap-lock reveal">
-    <b>Founding cohort: first 500 paying reps at $39/mo.</b> Reps 501–1,000 join at $59/mo and rep 1,001+ joins at $79/mo. Your software subscription rate stays with you while your subscription remains continuously active.
-  </div>
-  <div class="roadmap-actions reveal">
-    <a class="btn btn-primary btn-lg" href="#signup" onclick="prScrollSignup(event)">Lock in my founding rate <span class="arrow">→</span></a>
-  </div>
-  <p class="roadmap-note reveal">Pricing cohorts are based on paying-rep count. V2/V3 roadmap items are current priorities, not promised delivery dates, and may evolve with rep feedback. Future telecom or usage-based services may carry separate usage/add-on pricing.</p>
+  <p class="roadmap-note">Founding reps who join during V1 keep shaping what V2 becomes.</p>
 </section>
 
 <!-- ============ PRICING ============ -->
 <section class="section wrap" id="pricing">
   <div class="head center">
-    <span class="eyebrow center reveal">Launch pricing</span>
-    <h2 class="h2 reveal d1">Get in at $39. <span class="grad-text">Grow with PocketRep.</span></h2>
-    <p class="lead reveal d2">Start with 7 days free. The current Founding Rep rate is $39/month. New-customer pricing moves to $59 after the first 500 paying reps, then $79 after the first 1,000. Your software rate stays with you while your subscription remains continuously active.</p>
+    <span class="eyebrow center reveal">Founding pricing</span>
+    <h2 class="h2 reveal d1">One individual plan. <span class="grad-text">The earlier you join, the less you'll ever pay.</span></h2>
+    <p class="lead reveal d2">Start with 7 days free. Founding Rep access is $39/month for the first wave of reps, and whatever rate you join at stays yours while your subscription remains continuously active.</p>
   </div>
   <div class="price-grid two">
     <div class="price feat reveal">
@@ -1426,11 +1407,8 @@ body { overscroll-behavior-x: none; }
       <div class="desc">Your personal follow-up workspace for working the customers and opportunities already in your book.</div>
       <div class="cost"><span class="now">$39</span><span class="per">/mo</span></div>
       <div class="was">7 days free · card required · no subscription charge until day 8</div>
-      <div class="lock">◆ Keep your founding software rate while your subscription stays active</div>
+      <div class="lock">◆ Keep your rate for as long as your subscription stays active</div>
       <div class="spots"><span class="pip"></span> Founding Rep access</div>
-      <div class="price-path" aria-label="PocketRep planned new-customer pricing path">
-        <span class="step current">$39 · reps 1–500</span><span>→</span><span class="step">$59 · reps 501–1,000</span><span>→</span><span class="step">$79 · rep 1,001+</span>
-      </div>
       <hr>
       <ul>
         <li><span class="tick">✦</span> Heat Sheet, Rex coaching, and Game Plan</li>
@@ -1441,6 +1419,15 @@ body { overscroll-behavior-x: none; }
         <li><span class="tick">✦</span> 7-day free trial</li>
       </ul>
       <a class="btn btn-primary" href="#signup" onclick="prScrollSignup(event)">Work my book free <span class="arrow">→</span></a>
+      <div class="ladder">
+        <div class="ladder-label">Founding rate by cohort</div>
+        <div class="ladder-rows">
+          <div class="ladder-row active"><span class="lr-cohort"><b>You're here</b> · first ~500 paying reps</span><span class="lr-price">$39/mo</span></div>
+          <div class="ladder-row"><span class="lr-cohort">Next ~500 reps</span><span class="lr-price">$59/mo</span></div>
+          <div class="ladder-row"><span class="lr-cohort">1,001st rep onward</span><span class="lr-price">$79/mo</span></div>
+        </div>
+        <p class="ladder-foot">Rate applies to new customers at signup. Once you're in, your rate is yours for as long as your subscription stays continuously active — it doesn't rise when the next cohort opens.</p>
+      </div>
     </div>
     <div class="price reveal">
       <div class="soon"><span class="pip"></span> Coming later</div>
@@ -1505,12 +1492,12 @@ body { overscroll-behavior-x: none; }
   </div>
   <div class="faq" id="faq">
     <div class="faq-item"><button class="faq-q">Is PocketRep worth $39 a month?<span class="pm">＋</span></button><div class="faq-a"><p>A single repeat or referral deal can cover a lot more than a year of PocketRep. The point is simpler: work the book you already earned consistently enough to create more conversations and opportunities.</p></div></div>
+    <div class="faq-item"><button class="faq-q">Will my price go up later?<span class="pm">＋</span></button><div class="faq-a"><p>No. Whatever rate you join at is your rate for as long as your subscription stays continuously active. The founding $39/mo rate is for the first wave of paying reps; pricing for new customers rises in later cohorts, but that never changes the rate on your existing account.</p></div></div>
     <div class="faq-item"><button class="faq-q">What happens to my PocketRep data if I change dealerships?<span class="pm">＋</span></button><div class="faq-a"><p>Your PocketRep workspace stays with your account. Only store, move, or contact customer data you're authorized to use, and follow your employer's policies and applicable law.</p></div></div>
     <div class="faq-item"><button class="faq-q">Do I need a new phone number?<span class="pm">＋</span></button><div class="faq-a"><p>No. V1 keeps the rep in control of outreach using the phone's normal communication flow. PocketRep does not silently send customer messages on your behalf.</p></div></div>
     <div class="faq-item"><button class="faq-q">Can I import my existing contacts?<span class="pm">＋</span></button><div class="faq-a"><p>Yes. PocketRep accepts CSV and vCard files exported from most phones and CRMs. You review the parsed contacts before importing them.</p></div></div>
     <div class="faq-item"><button class="faq-q">Is this going to spam my customers?<span class="pm">＋</span></button><div class="faq-a"><p>No. Rex drafts; you review and take the send action through your phone's normal communication flow. You can mark a customer do-not-contact, and you remain responsible for consent, dealership policy, and applicable messaging laws.</p></div></div>
-    <div class="faq-item"><button class="faq-q">Does it work on my phone?<span class="pm">＋</span></button><div class="faq-a"><p>Yes. PocketRep V1 works from a modern phone or desktop browser today. Native PocketRep apps for iPhone and Android are a V2 priority, without a promised launch date yet.</p></div></div>
-    <div class="faq-item"><button class="faq-q">What happens when PocketRep moves to $59 or $79?<span class="pm">＋</span></button><div class="faq-a"><p>For new customers, the first 500 paying reps are $39/mo, reps 501–1,000 are $59/mo, and rep 1,001+ is $79/mo. If you join at the current $39 software rate, that software subscription rate stays with you while your subscription remains continuously active. Future telecom or usage-based add-ons may be priced separately.</p></div></div>
+    <div class="faq-item"><button class="faq-q">Does it work on my phone?<span class="pm">＋</span></button><div class="faq-a"><p>Yes. PocketRep V1 is built to work from a modern phone or desktop browser, so you can keep it with you on the floor without waiting for a native-app launch.</p></div></div>
     <div class="faq-item"><button class="faq-q">Where can I use PocketRep?<span class="pm">＋</span></button><div class="faq-a"><p>PocketRep is built for sales professionals and can be accessed online from supported locations. Our initial launch and support are focused on the United States, with broader international availability planned as we expand. Features, billing options, and availability may vary by country or region.</p></div></div>
   </div>
 </section>
@@ -1568,7 +1555,7 @@ body { overscroll-behavior-x: none; }
       <a class="btn btn-primary btn-lg" href="#signup" onclick="prScrollSignup(event)">Work my book free for 7 days <span class="arrow">→</span></a>
       <a class="btn btn-ghost btn-lg" href="https://app.pocketrep.pro">Log in</a>
     </div>
-    <p class="cta-sub">$39/mo Founding Rep rate. Keep your founding software rate while your subscription remains continuously active.</p>
+    <p class="cta-sub">$39/mo founding rate for the first wave of reps. Whatever rate you join at is yours for as long as you stay active.</p>
   </div>
 </section>
 
@@ -1646,6 +1633,7 @@ body { overscroll-behavior-x: none; }
       </div>
       <div class="muted">© 2026 PocketRep · The follow-up app for car salespeople</div>
     </div>
+    <p class="disclaimer">Secure checkout and billing by Stripe · 7-day free trial, card required · <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/cancel.html">Cancellation Policy</a> · questions to <a href="mailto:service@pocketrep.pro">service@pocketrep.pro</a></p>
     <p class="disclaimer">PocketRep is an independent tool and is not affiliated with, endorsed by, or sponsored by any third-party CRM, DMS, or software provider. All product names and trademarks are the property of their respective owners.</p>
     <p class="disclaimer">You are responsible for how you use PocketRep, including following your employer's policies and all applicable laws (such as the TCPA) when contacting customers. You send every message yourself. PocketRep never sends on your behalf.</p>
   </div>
@@ -1762,38 +1750,6 @@ body { overscroll-behavior-x: none; }
     });
   });
 
-  /* ---- countdown to founding-rate deadline ---- */
-  var cd = document.getElementById("countdown");
-  if (cd) {
-    // 14 days out, persisted so it doesn't reset on refresh
-    var KEY = "pr_founding_deadline";
-    var end = parseInt(localStorage.getItem(KEY) || "0", 10);
-    var now = Date.now();
-    if (!end || end < now) {
-      end = now + 14 * 24 * 60 * 60 * 1000;
-      localStorage.setItem(KEY, String(end));
-    }
-    var els = {
-      d: cd.querySelector('[data-c="d"]'),
-      h: cd.querySelector('[data-c="h"]'),
-      m: cd.querySelector('[data-c="m"]'),
-      s: cd.querySelector('[data-c="s"]')
-    };
-    function pad(x) { return x < 10 ? "0" + x : "" + x; }
-    function tick() {
-      var diff = Math.max(0, end - Date.now());
-      var s = Math.floor(diff / 1000);
-      var d = Math.floor(s / 86400); s -= d * 86400;
-      var h = Math.floor(s / 3600); s -= h * 3600;
-      var m = Math.floor(s / 60); s -= m * 60;
-      els.d.textContent = pad(d);
-      els.h.textContent = pad(h);
-      els.m.textContent = pad(m);
-      els.s.textContent = pad(s);
-    }
-    tick();
-    setInterval(tick, 1000);
-  }
   /* ---- hero radar: live detection + commission ticker ---- */
   var detect = document.getElementById("radarDetect");
   if (detect && !reduce) {
