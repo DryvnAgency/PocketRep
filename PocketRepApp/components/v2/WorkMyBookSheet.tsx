@@ -1,7 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import type { V2Contact } from '@/lib/v2/useContacts';
+import { getWorkMyBookOpportunities, type WorkMyBookOpportunity } from '@/lib/v2/workMyBook';
+import { supabase } from '@/lib/supabase';
 import { Label } from './atoms';
 
 function daysUntil(date: string | null): number | null {
@@ -15,8 +17,14 @@ function hasReferralSignal(c: V2Contact): boolean {
   return c.tags.some(tag => tag.trim().toLowerCase() === 'referral');
 }
 
-function scoreContact(c: V2Contact, today: string): number {
+function scoreContact(
+  c: V2Contact,
+  today: string,
+  authoritative?: WorkMyBookOpportunity,
+): number {
   let score = 0;
+  if (authoritative?.source === 'due_sequence') score += 220;
+  else if (authoritative?.source === 'referral') score += 170;
   if (c.nextFollowupDate && c.nextFollowupDate <= today) score += 120;
   if (c.tier === 'hot') score += 55;
   else if (c.tier === 'warm') score += 35;
@@ -29,7 +37,12 @@ function scoreContact(c: V2Contact, today: string): number {
   return score;
 }
 
-function reasonFor(c: V2Contact, today: string): string {
+function reasonFor(
+  c: V2Contact,
+  today: string,
+  authoritative?: WorkMyBookOpportunity,
+): string {
+  if (authoritative) return authoritative.reason;
   if (c.nextFollowupDate && c.nextFollowupDate <= today) return 'Follow-up due';
   if (hasReferralSignal(c)) return 'Referral opportunity';
   const leaseDays = daysUntil(c.leaseEndDate);
@@ -56,26 +69,73 @@ export default function WorkMyBookSheet({
   onStartTextQueue: (contacts: V2Contact[]) => void;
   onOpenSequences: () => void;
 }) {
+  const [authoritative, setAuthoritative] = useState<WorkMyBookOpportunity[]>([]);
+  const [loadingAuthoritative, setLoadingAuthoritative] = useState(false);
+  const [authoritativeError, setAuthoritativeError] = useState<string | null>(null);
   const today = new Date().toISOString().slice(0, 10);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoadingAuthoritative(true);
+    setAuthoritativeError(null);
+
+    const load = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+          if (!cancelled) setAuthoritative([]);
+          return;
+        }
+        const rows = await getWorkMyBookOpportunities(session.user.id, 'pocketrep');
+        if (!cancelled) setAuthoritative(rows);
+      } catch (e: any) {
+        if (!cancelled) {
+          setAuthoritative([]);
+          setAuthoritativeError(e?.message ?? 'Could not refresh Rex opportunities.');
+        }
+      } finally {
+        if (!cancelled) setLoadingAuthoritative(false);
+      }
+    };
+
+    void load();
+    return () => { cancelled = true; };
+  }, [open, contacts]);
+
+  const authoritativeByContact = useMemo(() => {
+    const map = new Map<string, WorkMyBookOpportunity>();
+    for (const row of authoritative) {
+      if (!map.has(row.contact_id)) map.set(row.contact_id, row);
+    }
+    return map;
+  }, [authoritative]);
+
   const work = useMemo(() => {
     const ranked = contacts
       .filter(c => !c.doNotContact && !!c.phone)
-      .map(c => ({ c, score: scoreContact(c, today) }))
+      .map(c => ({ c, score: scoreContact(c, today, authoritativeByContact.get(c.id)) }))
       .filter(row => row.score > 0)
       .sort((a, b) => b.score - a.score)
       .map(row => row.c);
 
     const call = ranked
-      .filter(c =>
-        c.tier === 'hot'
-        || c.tier === 'warm'
-        || (!!c.nextFollowupDate && c.nextFollowupDate <= today)
-        || hasReferralSignal(c)
-      )
+      .filter(c => {
+        const realOpportunity = authoritativeByContact.get(c.id);
+        return realOpportunity?.channel === 'call'
+          || c.tier === 'hot'
+          || c.tier === 'warm'
+          || (!!c.nextFollowupDate && c.nextFollowupDate <= today)
+          || hasReferralSignal(c);
+      })
       .slice(0, 25);
 
-    return { ranked, call, text: ranked.slice(0, 25) };
-  }, [contacts, today]);
+    const text = ranked
+      .filter(c => authoritativeByContact.get(c.id)?.channel !== 'call')
+      .slice(0, 25);
+
+    return { ranked, call, text };
+  }, [contacts, today, authoritativeByContact]);
 
   if (!open) return null;
 
@@ -96,8 +156,10 @@ export default function WorkMyBookSheet({
           <Text style={styles.eyebrow}>TODAY'S EXECUTION</Text>
           <Text style={styles.title}>Rex sorted the people worth touching.</Text>
           <Text style={styles.bodyText}>
-            Due follow-ups, stalled opportunities, long-dormant customers, sold ownership touches, referrals, and lease timing rise to the top.
+            Due sequence work and legitimate referral moments come from saved PocketRep history. Stalled, dormant, sold, and lease-timing opportunities fill out the rest of the board.
           </Text>
+          {loadingAuthoritative ? <Text style={styles.statusText}>Refreshing real sequence and relationship signals…</Text> : null}
+          {authoritativeError ? <Text style={styles.warningText}>Using your local book signals while Rex refresh is unavailable.</Text> : null}
         </View>
 
         <View style={styles.actionRow}>
@@ -135,7 +197,7 @@ export default function WorkMyBookSheet({
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.personName} numberOfLines={1}>{c.name}</Text>
               <Text style={styles.personMeta} numberOfLines={1}>
-                {reasonFor(c, today)}{c.vehicle ? ` · ${c.vehicle}` : ''}
+                {reasonFor(c, today, authoritativeByContact.get(c.id))}{c.vehicle ? ` · ${c.vehicle}` : ''}
               </Text>
             </View>
             <Text style={styles.personTier}>{c.tier.toUpperCase()}</Text>
@@ -183,6 +245,8 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
   title: { color: colors.white, fontSize: 20, lineHeight: 25, fontWeight: '800', marginTop: 6, letterSpacing: -0.3 },
   bodyText: { color: colors.grey3, fontSize: 12, lineHeight: 18, marginTop: 7 },
+  statusText: { color: colors.gold, fontSize: 10, lineHeight: 15, marginTop: 8 },
+  warningText: { color: colors.grey2, fontSize: 10, lineHeight: 15, marginTop: 8 },
   actionRow: { flexDirection: 'row', gap: 9 },
   actionCard: { flex: 1, minHeight: 132, padding: 13, borderRadius: radius.lg, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.goldBorder },
   disabled: { opacity: 0.45 },
