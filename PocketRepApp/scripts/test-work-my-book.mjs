@@ -44,9 +44,9 @@ ok('getReferralOpportunities is scoped to the calling rep (eq user_id)',
   /\.eq\('user_id', userId\)/.test(src));
 
 console.log('\n--- referral opportunities are gated on real, saved positive signals only ---');
-ok('positive-relationship sequence allowlist is exactly the 4 post-sale ownership templates',
-  /POSITIVE_RELATIONSHIP_SEQUENCE_NAMES = \[\s*'Sold Customer Ownership',\s*'New Vehicle Delivery',\s*'Second Delivery',\s*'Lease Maturity',?\s*\];/.test(src));
-ok('prospecting-only templates are never treated as a positive relationship signal',
+ok('ownership-context sequence allowlist is exactly the 4 post-sale ownership templates',
+  /OWNERSHIP_CONTEXT_SEQUENCE_NAMES = \[\s*'Sold Customer Ownership',\s*'New Vehicle Delivery',\s*'Second Delivery',\s*'Lease Maturity',?\s*\];/.test(src));
+ok('prospecting-only templates are never treated as ownership context either',
   !/'Fresh Up - 14 Day'/.test(src) && !/'Unsold Long-Term/.test(src) && !/'Holiday Check-In'/.test(src));
 ok('anniversary signal requires a real deals.closed_at value (no fabricated date)',
   /computeAnniversarySignal\(d\.closed_at, today\)/.test(src));
@@ -54,6 +54,19 @@ ok('positive reply signal requires an actually recorded reply_sentiment = positi
   /\.eq\('reply_sentiment', 'positive'\)/.test(src));
 ok('no sentiment/sale-happiness is guessed from silence, heat score, or elapsed time alone',
   !/heat_score/.test(src) && !/days_silent/.test(src));
+
+console.log('\n--- PR #164 review: sequence membership alone can never grant referral eligibility ---');
+ok("ReferralSignal only has 2 kinds — anniversary and positive_reply — sequence is not one of them",
+  /type ReferralSignal =\s*\n\s*\| \{ kind: 'anniversary'; years: number \}\s*\n\s*\| \{ kind: 'positive_reply'; daysAgo: number \};/.test(src));
+const signalsLoopMatch = src.match(/const signalsByContact = new Map[\s\S]*?const sequenceNameByContact/);
+const signalsLoop = signalsLoopMatch ? signalsLoopMatch[0] : '';
+ok('signalsByContact (the eligibility gate) is built only from deals/replies, never from enrollments',
+  !!signalsLoopMatch && !/enrollments/.test(signalsLoop));
+ok('sequence enrollment is read into a separate map that never feeds signalsByContact',
+  /const sequenceNameByContact = new Map<string, string>\(\);/.test(src) &&
+  /for \(const e of \(enrollments \?\? \[\]\) as any\[\]\) \{[\s\S]*?sequenceNameByContact\.set/.test(src));
+ok('the enrichment map is only ever read when building the reason string (never gates opportunity creation)',
+  /referralReason\(signal, sequenceNameByContact\.get\(contactId\) \?\? null\)/.test(src));
 
 console.log('\n--- referral wording stays conditional and truthful ---');
 ok('the ask is conditional ("if you know anyone else"), never presumed',
@@ -118,18 +131,63 @@ ok('null closed_at yields no signal', computeAnniversarySignal(null, TODAY) === 
 ok('a date 2 days before today, one year later, is inside the window',
   computeAnniversarySignal('2025-09-02', TODAY)?.years === 1);
 
-console.log('\n--- MIRROR: strongest signal priority (anniversary > sequence > positive_reply) ---');
-const SIGNAL_PRIORITY = { anniversary: 0, sequence: 1, positive_reply: 2 };
+console.log('\n--- MIRROR: strongest signal priority (anniversary > positive_reply; sequence never competes) ---');
+const SIGNAL_PRIORITY = { anniversary: 0, positive_reply: 1 };
 function strongestReferralSignal(signals) {
   if (signals.length === 0) return null;
   return signals.slice().sort((a, b) => SIGNAL_PRIORITY[a.kind] - SIGNAL_PRIORITY[b.kind])[0];
 }
-ok('anniversary wins over a sequence signal when both are present',
-  strongestReferralSignal([{ kind: 'sequence' }, { kind: 'anniversary', years: 1 }]).kind === 'anniversary');
-ok('sequence wins over a positive_reply signal when both are present',
-  strongestReferralSignal([{ kind: 'positive_reply' }, { kind: 'sequence' }]).kind === 'sequence');
+ok('anniversary wins over a positive_reply signal when both are present',
+  strongestReferralSignal([{ kind: 'positive_reply' }, { kind: 'anniversary', years: 1 }]).kind === 'anniversary');
 ok('no signals yields null (no opportunity — this is the "do not manufacture satisfaction" rule)',
   strongestReferralSignal([]) === null);
+
+console.log('\n--- MIRROR: PR #164 review — sequence membership alone never qualifies, only enriches ---');
+// Mirrors getReferralOpportunities' real separation: eligibilitySignals only
+// ever come from deals/replies; sequence membership lands in a side map that
+// can only decorate the reason for a contact who already has a real signal.
+function computeReferralOpportunities(contacts, dealAnniversaries, positiveReplies, sequenceMemberships) {
+  const signalsByContact = new Map();
+  const add = (id, s) => signalsByContact.set(id, [...(signalsByContact.get(id) ?? []), s]);
+  for (const [id, years] of Object.entries(dealAnniversaries)) add(id, { kind: 'anniversary', years });
+  for (const [id, daysAgo] of Object.entries(positiveReplies)) add(id, { kind: 'positive_reply', daysAgo });
+  const sequenceNameByContact = new Map(Object.entries(sequenceMemberships));
+  const out = [];
+  for (const [id, signals] of signalsByContact) {
+    const signal = strongestReferralSignal(signals);
+    if (!signal) continue;
+    out.push({ contact_id: id, sequenceContext: sequenceNameByContact.get(id) ?? null });
+  }
+  return out;
+}
+const sequenceOnly = computeReferralOpportunities(
+  ['solo-sequence-contact'], {}, {}, { 'solo-sequence-contact': 'New Vehicle Delivery' },
+);
+ok('a contact enrolled in New Vehicle Delivery with NO anniversary/positive-reply signal gets zero referral opportunities',
+  sequenceOnly.length === 0);
+const anniversaryPlusSequence = computeReferralOpportunities(
+  ['ready-contact'], { 'ready-contact': 1 }, {}, { 'ready-contact': 'Lease Maturity' },
+);
+ok('a contact with a real anniversary AND sequence membership still gets exactly one opportunity',
+  anniversaryPlusSequence.length === 1);
+ok('sequence membership is carried through as context once eligibility is already established',
+  anniversaryPlusSequence[0].sequenceContext === 'Lease Maturity');
+const anniversaryNoSequence = computeReferralOpportunities(['plain-contact'], { 'plain-contact': 2 }, {}, {});
+ok('a contact with a real anniversary and no sequence membership still qualifies (sequence is not required)',
+  anniversaryNoSequence.length === 1 && anniversaryNoSequence[0].sequenceContext === null);
+
+console.log('\n--- MIRROR: referralReason enrichment text ---');
+function referralReason(signal, activeSequenceName) {
+  const base = signal.kind === 'anniversary'
+    ? `${signal.years}-year ownership anniversary this week`
+    : `Replied positively ${signal.daysAgo}d ago`;
+  return activeSequenceName ? `${base} — currently on the ${activeSequenceName} follow-up` : base;
+}
+ok('reason with no sequence context is just the base signal reason',
+  referralReason({ kind: 'anniversary', years: 1 }, null) === '1-year ownership anniversary this week');
+ok('reason with sequence context appends it without changing the base claim',
+  referralReason({ kind: 'anniversary', years: 1 }, 'Sold Customer Ownership') ===
+  '1-year ownership anniversary this week — currently on the Sold Customer Ownership follow-up');
 
 console.log('\n--- MIRROR: cross-source dedup (a contact with due work today is not also pitched a referral ask) ---');
 function dedupReferralCandidates(dueSequenceContactIds, referralCandidateIds) {

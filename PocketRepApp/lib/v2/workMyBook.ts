@@ -20,15 +20,21 @@
 //      it is closed at this call site instead of upstream.
 //
 //   2. Referral opportunities — surfaced ONLY when a real, saved signal
-//      makes the ask legitimate: an active/completed enrollment in one of
-//      the positive post-sale journeys (Sold Customer Ownership, New
-//      Vehicle Delivery, Second Delivery, Lease Maturity), a deal on file
-//      whose closed_at lands on an ownership anniversary window, or a
-//      previously recorded positive reply (nurture_messages.reply_sentiment
-//      = 'positive'). Nothing here infers satisfaction from silence, a
-//      heat score, or elapsed time alone — every opportunity cites the
-//      concrete saved fact it came from, and the ask itself is worded
-//      conditionally (never presuming a happy outcome that wasn't recorded).
+//      makes the ask legitimate: a deal on file whose closed_at lands on an
+//      ownership anniversary window, or a previously recorded positive
+//      reply (nurture_messages.reply_sentiment = 'positive'). Nothing here
+//      infers satisfaction from silence, a heat score, or elapsed time
+//      alone — every opportunity cites the concrete saved fact it came
+//      from, and the ask itself is worded conditionally (never presuming a
+//      happy outcome that wasn't recorded).
+//
+//      Active/completed enrollment in a post-sale journey (Sold Customer
+//      Ownership, New Vehicle Delivery, Second Delivery, Lease Maturity) is
+//      NOT by itself a qualifying signal — per PR #164 review, early-stage
+//      membership (e.g. day 1 of New Vehicle Delivery) can predate any
+//      actual expressed satisfaction. It's used only as enrichment/context
+//      on the reason string once eligibility is already established by an
+//      anniversary or a recorded positive reply.
 //
 // Compliance, both sources: excludes is_deleted, do_not_contact, and
 // rep_decision 'dead'/'kill' contacts. Nothing here sends anything — these
@@ -65,7 +71,10 @@ export type WorkMyBookOpportunity = {
   isDemo: boolean;
 };
 
-const POSITIVE_RELATIONSHIP_SEQUENCE_NAMES = [
+// Context/wording enrichment ONLY, never eligibility on their own (see file
+// header) — membership here does not by itself make a referral ask
+// legitimate.
+const OWNERSHIP_CONTEXT_SEQUENCE_NAMES = [
   'Sold Customer Ownership',
   'New Vehicle Delivery',
   'Second Delivery',
@@ -122,8 +131,10 @@ function firstName(name: string): string {
   return name.split(' ')[0] || name;
 }
 
+// The only two signals that can, by themselves, make a referral ask
+// legitimate (see file header — sequence membership is enrichment, not a
+// third member of this union).
 type ReferralSignal =
-  | { kind: 'sequence'; sequenceName: string }
   | { kind: 'anniversary'; years: number }
   | { kind: 'positive_reply'; daysAgo: number };
 
@@ -131,8 +142,7 @@ type ReferralSignal =
 // one way, so the ask cites the single clearest real reason.
 const SIGNAL_PRIORITY: Record<ReferralSignal['kind'], number> = {
   anniversary: 0,
-  sequence: 1,
-  positive_reply: 2,
+  positive_reply: 1,
 };
 
 export function strongestReferralSignal(signals: ReferralSignal[]): ReferralSignal | null {
@@ -140,21 +150,23 @@ export function strongestReferralSignal(signals: ReferralSignal[]): ReferralSign
   return signals.slice().sort((a, b) => SIGNAL_PRIORITY[a.kind] - SIGNAL_PRIORITY[b.kind])[0];
 }
 
-export function referralReason(signal: ReferralSignal): string {
-  switch (signal.kind) {
-    case 'sequence':
-      return `On the ${signal.sequenceName} follow-up journey — a real ownership relationship, not a cold ask`;
-    case 'anniversary':
-      return `${signal.years}-year ownership anniversary this week`;
-    case 'positive_reply':
-      return `Replied positively ${signal.daysAgo}d ago`;
-  }
+// `activeSequenceName`, when present, is appended as context — it never
+// changes WHETHER this fires, only how the reason reads once a real
+// qualifying signal already fired it.
+export function referralReason(signal: ReferralSignal, activeSequenceName?: string | null): string {
+  const base = (() => {
+    switch (signal.kind) {
+      case 'anniversary':
+        return `${signal.years}-year ownership anniversary this week`;
+      case 'positive_reply':
+        return `Replied positively ${signal.daysAgo}d ago`;
+    }
+  })();
+  return activeSequenceName ? `${base} — currently on the ${activeSequenceName} follow-up` : base;
 }
 
 function referralSignalText(signal: ReferralSignal): string {
   switch (signal.kind) {
-    case 'sequence':
-      return 'been meaning to check in';
     case 'anniversary':
       return `it's been ${signal.years} year${signal.years === 1 ? '' : 's'} since we got you into it`;
     case 'positive_reply':
@@ -256,19 +268,15 @@ export async function getReferralOpportunities(
       .eq('reply_sentiment', 'positive'),
   ]);
 
+  // Eligibility signals — anniversary and positive reply ONLY. Sequence
+  // membership is deliberately excluded from this map; it can never grant
+  // eligibility on its own (see file header + OWNERSHIP_CONTEXT_SEQUENCE_NAMES).
   const signalsByContact = new Map<string, ReferralSignal[]>();
   const addSignal = (contactId: string, signal: ReferralSignal) => {
     const list = signalsByContact.get(contactId) ?? [];
     list.push(signal);
     signalsByContact.set(contactId, list);
   };
-
-  for (const e of (enrollments ?? []) as any[]) {
-    const name = e.sequences?.name;
-    if (name && POSITIVE_RELATIONSHIP_SEQUENCE_NAMES.includes(name)) {
-      addSignal(e.contact_id, { kind: 'sequence', sequenceName: name });
-    }
-  }
   for (const d of (deals ?? []) as any[]) {
     const anniv = computeAnniversarySignal(d.closed_at, today);
     if (anniv) addSignal(d.contact_id, { kind: 'anniversary', years: anniv.years });
@@ -278,6 +286,17 @@ export async function getReferralOpportunities(
     const daysAgo = when ? Math.max(0, daysBetween(today, new Date(when))) : null;
     if (daysAgo !== null && daysAgo <= POSITIVE_REPLY_WINDOW_DAYS) {
       addSignal(r.contact_id, { kind: 'positive_reply', daysAgo });
+    }
+  }
+
+  // Context/wording enrichment only — computed separately so it can never
+  // add an entry to signalsByContact above, only decorate the reason for a
+  // contact who already qualified through a real signal.
+  const sequenceNameByContact = new Map<string, string>();
+  for (const e of (enrollments ?? []) as any[]) {
+    const name = e.sequences?.name;
+    if (name && OWNERSHIP_CONTEXT_SEQUENCE_NAMES.includes(name) && !sequenceNameByContact.has(e.contact_id)) {
+      sequenceNameByContact.set(e.contact_id, name);
     }
   }
 
@@ -296,7 +315,7 @@ export async function getReferralOpportunities(
       email: c.email ?? '',
       vehicle: c.vehicle ?? null,
       channel: 'text',
-      reason: referralReason(signal),
+      reason: referralReason(signal, sequenceNameByContact.get(contactId) ?? null),
       message: buildReferralOpener(name, c.vehicle ?? null, signal),
       due_date: today.toISOString().slice(0, 10),
       isDemo: !!c.is_demo,
