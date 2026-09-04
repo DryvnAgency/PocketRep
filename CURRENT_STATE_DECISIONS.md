@@ -165,17 +165,20 @@ Future built-in communications must add consent, opt-out, quiet-hour, carrier-re
 
 ## 7. Pricing — OWNER DECISION
 
-The old user-count ladder is **killed**. Do not restore `$39 first 500 / $54 next 500 / $69 after 1,000`.
+**Updated 2026-09-04 (marketing lane).** The prior "old user-count ladder is killed" instruction (which named `$39 first 500 / $54 next 500 / $69 after 1,000`) is **superseded** by a new, owner-approved user-count ladder with different numbers. Do not conflate the two — the previously-killed figures ($54/$69) are not the current ones.
 
-Owner-approved product-generation direction:
+Owner-approved cohort ladder (2026-09-04):
 
-- **V1 Founding Rep: $39/month** for the current individual product.
-- The temporary $29 launch cutover is **retired**; do not advertise or route new customers to the retired $29 Payment Link.
+- **First ~500 paying reps: $39/month.**
+- **Next ~500 (~501–1,000): $59/month.**
+- **1,001st paying rep onward: $79/month** for new customers.
+- Cohort cutovers are **manually owner-managed** — there is no automatic/atomic cohort-count trigger in code, and none should be built. The Stripe Payment Link's active price is switched by the owner when a cohort boundary is reached.
+- A founding rep keeps the **software subscription rate they joined at while the subscription remains continuously active** — the ladder only affects the rate offered to new signups at the time they join, never an existing subscriber's rate.
+- The temporary $29 launch cutover remains **retired**; do not advertise or route new customers to the retired $29 Payment Link.
 - **7-day free trial**, card on file; charge begins on day 8 unless canceled.
-- A founding rep keeps the **software subscription rate they joined at while the subscription remains continuously active**.
-- **V2 direction for new customers: $49/month** when V2 materially earns the increase.
-- **V3 direction for new customers: $69/month** when V3 materially earns the increase.
-- V2/V3 prices are roadmap direction, **not current purchasable offers**.
+- Referral economics (§8) are unchanged by this ladder.
+
+**Needs owner reconciliation:** the previously-recorded "V2 direction for new customers: $49/month" and "V3 direction for new customers: $69/month" (tied to major product-version milestones, not signup-count cohorts) predate this ladder and now sit oddly beside it — the V1 cohort ladder alone reaches $59–$79 before V2/V3 even ship. Treat the old V2/V3 direction figures as stale pending an explicit owner decision on how (or whether) they still apply once this cohort ladder is live.
 
 Live Stripe resources prepared for the V1 cutover:
 

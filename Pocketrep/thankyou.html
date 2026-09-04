@@ -15,6 +15,24 @@
   @media(max-width:760px){.mission-grid{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:480px){.hero-pad{padding-top:104px}.mission-grid{grid-template-columns:1fr}}
 
+  /* ---- "your workspace is ready" — first-screen-of-the-app moment, not a receipt ---- */
+  .ready-card{max-width:520px;margin:0 auto;text-align:left}
+  .ready-badge{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--green)}
+  .ready-badge .pip{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+  .ready-title{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:-0.02em;margin-top:14px}
+  .ready-body{color:var(--muted);font-size:14.5px;line-height:1.6;margin-top:10px}
+  .next-steps{margin-top:22px;display:flex;flex-direction:column;gap:10px}
+  .next-step{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;border-radius:13px;background:rgba(255,255,255,0.03);border:1px solid var(--line)}
+  .next-step .ns-n{flex-shrink:0;width:24px;height:24px;border-radius:50%;background:rgba(212,168,67,.12);border:1px solid rgba(212,168,67,.3);color:var(--cyan);font-family:var(--mono);font-size:11px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .next-step b{font-size:14px}
+  .next-step p{color:var(--muted);font-size:12.5px;line-height:1.5;margin-top:2px}
+  .install-strip{margin-top:22px;padding:16px 17px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line-2)}
+  .install-strip .is-label{font-family:var(--mono);font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--cyan)}
+  .install-strip p{color:var(--muted);font-size:13px;line-height:1.55;margin-top:7px}
+  .install-strip a{color:var(--cyan);font-weight:600}
+  #done .btn{margin-top:20px}
+  #done .btn-ghost{margin-top:9px}
+
   html,body{width:100%;max-width:100%;overflow-x:hidden;overflow-x:clip}
   body{overscroll-behavior-x:none}
   @media(max-width:640px){
@@ -59,8 +77,8 @@
 <main>
 <section class="wrap hero-pad center">
   <span class="eyebrow center"><span class="pip" style="width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)"></span> 7-day trial activated</span>
-  <h1 class="display" style="margin-top:16px">Your book is ready<br><span class="grad-text">to go to work.</span></h1>
-  <p class="lead" style="max-width:620px;margin:16px auto 0">Your 7-day trial is live. Your card is securely on file and won't be charged until day 8. Secure your account, open the Heat Sheet, and work your first five.</p>
+  <h1 class="display" style="margin-top:16px">Welcome in.<br><span class="grad-text">This is PocketRep.</span></h1>
+  <p class="lead" style="max-width:620px;margin:16px auto 0">Your 7-day trial is live. Your card is securely on file and won't be charged until day 8. Set your password below, then we'll get you into your workspace.</p>
   <div class="setup">
     <div class="state on" id="loading"><div class="card center"><span class="spin"></span><p style="color:var(--muted);margin-top:12px;font-size:14px">Confirming your trial…</p></div></div>
     <div class="state" id="error"><div class="card center"><div class="success" style="color:var(--ink)">Almost there.</div><p id="errorText" style="color:var(--muted);margin-top:8px;font-size:14px">We couldn't verify your checkout yet.</p><button class="btn btn-primary btn-full" id="retry" style="margin-top:16px">Try Again</button><p class="note">If you already created your account, <a href="https://app.pocketrep.pro">log in here</a>.</p></div></div>
@@ -68,12 +86,23 @@
       <div class="field"><span class="label">Your account email</span><div class="verified"><span class="status-dot"></span><span class="email" id="email">—</span></div></div>
       <div class="field"><label class="label" for="password">Create your password <span class="req">*</span></label><input class="input" id="password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"></div>
       <div class="field"><label class="label" for="confirm">Confirm your password <span class="req">*</span></label><input class="input" id="confirm" type="password" autocomplete="new-password" minlength="8" placeholder="Re-enter your password"><div class="field-err" id="pwError">Passwords must match and be at least 8 characters.</div></div>
-      <button type="submit" class="btn btn-primary btn-full" id="submit">Open my Heat Sheet <span class="arrow">→</span></button>
+      <button type="submit" class="btn btn-primary btn-full" id="submit">Set up my workspace <span class="arrow">→</span></button>
     </form><p class="note"><b>Your number. Your relationships. Your approval.</b> PocketRep helps you work the book you already built.</p></div>
-    <div class="state" id="done"><div class="card center"><div class="success">Your workspace is ready.</div><p style="color:var(--muted);margin-top:8px;font-size:14px">Opening your Heat Sheet…</p><a class="btn btn-primary btn-full" id="continue" href="https://app.pocketrep.pro" style="margin-top:16px">Open my Heat Sheet <span class="arrow">→</span></a></div></div>
+    <div class="state" id="done"><div class="card ready-card">
+      <span class="ready-badge"><span class="pip"></span> Workspace ready</span>
+      <div class="ready-title">This is your PocketRep.</div>
+      <p class="ready-body">Here's what happens next: open PocketRep, add it to your Home Screen so it feels like a real app, and Rex will walk you through a sample book before you ever touch a real customer.</p>
+      <div class="next-steps">
+        <div class="next-step"><span class="ns-n">1</span><div><b>Open PocketRep</b><p>Meet Rex and see the Heat Sheet on a sample book — nothing real yet, nothing can send.</p></div></div>
+        <div class="next-step"><span class="ns-n">2</span><div><b>Add it to your Home Screen</b><p>One tap so it opens like a normal app every day after.</p></div></div>
+        <div class="next-step"><span class="ns-n">3</span><div><b>When you're ready, load your real book</b><p>Start with recent sold customers, then work backward. Rex builds your first Text Queue from it — you review and send every message yourself.</p></div></div>
+      </div>
+      <a class="btn btn-primary btn-full" id="continue" href="https://app.pocketrep.pro">Open PocketRep <span class="arrow">→</span></a>
+      <a class="btn btn-ghost btn-full" href="install.html">See how to add it to my Home Screen first</a>
+    </div></div>
   </div>
 </section>
-<section class="wrap section-sm" style="padding-top:10px"><div class="mission"><span class="eyebrow center" style="justify-content:center">Your first five minutes</span><div class="mission-grid"><div class="mission-step"><span class="mission-num">01</span><b>Secure your account</b><p>Create your password and enter your private PocketRep workspace.</p></div><div class="mission-step"><span class="mission-num">02</span><b>Open the Heat Sheet</b><p>See today's prioritized sample book before adding any customer data.</p></div><div class="mission-step"><span class="mission-num">03</span><b>Add your first customer</b><p>Add one manually or import a CSV or vCard when you're ready.</p></div><div class="mission-step"><span class="mission-num">04</span><b>Work your first five</b><p>See why now, let Rex draft the next move, then review and take action.</p></div></div><p class="trial-trust"><b>You stay in control.</b> Nothing sends until you take the send action. Your $39 founding software subscription rate stays locked while your subscription remains continuously active. Cancel from Billing before day 8 and no subscription charge begins.</p></div></section>
+<section class="wrap section-sm" style="padding-top:10px"><div class="mission"><span class="eyebrow center" style="justify-content:center">Your first five minutes</span><div class="mission-grid"><div class="mission-step"><span class="mission-num">01</span><b>Set your password</b><p>Create your password and enter your private PocketRep workspace.</p></div><div class="mission-step"><span class="mission-num">02</span><b>Meet your sample book</b><p>See today's prioritized sample book and Rex before adding any real customer data.</p></div><div class="mission-step"><span class="mission-num">03</span><b>Load your real book</b><p>Start with recent sold customers, add one manually, or import a CSV or vCard.</p></div><div class="mission-step"><span class="mission-num">04</span><b>Work your first five</b><p>See why now, let Rex draft the next move, then review and take action.</p></div></div><p class="trial-trust"><b>You stay in control.</b> Nothing sends until you take the send action. Your $39 founding rate stays locked in for as long as your subscription remains continuously active. Cancel from Billing before day 8 and no subscription charge begins.</p></div></section>
 </main>
 <footer class="footer"><div class="wrap"><div class="footer-inner"><a class="brand" href="/"><svg class="brand-mark" aria-hidden="true"><use href="#prmark"></use></svg><span class="brand-name">PocketRep<span class="dot">.</span></span></a><div class="footer-links"><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="/cancel.html">Cancel</a><a href="https://app.pocketrep.pro">Log in</a></div><div class="muted">© 2026 PocketRep — Built for closers</div></div></div></footer>
 <script>
@@ -95,7 +124,7 @@
           document.getElementById("email").textContent=r.body.email||"your account";
           api({action:"provision",session_id:sessionId}).then(function(p){
             var link=p.body&&p.body.action_link;
-            if(link){document.getElementById("continue").href=link;show("done");setTimeout(function(){location.href=link;},800);}
+            if(link){document.getElementById("continue").href=link;show("done");}
             else{error("Your account already exists. Log in at app.pocketrep.pro");}
           }).catch(function(){error("Your account already exists. Log in at app.pocketrep.pro");});
           return;
@@ -119,16 +148,16 @@
       if(r.status===200&&r.body&&r.body.ok){
         var link=r.body.action_link||"https://app.pocketrep.pro";
         document.getElementById("continue").href=link;show("done");
-        setTimeout(function(){location.href=link;},800);return;
+        return;
       }
-      btn.disabled=false;btn.innerHTML="Open my Heat Sheet <span class=\"arrow\">→</span>";
+      btn.disabled=false;btn.innerHTML="Set up my workspace <span class=\"arrow\">→</span>";
       if(r.status===409&&r.body&&r.body.error==="account_already_billed"){
         err.textContent="An account already exists for this email with billing attached. Log in to PocketRep and use Billing to manage the existing subscription.";
       }else{
         err.textContent="We couldn't finish creating your account. Please try again.";
       }
       err.classList.add("show");
-    }).catch(function(){btn.disabled=false;btn.innerHTML="Open my Heat Sheet <span class=\"arrow\">→</span>";err.textContent="Connection error. Please try again.";err.classList.add("show");});
+    }).catch(function(){btn.disabled=false;btn.innerHTML="Set up my workspace <span class=\"arrow\">→</span>";err.textContent="Connection error. Please try again.";err.classList.add("show");});
   });
   verify();
 })();
