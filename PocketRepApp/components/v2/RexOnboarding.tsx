@@ -42,6 +42,67 @@ function demoMessage(contact: DemoContact, index: number) {
   return `Hey ${first}, I was working through my follow-ups and thought of you. Still want me keeping an eye out around the ${vehicle}?`;
 }
 
+function TabPreview({ tab }: { tab: string }) {
+  const tabNames = ['HEAT', 'CONTACTS', 'REX', 'SALES', 'ME'];
+  const active = tab === 'HEAT SHEET' ? 'HEAT' : tab === 'SETTINGS / PROFILE' ? 'ME' : tab === 'SALES LOG' ? 'SALES' : tab;
+
+  return (
+    <View style={styles.previewFrame}>
+      <View style={styles.previewPhoneTop}>
+        <View><Text style={styles.previewBrand}>POCKETREP</Text><Text style={styles.previewSub}>SCREEN PREVIEW</Text></View>
+        <View style={styles.previewAvatar}><Text style={styles.previewAvatarText}>AC</Text></View>
+      </View>
+
+      {tab === 'HEAT SHEET' ? <>
+        <View style={styles.previewHeadline}><Text style={styles.previewTitle}>Heat Sheet</Text><Text style={styles.previewGold}>5 NEED ATTENTION</Text></View>
+        <View style={styles.previewStatRow}>
+          <View style={styles.previewStat}><Text style={styles.previewStatNum}>2</Text><Text style={styles.previewStatLabel}>HOT</Text></View>
+          <View style={styles.previewStat}><Text style={styles.previewStatNum}>2</Text><Text style={styles.previewStatLabel}>WARM</Text></View>
+          <View style={styles.previewStat}><Text style={styles.previewStatNum}>1</Text><Text style={styles.previewStatLabel}>DUE</Text></View>
+        </View>
+        <View style={styles.previewRow}><View style={styles.previewHeatDot} /><View style={styles.previewGrow}><Text style={styles.previewName}>Marcus Holloway</Text><Text style={styles.previewMeta}>2026 Rogue SV · follow up today</Text></View><Text style={styles.previewScore}>82</Text></View>
+        <View style={styles.previewRow}><View style={styles.previewWarmDot} /><View style={styles.previewGrow}><Text style={styles.previewName}>Sarah Thompson</Text><Text style={styles.previewMeta}>Altima SR · 4 days quiet</Text></View><Text style={styles.previewScore}>61</Text></View>
+      </> : null}
+
+      {tab === 'CONTACTS' ? <>
+        <View style={styles.previewHeadline}><Text style={styles.previewTitle}>Contacts</Text><Text style={styles.previewGold}>YOUR BOOK</Text></View>
+        <View style={styles.previewSearch}><Text style={styles.previewSearchText}>Search customers…</Text></View>
+        <View style={styles.previewPills}><Text style={styles.previewPillActive}>ALL</Text><Text style={styles.previewPill}>HOT</Text><Text style={styles.previewPill}>WARM</Text><Text style={styles.previewPill}>COLD</Text></View>
+        <View style={styles.previewRow}><View style={styles.previewInitial}><Text style={styles.previewInitialText}>MH</Text></View><View style={styles.previewGrow}><Text style={styles.previewName}>Marcus Holloway</Text><Text style={styles.previewMeta}>Rogue SV · Trade · Last touch 2d</Text></View></View>
+        <View style={styles.previewRow}><View style={styles.previewInitial}><Text style={styles.previewInitialText}>ST</Text></View><View style={styles.previewGrow}><Text style={styles.previewName}>Sarah Thompson</Text><Text style={styles.previewMeta}>Altima SR · Sold customer</Text></View></View>
+      </> : null}
+
+      {tab === 'REX' ? <>
+        <View style={styles.previewRexHead}><View style={styles.previewRexOrb} /><View><Text style={styles.previewTitle}>Rex</Text><Text style={styles.previewGold}>LIVE · READY</Text></View></View>
+        <View style={styles.previewBubbleRex}><Text style={styles.previewBubbleText}>I found 5 people worth working today. Marcus is the strongest next move.</Text></View>
+        <View style={styles.previewActionRow}><View style={styles.previewAction}><Text style={styles.previewActionTitle}>WORK MY BOOK</Text><Text style={styles.previewMeta}>Call + Text Queue</Text></View><View style={styles.previewAction}><Text style={styles.previewActionTitle}>ASK REX</Text><Text style={styles.previewMeta}>What should I say?</Text></View></View>
+        <View style={styles.previewBubbleUser}><Text style={styles.previewBubbleText}>Give me a text for Marcus.</Text></View>
+      </> : null}
+
+      {tab === 'SALES LOG' ? <>
+        <View style={styles.previewHeadline}><Text style={styles.previewTitle}>Sales Log</Text><Text style={styles.previewGold}>THIS MONTH</Text></View>
+        <View style={styles.previewStatRow}>
+          <View style={styles.previewStat}><Text style={styles.previewStatNum}>8</Text><Text style={styles.previewStatLabel}>DELIVERED</Text></View>
+          <View style={styles.previewStat}><Text style={styles.previewStatNum}>$12.4k</Text><Text style={styles.previewStatLabel}>GROSS</Text></View>
+          <View style={styles.previewStat}><Text style={styles.previewStatNum}>3</Text><Text style={styles.previewStatLabel}>SPLITS</Text></View>
+        </View>
+        <View style={styles.previewRow}><View style={styles.previewInitial}><Text style={styles.previewInitialText}>JT</Text></View><View style={styles.previewGrow}><Text style={styles.previewName}>Jordan Taylor</Text><Text style={styles.previewMeta}>2026 Rogue · Delivered today</Text></View><Text style={styles.previewGold}>SOLD</Text></View>
+        <View style={styles.previewAdd}><Text style={styles.previewAddText}>+ LOG A SALE</Text></View>
+      </> : null}
+
+      {tab === 'SETTINGS / PROFILE' ? <>
+        <View style={styles.previewHeadline}><Text style={styles.previewTitle}>Profile</Text><Text style={styles.previewGold}>YOUR POCKETREP</Text></View>
+        <View style={styles.previewProfile}><View style={styles.previewProfileOrb}><Text style={styles.previewProfileText}>AC</Text></View><View><Text style={styles.previewName}>Alex Carter</Text><Text style={styles.previewMeta}>Sales Consultant · Automotive</Text></View></View>
+        <View style={styles.previewSetting}><Text style={styles.previewName}>Rex style</Text><Text style={styles.previewGold}>SHARP ›</Text></View>
+        <View style={styles.previewSetting}><Text style={styles.previewName}>Install PocketRep</Text><Text style={styles.previewMeta}>Home Screen ›</Text></View>
+        <View style={styles.previewSetting}><Text style={styles.previewName}>Billing & support</Text><Text style={styles.previewMeta}>Manage ›</Text></View>
+      </> : null}
+
+      <View style={styles.previewTabs}>{tabNames.map(name => <View key={name} style={styles.previewTab}><View style={[styles.previewTabDot, name === active && styles.previewTabDotActive]} /><Text style={[styles.previewTabText, name === active && styles.previewTabTextActive]}>{name}</Text></View>)}</View>
+    </View>
+  );
+}
+
 export default function RexOnboarding({ open, onClose }: { open: boolean; onClose: (completed: boolean) => void }) {
   const [step, setStep] = useState(0);
   const [tourIndex, setTourIndex] = useState(0);
@@ -151,9 +212,10 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
         </> : null}
         {step === 1 ? <>
           <Text style={styles.eyebrow}>02 · WELCOME TO POCKETREP</Text>
-          <Text style={styles.title}>Your whole sales day, in five tabs.</Text>
-          <Text style={styles.body}>You can skip this anytime. Here is what each tab is for before we show you PocketRep working.</Text>
+          <Text style={styles.title}>See where everything lives.</Text>
+          <Text style={styles.body}>Each step shows you what the real tab looks like and what you use it for. You can skip this anytime.</Text>
           <View style={styles.tourDots}>{TOUR.map((item, index) => <View key={item.tab} style={[styles.tourDot, index === tourIndex && styles.tourDotActive]} />)}</View>
+          <TabPreview tab={tour.tab} />
           <View style={styles.tourCard}>
             <Text style={styles.tourKicker}>{tour.tab} · {tourIndex + 1} OF {TOUR.length}</Text>
             <Text style={styles.tourTitle}>{tour.title}</Text>
@@ -220,10 +282,57 @@ const styles = StyleSheet.create({
   tourDots: { flexDirection: 'row', gap: 6, marginTop: 22 },
   tourDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.ink4 },
   tourDotActive: { width: 24, backgroundColor: colors.gold },
-  tourCard: { marginTop: 14, padding: 20, minHeight: 230, justifyContent: 'center', borderRadius: radius.xl, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.ink2 },
+  previewFrame: { marginTop: 14, padding: 10, paddingBottom: 8, minHeight: 278, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.ink2, overflow: 'hidden' },
+  previewPhoneTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4, paddingBottom: 9, borderBottomWidth: 1, borderBottomColor: colors.ink4 },
+  previewBrand: { color: colors.white, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
+  previewSub: { color: colors.grey, fontSize: 6, fontWeight: '800', letterSpacing: 0.8, marginTop: 1 },
+  previewAvatar: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder },
+  previewAvatarText: { color: colors.gold, fontSize: 7, fontWeight: '900' },
+  previewHeadline: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 10, marginBottom: 8 },
+  previewTitle: { color: colors.white, fontSize: 16, fontWeight: '900', letterSpacing: -0.3 },
+  previewGold: { color: colors.gold, fontSize: 7, fontWeight: '900', letterSpacing: 0.6 },
+  previewStatRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
+  previewStat: { flex: 1, padding: 7, borderRadius: 8, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4 },
+  previewStatNum: { color: colors.white, fontSize: 13, fontWeight: '900' },
+  previewStatLabel: { color: colors.grey, fontSize: 6, fontWeight: '800', letterSpacing: 0.5, marginTop: 2 },
+  previewRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 7, marginBottom: 6, borderRadius: 9, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4 },
+  previewGrow: { flex: 1 },
+  previewName: { color: colors.white, fontSize: 9, fontWeight: '800' },
+  previewMeta: { color: colors.grey2, fontSize: 7, lineHeight: 10, marginTop: 2 },
+  previewScore: { color: colors.gold, fontSize: 12, fontWeight: '900' },
+  previewHeatDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.gold },
+  previewWarmDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.grey2 },
+  previewSearch: { height: 30, justifyContent: 'center', paddingHorizontal: 10, borderRadius: 9, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4 },
+  previewSearchText: { color: colors.grey, fontSize: 8 },
+  previewPills: { flexDirection: 'row', gap: 5, marginVertical: 7 },
+  previewPill: { color: colors.grey2, fontSize: 6, fontWeight: '900', paddingHorizontal: 7, paddingVertical: 4, borderRadius: 10, backgroundColor: colors.surface2 },
+  previewPillActive: { color: colors.gold, fontSize: 6, fontWeight: '900', paddingHorizontal: 7, paddingVertical: 4, borderRadius: 10, backgroundColor: colors.goldBg },
+  previewInitial: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ink4 },
+  previewInitialText: { color: colors.white, fontSize: 7, fontWeight: '900' },
+  previewRexHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, marginBottom: 8 },
+  previewRexOrb: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.gold },
+  previewBubbleRex: { maxWidth: '88%', padding: 9, borderRadius: 10, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.goldBorder },
+  previewBubbleUser: { maxWidth: '75%', alignSelf: 'flex-end', padding: 9, marginTop: 7, borderRadius: 10, backgroundColor: colors.goldBg },
+  previewBubbleText: { color: colors.white, fontSize: 8, lineHeight: 12 },
+  previewActionRow: { flexDirection: 'row', gap: 6, marginTop: 7 },
+  previewAction: { flex: 1, minHeight: 43, justifyContent: 'center', padding: 7, borderRadius: 9, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4 },
+  previewActionTitle: { color: colors.gold, fontSize: 7, fontWeight: '900', letterSpacing: 0.4 },
+  previewAdd: { minHeight: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 9, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.goldBg },
+  previewAddText: { color: colors.gold, fontSize: 7, fontWeight: '900', letterSpacing: 0.5 },
+  previewProfile: { flexDirection: 'row', alignItems: 'center', gap: 9, padding: 9, marginBottom: 7, borderRadius: 9, backgroundColor: colors.surface2 },
+  previewProfileOrb: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder },
+  previewProfileText: { color: colors.gold, fontSize: 9, fontWeight: '900' },
+  previewSetting: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 34, paddingHorizontal: 9, marginBottom: 5, borderRadius: 8, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4 },
+  previewTabs: { flexDirection: 'row', paddingTop: 7, marginTop: 'auto', borderTopWidth: 1, borderTopColor: colors.ink4 },
+  previewTab: { flex: 1, alignItems: 'center', gap: 2 },
+  previewTabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.grey },
+  previewTabDotActive: { width: 10, backgroundColor: colors.gold },
+  previewTabText: { color: colors.grey, fontSize: 5, fontWeight: '800' },
+  previewTabTextActive: { color: colors.gold },
+  tourCard: { marginTop: 10, padding: 15, minHeight: 138, justifyContent: 'center', borderRadius: radius.xl, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.ink2 },
   tourKicker: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
-  tourTitle: { color: colors.white, fontSize: 23, lineHeight: 29, fontWeight: '800', letterSpacing: -0.4, marginTop: 12 },
-  tourBody: { color: colors.grey3, fontSize: 14, lineHeight: 22, marginTop: 12 },
+  tourTitle: { color: colors.white, fontSize: 20, lineHeight: 25, fontWeight: '800', letterSpacing: -0.4, marginTop: 8 },
+  tourBody: { color: colors.grey3, fontSize: 13, lineHeight: 19, marginTop: 8 },
   tourNav: { flexDirection: 'row', gap: 10, marginTop: 14 },
   secondary: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface2 },
   secondaryStrong: { borderColor: colors.goldBorder, backgroundColor: colors.goldBg },
