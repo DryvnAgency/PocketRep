@@ -178,7 +178,7 @@ Owner-approved cohort ladder (2026-09-04):
 - **7-day free trial**, card on file; charge begins on day 8 unless canceled.
 - Referral economics (§8) are unchanged by this ladder.
 
-**Needs owner reconciliation:** the previously-recorded "V2 direction for new customers: $49/month" and "V3 direction for new customers: $69/month" (tied to major product-version milestones, not signup-count cohorts) predate this ladder and now sit oddly beside it — the V1 cohort ladder alone reaches $59–$79 before V2/V3 even ship. Treat the old V2/V3 direction figures as stale pending an explicit owner decision on how (or whether) they still apply once this cohort ladder is live.
+**Resolved 2026-09-04 (owner decision on PR #165):** the previously-recorded "V2 direction for new customers: $49/month" and "V3 direction for new customers: $69/month" are **retired**. V2 and V3 are roadmap stages (feature scope), not separate price plans. The cohort ladder above is the **only** public commercial pricing for PocketRep — it is not superseded or supplemented by anything tied to a V2 or V3 milestone. Do not reintroduce a $49 or $69 "version-tied" price anywhere in product copy or docs.
 
 Live Stripe resources prepared for the V1 cutover:
 

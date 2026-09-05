@@ -150,7 +150,19 @@ inc('decisions', decisions, [
   '**RexLens is separate/out-of-scope from PocketRep.',
   // the doc must explicitly flag the superseded old ladder rather than silently drop it
   'is **superseded** by a new, owner-approved user-count ladder',
+  // the old V2($49)/V3($69) "version-tied" pricing question was flagged, then
+  // resolved by the owner (PR #165 review comment): retired, not reconciled-in.
+  'Resolved 2026-09-04 (owner decision on PR #165)',
+  'V2 and V3 are roadmap stages (feature scope), not separate price plans',
+  'is the **only** public commercial pricing for PocketRep',
+]);
+// The doc may still name the retired V2/V3 figures in quotes for audit-trail
+// clarity (same style as the already-superseded $54/$69 ladder above) — what
+// must never come back is the *unresolved* framing, or those figures presented
+// as still-open/active.
+exc('decisions', decisions, [
   'Needs owner reconciliation',
+  'now sit oddly beside it',
 ]);
 
 console.log('\nPocketRep pricing alignment guard OK: $39/$59/$79 cohort ladder, verified truthful V1/V2/V3 roadmap, no fabricated urgency, no atomic cohort logic, real account-creation JS untouched.');
