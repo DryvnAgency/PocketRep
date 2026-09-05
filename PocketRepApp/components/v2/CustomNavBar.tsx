@@ -62,8 +62,8 @@ export default function CustomNavBar({
 
         <Pressable onPress={onSearch} style={({ pressed }) => [styles.iconBtn, pressed && styles.iconPressed]} accessibilityRole="button" accessibilityLabel="Search contacts" hitSlop={4}>
           <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-            <Circle cx={11} cy={11} r={6} stroke={colors.grey1} strokeWidth={1.8} />
-            <Path d="M16 16l4 4" stroke={colors.grey1} strokeWidth={1.8} strokeLinecap="round" />
+            <Circle cx={11} cy={11} r={6} stroke={colors.grey2} strokeWidth={1.8} />
+            <Path d="M16 16l4 4" stroke={colors.grey2} strokeWidth={1.8} strokeLinecap="round" />
           </Svg>
         </Pressable>
 
@@ -75,8 +75,8 @@ export default function CustomNavBar({
           hitSlop={4}
         >
           <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-            <Path d="M5 17v-5a7 7 0 1114 0v5l1.5 2H3.5L5 17z" stroke={colors.grey1} strokeWidth={1.6} strokeLinejoin="round" />
-            <Path d="M10 21a2 2 0 004 0" stroke={colors.grey1} strokeWidth={1.6} strokeLinecap="round" />
+            <Path d="M5 17v-5a7 7 0 1114 0v5l1.5 2H3.5L5 17z" stroke={colors.grey2} strokeWidth={1.6} strokeLinejoin="round" />
+            <Path d="M10 21a2 2 0 004 0" stroke={colors.grey2} strokeWidth={1.6} strokeLinecap="round" />
           </Svg>
           {unread > 0 ? (
             <View style={styles.notifBadge}>
