@@ -49,10 +49,11 @@ function TabButton({
   return (
     <Pressable
       onPress={onPress}
-      style={styles.tabBtn}
+      style={({ pressed }) => [styles.tabBtn, pressed && styles.tabBtnPressed]}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
       accessibilityLabel={`${t.label} tab`}
+      hitSlop={4}
     >
       {active ? <View style={styles.activeMark} /> : null}
       {renderIcon(t.id, color)}
@@ -121,6 +122,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 3,
     position: 'relative',
+  },
+  tabBtnPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.96 }],
   },
   activeMark: {
     position: 'absolute',
