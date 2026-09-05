@@ -15,7 +15,16 @@ const CHANNEL_ICON: Record<string, string> = {
 function SequenceCard({ s, onPress }: { s: V2Sequence; onPress: () => void }) {
   const live = s.enrolledCount > 0;
   return (
-    <Pressable onPress={onPress} style={[styles.card, { borderColor: live ? colors.goldBorder : colors.ink4 }]}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${s.name} sequence`}
+      style={({ pressed }) => [
+        styles.card,
+        { borderColor: live ? colors.goldBorder : colors.ink4 },
+        pressed && styles.pressed,
+      ]}
+    >
       <HeatStripe color={live ? colors.green : colors.grey} style={styles.stripe} />
       <View style={styles.cardHead}>
         <View style={{ flex: 1 }}>
@@ -64,7 +73,12 @@ export default function GamePlanSheet({
   return (
     <View style={styles.root}>
       <View style={styles.topBar}>
-        <Pressable onPress={onClose} style={styles.iconBtn}>
+        <Pressable
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close Game Plan"
+          style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
+        >
           <Text style={styles.iconBtnText}>‹</Text>
         </Pressable>
         <View style={{ flex: 1 }}>
@@ -83,12 +97,12 @@ export default function GamePlanSheet({
         ) : sequences.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>No sequences yet</Text>
-            <Text style={styles.emptyHint}>Sequences run automatic text/call/email cadences for any contact you enroll.</Text>
+            <Text style={styles.emptyHint}>Sequences organize your text, call, and email follow-up steps for contacts you enroll.</Text>
           </View>
         ) : (
           <View>
             <Text style={styles.intro}>
-              Multi-step cadences that text, call, or email contacts on your schedule. Enroll from any contact card.
+              Multi-step follow-up plans for text, call, and email. Enroll from a contact card, then review each action before you execute it.
             </Text>
             {sequences.map(s => (
               <SequenceCard
@@ -118,7 +132,9 @@ const styles = StyleSheet.create({
     zIndex: 70,
   } as any,
   topBar: {
-    paddingTop: 16,
+    paddingTop: Platform.OS === 'web'
+      ? ('max(16px, env(safe-area-inset-top))' as any)
+      : 16,
     paddingHorizontal: 14,
     paddingBottom: 12,
     flexDirection: 'row',
@@ -128,12 +144,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink2,
   },
   iconBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
     alignItems: 'center', justifyContent: 'center',
   },
-  iconBtnText: { color: colors.gold, fontSize: 18, fontWeight: '700' },
+  iconBtnText: { color: colors.gold, fontSize: 20, fontWeight: '700' },
   topTitle: { fontSize: 16, fontWeight: '700', color: colors.white, letterSpacing: -0.2, marginTop: 2 },
 
   body: { paddingBottom: Platform.OS === 'web' ? ('max(30px, env(safe-area-inset-bottom))' as any) : 30 },
@@ -157,6 +173,7 @@ const styles = StyleSheet.create({
   },
 
   card: {
+    minHeight: 44,
     position: 'relative',
     marginHorizontal: 14, marginVertical: 6,
     paddingTop: 14, paddingRight: 14, paddingBottom: 14, paddingLeft: 18,
@@ -164,6 +181,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.lg,
   },
+  pressed: { opacity: 0.8, transform: [{ scale: 0.992 }] },
   stripe: {
     borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg,
   } as any,
