@@ -39,7 +39,7 @@ ok('the local-notification contacts query filters is_deleted',
 
 console.log('\n--- native sequence enrollment/mass-text picker excludes deleted contacts ---');
 ok('the allContacts query filters is_deleted',
-  /supabase\.from\('contacts'\)\.select\('id,first_name,last_name,phone'\)\.eq\('user_id', user\.id\)\.eq\('is_deleted', false\)/.test(sequencesSrc));
+  /supabase\.from\('contacts'\)\.select\('id,first_name,last_name,phone(?:,do_not_contact)?'\)\.eq\('user_id', user\.id\)\.eq\('is_deleted', false\)/.test(sequencesSrc));
 
 console.log('\n--- native Rex whole-book context excludes deleted contacts ---');
 const loadAllMatch = rexSrc.match(/async function loadAll\(\)[\s\S]*?\n  \}\n/);

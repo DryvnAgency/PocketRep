@@ -23,6 +23,7 @@ const contactDetail = read('components/v2/ContactDetail.tsx');
 const blast = read('components/v2/BlastSequenceDrafter.tsx');
 const workbook = read('components/v2/WorkMyBookSheet.tsx');
 const heat = read('components/v2/HeatSheetTab.tsx');
+const legacySequences = read('app/(tabs)/sequences.tsx');
 const queue = read('lib/messageQueue.ts');
 const interactions = read('lib/v2/interactions.ts');
 const updateContact = read('lib/v2/updateContact.ts');
@@ -82,6 +83,12 @@ ok('Work My Book has paired call and text queues', workbook.includes('CALL QUEUE
 ok('Work My Book ranks dormant/stalled/sold/referral/lease context', ['Stalled opportunity','Sold ownership touch','Referral opportunity','Lease timing'].every(x => workbook.includes(x)));
 ok('Heat Sheet has Work My Book CTA', heat.includes('Work My Book'));
 ok('AppShell wires Work My Book to Heat Sheet', appShell.includes('onOpenGamePlan={() => setWorkBookOpen(true)}'));
+
+console.log('\n--- sequence assignment has no dead control ---');
+ok('legacy Sequences no longer shows the contact-search-coming-soon dead alert', !legacySequences.includes('Contact search coming soon'));
+ok('persisted sequences use the authoritative enrollment helper', legacySequences.includes("import { enrollContactInSequence } from '@/lib/v2/useSequences'") && legacySequences.includes('await enrollContactInSequence(contact.id, seq.id)'));
+ok('sequence picker hides DNC contacts', legacySequences.includes('if (c.do_not_contact) return false') && legacySequences.includes('DNC contacts are hidden'));
+ok('static preview templates cannot create fake contact_sequences rows', legacySequences.includes("const persistedSequence = !/^tpl_\\d+$/.test(seq.id)") && legacySequences.includes('This preview is not a database sequence and cannot create a fake enrollment'));
 
 console.log('\n--- contact card is safer and cleaner ---');
 ok('ContactDetail no longer imports LanguageToggle', !contactDetail.includes("import LanguageToggle"));
