@@ -10,6 +10,7 @@ import { isRexFollowupEnabled, isContactImportEnabled } from '@/lib/v2/rexFeatur
 import { kickoffRecapForContact } from '@/lib/v2/followupSequence';
 import { pickOneFromDevice, isDeviceContactPickerSupported } from '@/lib/v2/contactImport';
 import type { V2Contact } from '@/lib/v2/useContacts';
+import { useWebVisualViewportInset } from '@/lib/v2/useWebVisualViewportInset';
 
 const PLAN_OPTIONS: Array<{ value: NewContactDraft['planLabel']; label: string }> = [
   { value: 'TODAY', label: 'Today' },
@@ -47,6 +48,7 @@ export default function AddContactModal({
   const [saving, setSaving] = useState(false);
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const keyboardInset = useWebVisualViewportInset(open);
   // Synchronous re-entrancy guard: the state-based `saving` updates async, so a
   // same-tick double-tap can pass `canSave` twice and create two contacts (+ two
   // recap kickoffs). This ref blocks the second call before the first's await.
@@ -155,7 +157,7 @@ export default function AddContactModal({
     <View style={StyleSheet.absoluteFillObject as any}>
       <Pressable style={styles.scrim} onPress={onClose} />
       <KeyboardAvoidingView
-        style={styles.sheet}
+        style={[styles.sheet, keyboardInset > 0 ? { bottom: keyboardInset } : null]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.handle} />
@@ -178,7 +180,7 @@ export default function AddContactModal({
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           {canPickFromPhone ? (
             <Pressable
               onPress={handlePickFromPhone}
