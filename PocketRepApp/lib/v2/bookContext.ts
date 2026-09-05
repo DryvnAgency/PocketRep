@@ -71,6 +71,7 @@ export async function loadBookContext(): Promise<BookContext> {
       'id,first_name,last_name,heat_score,vehicle,vehicle_make,vehicle_model,last_contact_date,last_contact_summary,lease_end_date,current_mileage,preferred_language,rep_decision,is_past_customer,do_not_contact,tags'
     )
     .eq('is_deleted', false)
+    .eq('do_not_contact', false)
     .order('heat_score', { ascending: false })
     .limit(100);
   // NOTE: demo/tour contacts ARE included here on purpose — they must work fully
@@ -85,7 +86,7 @@ export async function loadBookContext(): Promise<BookContext> {
     };
   }
 
-  const rows = (data ?? []).map(rowToBook);
+  const rows = (data ?? []).map(rowToBook).filter(c => !c.do_not_contact);
   const hot: BookContact[] = [];
   const warm: BookContact[] = [];
   const cold: BookContact[] = [];
