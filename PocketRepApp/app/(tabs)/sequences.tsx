@@ -14,6 +14,7 @@ import {
   markSentAndLog, markSkipped, type QueueItem,
 } from '@/lib/messageQueue';
 import { launchSms } from '@/lib/v2/smsLauncher';
+import { enrollContactInSequence } from '@/lib/v2/useSequences';
 
 let AsyncStorage: any = null;
 try {
@@ -258,6 +259,14 @@ interface MassTextRecord {
   sent_at: string;
 }
 
+type SequenceContact = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  do_not_contact?: boolean | null;
+};
+
 const EMPTY_STEP = (): Omit<SequenceStep, 'id' | 'sequence_id'> => ({
   step_number: 1,
   delay_days: 0,
@@ -303,7 +312,7 @@ export default function SequencesScreen() {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [showMassTextModal, setShowMassTextModal] = useState(false);
   const [massMsg, setMassMsg] = useState('');
-  const [allContacts, setAllContacts] = useState<{id: string; first_name: string; last_name: string; phone: string}[]>([]);
+  const [allContacts, setAllContacts] = useState<SequenceContact[]>([]);
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [contactSearch, setContactSearch] = useState('');
 
@@ -357,7 +366,7 @@ export default function SequencesScreen() {
       const [{ data: prof }, { data: seqs }, { data: ctcts }] = await Promise.all([
         supabase.from('profiles').select('plan,industry').eq('id', user.id).single(),
         supabase.from('sequences').select('*, sequence_steps(*)').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('contacts').select('id,first_name,last_name,phone').eq('user_id', user.id).eq('is_deleted', false).order('last_name'),
+        supabase.from('contacts').select('id,first_name,last_name,phone,do_not_contact').eq('user_id', user.id).eq('is_deleted', false).order('last_name'),
       ]);
       if (prof) {
         setUserPlan(prof.plan ?? 'pro');
@@ -367,7 +376,7 @@ export default function SequencesScreen() {
         }
       }
       setMySequences(seqs ?? []);
-      setAllContacts((ctcts ?? []) as any);
+      setAllContacts((ctcts ?? []) as SequenceContact[]);
     } catch {
       setMySequences([]);
     }
@@ -519,8 +528,8 @@ export default function SequencesScreen() {
 
   async function sendMassText() {
     if (!massMsg.trim() || selectedContactIds.size === 0) return;
-    const recipients = allContacts.filter(c => selectedContactIds.has(c.id) && c.phone);
-    if (!recipients.length) { Alert.alert('No phone numbers', 'Selected contacts have no phone numbers.'); return; }
+    const recipients = allContacts.filter(c => selectedContactIds.has(c.id) && c.phone && !c.do_not_contact);
+    if (!recipients.length) { Alert.alert('No eligible phone numbers', 'Selected contacts are missing a phone number or are marked do not contact.'); return; }
     const count = recipients.length;
 
     const confirmed = await new Promise<boolean>(resolve => {
@@ -655,7 +664,7 @@ export default function SequencesScreen() {
   }
 
   if (view === 'detail' && selectedSeq) {
-    return <DetailView seq={selectedSeq} onBack={() => setView('list')} />;
+    return <DetailView seq={selectedSeq} contacts={allContacts} onAssigned={loadQueue} onBack={() => setView('list')} />;
   }
 
   if (view === 'create') {
@@ -1048,6 +1057,7 @@ export default function SequencesScreen() {
             <ScrollView style={mt.contactList} keyboardShouldPersistTaps="handled">
               {allContacts
                 .filter(c => {
+                  if (c.do_not_contact) return false;
                   const q = contactSearch.toLowerCase();
                   return !q || `${c.first_name} ${c.last_name}`.toLowerCase().includes(q) || c.phone?.includes(q);
                 })
@@ -1128,7 +1138,45 @@ function SequenceBubble({ seq, onPress }: { seq: Sequence; onPress: () => void }
   );
 }
 
-function DetailView({ seq, onBack }: { seq: Sequence; onBack: () => void }) {
+function DetailView({
+  seq,
+  contacts,
+  onBack,
+  onAssigned,
+}: {
+  seq: Sequence;
+  contacts: SequenceContact[];
+  onBack: () => void;
+  onAssigned: () => Promise<void>;
+}) {
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignSearch, setAssignSearch] = useState('');
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const persistedSequence = !/^tpl_\d+$/.test(seq.id);
+
+  const eligibleContacts = contacts.filter(c => {
+    if (c.do_not_contact) return false;
+    const q = assignSearch.trim().toLowerCase();
+    if (!q) return true;
+    return `${c.first_name} ${c.last_name}`.toLowerCase().includes(q) || c.phone?.includes(q);
+  });
+
+  async function assignContact(contact: SequenceContact) {
+    if (!persistedSequence || assigningId) return;
+    setAssigningId(contact.id);
+    try {
+      await enrollContactInSequence(contact.id, seq.id);
+      await onAssigned();
+      setAssignOpen(false);
+      setAssignSearch('');
+      Alert.alert('Sequence assigned', `${contact.first_name} ${contact.last_name}`.trim() + ` is now active on ${seq.name}.`);
+    } catch (error: any) {
+      Alert.alert('Could not assign sequence', error?.message ?? 'Try again from the customer card.');
+    } finally {
+      setAssigningId(null);
+    }
+  }
+
   return (
     <View style={s.root}>
       <View style={s.header}>
@@ -1165,15 +1213,71 @@ function DetailView({ seq, onBack }: { seq: Sequence; onBack: () => void }) {
           </View>
         ))}
 
-        <TouchableOpacity
-          style={s.assignBtn}
-          onPress={() => Alert.alert('Assign to Contact', 'Contact search coming soon. For now, open a contact and assign from their profile.')}
-          activeOpacity={0.85}
-        >
-          <Text style={s.assignBtnText}>Assign to Contact</Text>
-        </TouchableOpacity>
+        {persistedSequence ? (
+          <TouchableOpacity
+            style={s.assignBtn}
+            onPress={() => { setAssignSearch(''); setAssignOpen(true); }}
+            activeOpacity={0.85}
+          >
+            <Text style={s.assignBtnText}>Assign to Contact</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={s.referenceNote}>
+            <Text style={s.referenceTitle}>Reference template</Text>
+            <Text style={s.referenceText}>Open a customer card and choose Sequences to enroll them in the live sequence library. This preview is not a database sequence and cannot create a fake enrollment.</Text>
+          </View>
+        )}
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <Modal visible={assignOpen} animationType="slide" transparent onRequestClose={() => setAssignOpen(false)}>
+        <View style={mt.overlay}>
+          <View style={mt.sheet}>
+            <View style={mt.handle} />
+            <View style={mt.header}>
+              <View style={{ flex: 1, paddingRight: spacing.md }}>
+                <Text style={mt.title}>Assign {seq.name}</Text>
+                <Text style={mt.limitText}>Choose one customer. DNC contacts are hidden.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setAssignOpen(false)} disabled={!!assigningId}>
+                <Text style={mt.close}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={mt.input}
+              value={assignSearch}
+              onChangeText={setAssignSearch}
+              placeholder="Search contacts…"
+              placeholderTextColor={colors.grey}
+              autoFocus
+            />
+
+            <ScrollView style={[mt.contactList, { maxHeight: 360 }]} keyboardShouldPersistTaps="handled">
+              {eligibleContacts.length === 0 ? (
+                <Text style={s.referenceText}>No eligible contacts found.</Text>
+              ) : eligibleContacts.map(c => {
+                const loading = assigningId === c.id;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={mt.contactRow}
+                    onPress={() => assignContact(c)}
+                    disabled={!!assigningId}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={mt.contactName}>{c.first_name} {c.last_name}</Text>
+                      {c.phone ? <Text style={mt.contactPhone}>{c.phone}</Text> : null}
+                    </View>
+                    {loading ? <ActivityIndicator color={colors.gold} /> : <Text style={s.assignChevron}>→</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1317,6 +1421,13 @@ const s = StyleSheet.create({
     padding: spacing.md, alignItems: 'center', marginTop: spacing.xl,
   },
   assignBtnText: { color: colors.ink, fontWeight: '700', fontSize: 15 },
+  assignChevron: { color: colors.gold, fontSize: 18, fontWeight: '800' },
+  referenceNote: {
+    marginTop: spacing.xl, padding: spacing.md, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface2,
+  },
+  referenceTitle: { color: colors.white, fontSize: 12, fontWeight: '800', marginBottom: 4 },
+  referenceText: { color: colors.grey2, fontSize: 12, lineHeight: 18 },
 
   // Builder
   fieldLabel: { fontSize: 11, fontWeight: '600', color: colors.grey3, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: spacing.sm, marginBottom: 4 },
