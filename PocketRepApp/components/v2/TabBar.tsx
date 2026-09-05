@@ -1,4 +1,4 @@
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform, LayoutAnimation } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { colors } from '@/constants/theme';
 import HeyRexOrb, { OrbState } from './HeyRexOrb';
@@ -11,6 +11,25 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'profile', label: 'You' },
 ];
 
+function ensureWebTransitionStyle() {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+  if (document.getElementById('pocketrep-view-transition-style')) return;
+  const style = document.createElement('style');
+  style.id = 'pocketrep-view-transition-style';
+  style.textContent = `
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+      animation-duration: 180ms;
+      animation-timing-function: cubic-bezier(.2,.8,.2,1);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      ::view-transition-old(root),
+      ::view-transition-new(root) { animation-duration: 0.01ms; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 export default function TabBar({
   active,
   onChange,
@@ -22,15 +41,43 @@ export default function TabBar({
   orbState: OrbState;
   onOrbPress: () => void;
 }) {
+  const transitionTo = (id: TabId) => {
+    if (id === active) return;
+
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      ensureWebTransitionStyle();
+      const doc = document as Document & {
+        startViewTransition?: (update: () => void | Promise<void>) => unknown;
+      };
+      if (doc.startViewTransition) {
+        doc.startViewTransition(() => new Promise<void>(resolve => {
+          onChange(id);
+          requestAnimationFrame(() => resolve());
+        }));
+        return;
+      }
+    }
+
+    if (Platform.OS !== 'web') {
+      LayoutAnimation.configureNext({
+        duration: 180,
+        create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+        update: { type: LayoutAnimation.Types.easeInEaseOut },
+        delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+      });
+    }
+    onChange(id);
+  };
+
   return (
     <View style={styles.root}>
       <HeyRexOrb state={orbState} onPress={onOrbPress} />
       <View style={styles.row}>
-        <TabButton t={TABS[0]} active={active === TABS[0].id} onPress={() => onChange(TABS[0].id)} />
-        <TabButton t={TABS[1]} active={active === TABS[1].id} onPress={() => onChange(TABS[1].id)} />
+        <TabButton t={TABS[0]} active={active === TABS[0].id} onPress={() => transitionTo(TABS[0].id)} />
+        <TabButton t={TABS[1]} active={active === TABS[1].id} onPress={() => transitionTo(TABS[1].id)} />
         <View style={{ flex: 1 }} />
-        <TabButton t={TABS[2]} active={active === TABS[2].id} onPress={() => onChange(TABS[2].id)} />
-        <TabButton t={TABS[3]} active={active === TABS[3].id} onPress={() => onChange(TABS[3].id)} />
+        <TabButton t={TABS[2]} active={active === TABS[2].id} onPress={() => transitionTo(TABS[2].id)} />
+        <TabButton t={TABS[3]} active={active === TABS[3].id} onPress={() => transitionTo(TABS[3].id)} />
       </View>
     </View>
   );
