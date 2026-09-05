@@ -15,6 +15,7 @@ const root = path.resolve(new URL('..', import.meta.url).pathname);
 const read = p => fs.readFileSync(path.join(root, p), 'utf8');
 
 const onboarding = read('components/v2/RexOnboarding.tsx');
+const onboardingDemo = read('components/v2/EliteOnboardingDemo.tsx');
 const soldGuide = read('components/v2/SoldBookGuide.tsx');
 const appShell = read('components/v2/AppShell.tsx');
 const rexCoach = read('components/v2/RexCoach.tsx');
@@ -44,7 +45,7 @@ ok('demo contacts remain part of onboarding', onboarding.includes('Marcus Hollow
 ok('onboarding explicitly avoids forcing import', /demo/i.test(onboarding) && !/Import my real book/.test(onboarding));
 ok('activation runs a visible demo Text Queue', onboarding.includes('Run demo Text Queue') && onboarding.includes('THE A-HA'));
 ok('demo queue messages are individualized', onboarding.includes('demoMessage') && onboarding.includes('demos.slice(0, 3).map'));
-ok('demo reply is animated and visible', onboarding.includes('CUSTOMER REPLIED · DEMO') && onboarding.includes('Animated.spring'));
+ok('demo reply is animated and visible', onboardingDemo.includes('CUSTOMER REPLIED · DEMO') && onboarding.includes('Animated.spring'));
 ok('activation finishes by handing off to install + 60-day book instead of single-customer capture',
   onboarding.includes('Continue · install + build my 60-day book') && onboarding.includes('Start with last month') && onboarding.includes('last two months of customers you sold') && !onboarding.includes('Now add one of my customers'));
 ok('onboarding is a tight 4-step activation with a skippable tab tour',
