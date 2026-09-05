@@ -88,6 +88,11 @@ export async function generateDigestForWeek(weekStart: string): Promise<WeeklyDi
       .eq('is_deleted', false),
   ]);
 
+  // Never persist a plausible-looking zero/partial digest when either source
+  // query failed. Surface the database error so callers can retry instead.
+  if (dealsRes.error) throw dealsRes.error;
+  if (contactsRes.error) throw contactsRes.error;
+
   const deals = dealsRes.data ?? [];
   const contacts = contactsRes.data ?? [];
 
@@ -101,17 +106,7 @@ export async function generateDigestForWeek(weekStart: string): Promise<WeeklyDi
 
   let highlights = '';
   try {
-    const prompt = `You're Rex, summarizing one sales rep's week.
-
-Stats:
-- Units: ${units}
-- Commission: $${commission}
-- Gross: $${gross}
-- New contacts: ${contactsAdded}
-- Contacts touched: ${contactsTouched}
-- Deals this week: ${deals.map((d: any) => `${d.title ?? '?'} (${d.vehicle ?? '?'}, $${d.amount})`).join('; ') || '(none)'}
-
-Write 2-4 short bullets — what went well, what needs attention next week, one specific suggestion. Each bullet under 18 words. No preamble.`;
+    const prompt = `You're Rex, summarizing one sales rep's week.\n\nStats:\n- Units: ${units}\n- Commission: $${commission}\n- Gross: $${gross}\n- New contacts: ${contactsAdded}\n- Contacts touched: ${contactsTouched}\n- Deals this week: ${deals.map((d: any) => `${d.title ?? '?'} (${d.vehicle ?? '?'}, $${d.amount})`).join('; ') || '(none)'}\n\nWrite 2-4 short bullets — what went well, what needs attention next week, one specific suggestion. Each bullet under 18 words. No preamble.`;
     highlights = (await callBrain({
       maxTokens: 400,
       tier: 'pro',
