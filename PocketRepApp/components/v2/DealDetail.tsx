@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet, Alert, Platform,
+  View, Text, Pressable, ScrollView, StyleSheet, Alert, Platform, ActivityIndicator,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
@@ -56,8 +56,6 @@ export default function DealDetail({
       onDeleted();
       onClose();
     } catch (e: any) {
-      // Previously logged only to console — the button just returned to
-      // normal with zero feedback, as if nothing had been tapped.
       console.warn('deleteDeal failed', e);
       setDeleteError(e?.message ?? "Couldn't delete — try again");
       deletingRef.current = false;
@@ -79,30 +77,55 @@ export default function DealDetail({
 
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
-      <Pressable style={styles.scrim} onPress={onClose} />
+      <Pressable style={({ pressed }) => [styles.scrim, pressed && styles.scrimPressed]} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close deal details" />
       <View style={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Pressable onPress={onClose} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Close deal details">
+          <Pressable
+            onPress={onClose}
+            disabled={deleting}
+            style={({ pressed }) => [styles.headerBtn, pressed && !deleting && styles.pressed, deleting && styles.disabled]}
+            accessibilityRole="button"
+            accessibilityLabel="Close deal details"
+            accessibilityState={{ disabled: deleting }}
+          >
             <Text style={styles.headerBtnText}>Close</Text>
           </Pressable>
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={styles.headerKicker}>LOGGED DEAL</Text>
+          <View style={styles.headerCenter}>
+            <View style={styles.loggedRow}>
+              <View style={styles.readyDot} />
+              <Text style={styles.headerKicker}>SALE LOGGED</Text>
+            </View>
             <Text style={styles.headerTitle} numberOfLines={1}>{deal.name}</Text>
           </View>
-          <View style={[styles.headerBtn, { opacity: 0 }]}>
+          <View style={[styles.headerBtn, styles.headerGhost]}>
             <Text style={styles.headerBtnText}>Close</Text>
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.body,
+            Platform.OS === 'web' ? ({ paddingBottom: 'max(28px, env(safe-area-inset-bottom))' } as any) : null,
+          ]}
+        >
           <View style={styles.payoutCard}>
-            <Label color={colors.gold}>COMMISSION</Label>
+            <View style={styles.payoutTopRow}>
+              <Label color={colors.gold}>COMMISSION</Label>
+              <Text style={styles.payoutMeta}>RECORDED</Text>
+            </View>
             <Text style={styles.payout}>{money(deal.amount)}</Text>
+            <Text style={styles.payoutHint}>Your logged payout for this delivery</Text>
+          </View>
+
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionKicker}>DEAL SNAPSHOT</Text>
+            <Text style={styles.sectionMeta}>{deal.dealType ? (TYPE_LABEL[deal.dealType] ?? deal.dealType) : 'Deal'}</Text>
           </View>
 
           <View style={styles.card}>
-            <Row label="Customer" value={deal.name} />
+            <Row label="Customer" value={deal.name} strong />
             <Row label="Vehicle" value={deal.vehicle ?? '—'} />
             <Row label="Stock #" value={deal.stock ?? '—'} />
             <Row label="Delivered" value={fmtDate(deal.closedAt)} />
@@ -115,18 +138,23 @@ export default function DealDetail({
             ) : null}
           </View>
 
+          <View style={styles.historyNote}>
+            <Text style={styles.historyNoteTitle}>SALES LOG</Text>
+            <Text style={styles.historyNoteText}>This view reflects the deal already recorded in PocketRep. Deleting removes this deal entry; it does not rewrite customer communication history.</Text>
+          </View>
+
           {deleteError ? <Text style={styles.deleteErrorText}>{deleteError}</Text> : null}
           <Pressable
             onPress={confirmDelete}
             disabled={deleting}
             accessibilityRole="button"
             accessibilityLabel="Delete deal"
-            accessibilityState={{ disabled: deleting }}
-            style={[styles.deleteBtn, deleting && { opacity: 0.6 }]}
+            accessibilityState={{ disabled: deleting, busy: deleting }}
+            style={({ pressed }) => [styles.deleteBtn, pressed && !deleting && styles.deletePressed, deleting && styles.disabled]}
           >
-            <Text style={styles.deleteText}>{deleting ? 'Deleting…' : 'Delete deal'}</Text>
+            {deleting ? <ActivityIndicator size="small" color={colors.red} /> : null}
+            <Text style={styles.deleteText}>{deleting ? 'Deleting deal…' : 'Delete deal'}</Text>
           </Pressable>
-          <View style={{ height: 28 }} />
         </ScrollView>
       </View>
     </View>
@@ -134,15 +162,16 @@ export default function DealDetail({
 }
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.72)' },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.76)' },
+  scrimPressed: { backgroundColor: 'rgba(5,5,8,0.8)' },
   sheet: {
     position: 'absolute',
-    left: 0, right: 0, bottom: 0, top: '18%',
+    left: 0, right: 0, bottom: 0, top: '14%',
     backgroundColor: colors.ink2,
     borderTopWidth: 1,
     borderTopColor: colors.goldBorder,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     overflow: 'hidden',
   } as any,
   handle: {
@@ -160,27 +189,37 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.ink4,
   },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  loggedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  readyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#45D483' },
   headerBtn: {
-    paddingHorizontal: 14, paddingVertical: 7,
+    paddingHorizontal: 14, paddingVertical: 10,
     borderRadius: 16,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
-    minWidth: 64, alignItems: 'center',
+    minWidth: 64, minHeight: 44, alignItems: 'center', justifyContent: 'center',
   },
-  headerBtnText: { fontSize: 12, fontWeight: '700', color: colors.grey2 },
-  headerKicker: { fontSize: 10, fontWeight: '700', color: colors.gold, letterSpacing: 1.4 },
-  headerTitle: { fontSize: 14, fontWeight: '700', color: colors.white, marginTop: 2, letterSpacing: -0.2 },
+  headerGhost: { opacity: 0, pointerEvents: 'none' } as any,
+  headerBtnText: { fontSize: 12, fontWeight: '800', color: colors.grey2 },
+  headerKicker: { fontSize: 10, fontWeight: '800', color: colors.gold, letterSpacing: 1.4 },
+  headerTitle: { fontSize: 15, fontWeight: '800', color: colors.white, marginTop: 3, letterSpacing: -0.25 },
 
-  body: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14, gap: 14 },
+  body: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 28, gap: 14 },
 
   payoutCard: {
     backgroundColor: colors.goldBg,
     borderWidth: 1, borderColor: colors.goldBorder,
     borderRadius: radius.lg,
-    paddingHorizontal: 16, paddingVertical: 16,
+    paddingHorizontal: 18, paddingVertical: 18,
   },
-  payout: { fontSize: 30, fontWeight: '900', color: colors.gold2, letterSpacing: -1, marginTop: 4 },
+  payoutTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  payoutMeta: { fontSize: 9, fontWeight: '800', color: colors.grey2, letterSpacing: 1.1 },
+  payout: { fontSize: 32, fontWeight: '900', color: colors.gold2, letterSpacing: -1.1, marginTop: 5 },
+  payoutHint: { fontSize: 11, color: colors.grey2, marginTop: 4 },
 
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 2, marginTop: 2 },
+  sectionKicker: { fontSize: 10, fontWeight: '800', color: colors.grey2, letterSpacing: 1.35 },
+  sectionMeta: { fontSize: 11, fontWeight: '700', color: colors.gold },
   card: {
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
@@ -192,23 +231,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 13,
+    minHeight: 46,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.ink4,
     gap: 12,
   },
   rowLabel: { fontSize: 13, color: colors.grey2 },
-  rowValue: { fontSize: 14, fontWeight: '600', color: colors.white, flexShrink: 1, textAlign: 'right' },
-  rowValueStrong: { color: colors.gold2 },
+  rowValue: { fontSize: 14, fontWeight: '650' as any, color: colors.white, flexShrink: 1, textAlign: 'right' },
+  rowValueStrong: { color: colors.gold2, fontWeight: '800' },
+
+  historyNote: {
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.ink4,
+    borderRadius: radius.lg,
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+  },
+  historyNoteTitle: { fontSize: 9, fontWeight: '800', color: colors.grey2, letterSpacing: 1.2 },
+  historyNoteText: { fontSize: 11, lineHeight: 16, color: colors.grey2, marginTop: 5 },
 
   deleteBtn: {
-    marginTop: 8,
-    paddingVertical: 14,
+    minHeight: 48,
+    marginTop: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
     backgroundColor: colors.redBg,
     borderWidth: 1, borderColor: colors.redBorder,
     borderRadius: radius.lg,
-    alignItems: 'center',
+    alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
   },
+  deletePressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
   deleteText: { fontSize: 14, fontWeight: '800', color: colors.red, letterSpacing: 0.2 },
   deleteErrorText: { fontSize: 12, color: colors.red, textAlign: 'center', marginTop: -4 },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
+  disabled: { opacity: 0.48 },
 });
