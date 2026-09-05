@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
 
@@ -44,6 +44,19 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
     deferredPromptEvent = e;
     try { localStorage.setItem(INSTALL_EVENT_KEY, '1'); } catch { /* noop */ }
   });
+}
+
+function InstallCard({ children }: { children: React.ReactNode }) {
+  return (
+    <ScrollView
+      style={styles.card}
+      contentContainerStyle={styles.cardContent}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
+      {children}
+    </ScrollView>
+  );
 }
 
 export default function PWAInstallPrompt({
@@ -91,7 +104,7 @@ export default function PWAInstallPrompt({
     return (
       <View style={StyleSheet.absoluteFillObject as any}>
         <Pressable style={styles.scrim} onPress={handleDismiss} />
-        <View style={styles.card}>
+        <InstallCard>
           <Text style={styles.appIcon}>📱</Text>
           <Label color={colors.gold}>PUT POCKETREP ON YOUR HOME SCREEN</Label>
           <Text style={styles.title}>Keep Rex one tap away</Text>
@@ -105,10 +118,10 @@ export default function PWAInstallPrompt({
             <Step n={3} text={'Then use Add to Home Screen / Install app from the browser'} />
           </View>
           <Text style={styles.nextMission}>NEXT: load the last 2 months of customers you sold. Rex will turn them into your first personalized Text Queue.</Text>
-          <Pressable onPress={handleDismiss} style={styles.gotItBtn}>
+          <Pressable onPress={handleDismiss} style={({ pressed }) => [styles.gotItBtn, pressed && styles.pressed]} accessibilityRole="button">
             <Text style={styles.gotItText}>Got it · build my 60-day book</Text>
           </Pressable>
-        </View>
+        </InstallCard>
       </View>
     );
   }
@@ -117,7 +130,7 @@ export default function PWAInstallPrompt({
     return (
       <View style={StyleSheet.absoluteFillObject as any}>
         <Pressable style={styles.scrim} onPress={handleDismiss} />
-        <View style={styles.card}>
+        <InstallCard>
           <Text style={styles.appIcon}>📱</Text>
           <Label color={colors.gold}>PUT POCKETREP ON YOUR HOME SCREEN</Label>
           <Text style={styles.title}>Keep Rex one tap away</Text>
@@ -126,14 +139,20 @@ export default function PWAInstallPrompt({
           </Text>
           <Text style={styles.nextMission}>NEXT: load the last 2 months of customers you sold. Rex will turn them into your first personalized Text Queue.</Text>
           <View style={styles.actions}>
-            <Pressable onPress={handleDismiss} style={styles.laterBtn}>
+            <Pressable onPress={handleDismiss} style={({ pressed }) => [styles.laterBtn, pressed && styles.pressed]} accessibilityRole="button">
               <Text style={styles.laterText}>Later</Text>
             </Pressable>
-            <Pressable onPress={handleInstall} style={[styles.installBtn, installing && styles.installBtnDisabled]} disabled={installing}>
+            <Pressable
+              onPress={handleInstall}
+              style={({ pressed }) => [styles.installBtn, pressed && !installing && styles.pressed, installing && styles.installBtnDisabled]}
+              disabled={installing}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: installing, busy: installing }}
+            >
               <Text style={styles.installText}>{installing ? 'Installing…' : 'Install PocketRep'}</Text>
             </Pressable>
           </View>
-        </View>
+        </InstallCard>
       </View>
     );
   }
@@ -142,7 +161,7 @@ export default function PWAInstallPrompt({
     return (
       <View style={StyleSheet.absoluteFillObject as any}>
         <Pressable style={styles.scrim} onPress={handleDismiss} />
-        <View style={styles.card}>
+        <InstallCard>
           <Text style={styles.appIcon}>📱</Text>
           <Label color={colors.gold}>PUT POCKETREP ON YOUR HOME SCREEN</Label>
           <Text style={styles.title}>Install PocketRep like an iPhone app</Text>
@@ -155,10 +174,10 @@ export default function PWAInstallPrompt({
             <Step n={3} text={'Tap "Add" in the top right'} />
           </View>
           <Text style={styles.nextMission}>NEXT: load the last 2 months of customers you sold. Start with last month, then the month before. Rex will build a different text for each customer and you control every send.</Text>
-          <Pressable onPress={handleDismiss} style={styles.gotItBtn}>
+          <Pressable onPress={handleDismiss} style={({ pressed }) => [styles.gotItBtn, pressed && styles.pressed]} accessibilityRole="button">
             <Text style={styles.gotItText}>Got it · build my 60-day book</Text>
           </Pressable>
-        </View>
+        </InstallCard>
       </View>
     );
   }
@@ -167,7 +186,7 @@ export default function PWAInstallPrompt({
     return (
       <View style={StyleSheet.absoluteFillObject as any}>
         <Pressable style={styles.scrim} onPress={handleDismiss} />
-        <View style={styles.card}>
+        <InstallCard>
           <Text style={styles.appIcon}>📱</Text>
           <Label color={colors.gold}>PUT POCKETREP ON YOUR HOME SCREEN</Label>
           <Text style={styles.title}>Install PocketRep like an Android app</Text>
@@ -178,10 +197,10 @@ export default function PWAInstallPrompt({
             <Step n={3} text={'Tap "Install" to confirm'} />
           </View>
           <Text style={styles.nextMission}>NEXT: load the last 2 months of customers you sold. Rex will build your first personalized Text Queue and you control every send.</Text>
-          <Pressable onPress={handleDismiss} style={styles.gotItBtn}>
+          <Pressable onPress={handleDismiss} style={({ pressed }) => [styles.gotItBtn, pressed && styles.pressed]} accessibilityRole="button">
             <Text style={styles.gotItText}>Got it · build my 60-day book</Text>
           </Pressable>
-        </View>
+        </InstallCard>
       </View>
     );
   }
@@ -189,7 +208,7 @@ export default function PWAInstallPrompt({
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
       <Pressable style={styles.scrim} onPress={handleDismiss} />
-      <View style={styles.card}>
+      <InstallCard>
         <Text style={styles.appIcon}>💻</Text>
         <Label color={colors.gold}>INSTALL POCKETREP</Label>
         <Text style={styles.title}>Keep PocketRep in your dock or taskbar</Text>
@@ -199,10 +218,10 @@ export default function PWAInstallPrompt({
           <Step n={2} text={'Click "Install" to confirm'} />
         </View>
         <Text style={styles.nextMission}>NEXT: load the last 2 months of customers you sold. Rex will build your first personalized Text Queue.</Text>
-        <Pressable onPress={handleDismiss} style={styles.gotItBtn}>
+        <Pressable onPress={handleDismiss} style={({ pressed }) => [styles.gotItBtn, pressed && styles.pressed]} accessibilityRole="button">
           <Text style={styles.gotItText}>Got it · build my 60-day book</Text>
         </Pressable>
-      </View>
+      </InstallCard>
     </View>
   );
 }
@@ -230,7 +249,21 @@ function Step({ n, text }: { n: number; text: string }) {
 
 const styles = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.85)' } as any,
-  card: { position: 'absolute', left: 24, right: 24, top: '12%', backgroundColor: colors.ink2, borderWidth: 1, borderColor: colors.goldBorder, borderRadius: radius.xl, padding: 22 } as any,
+  card: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    top: Platform.OS === 'web' ? ('max(24px, env(safe-area-inset-top))' as any) : 24,
+    maxHeight: Platform.OS === 'web' ? ('calc(100dvh - max(48px, env(safe-area-inset-top)) - max(24px, env(safe-area-inset-bottom)))' as any) : '90%',
+    backgroundColor: colors.ink2,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    borderRadius: radius.xl,
+  } as any,
+  cardContent: {
+    padding: 22,
+    paddingBottom: Platform.OS === 'web' ? ('max(22px, env(safe-area-inset-bottom))' as any) : 22,
+  } as any,
   appIcon: { fontSize: 36, textAlign: 'center', marginBottom: 10 },
   title: { fontSize: 18, fontWeight: '700', color: colors.white, marginTop: 8, letterSpacing: -0.3 },
   body: { fontSize: 13, color: colors.grey3, marginTop: 8, lineHeight: 19 },
@@ -241,11 +274,12 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 13, color: colors.grey3, flex: 1, lineHeight: 18 },
   nextMission: { marginTop: 16, padding: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.goldBg, color: colors.white, fontSize: 12, lineHeight: 18, fontWeight: '700' },
   actions: { flexDirection: 'row', gap: 8, marginTop: 20 },
-  laterBtn: { flex: 1, paddingVertical: 12, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.md, alignItems: 'center' },
+  laterBtn: { minHeight: 44, flex: 1, paddingHorizontal: 12, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   laterText: { fontSize: 13, fontWeight: '700', color: colors.grey2 },
-  installBtn: { flex: 1.2, paddingVertical: 12, backgroundColor: colors.gold, borderRadius: radius.md, alignItems: 'center' },
+  installBtn: { minHeight: 44, flex: 1.2, paddingHorizontal: 12, backgroundColor: colors.gold, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   installBtnDisabled: { opacity: 0.6 },
   installText: { fontSize: 13, fontWeight: '800', color: colors.ink, letterSpacing: 0.2 },
-  gotItBtn: { marginTop: 20, paddingVertical: 12, backgroundColor: colors.gold, borderRadius: radius.md, alignItems: 'center' },
+  gotItBtn: { minHeight: 44, marginTop: 20, paddingHorizontal: 12, backgroundColor: colors.gold, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   gotItText: { fontSize: 13, fontWeight: '800', color: colors.ink, letterSpacing: 0.2 },
+  pressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
 });
