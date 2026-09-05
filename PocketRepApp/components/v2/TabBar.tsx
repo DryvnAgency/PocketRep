@@ -72,7 +72,7 @@ export default function TabBar({
       <View style={styles.row}>
         <TabButton t={TABS[0]} active={active === TABS[0].id} onPress={() => transitionTo(TABS[0].id)} />
         <TabButton t={TABS[1]} active={active === TABS[1].id} onPress={() => transitionTo(TABS[1].id)} />
-        <View style={styles.rexSlot} accessibilityRole="none">
+        <View style={styles.rexSlot}>
           <HeyRexOrb state={orbState} onPress={onOrbPress} />
           <Text style={styles.rexLabel}>REX</Text>
         </View>
