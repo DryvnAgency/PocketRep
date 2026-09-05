@@ -50,7 +50,7 @@ function TabPreview({ tab }: { tab: string }) {
     <View style={styles.previewFrame}>
       <View style={styles.previewPhoneTop}>
         <View><Text style={styles.previewBrand}>POCKETREP</Text><Text style={styles.previewSub}>SCREEN PREVIEW</Text></View>
-        <View style={styles.previewAvatar}><Text style={styles.previewAvatarText}>EP</Text></View>
+        <View style={styles.previewAvatar}><Text style={styles.previewAvatarText}>AC</Text></View>
       </View>
 
       {tab === 'HEAT SHEET' ? <>
@@ -92,7 +92,7 @@ function TabPreview({ tab }: { tab: string }) {
 
       {tab === 'SETTINGS / PROFILE' ? <>
         <View style={styles.previewHeadline}><Text style={styles.previewTitle}>Profile</Text><Text style={styles.previewGold}>YOUR POCKETREP</Text></View>
-        <View style={styles.previewProfile}><View style={styles.previewProfileOrb}><Text style={styles.previewProfileText}>EP</Text></View><View><Text style={styles.previewName}>Eddie Ponce</Text><Text style={styles.previewMeta}>Sales Consultant · Automotive</Text></View></View>
+        <View style={styles.previewProfile}><View style={styles.previewProfileOrb}><Text style={styles.previewProfileText}>AC</Text></View><View><Text style={styles.previewName}>Alex Carter</Text><Text style={styles.previewMeta}>Sales Consultant · Automotive</Text></View></View>
         <View style={styles.previewSetting}><Text style={styles.previewName}>Rex style</Text><Text style={styles.previewGold}>SHARP ›</Text></View>
         <View style={styles.previewSetting}><Text style={styles.previewName}>Install PocketRep</Text><Text style={styles.previewMeta}>Home Screen ›</Text></View>
         <View style={styles.previewSetting}><Text style={styles.previewName}>Billing & support</Text><Text style={styles.previewMeta}>Manage ›</Text></View>
