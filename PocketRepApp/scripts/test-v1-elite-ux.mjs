@@ -46,7 +46,8 @@ ok('demo queue messages are individualized', onboarding.includes('demoMessage') 
 ok('demo reply is animated and visible', onboarding.includes('CUSTOMER REPLIED · DEMO') && onboarding.includes('Animated.spring'));
 ok('activation finishes by handing off to install + 60-day book instead of single-customer capture',
   onboarding.includes('Continue · install + build my 60-day book') && onboarding.includes('Start with last month') && onboarding.includes('last two months of customers you sold') && !onboarding.includes('Now add one of my customers'));
-ok('onboarding is a tight 3-step activation', onboarding.includes('((step + 1) / 3) * 100'));
+ok('onboarding is a tight 4-step activation with a skippable tab tour',
+  onboarding.includes('((step + 1) / 4) * 100') && onboarding.includes('WELCOME TO POCKETREP') && onboarding.includes('Skip tour') && ['HEAT SHEET','CONTACTS','REX','SALES LOG','SETTINGS / PROFILE'].every(x => onboarding.includes(x)));
 ok('demo seed failure cannot dead-end activation', onboarding.includes('FALLBACK_DEMOS') && onboarding.includes('setDemos(FALLBACK_DEMOS)') && onboarding.includes('if (live.length) setDemos(live.slice(0, 3))'));
 
 console.log('\n--- tap-first 60-day sold-book activation remains available ---');

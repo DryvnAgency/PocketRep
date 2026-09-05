@@ -26,6 +26,13 @@ const TONES = [
   { value: 'Fire', hint: 'high energy closer' },
 ];
 const INDUSTRIES = ['Automotive', 'RV / Marine / Powersports', 'Real Estate', 'Other Sales'];
+const TOUR = [
+  { tab: 'HEAT SHEET', title: 'Know who needs attention now.', body: 'Your daily priority list. Start here when you want the fastest answer to: who should I work next, and why?' },
+  { tab: 'CONTACTS', title: 'Your book, with the story attached.', body: 'Search customers, keep notes and history, update tags, and open the full relationship before you reach out.' },
+  { tab: 'REX', title: 'Your coach and next-move engine.', body: 'Ask Rex who to call, what to say, how to handle an objection, or open Work My Book for your call and text queues.' },
+  { tab: 'SALES LOG', title: 'Log the win and keep score.', body: 'Save deliveries and outcomes so PocketRep can show your activity, momentum, and the customers that should come back around.' },
+  { tab: 'SETTINGS / PROFILE', title: 'Make PocketRep yours.', body: 'Manage your store, industry, Rex style, install help, billing, support, and the preferences that shape your workflow.' },
+];
 
 function demoMessage(contact: DemoContact, index: number) {
   const first = contact.first_name || 'there';
@@ -37,6 +44,7 @@ function demoMessage(contact: DemoContact, index: number) {
 
 export default function RexOnboarding({ open, onClose }: { open: boolean; onClose: (completed: boolean) => void }) {
   const [step, setStep] = useState(0);
+  const [tourIndex, setTourIndex] = useState(0);
   const [answers, setAnswers] = useState<Answers>(EMPTY);
   const [demos, setDemos] = useState<DemoContact[]>(FALLBACK_DEMOS);
   const [loading, setLoading] = useState(false);
@@ -50,6 +58,7 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
   useEffect(() => {
     if (!open) return;
     setStep(0);
+    setTourIndex(0);
     setAnswers(EMPTY);
     setError('');
     setDemoBlastSent(false);
@@ -116,14 +125,15 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
     }, 1200);
   };
 
-  const progress = ((step + 1) / 3) * 100;
+  const progress = ((step + 1) / 4) * 100;
   const replyContact = demos[0] ?? FALLBACK_DEMOS[0];
+  const tour = TOUR[tourIndex];
 
   return (
     <View style={styles.root}>
       <View style={styles.top}>
         <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${progress}%` }]} /></View>
-        <Pressable onPress={() => onClose(false)} hitSlop={8}><Text style={styles.skip}>Skip</Text></Pressable>
+        <Pressable onPress={() => step === 1 ? setStep(2) : onClose(false)} hitSlop={8}><Text style={styles.skip}>{step === 1 ? 'Skip tour' : 'Skip'}</Text></Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.rexRow}><View style={styles.orb} /><Text style={styles.rex}>REX</Text></View>
@@ -140,14 +150,29 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
           </View>
         </> : null}
         {step === 1 ? <>
-          <Text style={styles.eyebrow}>02 · YOUR DEMO BOOK</Text>
+          <Text style={styles.eyebrow}>02 · WELCOME TO POCKETREP</Text>
+          <Text style={styles.title}>Your whole sales day, in five tabs.</Text>
+          <Text style={styles.body}>You can skip this anytime. Here is what each tab is for before we show you PocketRep working.</Text>
+          <View style={styles.tourDots}>{TOUR.map((item, index) => <View key={item.tab} style={[styles.tourDot, index === tourIndex && styles.tourDotActive]} />)}</View>
+          <View style={styles.tourCard}>
+            <Text style={styles.tourKicker}>{tour.tab} · {tourIndex + 1} OF {TOUR.length}</Text>
+            <Text style={styles.tourTitle}>{tour.title}</Text>
+            <Text style={styles.tourBody}>{tour.body}</Text>
+          </View>
+          <View style={styles.tourNav}>
+            <Pressable onPress={() => setTourIndex(i => Math.max(0, i - 1))} disabled={tourIndex === 0} style={[styles.secondary, tourIndex === 0 && styles.disabled]}><Text style={styles.secondaryText}>Back</Text></Pressable>
+            <Pressable onPress={() => tourIndex < TOUR.length - 1 ? setTourIndex(i => i + 1) : setStep(2)} style={[styles.secondary, styles.secondaryStrong]}><Text style={styles.secondaryText}>{tourIndex < TOUR.length - 1 ? 'Next tab' : 'See the demo'}</Text></Pressable>
+          </View>
+        </> : null}
+        {step === 2 ? <>
+          <Text style={styles.eyebrow}>03 · YOUR DEMO BOOK</Text>
           <Text style={styles.title}>See PocketRep work before you add anything.</Text>
           <Text style={styles.body}>These are safe demo customers. Rex gives each person a different reason to reach out. Nothing here contacts a real customer.</Text>
           <View style={styles.panel}>{loading ? <ActivityIndicator color={colors.gold} /> : null}{demos.slice(0, 3).map((d, i) => <View key={d.id} style={styles.demoCard}><View style={styles.messageHead}><Text style={styles.demoName}>{d.first_name} {d.last_name}</Text><Text style={styles.demo}>DEMO</Text></View><Text style={styles.vehicle}>{d.vehicle || 'Sample customer'}</Text><Text style={styles.message}>{demoMessage(d, i)}</Text></View>)}</View>
           <View style={styles.callout}><Text style={styles.calloutTitle}>THE LOOP</Text><Text style={styles.calloutText}>Rex finds the reason → writes each customer differently → you control every send → PocketRep keeps the response and context with the customer.</Text></View>
         </> : null}
-        {step === 2 ? <>
-          <Text style={styles.eyebrow}>03 · THE A-HA</Text>
+        {step === 3 ? <>
+          <Text style={styles.eyebrow}>04 · THE A-HA</Text>
           <Text style={styles.title}>Bring your real book back to life.</Text>
           <Text style={styles.body}>Run the demo Text Queue. PocketRep will simulate one reply so you can see the loop. No message leaves your phone.</Text>
           <View style={styles.panel}>{demos.slice(0, 3).map((d, i) => <View key={d.id} style={styles.demoCard}><View style={styles.messageHead}><Text style={styles.demoName}>{d.first_name} {d.last_name}</Text><Text style={styles.demo}>DEMO</Text></View><Text style={styles.message}>{demoMessage(d, i)}</Text></View>)}</View>
@@ -158,10 +183,10 @@ export default function RexOnboarding({ open, onClose }: { open: boolean; onClos
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScrollView>
       <View style={styles.bottom}>
-        {step === 0 ? <Pressable onPress={() => { void saveIdentity().then(ok => { if (ok) setStep(1); }); }} disabled={saving} style={[styles.primary, saving && styles.disabled]}><Text style={styles.primaryText}>{saving ? 'Saving…' : 'Next · See my demo book'}</Text></Pressable> : null}
-        {step === 1 ? <Pressable onPress={() => setStep(2)} style={styles.primary}><Text style={styles.primaryText}>Next · Run the demo Text Queue</Text></Pressable> : null}
-        {step === 2 && !demoReplyVisible ? <Pressable onPress={runDemoBlast} disabled={demoBlastSent} style={[styles.primary, demoBlastSent && styles.disabled]}><Text style={styles.primaryText}>{demoBlastSent ? 'Waiting for the reply…' : `Run demo Text Queue · ${Math.min(demos.length, 3)}`}</Text></Pressable> : null}
-        {step === 2 && demoReplyVisible ? <Pressable onPress={() => onClose(true)} style={styles.primary}><Text style={styles.primaryText}>Continue · install + build my 60-day book</Text></Pressable> : null}
+        {step === 0 ? <Pressable onPress={() => { void saveIdentity().then(ok => { if (ok) setStep(1); }); }} disabled={saving} style={[styles.primary, saving && styles.disabled]}><Text style={styles.primaryText}>{saving ? 'Saving…' : 'Next · Welcome to PocketRep'}</Text></Pressable> : null}
+        {step === 2 ? <Pressable onPress={() => setStep(3)} style={styles.primary}><Text style={styles.primaryText}>Next · Run the demo Text Queue</Text></Pressable> : null}
+        {step === 3 && !demoReplyVisible ? <Pressable onPress={runDemoBlast} disabled={demoBlastSent} style={[styles.primary, demoBlastSent && styles.disabled]}><Text style={styles.primaryText}>{demoBlastSent ? 'Waiting for the reply…' : `Run demo Text Queue · ${Math.min(demos.length, 3)}`}</Text></Pressable> : null}
+        {step === 3 && demoReplyVisible ? <Pressable onPress={() => onClose(true)} style={styles.primary}><Text style={styles.primaryText}>Continue · install + build my 60-day book</Text></Pressable> : null}
       </View>
     </View>
   );
@@ -192,6 +217,17 @@ const styles = StyleSheet.create({
   tone: { flex: 1, padding: 11, borderRadius: radius.md, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface2 },
   toneName: { color: colors.grey3, fontSize: 12, fontWeight: '800' },
   toneHint: { color: colors.grey, fontSize: 9, lineHeight: 13, marginTop: 3 },
+  tourDots: { flexDirection: 'row', gap: 6, marginTop: 22 },
+  tourDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.ink4 },
+  tourDotActive: { width: 24, backgroundColor: colors.gold },
+  tourCard: { marginTop: 14, padding: 20, minHeight: 230, justifyContent: 'center', borderRadius: radius.xl, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.ink2 },
+  tourKicker: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  tourTitle: { color: colors.white, fontSize: 23, lineHeight: 29, fontWeight: '800', letterSpacing: -0.4, marginTop: 12 },
+  tourBody: { color: colors.grey3, fontSize: 14, lineHeight: 22, marginTop: 12 },
+  tourNav: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  secondary: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface2 },
+  secondaryStrong: { borderColor: colors.goldBorder, backgroundColor: colors.goldBg },
+  secondaryText: { color: colors.white, fontSize: 13, fontWeight: '800' },
   panel: { marginTop: 18, padding: 12, gap: 8, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.ink2 },
   demoCard: { padding: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface2 },
   messageHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 },
