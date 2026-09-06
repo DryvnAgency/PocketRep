@@ -462,7 +462,13 @@ export default function AppShell() {
       <NurtureReviewer open={nurtureReviewerOpen} onClose={() => setNurtureReviewerOpen(false)} onChanged={() => setNurtureRefetchKey(k => k + 1)} />
       <NotificationsCenter open={notifOpen} items={notifItems} onClose={() => setNotifOpen(false)} onOpenContact={(id) => setSelectedId(id)} onOpenNurture={() => setNurtureReviewerOpen(true)} onChanged={() => setNurtureRefetchKey(k => k + 1)} />
 
-      <RexCoach open={rexCoachOpen} onClose={() => setRexCoachOpen(false)} contacts={contacts ?? []} payPlan={payPlan} initialContactId={selected?.id ?? null}
+      <RexCoach open={rexCoachOpen} onClose={() => {
+        setRexCoachOpen(false);
+        if (soldBookMission) {
+          setSoldBookMission(null);
+          setSoldBookMissionIds([]);
+        }
+      }} contacts={contacts ?? []} payPlan={payPlan} initialContactId={selected?.id ?? null}
         mission={soldBookMission} missionCount={soldBookMissionIds.length} onFinishMission={finishSoldBookMission} onOpenContact={(id) => setSelectedId(id)}
         onDraftFirstText={draftFirstThankYou} onEnrollFreshUp={enrollFreshUpFromRex} onActed={async (action, result) => {
           const t = action.type;
