@@ -74,7 +74,10 @@ export function EliteChoiceButton({ label, detail, selected = false, onPress, di
       onPress={onPress}
       style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, disabled && styles.disabled, pressed && !disabled && styles.pressed]}
     >
-      <Text style={[styles.choiceLabel, selected && styles.choiceLabelSelected]}>{label}</Text>
+      <View style={styles.choiceTopRow}>
+        <Text style={[styles.choiceLabel, selected && styles.choiceLabelSelected]}>{label}</Text>
+        {selected ? <View style={styles.choiceCheck}><Text style={styles.choiceCheckText}>✓</Text></View> : null}
+      </View>
       {detail ? <Text style={styles.choiceDetail}>{detail}</Text> : null}
     </Pressable>
   );
@@ -148,8 +151,11 @@ const styles = StyleSheet.create({
   panelCompact: { padding: 14 },
   choice: { width: '100%', minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.md, backgroundColor: colors.surface2, paddingHorizontal: 14, paddingVertical: 10 },
   choiceSelected: { borderColor: colors.goldBorderStrong, backgroundColor: colors.goldBg },
-  choiceLabel: { color: colors.white, fontSize: 13, fontWeight: '800' },
+  choiceTopRow: { minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  choiceLabel: { flexShrink: 1, color: colors.white, fontSize: 13, fontWeight: '800' },
   choiceLabelSelected: { color: colors.gold },
+  choiceCheck: { width: 18, height: 18, flexShrink: 0, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold },
+  choiceCheckText: { color: colors.ink, fontSize: 10, lineHeight: 12, fontWeight: '900' },
   choiceDetail: { color: colors.grey2, fontSize: 10, lineHeight: 14, marginTop: 3 },
   quickReply: { minHeight: 44, flexGrow: 1, flexBasis: 132, maxWidth: 210, justifyContent: 'center', borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.full, backgroundColor: colors.surface2, paddingHorizontal: 14, paddingVertical: 8 },
   quickReplySelected: { borderColor: colors.goldBorderStrong, backgroundColor: colors.goldBg },
