@@ -69,6 +69,27 @@ export type PendingSequenceClassification = {
   classification: null;
 };
 
+/**
+ * Authoritative last-second outreach guard.
+ * Saved queues can outlive a contact status change, so every call/text/email
+ * launcher re-checks the current row before opening an external app.
+ */
+export async function assertContactActionAllowed(contactId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Sign in again before working this follow-up.');
+
+  const { data: contact, error } = await supabase
+    .from('contacts')
+    .select('id,is_deleted,do_not_contact')
+    .eq('id', contactId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!contact || contact.is_deleted || contact.do_not_contact) {
+    throw new Error('This customer is blocked or no longer active. PocketRep will not open an outreach action.');
+  }
+}
+
 function addDays(date: string, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
@@ -363,7 +384,8 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
   const contactIds = [...new Set(enrollments.map((e: any) => e.contact_id))];
   const { data: contacts, error: contactError } = await supabase
     .from('contacts')
-    .select('id,first_name,last_name,phone,email,vehicle,trim,trade_in,vehicle_year,vehicle_make,vehicle_model,lease_end_date,is_deleted,is_demo')
+    .select('id,first_name,last_name,phone,email,vehicle,trim,trade_in,vehicle_year,vehicle_make,vehicle_model,lease_end_date,is_deleted,do_not_contact,is_demo')
+    .eq('user_id', userId)
     .in('id', contactIds);
   if (contactError) throw contactError;
 
@@ -382,7 +404,7 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
   const items: QueueItem[] = [];
   for (const enrollment of enrollments as any[]) {
     const contact = contactMap[enrollment.contact_id];
-    if (!contact || contact.is_deleted) continue;
+    if (!contact || contact.is_deleted || contact.do_not_contact) continue;
 
     const steps = (enrollment.sequences?.sequence_steps ?? [])
       .slice()
