@@ -10,6 +10,13 @@ type DemoContactCardProps = {
   score?: number | null;
 };
 
+function reasonForScore(score?: number | null) {
+  if (typeof score !== 'number') return 'Follow-up opportunity';
+  if (score >= 75) return 'High intent · worth working now';
+  if (score >= 55) return 'Follow-up due · keep momentum';
+  return 'Keep warm · stay in the conversation';
+}
+
 export function DemoContactCard({ name, vehicle, message, score }: DemoContactCardProps) {
   return (
     <View style={styles.contactCard}>
@@ -23,11 +30,22 @@ export function DemoContactCard({ name, vehicle, message, score }: DemoContactCa
         </View>
         <View style={styles.demoPill}><Text style={styles.demoPillText}>DEMO</Text></View>
       </View>
-      <View style={styles.reasonRow}>
-        <Text style={styles.reasonLabel}>REX DRAFT</Text>
+
+      <View style={styles.reasonBox}>
+        <View style={styles.reasonCopy}>
+          <Text style={styles.reasonLabel}>WHY NOW</Text>
+          <Text style={styles.reasonText}>{reasonForScore(score)}</Text>
+        </View>
         {typeof score === 'number' ? <Text style={styles.score}>{score}</Text> : null}
       </View>
-      <Text style={styles.message}>{message}</Text>
+
+      <View style={styles.draftBox}>
+        <View style={styles.draftHeader}>
+          <Text style={styles.draftLabel}>REX DRAFT</Text>
+          <View style={styles.reviewPill}><Text style={styles.reviewPillText}>REVIEW</Text></View>
+        </View>
+        <Text style={styles.message}>{message}</Text>
+      </View>
     </View>
   );
 }
@@ -40,6 +58,10 @@ type DemoQueuePanelProps = {
 export function DemoQueuePanel({ children, loading = false }: DemoQueuePanelProps) {
   return (
     <View style={styles.deviceFrame}>
+      <View style={styles.phoneStatusBar} accessibilityElementsHidden>
+        <Text style={styles.phoneTime}>9:41</Text>
+        <Text style={styles.phoneSignal}>●●●  5G  ▰</Text>
+      </View>
       <View style={styles.deviceTopBar}>
         <View>
           <Text style={styles.deviceBrand}>POCKETREP</Text>
@@ -75,6 +97,7 @@ export function DemoQueuePanel({ children, loading = false }: DemoQueuePanelProp
         <View style={styles.previewNavItem}><View style={styles.previewNavDot} /><Text style={styles.previewNavText}>SALES</Text></View>
         <View style={styles.previewNavItem}><View style={styles.previewNavDot} /><Text style={styles.previewNavText}>ME</Text></View>
       </View>
+      <View style={styles.homeIndicator} accessibilityElementsHidden />
     </View>
   );
 }
@@ -83,7 +106,7 @@ export function DemoQuickReplies({ onSelect, selected }: { onSelect: (value: str
   const replies = [
     'Still interested?',
     'Today or tomorrow?',
-    'Want me to run the next step?',
+    'Want me to map the next step?',
   ];
 
   return (
@@ -123,7 +146,10 @@ function initials(name: string) {
 
 const styles = StyleSheet.create({
   deviceFrame: { marginTop: 18, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.ink2, overflow: 'hidden' },
-  deviceTopBar: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: colors.ink4 },
+  phoneStatusBar: { minHeight: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 5, backgroundColor: colors.ink },
+  phoneTime: { color: colors.grey3, fontSize: 7, fontWeight: '900', letterSpacing: 0.2 },
+  phoneSignal: { color: colors.grey2, fontSize: 6, fontWeight: '800', letterSpacing: 0.5 },
+  deviceTopBar: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: colors.ink4 },
   deviceBrand: { color: colors.white, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
   deviceScreen: { color: colors.grey2, fontSize: 7, fontWeight: '800', letterSpacing: 0.9, marginTop: 2 },
   deviceStatus: { flexDirection: 'row', alignItems: 'center', gap: 5 },
@@ -156,10 +182,17 @@ const styles = StyleSheet.create({
   vehicle: { color: colors.grey2, fontSize: 10, marginTop: 3 },
   demoPill: { borderRadius: radius.full, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.goldBg, paddingHorizontal: 8, paddingVertical: 5 },
   demoPillText: { color: colors.gold, fontSize: 7, fontWeight: '900', letterSpacing: 0.9 },
-  reasonRow: { marginTop: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  reasonLabel: { color: colors.grey2, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
-  score: { color: colors.gold, fontSize: 11, fontWeight: '900' },
-  message: { color: colors.grey3, fontSize: 12, lineHeight: 18, marginTop: 6 },
+  reasonBox: { marginTop: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.goldBg },
+  reasonCopy: { flex: 1, minWidth: 0 },
+  reasonLabel: { color: colors.gold, fontSize: 7, fontWeight: '900', letterSpacing: 0.9 },
+  reasonText: { color: colors.grey3, fontSize: 10, lineHeight: 14, fontWeight: '700', marginTop: 3 },
+  score: { color: colors.gold, fontSize: 17, fontWeight: '900', letterSpacing: -0.4 },
+  draftBox: { marginTop: 10, padding: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.ink2 },
+  draftHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  draftLabel: { color: colors.grey2, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
+  reviewPill: { borderRadius: radius.full, borderWidth: 1, borderColor: colors.ink4, paddingHorizontal: 7, paddingVertical: 4 },
+  reviewPillText: { color: colors.grey2, fontSize: 6, fontWeight: '900', letterSpacing: 0.8 },
+  message: { color: colors.grey3, fontSize: 12, lineHeight: 18, marginTop: 7 },
   previewNav: { minHeight: 62, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.ink4, backgroundColor: colors.ink },
   previewNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
   previewNavDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.grey },
@@ -168,6 +201,7 @@ const styles = StyleSheet.create({
   previewRexOrb: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.goldBorderStrong, backgroundColor: colors.ink2 },
   previewRexCore: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.gold },
   previewRexText: { color: colors.gold, fontSize: 6, fontWeight: '900', letterSpacing: 0.7 },
+  homeIndicator: { alignSelf: 'center', width: 78, height: 3, borderRadius: radius.full, backgroundColor: colors.grey, marginBottom: 5, opacity: 0.55 },
   quickReplyBlock: { marginTop: 16 },
   quickReplyLabel: { color: colors.grey2, fontSize: 9, fontWeight: '900', letterSpacing: 1, marginBottom: 9 },
   quickReplyRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
