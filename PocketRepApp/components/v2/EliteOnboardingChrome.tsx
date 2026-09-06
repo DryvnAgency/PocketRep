@@ -17,11 +17,24 @@ export function OnboardingScreen({ children }: { children: ReactNode }) {
 
 export function OnboardingProgress({ step, total, onSkip, skipLabel = 'Skip' }: { step: number; total: number; onSkip: () => void; skipLabel?: string }) {
   const safeTotal = Math.max(total, 1);
-  const width = `${Math.min(100, Math.max(0, ((step + 1) / safeTotal) * 100))}%` as `${number}%`;
+  const safeStep = Math.min(safeTotal, Math.max(1, step + 1));
+  const width = `${Math.min(100, Math.max(0, (safeStep / safeTotal) * 100))}%` as `${number}%`;
+  const stepLabel = `${String(safeStep).padStart(2, '0')} / ${String(safeTotal).padStart(2, '0')}`;
   return (
     <View style={styles.progressRow}>
-      <View style={styles.progressTrack} accessibilityLabel={`Setup step ${step + 1} of ${safeTotal}`}>
-        <View style={[styles.progressFill, { width }]} />
+      <View style={styles.progressCopy}>
+        <View style={styles.progressMetaRow}>
+          <Text style={styles.progressMeta}>SETUP</Text>
+          <Text style={styles.progressCount}>{stepLabel}</Text>
+        </View>
+        <View
+          style={styles.progressTrack}
+          accessibilityRole="progressbar"
+          accessibilityLabel={`Setup step ${safeStep} of ${safeTotal}`}
+          accessibilityValue={{ min: 1, max: safeTotal, now: safeStep }}
+        >
+          <View style={[styles.progressFill, { width }]} />
+        </View>
       </View>
       <Pressable
         accessibilityRole="button"
@@ -54,7 +67,7 @@ export function OnboardingHeading({ eyebrow, title, body }: { eyebrow: string; t
   return (
     <View style={styles.heading}>
       <Text style={styles.eyebrow}>{eyebrow}</Text>
-      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.title} accessibilityRole="header">{title}</Text>
       <Text style={styles.body}>{body}</Text>
     </View>
   );
@@ -132,7 +145,11 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'web' ? ('env(safe-area-inset-bottom)' as any) : 0,
   },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  progressTrack: { flex: 1, height: 3, borderRadius: radius.full, backgroundColor: colors.ink4, overflow: 'hidden' },
+  progressCopy: { flex: 1, minWidth: 0, gap: 6 },
+  progressMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  progressMeta: { color: colors.grey, fontSize: 8, lineHeight: 10, fontWeight: '900', letterSpacing: 1.2 },
+  progressCount: { color: colors.gold, fontSize: 8, lineHeight: 10, fontWeight: '900', letterSpacing: 1 },
+  progressTrack: { width: '100%', height: 3, borderRadius: radius.full, backgroundColor: colors.ink4, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.gold },
   skipButton: { minHeight: 44, minWidth: 44, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: 4 },
   skipText: { color: colors.grey2, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
