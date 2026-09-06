@@ -1,5 +1,5 @@
 import {
-  View, Text, Pressable, ScrollView, StyleSheet,
+  View, Text, Pressable, ScrollView, StyleSheet, Platform,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { Label } from './atoms';
@@ -68,11 +68,21 @@ export default function NotificationsCenter({
             </Text>
           </View>
           {unread > 0 ? (
-            <Pressable onPress={() => markManyRead(items.map(i => i.key))} style={styles.markAll} accessibilityRole="button" accessibilityLabel="Mark all notifications read">
+            <Pressable
+              onPress={() => markManyRead(items.map(i => i.key))}
+              style={({ pressed }) => [styles.markAll, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Mark all notifications read"
+            >
               <Text style={styles.markAllText}>Mark all read</Text>
             </Pressable>
           ) : null}
-          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Close notifications">
+          <Pressable
+            onPress={onClose}
+            style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Close notifications"
+          >
             <Text style={styles.closeText}>✕</Text>
           </Pressable>
         </View>
@@ -89,7 +99,12 @@ export default function NotificationsCenter({
               const meta = KIND_META[n.kind];
               return (
                 <View key={n.key} style={[styles.card, !n.read && styles.cardUnread]}>
-                  <Pressable onPress={() => openItem(n)} style={styles.cardMain} accessibilityRole="button" accessibilityLabel={`Open notification: ${n.title}`}>
+                  <Pressable
+                    onPress={() => openItem(n)}
+                    style={({ pressed }) => [styles.cardMain, pressed && styles.cardMainPressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open notification: ${n.title}`}
+                  >
                     <View style={[styles.iconWrap, { borderColor: meta.color }]}>
                       <Text style={{ fontSize: 15 }}>{meta.icon}</Text>
                     </View>
@@ -106,21 +121,30 @@ export default function NotificationsCenter({
                   </Pressable>
                   <View style={styles.actions}>
                     {n.kind === 'reminder' ? (
-                      <Pressable onPress={() => completeReminderItem(n)} hitSlop={6} style={styles.doneBtn} accessibilityRole="button" accessibilityLabel={`Complete reminder: ${n.title}`}>
+                      <Pressable
+                        onPress={() => completeReminderItem(n)}
+                        style={({ pressed }) => [styles.doneBtn, pressed && styles.pressed]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Complete reminder: ${n.title}`}
+                      >
                         <Text style={styles.doneText}>✓ Done</Text>
                       </Pressable>
                     ) : (
                       <Pressable
                         onPress={() => (n.read ? markUnread(n.key) : markRead(n.key))}
-                        hitSlop={6}
-                        style={styles.actionBtn}
+                        style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}
                         accessibilityRole="button"
                         accessibilityLabel={`${n.read ? 'Mark unread' : 'Mark read'}: ${n.title}`}
                       >
                         <Text style={styles.actionText}>{n.read ? 'Mark unread' : 'Mark read'}</Text>
                       </Pressable>
                     )}
-                    <Pressable onPress={() => dismissNotification(n.key)} hitSlop={6} style={styles.dismissBtn} accessibilityRole="button" accessibilityLabel={`Dismiss notification: ${n.title}`}>
+                    <Pressable
+                      onPress={() => dismissNotification(n.key)}
+                      style={({ pressed }) => [styles.dismissBtn, pressed && styles.pressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Dismiss notification: ${n.title}`}
+                    >
                       <Text style={styles.dismissText}>✕</Text>
                     </Pressable>
                   </View>
@@ -128,7 +152,6 @@ export default function NotificationsCenter({
               );
             })
           )}
-          <View style={{ height: 28 }} />
         </ScrollView>
       </View>
     </View>
@@ -142,7 +165,7 @@ const styles = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.72)' },
   sheet: {
     position: 'absolute',
-    left: 0, right: 0, bottom: 0, top: '9%',
+    left: 0, right: 0, bottom: 0, top: Platform.OS === 'web' ? ('max(9%, env(safe-area-inset-top))' as any) : '9%',
     backgroundColor: colors.ink2,
     borderTopWidth: 1,
     borderTopColor: colors.goldBorder,
@@ -168,21 +191,28 @@ const styles = StyleSheet.create({
   headerKicker: { fontSize: 10, fontWeight: '700', color: colors.gold, letterSpacing: 1.4 },
   headerTitle: { fontSize: 18, fontWeight: '800', color: colors.white, marginTop: 2, letterSpacing: -0.3 },
   markAll: {
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 16,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
     backgroundColor: colors.goldBg,
     borderWidth: 1, borderColor: colors.goldBorder,
+    alignItems: 'center', justifyContent: 'center',
   },
   markAllText: { fontSize: 11, fontWeight: '700', color: colors.gold, letterSpacing: 0.2 },
   closeBtn: {
-    width: 32, height: 32, borderRadius: 16,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
     alignItems: 'center', justifyContent: 'center',
   },
   closeText: { color: colors.grey2, fontSize: 14 },
 
-  body: { paddingHorizontal: 14, paddingTop: 12, gap: 10 },
+  body: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'web' ? ('max(28px, env(safe-area-inset-bottom))' as any) : 28,
+    gap: 10,
+  },
 
   card: {
     backgroundColor: colors.surface2,
@@ -199,6 +229,7 @@ const styles = StyleSheet.create({
     paddingTop: 13,
     paddingBottom: 8,
   },
+  cardMainPressed: { backgroundColor: colors.goldBg },
   iconWrap: {
     width: 34, height: 34, borderRadius: 10,
     borderWidth: 1,
@@ -221,26 +252,31 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   actionBtn: {
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 12,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
     borderWidth: 1, borderColor: colors.ink4,
     backgroundColor: colors.ink2,
+    alignItems: 'center', justifyContent: 'center',
   },
   actionText: { fontSize: 11, fontWeight: '700', color: colors.grey2 },
   doneBtn: {
-    paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 12,
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 22,
     borderWidth: 1, borderColor: colors.goldBorder,
     backgroundColor: colors.goldBg,
+    alignItems: 'center', justifyContent: 'center',
   },
   doneText: { fontSize: 11, fontWeight: '800', color: colors.gold, letterSpacing: 0.2 },
   dismissBtn: {
-    width: 28, height: 28, borderRadius: 14,
+    width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: colors.ink4,
     backgroundColor: colors.ink2,
   },
   dismissText: { fontSize: 12, color: colors.grey2 },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
 
   empty: { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 24 },
   emptyIcon: {
