@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
-import { Label, Pill } from './atoms';
+import { Label } from './atoms';
 import {
   updateSequenceStep,
   renameSequence,
@@ -15,6 +15,7 @@ import {
   formatSequenceTemplateTokens,
   getUnsupportedSequenceTemplateTokens,
 } from '@/lib/v2/sequenceTemplates';
+import { useWebVisualViewportInset } from '@/lib/v2/useWebVisualViewportInset';
 
 const CHANNELS: Array<{ value: 'text' | 'call' | 'email'; icon: string; label: string }> = [
   { value: 'text', icon: '💬', label: 'Text' },
@@ -22,7 +23,6 @@ const CHANNELS: Array<{ value: 'text' | 'call' | 'email'; icon: string; label: s
   { value: 'email', icon: '✉', label: 'Email' },
 ];
 
-// Highlight {{tokens}} in the preview view.
 function renderHighlighted(text: string): React.ReactNode {
   const parts = text.split(/(\{\{[^}]+\}\})/g);
   return parts.map((p, i) => {
@@ -53,6 +53,7 @@ export default function SequenceEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const keyboardInset = useWebVisualViewportInset(open);
 
   useEffect(() => {
     if (!open || !sequence) return;
@@ -68,7 +69,7 @@ export default function SequenceEditor({
     setStepDrafts(drafts);
     setStepChannels(channels);
     setStepDelays(delays);
-    setPreviewIds(new Set(sequence.steps.map(s => s.id))); // start in preview mode
+    setPreviewIds(new Set(sequence.steps.map(s => s.id)));
     setSaving(false);
     setError(null);
     setConfirmArchive(false);
@@ -137,9 +138,15 @@ export default function SequenceEditor({
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, keyboardInset > 0 && { bottom: keyboardInset }]}>
       <View style={styles.topBar}>
-        <Pressable onPress={onClose} style={styles.iconBtn}>
+        <Pressable
+          onPress={onClose}
+          disabled={saving}
+          style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed, saving && styles.disabled]}
+          accessibilityRole="button"
+          accessibilityLabel="Close sequence editor"
+        >
           <Text style={styles.iconBtnText}>‹</Text>
         </Pressable>
         <View style={{ flex: 1 }}>
@@ -149,13 +156,20 @@ export default function SequenceEditor({
         <Pressable
           onPress={handleSave}
           disabled={saving}
-          style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+          style={({ pressed }) => [styles.saveBtn, pressed && styles.pressed, saving && styles.disabled]}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: saving, busy: saving }}
+          accessibilityLabel="Save sequence"
         >
           <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save'}</Text>
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         <View style={styles.field}>
           <Label color={colors.grey2}>NAME</Label>
           <TextInput
@@ -181,30 +195,41 @@ export default function SequenceEditor({
                     {stepDelays[step.id] === 0 ? 'fires immediately' : `fires in ${stepDelays[step.id]}d`}
                   </Text>
                 </View>
-                <Pressable onPress={() => togglePreview(step.id)} hitSlop={6}>
+                <Pressable
+                  onPress={() => togglePreview(step.id)}
+                  style={({ pressed }) => [styles.previewToggle, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${previewing ? 'Edit' : 'Preview'} step ${i + 1}`}
+                >
                   <Text style={styles.linkText}>{previewing ? 'EDIT' : 'PREVIEW'}</Text>
                 </Pressable>
               </View>
 
               <View style={styles.channelRow}>
-                {CHANNELS.map(c => (
-                  <Pressable
-                    key={c.value}
-                    onPress={() => setStepChannels(prev => ({ ...prev, [step.id]: c.value }))}
-                    style={[
-                      styles.channelBtn,
-                      stepChannels[step.id] === c.value
-                        ? { backgroundColor: colors.goldBg, borderColor: colors.gold }
-                        : { backgroundColor: 'transparent', borderColor: colors.ink4 },
-                    ]}
-                  >
-                    <Text style={{ fontSize: 12 }}>{c.icon}</Text>
-                    <Text style={[
-                      styles.channelText,
-                      { color: stepChannels[step.id] === c.value ? colors.gold : colors.grey2 },
-                    ]}>{c.label}</Text>
-                  </Pressable>
-                ))}
+                {CHANNELS.map(c => {
+                  const selected = stepChannels[step.id] === c.value;
+                  return (
+                    <Pressable
+                      key={c.value}
+                      onPress={() => setStepChannels(prev => ({ ...prev, [step.id]: c.value }))}
+                      style={({ pressed }) => [
+                        styles.channelBtn,
+                        selected
+                          ? { backgroundColor: colors.goldBg, borderColor: colors.gold }
+                          : { backgroundColor: 'transparent', borderColor: colors.ink4 },
+                        pressed && styles.pressed,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                    >
+                      <Text style={{ fontSize: 12 }}>{c.icon}</Text>
+                      <Text style={[
+                        styles.channelText,
+                        { color: selected ? colors.gold : colors.grey2 },
+                      ]}>{c.label}</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
 
               <View style={styles.delayRow}>
@@ -241,7 +266,7 @@ export default function SequenceEditor({
                     <Pressable
                       key={tok}
                       onPress={() => insertToken(step.id, tok)}
-                      style={styles.tokenChip}
+                      style={({ pressed }) => [styles.tokenChip, pressed && styles.pressed]}
                     >
                       <Text style={styles.tokenChipText}>{`{{${tok}}}`}</Text>
                     </Pressable>
@@ -261,20 +286,31 @@ export default function SequenceEditor({
               It'll be hidden from the list. Existing enrollments keep running.
             </Text>
             <View style={styles.confirmRow}>
-              <Pressable onPress={() => setConfirmArchive(false)} style={styles.cancelBtn}>
+              <Pressable
+                onPress={() => setConfirmArchive(false)}
+                disabled={saving}
+                style={({ pressed }) => [styles.cancelBtn, pressed && styles.pressed, saving && styles.disabled]}
+              >
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={handleArchive} style={styles.archiveBtn}>
-                <Text style={styles.archiveBtnText}>Archive</Text>
+              <Pressable
+                onPress={handleArchive}
+                disabled={saving}
+                style={({ pressed }) => [styles.archiveBtn, pressed && styles.pressed, saving && styles.disabled]}
+              >
+                <Text style={styles.archiveBtnText}>{saving ? 'Archiving…' : 'Archive'}</Text>
               </Pressable>
             </View>
           </View>
         ) : (
-          <Pressable onPress={() => setConfirmArchive(true)} style={styles.archiveLink}>
+          <Pressable
+            onPress={() => setConfirmArchive(true)}
+            disabled={saving}
+            style={({ pressed }) => [styles.archiveLink, pressed && styles.pressed, saving && styles.disabled]}
+          >
             <Text style={styles.archiveLinkText}>Archive sequence</Text>
           </Pressable>
         )}
-        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
@@ -287,7 +323,7 @@ const styles = StyleSheet.create({
     zIndex: 71,
   } as any,
   topBar: {
-    paddingTop: 16,
+    paddingTop: Platform.OS === 'web' ? ('max(16px, env(safe-area-inset-top))' as any) : 16,
     paddingHorizontal: 14,
     paddingBottom: 12,
     flexDirection: 'row',
@@ -297,29 +333,37 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink2,
   },
   iconBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
     alignItems: 'center', justifyContent: 'center',
   },
-  iconBtnText: { color: colors.gold, fontSize: 18, fontWeight: '700' },
+  iconBtnText: { color: colors.gold, fontSize: 20, fontWeight: '700' },
   topTitle: { fontSize: 16, fontWeight: '700', color: colors.white, marginTop: 2 },
   saveBtn: {
-    paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: 16,
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 22,
     backgroundColor: colors.gold,
+    alignItems: 'center', justifyContent: 'center',
   },
   saveBtnText: { color: colors.ink, fontWeight: '700', fontSize: 13 },
 
-  body: { padding: 14, gap: 14 },
+  body: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: Platform.OS === 'web' ? ('max(40px, env(safe-area-inset-bottom))' as any) : 40,
+    gap: 14,
+  },
 
   field: { gap: 8 },
   nameInput: {
+    minHeight: 48,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.md,
     paddingHorizontal: 12, paddingVertical: 12,
-    color: colors.white, fontSize: 15, fontWeight: '600',
+    color: colors.white, fontSize: 16, fontWeight: '600',
   },
 
   stepCard: {
@@ -339,11 +383,18 @@ const styles = StyleSheet.create({
   stepNumText: { color: colors.gold, fontSize: 13, fontWeight: '800' },
   stepLabel: { fontSize: 10, fontWeight: '700', color: colors.gold, letterSpacing: 1.0 },
   stepMeta: { fontSize: 11, color: colors.grey2, marginTop: 2 },
+  previewToggle: {
+    minWidth: 58,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   linkText: { fontSize: 11, fontWeight: '700', color: colors.gold, letterSpacing: 0.5 },
 
   channelRow: { flexDirection: 'row', gap: 6 },
   channelBtn: {
-    flex: 1, paddingVertical: 8,
+    flex: 1,
+    minHeight: 44,
     borderRadius: radius.full,
     borderWidth: 1,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
@@ -353,12 +404,13 @@ const styles = StyleSheet.create({
   delayRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   delayLabel: { fontSize: 11, fontWeight: '700', color: colors.grey2, letterSpacing: 0.5 },
   delayInput: {
-    width: 50,
+    width: 56,
+    minHeight: 44,
     backgroundColor: colors.ink3,
     borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.sm,
-    paddingVertical: 6, paddingHorizontal: 10,
-    color: colors.white, fontSize: 13, fontWeight: '700',
+    paddingVertical: 8, paddingHorizontal: 10,
+    color: colors.white, fontSize: 16, fontWeight: '700',
     textAlign: 'center',
   },
 
@@ -376,7 +428,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.gold,
     borderRadius: radius.md,
     padding: 12,
-    color: colors.white, fontSize: 14, lineHeight: 20,
+    color: colors.white, fontSize: 16, lineHeight: 22,
     fontFamily: 'Menlo',
     textAlignVertical: 'top' as any,
   } as any,
@@ -385,14 +437,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6,
   },
   tokenChip: {
-    paddingHorizontal: 10, paddingVertical: 6,
+    minHeight: 44,
+    paddingHorizontal: 10,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.goldBorder,
     borderRadius: radius.full,
+    alignItems: 'center', justifyContent: 'center',
   },
   tokenChipText: { color: colors.gold, fontFamily: 'Menlo', fontSize: 11, fontWeight: '600' },
 
-  archiveLink: { alignItems: 'center', paddingVertical: 14 },
+  archiveLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingVertical: 10 },
   archiveLinkText: { color: colors.red, fontSize: 13, fontWeight: '600' },
 
   confirmCard: {
@@ -405,20 +459,22 @@ const styles = StyleSheet.create({
   confirmBody: { color: colors.grey2, fontSize: 13, lineHeight: 18 },
   confirmRow: { flexDirection: 'row', gap: 8 },
   cancelBtn: {
-    flex: 1, paddingVertical: 11,
+    flex: 1, minHeight: 44,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.md,
-    alignItems: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   cancelBtnText: { color: colors.grey2, fontSize: 13, fontWeight: '700' },
   archiveBtn: {
-    flex: 1, paddingVertical: 11,
+    flex: 1, minHeight: 44,
     backgroundColor: colors.red,
     borderRadius: radius.md,
-    alignItems: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   archiveBtnText: { color: colors.white, fontSize: 13, fontWeight: '700' },
 
   error: { color: colors.red, fontSize: 13, padding: 4 },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
+  disabled: { opacity: 0.55 },
 });
