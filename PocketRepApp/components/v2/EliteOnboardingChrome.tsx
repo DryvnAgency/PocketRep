@@ -90,7 +90,10 @@ export function QuickReplyChip({ label, onPress, selected = false }: { label: st
       onPress={onPress}
       style={({ pressed }) => [styles.quickReply, selected && styles.quickReplySelected, pressed && styles.pressed]}
     >
-      <Text style={[styles.quickReplyText, selected && styles.quickReplyTextSelected]} numberOfLines={2}>{label}</Text>
+      <View style={styles.quickReplyContent}>
+        {selected ? <View style={styles.quickReplyCheck}><Text style={styles.quickReplyCheckText}>✓</Text></View> : null}
+        <Text style={[styles.quickReplyText, selected && styles.quickReplyTextSelected]} numberOfLines={2}>{label}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -148,9 +151,12 @@ const styles = StyleSheet.create({
   choiceLabel: { color: colors.white, fontSize: 13, fontWeight: '800' },
   choiceLabelSelected: { color: colors.gold },
   choiceDetail: { color: colors.grey2, fontSize: 10, lineHeight: 14, marginTop: 3 },
-  quickReply: { minHeight: 44, maxWidth: 210, justifyContent: 'center', borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.full, backgroundColor: colors.surface2, paddingHorizontal: 14, paddingVertical: 8 },
+  quickReply: { minHeight: 44, flexGrow: 1, flexBasis: 132, maxWidth: 210, justifyContent: 'center', borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.full, backgroundColor: colors.surface2, paddingHorizontal: 14, paddingVertical: 8 },
   quickReplySelected: { borderColor: colors.goldBorderStrong, backgroundColor: colors.goldBg },
-  quickReplyText: { color: colors.grey3, fontSize: 11, lineHeight: 15, fontWeight: '700' },
+  quickReplyContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  quickReplyCheck: { width: 16, height: 16, flexShrink: 0, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold },
+  quickReplyCheckText: { color: colors.ink, fontSize: 9, lineHeight: 11, fontWeight: '900' },
+  quickReplyText: { flexShrink: 1, color: colors.grey3, fontSize: 11, lineHeight: 15, fontWeight: '700', textAlign: 'center' },
   quickReplyTextSelected: { color: colors.gold },
   action: { width: '100%', minWidth: 0, minHeight: 54, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18, paddingVertical: 8, borderWidth: 1 },
   actionGold: { backgroundColor: colors.gold, borderColor: colors.gold2 },
