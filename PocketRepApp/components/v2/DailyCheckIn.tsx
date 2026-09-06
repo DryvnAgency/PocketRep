@@ -127,10 +127,9 @@ export default function DailyCheckIn({ contacts, onStartList }: {
         </View>
         <Pressable
           onPress={() => persistCollapsed(true)}
-          hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Minimize Rex daily check-in"
-          style={styles.minimize}
+          style={({ pressed }) => [styles.minimize, pressed && styles.pressed]}
         >
           <Text style={styles.minimizeText}>—</Text>
         </Pressable>
@@ -152,7 +151,13 @@ export default function DailyCheckIn({ contacts, onStartList }: {
           : 'Your Heat Sheet is your daily list. Work it, log it, and Rex will keep the next move in front of you.'}
       </Text>
 
-      <Pressable onPress={() => { markStarted(); onStartList?.(); }} style={({ pressed }) => [styles.cta, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Start today's priority list">
+      <Pressable
+        onPress={() => { markStarted(); onStartList?.(); }}
+        style={({ pressed }) => [styles.cta, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel="Start today's priority list"
+        accessibilityState={{ selected: started }}
+      >
         <Text style={styles.ctaText}>{started ? "✓ TODAY’S LIST STARTED" : "START TODAY’S LIST →"}</Text>
       </Pressable>
     </View>
@@ -161,21 +166,21 @@ export default function DailyCheckIn({ contacts, onStartList }: {
 
 const styles = StyleSheet.create({
   card: { marginHorizontal: 14, marginTop: 10, padding: 16, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.goldBorder, borderRadius: radius.lg },
-  compact: { marginHorizontal: 14, marginTop: 10, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.goldBorder, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  compact: { marginHorizontal: 14, marginTop: 10, minHeight: 52, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.goldBorder, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: 10 },
   compactText: { color: colors.white, fontSize: 12, fontWeight: '700', marginTop: 3 },
   expand: { color: colors.gold, fontSize: 18, fontWeight: '800' },
   top: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   eyebrow: { color: colors.gold, fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
   title: { color: colors.white, fontSize: 15, lineHeight: 21, fontWeight: '700', marginTop: 5, maxWidth: 420 },
-  minimize: { width: 30, height: 30, borderRadius: 10, backgroundColor: colors.goldBg, alignItems: 'center', justifyContent: 'center' },
+  minimize: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.goldBg, alignItems: 'center', justifyContent: 'center' },
   minimizeText: { color: colors.gold, fontSize: 18, fontWeight: '800', lineHeight: 18 },
   stats: { flexDirection: 'row', marginTop: 14, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.ink4, paddingVertical: 11 },
   stat: { flex: 1, alignItems: 'center' },
   value: { color: colors.gold, fontSize: 21, fontWeight: '800' },
   label: { color: colors.grey, fontSize: 8, fontWeight: '800', letterSpacing: .8, marginTop: 2 },
   sub: { color: colors.grey2, fontSize: 11, lineHeight: 16, marginTop: 12 },
-  cta: { marginTop: 13, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.full, backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder },
+  cta: { marginTop: 13, alignSelf: 'flex-start', minHeight: 44, paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.full, backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder, justifyContent: 'center' },
   ctaText: { color: colors.gold, fontSize: 10, fontWeight: '800', letterSpacing: .6 },
-  pressed: { opacity: .75, transform: [{ scale: .98 }] },
+  pressed: { opacity: .72, transform: [{ scale: .98 }] },
   overdueValue: { color: colors.red },
 });
