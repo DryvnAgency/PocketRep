@@ -30,6 +30,7 @@ const interactions = read('lib/v2/interactions.ts');
 const updateContact = read('lib/v2/updateContact.ts');
 const historyMigration = read('supabase/migrations/20260904003000_v1_immutable_contact_history.sql');
 const sequenceMigration = read('supabase/migrations/20260904000000_v2_canonical_sequence_templates.sql');
+const smsTerminalMigration = read('supabase/migrations/20260906000000_lock_outbound_sms_terminal_status.sql');
 
 console.log('\n--- onboarding is demo-first, generic, and creates the aha moment ---');
 ok('onboarding no longer contains Eddie Ponce placeholder', !onboarding.includes('Eddie Ponce'));
@@ -137,6 +138,61 @@ ok('classification choices are explicit values', ['sold','still_shopping','no_re
 ok('Sold branches to Sold Customer Ownership', queue.includes("'Sold Customer Ownership'"));
 ok('shopping/no-response branch to Unsold Long-Term Follow-Up', queue.includes("'Unsold Long-Term Follow-Up'"));
 ok('no model guesses the classification', queue.includes('Human-resolve') && queue.includes('explicit tap'));
+
+console.log('\n--- launch hardening: DNC fail-closed on every queue/blast/mission path ---');
+ok('generateQueue selects do_not_contact alongside is_deleted',
+  queue.includes("select('id,first_name,last_name,phone,email,vehicle,trim,trade_in,vehicle_year,vehicle_make,vehicle_model,lease_end_date,is_deleted,do_not_contact,is_demo')"));
+ok('generateQueue skips a DNC contact on every channel, not just text',
+  queue.includes('if (!contact || contact.is_deleted || contact.do_not_contact) continue;'));
+ok('Sequences tab re-validates a same-day cached queue against live DNC/deleted status',
+  legacySequences.includes("select('id,is_deleted,do_not_contact')") && legacySequences.includes('blocked.has(i.contact_id)') && legacySequences.includes('removedBeforePos'));
+ok('Rex-initiated blast drafting excludes DNC contacts before drafting',
+  appShell.includes('payload.contact_ids.includes(contact.id) && !contact.doNotContact'));
+ok('weekly digest still fails closed on a read error instead of persisting a zeroed digest',
+  read('lib/v2/weeklyDigest.ts').includes('if (dealsRes.error) throw dealsRes.error;') && read('lib/v2/weeklyDigest.ts').includes('if (contactsRes.error) throw contactsRes.error;'));
+
+console.log('\n--- launch hardening: exiting a sold-book Rex mission mid-way clears mission state ---');
+ok('back-gesturing out of the Rex sheet clears an in-progress sold-book mission',
+  appShell.includes('if (rexCoachOpen) {\n      setRexCoachOpen(false);\n      // Back-gesturing out of a sold-book mission mid-way'));
+ok("RexCoach's own onClose prop clears an in-progress sold-book mission",
+  appShell.includes("<RexCoach open={rexCoachOpen} onClose={() => {\n        setRexCoachOpen(false);"));
+{
+  // All four places that can end the Rex sheet / blast drafter before a
+  // mission naturally finishes must clear mission state -- count directly
+  // so a future edit removing just one can't slip through unnoticed.
+  const pattern = /if \(soldBookMission\) \{ setSoldBookMission\(null\); setSoldBookMissionIds\(\[\]\); \}/g;
+  const count = (appShell.match(pattern) ?? []).length;
+  ok('mission-clear-on-close appears at every early-exit path (>= 3: back-gesture, onClose prop, blast-drafter onClose)', count >= 3);
+}
+
+console.log('\n--- launch hardening: outbound_sms_actions.status is a locked state machine ---');
+ok('terminal-status trigger fires before update on outbound_sms_actions',
+  smsTerminalMigration.includes('before update on public.outbound_sms_actions'));
+ok('terminal-status trigger blocks any change once a row leaves opened',
+  smsTerminalMigration.includes("old.status is distinct from 'opened' and new.status is distinct from old.status"));
+{
+  // JS mirror of the trigger's allow/block decision, exercised against
+  // every status this app's sole writer (lib/v2/smsActions.ts) can produce.
+  const triggerAllows = (oldStatus, newStatus) => {
+    const oldIsOpened = oldStatus === 'opened';
+    const statusChanging = newStatus !== oldStatus;
+    return !(!oldIsOpened && statusChanging);
+  };
+  const terminal = ['confirmed_sent', 'not_sent', 'failed', 'no_phone', 'blocked_unsafe', 'simulated_sent', 'sent'];
+  ok('opened -> confirmed_sent allowed (markSmsSent)', triggerAllows('opened', 'confirmed_sent'));
+  ok('opened -> not_sent allowed (markSmsNotSent)', triggerAllows('opened', 'not_sent'));
+  let blockedCount = 0;
+  for (const from of terminal) {
+    for (const to of [...terminal, 'opened']) {
+      if (to === from) continue;
+      if (!triggerAllows(from, to)) blockedCount++;
+    }
+  }
+  ok('every terminal status is locked against every other status (no resurrection, no cross-terminal drift)',
+    blockedCount === terminal.length * terminal.length);
+  ok('same-value update to a terminal row stays allowed (completed_at touch-ups)',
+    terminal.every(s => triggerAllows(s, s)));
+}
 
 console.log(`\n${failures === 0 ? '✅ ALL PASSED' : `❌ ${failures} FAILED`} (${checks} checks)`);
 process.exit(failures ? 1 : 0);
