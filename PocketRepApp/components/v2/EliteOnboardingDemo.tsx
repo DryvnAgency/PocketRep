@@ -41,11 +41,20 @@ export function DemoQueuePanel({ children, loading = false }: DemoQueuePanelProp
   return (
     <View style={styles.panel}>
       <View style={styles.panelHeader}>
-        <View>
-          <Text style={styles.kicker}>TEXT QUEUE · DEMO</Text>
+        <View style={styles.panelHeaderCopy}>
+          <Text style={styles.kicker}>WORK MY BOOK · DEMO</Text>
           <Text style={styles.panelTitle}>Different customer. Different reason.</Text>
         </View>
         <View style={styles.readyRow}><View style={styles.readyDot} /><Text style={styles.readyText}>READY</Text></View>
+      </View>
+      <View style={styles.queueTabs} accessibilityLabel="Work My Book preview, Text Queue selected">
+        <View style={styles.queueTab}><Text style={styles.queueTabText}>RECOMMENDED</Text></View>
+        <View style={styles.queueTab}><Text style={styles.queueTabText}>CALL QUEUE</Text></View>
+        <View style={[styles.queueTab, styles.queueTabActive]}><Text style={[styles.queueTabText, styles.queueTabTextActive]}>TEXT QUEUE</Text></View>
+      </View>
+      <View style={styles.queueRule}>
+        <Text style={styles.queueRuleStrong}>Reason → draft → review → send</Text>
+        <Text style={styles.queueRuleText}>Nothing is auto-sent.</Text>
       </View>
       {loading ? <View style={styles.loading}><ActivityIndicator color={colors.gold} /><Text style={styles.loadingText}>Loading the sample book…</Text></View> : children}
     </View>
@@ -96,12 +105,21 @@ function initials(name: string) {
 
 const styles = StyleSheet.create({
   panel: { marginTop: 18, padding: 14, gap: 10, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface },
-  panelHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: 4, paddingBottom: 8 },
+  panelHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: 4, paddingBottom: 6 },
+  panelHeaderCopy: { flex: 1, minWidth: 0 },
   kicker: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
   panelTitle: { color: colors.white, fontSize: 17, lineHeight: 22, fontWeight: '800', letterSpacing: -0.3, marginTop: 5 },
   readyRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingTop: 2 },
   readyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.green },
   readyText: { color: colors.grey2, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  queueTabs: { flexDirection: 'row', gap: 5, padding: 4, borderRadius: radius.md, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.ink2 },
+  queueTab: { flex: 1, minHeight: 34, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  queueTabActive: { backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorderStrong },
+  queueTabText: { color: colors.grey, fontSize: 7, lineHeight: 10, fontWeight: '900', letterSpacing: 0.5, textAlign: 'center' },
+  queueTabTextActive: { color: colors.gold },
+  queueRule: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, paddingHorizontal: 5, paddingBottom: 2 },
+  queueRuleStrong: { color: colors.gold, fontSize: 9, lineHeight: 13, fontWeight: '800' },
+  queueRuleText: { color: colors.grey2, fontSize: 9, lineHeight: 13, fontWeight: '700' },
   loading: { minHeight: 92, alignItems: 'center', justifyContent: 'center', gap: 9 },
   loadingText: { color: colors.grey2, fontSize: 11, fontWeight: '700' },
   contactCard: { padding: 13, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface2 },
