@@ -111,13 +111,17 @@ export function DemoQuickReplies({ onSelect, selected }: { onSelect: (value: str
 
   return (
     <View style={styles.quickReplyBlock}>
-      <Text style={styles.quickReplyLabel}>QUICK REPLIES · TAP TO DRAFT</Text>
+      <View style={styles.quickReplyHeading}>
+        <Text style={styles.quickReplyLabel}>QUICK REPLIES · CONTEXT AWARE</Text>
+        <View style={styles.draftOnlyPill}><Text style={styles.draftOnlyText}>DRAFT ONLY</Text></View>
+      </View>
+      <Text style={styles.quickReplyPrompt}>Tap a next move and Rex prepares the wording for review.</Text>
       <View style={styles.quickReplyRow}>
         {replies.map(reply => (
           <QuickReplyChip key={reply} label={reply} selected={selected === reply} onPress={() => onSelect(reply)} />
         ))}
       </View>
-      <Text style={styles.quickReplyNote}>Quick Replies only prepare a draft. The rep still reviews and controls every send.</Text>
+      <Text style={styles.quickReplyNote}>Quick Replies never send automatically. You still review, edit if needed, and control the send.</Text>
     </View>
   );
 }
@@ -131,6 +135,13 @@ export function DemoReplyCard({ name, message }: { name: string; message: string
       </View>
       <Text style={styles.replyName}>{name}</Text>
       <Text style={styles.replyMessage}>{message}</Text>
+      <View style={styles.replyNextMove}>
+        <View style={styles.replyRexMark}><View style={styles.replyRexCore} /></View>
+        <View style={styles.replyNextCopy}>
+          <Text style={styles.replyNextLabel}>REX READS THE CONTEXT</Text>
+          <Text style={styles.replyNextText}>The reply shapes the next draft. You choose the move, review the message, and send it yourself.</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -203,7 +214,11 @@ const styles = StyleSheet.create({
   previewRexText: { color: colors.gold, fontSize: 6, fontWeight: '900', letterSpacing: 0.7 },
   homeIndicator: { alignSelf: 'center', width: 78, height: 3, borderRadius: radius.full, backgroundColor: colors.grey, marginBottom: 5, opacity: 0.55 },
   quickReplyBlock: { marginTop: 16 },
-  quickReplyLabel: { color: colors.grey2, fontSize: 9, fontWeight: '900', letterSpacing: 1, marginBottom: 9 },
+  quickReplyHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
+  quickReplyLabel: { color: colors.grey2, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  draftOnlyPill: { borderRadius: radius.full, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.goldBg, paddingHorizontal: 8, paddingVertical: 4 },
+  draftOnlyText: { color: colors.gold, fontSize: 6, fontWeight: '900', letterSpacing: 0.8 },
+  quickReplyPrompt: { color: colors.grey3, fontSize: 10, lineHeight: 15, marginBottom: 9 },
   quickReplyRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   quickReplyNote: { color: colors.grey, fontSize: 10, lineHeight: 15, marginTop: 9 },
   replyCard: { marginTop: 16, padding: 15, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.goldBorderStrong, backgroundColor: colors.ink2 },
@@ -211,4 +226,10 @@ const styles = StyleSheet.create({
   replyKicker: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   replyName: { color: colors.white, fontSize: 14, fontWeight: '800', marginTop: 9 },
   replyMessage: { color: colors.grey3, fontSize: 13, lineHeight: 19, marginTop: 5 },
+  replyNextMove: { marginTop: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface2 },
+  replyRexMark: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.goldBorderStrong, backgroundColor: colors.ink2 },
+  replyRexCore: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.gold },
+  replyNextCopy: { flex: 1, minWidth: 0 },
+  replyNextLabel: { color: colors.gold, fontSize: 7, fontWeight: '900', letterSpacing: 0.9 },
+  replyNextText: { color: colors.grey2, fontSize: 10, lineHeight: 15, marginTop: 3 },
 });
