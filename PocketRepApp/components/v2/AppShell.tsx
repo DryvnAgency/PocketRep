@@ -270,7 +270,11 @@ export default function AppShell() {
   };
 
   const openBlastFromRex = async (payload: CreateBlastSequencePayload) => {
-    const chosen = (contacts ?? []).filter(contact => payload.contact_ids.includes(contact.id));
+    // DNC contacts must never be drafted into a Rex-initiated blast, even
+    // though the eventual send is separately blocked by launchSms — drafting
+    // still exposes their notes to the AI provider and shows a ready-to-send
+    // card for someone who opted out.
+    const chosen = (contacts ?? []).filter(contact => payload.contact_ids.includes(contact.id) && !contact.doNotContact);
     if (chosen.length === 0) throw new Error('No matching contacts were found for that blast.');
     try {
       setBlastDraft(await createBlastDraft({ intent: payload.intent, filterSummary: payload.filter_summary, promotion: payload.promotion ?? {}, contacts: chosen }));

@@ -363,7 +363,7 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
   const contactIds = [...new Set(enrollments.map((e: any) => e.contact_id))];
   const { data: contacts, error: contactError } = await supabase
     .from('contacts')
-    .select('id,first_name,last_name,phone,email,vehicle,trim,trade_in,vehicle_year,vehicle_make,vehicle_model,lease_end_date,is_deleted,is_demo')
+    .select('id,first_name,last_name,phone,email,vehicle,trim,trade_in,vehicle_year,vehicle_make,vehicle_model,lease_end_date,is_deleted,do_not_contact,is_demo')
     .in('id', contactIds);
   if (contactError) throw contactError;
 
@@ -382,7 +382,10 @@ export async function generateQueue(userId: string, plan: string): Promise<Queue
   const items: QueueItem[] = [];
   for (const enrollment of enrollments as any[]) {
     const contact = contactMap[enrollment.contact_id];
-    if (!contact || contact.is_deleted) continue;
+    // Fail closed: a contact that is soft-deleted or has opted out must never
+    // surface as an actionable queue item, on any channel (call/email are not
+    // protected downstream the way launchSms re-checks text sends).
+    if (!contact || contact.is_deleted || contact.do_not_contact) continue;
 
     const steps = (enrollment.sequences?.sequence_steps ?? [])
       .slice()

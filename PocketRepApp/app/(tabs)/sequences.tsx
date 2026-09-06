@@ -393,8 +393,30 @@ export default function SequencesScreen() {
       const today = new Date().toISOString().split('T')[0];
       if (saved && saved.generated_at.startsWith(today)) {
         const pending = saved.items.filter(i => i.status === 'pending' || i.status === 'saved');
-        setQueueItems(pending);
-        setQueuePos(saved.saved_position);
+        // A saved queue can be hours old. A contact's do_not_contact/is_deleted
+        // status can change after it was cached, and this list must never show
+        // a now-blocked contact as actionable just because it was queued
+        // before their status changed — re-check live status before rendering.
+        let filtered = pending;
+        let pos = saved.saved_position;
+        if (pending.length > 0) {
+          const { data: liveContacts } = await supabase
+            .from('contacts')
+            .select('id,is_deleted,do_not_contact')
+            .in('id', [...new Set(pending.map(i => i.contact_id))]);
+          const blocked = new Set(
+            (liveContacts ?? []).filter(c => c.is_deleted || c.do_not_contact).map(c => c.id),
+          );
+          if (blocked.size > 0) {
+            // Keep saved_position pointing at the same logical next-up item:
+            // shift it left by however many blocked items sat before it.
+            const removedBeforePos = pending.slice(0, pos).filter(i => blocked.has(i.contact_id)).length;
+            filtered = pending.filter(i => !blocked.has(i.contact_id));
+            pos = Math.max(0, Math.min(pos - removedBeforePos, filtered.length - 1));
+          }
+        }
+        setQueueItems(filtered);
+        setQueuePos(filtered.length > 0 ? pos : 0);
       } else {
         const { data: prof } = await supabase.from('profiles').select('plan').eq('id', user.id).single();
         const items = await generateQueue(user.id, prof?.plan ?? 'pro');

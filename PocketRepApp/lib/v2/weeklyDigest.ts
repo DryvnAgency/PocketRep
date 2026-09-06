@@ -88,6 +88,11 @@ export async function generateDigestForWeek(weekStart: string): Promise<WeeklyDi
       .eq('is_deleted', false),
   ]);
 
+  // A failed read must never fall through to an empty array — that would let
+  // a transient error silently overwrite an already-correct digest with a
+  // zeroed one below (this function always upserts).
+  if (dealsRes.error) throw dealsRes.error;
+  if (contactsRes.error) throw contactsRes.error;
   const deals = dealsRes.data ?? [];
   const contacts = contactsRes.data ?? [];
 
