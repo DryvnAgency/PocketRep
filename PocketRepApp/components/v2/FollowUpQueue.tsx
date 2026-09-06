@@ -7,6 +7,7 @@ import {
   markSkipped,
   loadPendingSequenceClassifications,
   classifyAndBranchSequence,
+  assertContactActionAllowed,
   type QueueItem,
   type PendingSequenceClassification,
   type SequenceClassification,
@@ -105,6 +106,7 @@ export default function FollowUpQueue() {
     setError(null);
     try {
       if (action === 'work') {
+        await assertContactActionAllowed(item.contact_id);
         if (item.unresolved_tokens?.length) {
           throw new Error(`Add values for ${formatSequenceTemplateTokens(item.unresolved_tokens)} before working this follow-up.`);
         }
