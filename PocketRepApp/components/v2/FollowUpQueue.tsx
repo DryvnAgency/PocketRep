@@ -23,6 +23,21 @@ function channelLabel(channel: QueueItem['channel']) {
   return 'EMAIL';
 }
 
+async function assertContactActionAllowed(contactId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Sign in again before working this follow-up.');
+  const { data: contact, error } = await supabase
+    .from('contacts')
+    .select('id,is_deleted,do_not_contact')
+    .eq('id', contactId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!contact || contact.is_deleted || contact.do_not_contact) {
+    throw new Error('This customer is blocked or no longer active. PocketRep will not open an outreach action.');
+  }
+}
+
 type LaunchResult = 'confirmed' | 'opened' | 'not_sent' | 'unsupported' | 'failed';
 
 async function launchChannel(item: QueueItem): Promise<LaunchResult> {
@@ -105,6 +120,7 @@ export default function FollowUpQueue() {
     setError(null);
     try {
       if (action === 'work') {
+        await assertContactActionAllowed(item.contact_id);
         if (item.unresolved_tokens?.length) {
           throw new Error(`Add values for ${formatSequenceTemplateTokens(item.unresolved_tokens)} before working this follow-up.`);
         }
