@@ -38,7 +38,12 @@ export default function CustomNavBar({
   return (
     <View style={styles.root}>
       <View style={styles.row}>
-        <Pressable onPress={onUpgrade} accessibilityRole="button" accessibilityLabel="Open profile and plan" hitSlop={4}>
+        <Pressable
+          onPress={onUpgrade}
+          style={({ pressed }) => [styles.topAction, pressed && styles.iconPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile and plan"
+        >
           <LinearGradient
             colors={[colors.gold2, colors.gold]}
             start={{ x: 0, y: 0 }}
@@ -60,7 +65,7 @@ export default function CustomNavBar({
 
         <View style={{ flex: 1 }} />
 
-        <Pressable onPress={onSearch} style={({ pressed }) => [styles.iconBtn, pressed && styles.iconPressed]} accessibilityRole="button" accessibilityLabel="Search contacts" hitSlop={4}>
+        <Pressable onPress={onSearch} style={({ pressed }) => [styles.iconBtn, pressed && styles.iconPressed]} accessibilityRole="button" accessibilityLabel="Search contacts">
           <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
             <Circle cx={11} cy={11} r={6} stroke={colors.grey2} strokeWidth={1.8} />
             <Path d="M16 16l4 4" stroke={colors.grey2} strokeWidth={1.8} strokeLinecap="round" />
@@ -72,7 +77,6 @@ export default function CustomNavBar({
           style={({ pressed }) => [styles.iconBtn, pressed && styles.iconPressed]}
           accessibilityRole="button"
           accessibilityLabel={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
-          hitSlop={4}
         >
           <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
             <Path d="M5 17v-5a7 7 0 1114 0v5l1.5 2H3.5L5 17z" stroke={colors.grey2} strokeWidth={1.6} strokeLinejoin="round" />
@@ -101,9 +105,15 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
-    marginBottom: 7,
-    minHeight: 34,
+    gap: 6,
+    marginBottom: 4,
+    minHeight: 44,
+  },
+  topAction: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mark: {
     width: 32,
@@ -120,9 +130,9 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   iconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.surface2,
     borderWidth: 1,
     borderColor: colors.ink4,
@@ -132,8 +142,8 @@ const styles = StyleSheet.create({
   iconPressed: { opacity: 0.72, transform: [{ scale: 0.96 }] },
   notifBadge: {
     position: 'absolute',
-    top: 1,
-    right: 0,
+    top: 4,
+    right: 3,
     minWidth: 16,
     height: 16,
     paddingHorizontal: 4,
