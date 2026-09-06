@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { Avatar, Label, SectionHead, rgbaTint } from './atoms';
 import type { V2Contact } from '@/lib/v2/useContacts';
 import type { V2Tag } from '@/lib/v2/useTags';
 import { createTag, applyTagToContacts } from '@/lib/v2/tagMutations';
+import { useWebVisualViewportInset } from '@/lib/v2/useWebVisualViewportInset';
 
 const COLOR_SWATCHES = [
   colors.gold,
@@ -41,6 +42,7 @@ export default function BulkTagFlow({
   const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const keyboardInset = useWebVisualViewportInset(open);
 
   useEffect(() => {
     if (open) {
@@ -101,16 +103,28 @@ export default function BulkTagFlow({
 
   if (!open) return null;
 
+  const scrollContentStyle = [
+    styles.scrollContent,
+    Platform.OS === 'web' && ({ paddingBottom: 'max(24px, env(safe-area-inset-bottom))' } as any),
+  ];
+
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
       <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.sheet}>
+      <View
+        style={[
+          styles.sheet,
+          Platform.OS === 'web' && ({ top: 'max(7%, env(safe-area-inset-top))' } as any),
+          keyboardInset > 0 && { bottom: keyboardInset },
+        ]}
+      >
         <View style={styles.handle} />
 
         <View style={styles.header}>
           <Pressable
             onPress={step === 'choose' ? onClose : () => setStep('choose')}
-            style={styles.headerBtn}
+            style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
+            accessibilityRole="button"
           >
             <Text style={styles.headerBtnText}>
               {step === 'choose' ? 'Cancel' : '‹ Back'}
@@ -128,25 +142,28 @@ export default function BulkTagFlow({
             <Pressable
               onPress={apply}
               disabled={!chosen || picked.size === 0 || saving}
-              style={[
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !chosen || picked.size === 0 || saving, busy: saving }}
+              style={({ pressed }) => [
                 styles.headerBtn,
-                picked.size > 0 ? styles.headerBtnPrimary : styles.headerBtnDisabled,
+                picked.size > 0 && !saving ? styles.headerBtnPrimary : styles.headerBtnDisabled,
+                pressed && picked.size > 0 && !saving && styles.pressed,
               ]}
             >
               <Text style={[
                 styles.headerBtnText,
-                picked.size > 0 ? { color: colors.ink } : { color: colors.grey },
+                picked.size > 0 && !saving ? { color: colors.ink } : { color: colors.grey },
               ]}>
                 {saving ? 'Saving…' : 'Apply'}
               </Text>
             </Pressable>
           ) : (
-            <View style={{ width: 64 }} />
+            <View style={{ width: 64, minHeight: 44 }} />
           )}
         </View>
 
         {step === 'choose' ? (
-          <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+          <ScrollView contentContainerStyle={scrollContentStyle} keyboardShouldPersistTaps="handled">
             <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
               <Label color={colors.gold}>CREATE NEW TAG</Label>
               <View style={styles.createRow}>
@@ -160,9 +177,12 @@ export default function BulkTagFlow({
                 <Pressable
                   disabled={!newName.trim()}
                   onPress={() => goToSelect({ name: newName.trim(), color: newColor })}
-                  style={[
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !newName.trim() }}
+                  style={({ pressed }) => [
                     styles.nextBtn,
                     newName.trim() ? styles.nextBtnEnabled : styles.nextBtnDisabled,
+                    pressed && !!newName.trim() && styles.pressed,
                   ]}
                 >
                   <Text style={[
@@ -179,11 +199,20 @@ export default function BulkTagFlow({
                   <Pressable
                     key={c}
                     onPress={() => setNewColor(c)}
-                    style={[
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use ${c} tag color`}
+                    accessibilityState={{ selected: newColor === c }}
+                    hitSlop={6}
+                    style={({ pressed }) => [
+                      styles.swatchTap,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={[
                       styles.swatch,
                       { backgroundColor: c, borderColor: newColor === c ? colors.white : 'transparent' },
-                    ]}
-                  />
+                    ]} />
+                  </Pressable>
                 ))}
               </View>
             </View>
@@ -194,9 +223,11 @@ export default function BulkTagFlow({
                 <Pressable
                   key={t.id}
                   onPress={() => goToSelect({ name: t.name, color: t.color })}
-                  style={[
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
                     styles.existingTag,
                     { backgroundColor: rgbaTint(t.color, 0.12), borderColor: rgbaTint(t.color, 0.35) },
+                    pressed && styles.pressed,
                   ]}
                 >
                   <View style={[styles.existingDot, { backgroundColor: t.color }]} />
@@ -206,7 +237,7 @@ export default function BulkTagFlow({
             </View>
           </ScrollView>
         ) : chosen ? (
-          <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+          <ScrollView contentContainerStyle={scrollContentStyle} keyboardShouldPersistTaps="handled">
             <View
               style={[
                 styles.previewCard,
@@ -241,10 +272,13 @@ export default function BulkTagFlow({
                   <Pressable
                     key={c.id}
                     onPress={() => togglePick(c.id)}
-                    style={[
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected }}
+                    style={({ pressed }) => [
                       styles.pickerRow,
                       i > 0 && styles.pickerRowDivider,
                       selected && { backgroundColor: colors.goldBg },
+                      pressed && styles.pressed,
                     ]}
                   >
                     <View style={[
@@ -302,38 +336,45 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.ink4,
   },
   headerBtn: {
-    paddingHorizontal: 14, paddingVertical: 7,
+    paddingHorizontal: 14,
     borderRadius: 16,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
-    minWidth: 64, alignItems: 'center',
+    minWidth: 64, minHeight: 44,
+    alignItems: 'center', justifyContent: 'center',
   },
   headerBtnPrimary: { backgroundColor: colors.gold, borderColor: colors.gold },
-  headerBtnDisabled: { backgroundColor: colors.ink4, borderColor: colors.ink4 },
+  headerBtnDisabled: { backgroundColor: colors.ink4, borderColor: colors.ink4, opacity: 0.65 },
   headerBtnText: { fontSize: 12, fontWeight: '700', color: colors.grey2 },
   headerKicker: { fontSize: 10, fontWeight: '700', color: colors.gold, letterSpacing: 1.4 },
   headerTitle: { fontSize: 14, fontWeight: '700', color: colors.white, marginTop: 2, letterSpacing: -0.2 },
+  scrollContent: { paddingBottom: 24 },
 
   createRow: { flexDirection: 'row', gap: 8, marginTop: 10, alignItems: 'center' },
   input: {
     flex: 1,
+    minHeight: 48,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.md,
     paddingHorizontal: 12, paddingVertical: 11,
-    color: colors.white, fontSize: 14, fontWeight: '600',
+    color: colors.white, fontSize: 16, fontWeight: '600',
   },
   nextBtn: {
-    paddingHorizontal: 14, paddingVertical: 11,
+    minHeight: 48,
+    minWidth: 72,
+    paddingHorizontal: 14,
     borderRadius: radius.md,
+    alignItems: 'center', justifyContent: 'center',
   },
   nextBtnEnabled: { backgroundColor: colors.gold },
-  nextBtnDisabled: { backgroundColor: colors.ink4 },
+  nextBtnDisabled: { backgroundColor: colors.ink4, opacity: 0.65 },
   nextBtnText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
 
-  colorRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 12 },
-  colorLabel: { fontSize: 10, fontWeight: '700', color: colors.grey2, letterSpacing: 0.8 },
-  swatch: { width: 22, height: 22, borderRadius: 11, borderWidth: 2 },
+  colorRow: { flexDirection: 'row', gap: 4, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' },
+  colorLabel: { fontSize: 10, fontWeight: '700', color: colors.grey2, letterSpacing: 0.8, marginRight: 4 },
+  swatchTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },
+  swatch: { width: 24, height: 24, borderRadius: 12, borderWidth: 2 },
 
   existingTags: {
     flexDirection: 'row',
@@ -345,8 +386,10 @@ const styles = StyleSheet.create({
   existingTag: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    paddingHorizontal: 14, paddingVertical: 9,
+    minHeight: 44,
+    paddingHorizontal: 14,
     borderRadius: radius.full,
     borderWidth: 1.5,
   },
@@ -369,6 +412,7 @@ const styles = StyleSheet.create({
 
   searchWrap: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 },
   searchBox: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -381,7 +425,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: colors.white,
-    fontSize: 14,
+    fontSize: 16,
     paddingVertical: 10,
   },
 
@@ -393,6 +437,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   pickerRow: {
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -400,7 +445,7 @@ const styles = StyleSheet.create({
   },
   pickerRowDivider: { borderTopWidth: 1, borderTopColor: colors.ink3 },
   check: {
-    width: 22, height: 22, borderRadius: 11,
+    width: 24, height: 24, borderRadius: 12,
     borderWidth: 2,
     alignItems: 'center', justifyContent: 'center',
   },
@@ -408,5 +453,6 @@ const styles = StyleSheet.create({
   pickerName: { fontSize: 15, fontWeight: '600', color: colors.white, letterSpacing: -0.2 },
   pickerVehicle: { fontSize: 11, color: colors.grey2, marginTop: 2 },
 
+  pressed: { opacity: 0.72 },
   error: { color: colors.red, fontSize: 13, marginHorizontal: 14, marginTop: 8 },
 });

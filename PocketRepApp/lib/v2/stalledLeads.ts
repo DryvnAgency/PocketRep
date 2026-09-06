@@ -123,7 +123,7 @@ export async function analyzeStalledLeads({
   const pool = [
     ...book.stalled,
     ...(includeDead ? book.dead : []),
-  ].filter(c => c.days_silent >= daysSilentThreshold);
+  ].filter(c => !c.do_not_contact && c.days_silent >= daysSilentThreshold);
 
   const decided = pool.map(c => ({ contact: c, ...decide(c) }));
 

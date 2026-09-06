@@ -23,7 +23,7 @@ export default function ContactListPreview({
         <Text style={styles.kicker}>FILTER · {total} MATCH{total === 1 ? '' : 'ES'}</Text>
         {filterSummary ? <Text style={styles.summary}>{filterSummary}</Text> : null}
       </View>
-      <ScrollView style={styles.scroller} contentContainerStyle={{ paddingVertical: 6 }}>
+      <ScrollView style={styles.scroller} contentContainerStyle={styles.scrollerContent}>
         {contacts.length === 0 ? (
           <Text style={styles.empty}>No matches.</Text>
         ) : (
@@ -33,10 +33,18 @@ export default function ContactListPreview({
               <Pressable
                 key={c.id}
                 onPress={() => onTapContact?.(c.id)}
-                style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.goldBg }]}
+                disabled={!onTapContact}
+                accessibilityRole={onTapContact ? 'button' : undefined}
+                accessibilityLabel={onTapContact ? `Open ${c.name}` : undefined}
+                accessibilityState={onTapContact ? { disabled: false } : { disabled: true }}
+                style={({ pressed }) => [
+                  styles.row,
+                  pressed && onTapContact ? styles.rowPressed : null,
+                  !onTapContact ? styles.rowDisabled : null,
+                ]}
               >
-                <Avatar name={c.name} size={32} />
-                <View style={{ flex: 1, minWidth: 0 }}>
+                <Avatar name={c.name} size={34} />
+                <View style={styles.rowCopy}>
                   <Text style={styles.name} numberOfLines={1}>{c.name}</Text>
                   <Text style={styles.sub} numberOfLines={1}>
                     {c.vehicle ?? '—'}{c.days != null ? ` · ${c.days}d silent` : ''}
@@ -58,31 +66,41 @@ export default function ContactListPreview({
 const styles = StyleSheet.create({
   wrap: {
     backgroundColor: colors.surface2,
-    borderWidth: 1, borderColor: colors.ink4,
-    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    borderRadius: radius.lg,
     overflow: 'hidden',
-    maxHeight: 260,
+    maxHeight: 280,
   },
   head: {
-    paddingHorizontal: 14, paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     backgroundColor: colors.ink2,
-    borderBottomWidth: 1, borderBottomColor: colors.ink4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink4,
   },
-  kicker: { fontSize: 9, fontWeight: '700', color: colors.gold, letterSpacing: 1.0 },
-  summary: { fontSize: 12, color: colors.white, marginTop: 4 },
+  kicker: { fontSize: 9, fontWeight: '800', color: colors.gold, letterSpacing: 1.1 },
+  summary: { fontSize: 12, color: colors.white, marginTop: 4, lineHeight: 17 },
 
-  scroller: { maxHeight: 220 },
+  scroller: { maxHeight: 232 },
+  scrollerContent: { paddingVertical: 6 },
 
   row: {
+    minHeight: 50,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.ink3,
   },
-  name: { fontSize: 13, fontWeight: '600', color: colors.white },
-  sub: { fontSize: 11, color: colors.grey2, marginTop: 2 },
-  tierDot: { width: 8, height: 8, borderRadius: 4 },
-  empty: { padding: 16, color: colors.grey2, textAlign: 'center', fontSize: 13 },
-  more: { fontSize: 11, color: colors.grey2, textAlign: 'center', padding: 8 },
+  rowPressed: { backgroundColor: colors.goldBg, opacity: 0.9 },
+  rowDisabled: { opacity: 0.82 },
+  rowCopy: { flex: 1, minWidth: 0, justifyContent: 'center' },
+  name: { fontSize: 13, fontWeight: '700', color: colors.white },
+  sub: { fontSize: 11, color: colors.grey2, marginTop: 2, lineHeight: 15 },
+  tierDot: { width: 9, height: 9, borderRadius: 5 },
+  empty: { padding: 18, color: colors.grey2, textAlign: 'center', fontSize: 13 },
+  more: { fontSize: 11, color: colors.grey2, textAlign: 'center', paddingHorizontal: 8, paddingVertical: 10 },
 });

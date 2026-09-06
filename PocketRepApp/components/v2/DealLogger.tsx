@@ -12,8 +12,13 @@ import {
 import { usePayPlan, calcCommissionWithPlan, DEFAULT_PAY_PLAN } from '@/lib/v2/payPlan';
 import { formatMoney } from '@/lib/v2/format';
 import { parseGrossInput, validateDealDraft } from '@/lib/v2/dealValidation';
+import { useWebVisualViewportInset } from '@/lib/v2/useWebVisualViewportInset';
 
-const today = () => new Date().toISOString().slice(0, 10);
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+const today = () => ymd(new Date());
 
 const blank = (): DealDraft => ({
   name: '', stock: '', vehicle: '',
@@ -43,6 +48,7 @@ export default function DealLogger({
   const [error, setError] = useState<string | null>(null);
   const [frontGrossInput, setFrontGrossInput] = useState('');
   const [backGrossInput, setBackGrossInput] = useState('');
+  const keyboardInset = useWebVisualViewportInset(open);
   // `saving` state updates asynchronously, so a same-tick double-tap on Save
   // could pass the `!canSave || saving` guard twice and insert two deals —
   // AddContactModal.tsx's savingRef fixes the identical race there.
@@ -124,7 +130,7 @@ export default function DealLogger({
     <View style={styles.overlay}>
       <Pressable style={styles.scrim} onPress={onClose} />
       <KeyboardAvoidingView
-        style={styles.sheet}
+        style={[styles.sheet, keyboardInset > 0 ? { bottom: keyboardInset } : null]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.handle} />
@@ -151,7 +157,7 @@ export default function DealLogger({
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Field label="CUSTOMER">
             <TextInput
               value={d.name}

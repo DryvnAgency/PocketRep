@@ -10,6 +10,7 @@ const index = read('index.html');
 const privacy = read('privacy.html');
 const terms = read('terms.html');
 const cancel = read('cancel.html');
+const stripeWebhook = fs.readFileSync(path.join(root, 'PocketRepApp/supabase/functions/stripe-webhook/index.ts'), 'utf8');
 let failures = 0;
 const ok = (label, condition) => {
   console.log(`${condition ? 'PASS' : 'FAIL'}  ${label}`);
@@ -25,8 +26,21 @@ ok('V3 remains vision framing', /personal sales operating system/i.test(index) |
 
 console.log('\n--- trust and legal consistency ---');
 ok('legal pages do not advertise retired Rex Lens product', ![privacy, terms, cancel].some(x => /Rex Lens/i.test(x)));
-ok('cancellation page states collected subscription charges are non-refundable', /Subscription charges are non-refundable/i.test(cancel));
-ok('cancellation page preserves trial no-charge-before-first-charge language', /cancel before the first trial charge/i.test(cancel));
+ok('trial cancellation ends access immediately', /access ends when you cancel/i.test(cancel));
+ok('trial cancellation prevents the first paid charge', /no paid subscription fee is charged/i.test(cancel));
+ok('paid cancellation keeps access through the current paid billing period', /remains available through the end of the current paid billing period/i.test(cancel));
+ok('paid cancellation stops the next renewal', /will not renew for the next billing cycle/i.test(cancel));
+ok('already-collected subscription charges are non-refundable', /charges already collected are non-refundable/i.test(cancel));
+ok('cancellation page does not defer policy to Stripe', !/unless Stripe shows otherwise/i.test(cancel));
+ok('Terms repeat immediate trial-cancel access loss', /cancel during the free trial[\s\S]*access ends when you cancel/i.test(terms));
+ok('Terms repeat paid-through cancellation access', /cancel after a paid subscription has begun[\s\S]*access remains available through the end of the current paid billing period/i.test(terms));
+ok('Terms repeat no-prorated-refund policy', /do not provide partial or prorated refunds/i.test(terms));
+ok('Stripe trial cancel-at-period-end becomes an immediate PocketRep lock',
+  stripeWebhook.includes('s.status === "trialing" && (s.cancel_at_period_end === true || Boolean(s.cancel_at))') &&
+  stripeWebhook.includes('const effectiveStatus = trialCancellationScheduled ? "canceled" : s.status'));
+ok('paid cancel-at-period-end remains active until Stripe ends the subscription',
+  stripeWebhook.includes('const trialCancellationScheduled = s.status === "trialing"') &&
+  !stripeWebhook.includes('s.status === "active" && (s.cancel_at_period_end'));
 ok('Stripe customer portal cancellation remains visible', /Stripe Customer Portal/i.test(cancel));
 ok('privacy keeps AI providers model-agnostic', /third-party AI gateways and model providers/i.test(privacy));
 ok('service and privacy contacts remain visible', terms.includes('service@pocketrep.pro') && cancel.includes('service@pocketrep.pro') && privacy.includes('privacy@pocketrep.pro'));

@@ -1,16 +1,10 @@
 /**
  * PocketRep — post-export web patcher. Runs as part of `npm run build:web`
- * (see package.json) right after `expo export --platform web`.
+ * right after `expo export --platform web`.
  *
- * Injects the PWA head tags (manifest, theme color, apple-* metas,
- * apple-touch-icon, viewport-fit=cover) into dist/index.html so the site is
- * installable ("Add to Home Screen") on iPhone Safari and Android Chrome.
- *
- * Why not app/+html.tsx: Expo Router only renders that shell when app.json has
- * web.output "static". This app exports "single-page" (SPA + the vercel.json
- * rewrite), where Expo emits a fixed template — so the tags are patched in
- * here, deterministically, at build time. Idempotent; fails the build loudly
- * if dist/index.html is missing.
+ * Injects the PWA head tags and the installed-app viewport shell into
+ * dist/index.html. Idempotent; fails loudly if the export template changes in a
+ * way that would silently break installability.
  */
 
 const fs = require('fs');
@@ -24,14 +18,11 @@ if (html.includes('rel="manifest"')) {
   process.exit(0);
 }
 
-// A green build must never silently ship an uninstallable PWA: if Expo's
-// template ever loses the </head> marker, fail the build loudly.
 if (!html.includes('</head>')) {
   console.error('postexport-web: FATAL — no </head> in dist/index.html (Expo template changed); refusing to ship without PWA tags.');
   process.exit(1);
 }
 if (!html.includes('shrink-to-fit=no')) {
-  // Viewport nicety only (notch paint) — warn, don't fail.
   console.warn('postexport-web: warning — viewport marker missing; viewport-fit=cover not applied.');
 }
 
@@ -43,19 +34,15 @@ const TAGS = [
   '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />',
   '<meta name="apple-mobile-web-app-title" content="PocketRep" />',
   '<link rel="apple-touch-icon" href="/apple-touch-icon.png" />',
-  // Match the app's ink background before the bundle paints (no white flash).
-  // Also: force inputs to >=16px so focusing a field never triggers iOS Safari's
-  // auto-zoom (the classic "this is a website" tell), and kill the gray tap-flash.
-  // Web-only (this patches the Expo web export) — native inputs are unaffected.
-  '<style>html,body{background:#0c0c0e}*{-webkit-tap-highlight-color:transparent}input,textarea{font-size:16px!important}</style>',
-  // Register the offline app-shell service worker (public/sw.js). Network-first
-  // for navigations, so this never serves a stale shell to online users.
+  // Fill the real device viewport instead of inventing browser-like top/bottom
+  // gutters. Safe-area padding belongs to app chrome components, not body.
+  // Inputs stay >=16px to prevent iOS focus zoom; tap flash/overscroll are off.
+  '<style>html,body,#root{width:100%;height:100%;min-height:100%;margin:0;padding:0;background:#0c0c0e;overflow:hidden}#root{min-height:100dvh;height:100dvh}body{overscroll-behavior:none}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}input,textarea{font-size:16px!important}@supports not (height:100dvh){#root{height:100vh;min-height:100vh}}</style>',
   '<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})});}</script>',
 ].join('\n    ');
 
-// Standalone mode should paint behind the iPhone notch.
 html = html.replace('shrink-to-fit=no', 'shrink-to-fit=no, viewport-fit=cover');
 html = html.replace('</head>', `    ${TAGS}\n  </head>`);
 
 fs.writeFileSync(file, html);
-console.log('postexport-web: PWA head tags injected into dist/index.html');
+console.log('postexport-web: PWA head tags + dynamic viewport shell injected into dist/index.html');

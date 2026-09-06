@@ -27,8 +27,6 @@ export async function logContactTouch(
 ): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
 
-  // Read the current follow-up date so we don't clobber a Rex-set or rep-set
-  // future date with a blind 3-day default.
   const { data: existing } = await supabase
     .from('contacts')
     .select('next_followup_date')
@@ -38,21 +36,15 @@ export async function logContactTouch(
   const existingFollowup = existing?.next_followup_date ?? null;
   const hasFutureFollowup = existingFollowup != null && existingFollowup > today;
 
-  // Outcome-aware follow-up scheduling:
-  // - wrong-number  → clear any follow-up (don't chase a dead number)
-  // - no-answer / voicemail → 1-day follow-up (unless a sooner date is already set)
-  // - answered / text / email / default → 3-day default (unless a future date exists)
   let nextFollowUp: string | null;
   if (outcome === 'wrong-number') {
     nextFollowUp = null;
   } else if (outcome === 'no-answer' || outcome === 'voicemail') {
     const oneDay = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-    // Don't push a follow-up LATER if one is already sooner
     nextFollowUp = hasFutureFollowup && existingFollowup! <= oneDay
       ? existingFollowup
       : oneDay;
   } else {
-    // 3-day default — only apply when no future date exists
     nextFollowUp = hasFutureFollowup
       ? existingFollowup
       : new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
@@ -64,7 +56,6 @@ export async function logContactTouch(
     last_contact_summary: (summary ?? `${method} sent`).slice(0, 140),
     updated_at: new Date().toISOString(),
   };
-  // Only touch next_followup_date if we're actually changing it
   if (nextFollowUp !== existingFollowup) {
     patch.next_followup_date = nextFollowUp;
   }
@@ -110,16 +101,14 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
   const normalizedPhone = normalizePhone(draft.phone);
   const normalizedEmail = normalizeEmail(draft.email);
 
-  // Single-contact capture is used by both the manual Add Contact flow and Rex.
-  // Keep it idempotent by phone/email just like bulk import: a duplicate is
-  // blocked, never merged, so a quick capture can never overwrite or fork the
-  // customer's existing notes/history. Soft-deleted rows do not block a new add.
+  // Keep capture idempotent while preserving opt-out history. Active duplicates
+  // are blocked. Deleted non-DNC rows may be intentionally re-added, but a
+  // deleted DNC row still blocks recreation so delete + re-add cannot bypass DNC.
   if (normalizedPhone || normalizedEmail) {
     const { data: existing, error: existingError } = await supabase
       .from('contacts')
-      .select('id,phone,email')
-      .eq('user_id', user.id)
-      .eq('is_deleted', false);
+      .select('id,phone,email,is_deleted,do_not_contact')
+      .eq('user_id', user.id);
     if (existingError) throw existingError;
 
     const duplicate = (existing ?? []).find(row => {
@@ -127,7 +116,10 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
       const sameEmail = normalizedEmail && normalizeEmail(row.email) === normalizedEmail;
       return !!samePhone || !!sameEmail;
     });
-    if (duplicate) {
+    if (duplicate?.is_deleted && duplicate?.do_not_contact) {
+      throw new Error('This customer was previously marked do not contact. Review the existing record before contacting them again.');
+    }
+    if (duplicate && !duplicate.is_deleted) {
       throw new Error('That customer is already in your book. Open the existing contact instead of creating a duplicate.');
     }
   }
@@ -180,7 +172,6 @@ function normalizePhone(value?: string | null): string {
   const raw = (value ?? '').trim();
   if (!raw) return '';
   const digits = raw.replace(/\D/g, '');
-  // Keep international numbers intact; normalize common US 1XXXXXXXXXX to +1.
   if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
   if (digits.length === 10) return `+1${digits}`;
   return raw;
@@ -195,10 +186,6 @@ function normalizeEmail(value?: string | null): string {
   return (value ?? '').trim().toLowerCase();
 }
 
-// Parse a loose numeric CSV cell (commas/spaces allowed) to an integer within
-// [min,max], or null if missing/unparseable/out of range — used for the
-// vehicle-year and current-mileage import columns so garbage text doesn't
-// reach the DB as a bad int.
 function parseBoundedInt(value: string | undefined, min: number, max: number): number | null {
   const digits = (value ?? '').replace(/[,\s]/g, '');
   if (!digits) return null;
@@ -207,9 +194,6 @@ function parseBoundedInt(value: string | undefined, min: number, max: number): n
   return n;
 }
 
-// Parse a loose CSV date cell into YYYY-MM-DD, or null if missing/unparseable
-// — used for the lease-end-date import column so an unrecognized format
-// doesn't insert an invalid date.
 function parseDateOnly(value: string | undefined): string | null {
   const raw = (value ?? '').trim();
   if (!raw) return null;
@@ -218,9 +202,6 @@ function parseDateOnly(value: string | undefined): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-// Bulk import is intentionally idempotent by phone/email within the signed-in
-// user's book. The review UI catches obvious duplicates first, but this second
-// check protects against stale lists, repeated imports, and concurrent imports.
 export async function bulkCreateContacts(rows: ImportContactRow[]): Promise<number> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not signed in');
@@ -243,7 +224,6 @@ export async function bulkCreateContacts(rows: ImportContactRow[]): Promise<numb
 
   if (candidates.length === 0) return 0;
 
-  // De-dupe the incoming batch itself before touching the database.
   const seenPhones = new Set<string>();
   const seenEmails = new Set<string>();
   const unique = candidates.filter(r => {
@@ -255,16 +235,17 @@ export async function bulkCreateContacts(rows: ImportContactRow[]): Promise<numb
     return !duplicate;
   });
 
-  // Pull only the fields needed for duplicate detection for this user's book.
   const { data: existing, error: existingError } = await supabase
     .from('contacts')
-    .select('phone,email')
-    .eq('user_id', user.id)
-    .eq('is_deleted', false);
+    .select('phone,email,is_deleted,do_not_contact')
+    .eq('user_id', user.id);
   if (existingError) throw existingError;
 
-  const existingPhones = new Set((existing ?? []).map(r => phoneKey(r.phone)).filter(Boolean));
-  const existingEmails = new Set((existing ?? []).map(r => normalizeEmail(r.email)).filter(Boolean));
+  // Active rows and any DNC row remain protected duplicates. Deleted non-DNC
+  // rows may still be intentionally re-imported.
+  const protectedExisting = (existing ?? []).filter(r => !r.is_deleted || r.do_not_contact);
+  const existingPhones = new Set(protectedExisting.map(r => phoneKey(r.phone)).filter(Boolean));
+  const existingEmails = new Set(protectedExisting.map(r => normalizeEmail(r.email)).filter(Boolean));
 
   const fresh = unique.filter(r => {
     const pk = phoneKey(r.phone);
@@ -299,10 +280,6 @@ export async function bulkCreateContacts(rows: ImportContactRow[]): Promise<numb
 }
 
 export async function deleteContact(id: string): Promise<void> {
-  // "Delete" removes the contact from the active book without erasing the
-  // activity/deal history that hangs off the row. Request the changed row back:
-  // PostgREST otherwise reports a policy-filtered zero-row update as a successful
-  // request, which would let the UI claim a contact disappeared when it did not.
   const { data, error } = await supabase
     .from('contacts')
     .update({ is_deleted: true, updated_at: new Date().toISOString() })

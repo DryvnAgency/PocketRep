@@ -131,7 +131,12 @@ export default function VehicleFinderModal({
       <View style={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Pressable onPress={phase === 'results' ? () => setPhase('input') : close} style={styles.headerBtn}>
+          <Pressable
+            onPress={phase === 'results' ? () => setPhase('input') : close}
+            style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={phase === 'results' ? 'Edit vehicle search' : 'Cancel vehicle search'}
+          >
             <Text style={styles.headerBtnText}>{phase === 'results' ? 'Edit' : 'Cancel'}</Text>
           </Pressable>
           <View style={{ flex: 1, alignItems: 'center' }}>
@@ -177,6 +182,7 @@ function InputForm({
 }) {
   let host = savedUrl;
   try { host = new URL(savedUrl).hostname.replace(/^www\./, ''); } catch { /* keep raw */ }
+  const disabled = !notes.trim();
   return (
     <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
       <Text style={styles.label}>Customer notes</Text>
@@ -188,10 +194,22 @@ function InputForm({
         multiline
         style={styles.notesInput}
       />
-      <Pressable onPress={onRun} disabled={!notes.trim()} style={[styles.primaryBtn, !notes.trim() && { opacity: 0.4 }]}>
+      <Pressable
+        onPress={onRun}
+        disabled={disabled}
+        style={({ pressed }) => [styles.primaryBtn, disabled && styles.disabled, pressed && !disabled && styles.primaryPressed]}
+        accessibilityRole="button"
+        accessibilityLabel="Find vehicle matches"
+        accessibilityState={{ disabled }}
+      >
         <Text style={styles.primaryBtnText}>Find matches</Text>
       </Pressable>
-      <Pressable onPress={onEditUrl} style={styles.sourceRow}>
+      <Pressable
+        onPress={onEditUrl}
+        style={({ pressed }) => [styles.sourceRow, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel="Change dealership inventory website"
+      >
         <Text style={styles.sourceRowText}>Reading inventory from <Text style={{ color: colors.grey3 }}>{host}</Text></Text>
         <Text style={styles.sourceRowEdit}>Change</Text>
       </Pressable>
@@ -206,6 +224,7 @@ function NoUrlForm({
 }: {
   urlDraft: string; setUrlDraft: (v: string) => void; onSave: () => void; error: string | null;
 }) {
+  const disabled = !urlDraft.trim();
   return (
     <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
       <Text style={styles.bigHint}>Save your dealership website</Text>
@@ -222,7 +241,14 @@ function NoUrlForm({
         keyboardType={Platform.OS === 'web' ? 'default' : 'url'}
         style={styles.urlInput}
       />
-      <Pressable onPress={onSave} disabled={!urlDraft.trim()} style={[styles.primaryBtn, !urlDraft.trim() && { opacity: 0.4 }]}>
+      <Pressable
+        onPress={onSave}
+        disabled={disabled}
+        style={({ pressed }) => [styles.primaryBtn, disabled && styles.disabled, pressed && !disabled && styles.primaryPressed]}
+        accessibilityRole="button"
+        accessibilityLabel="Save dealership website"
+        accessibilityState={{ disabled }}
+      >
         <Text style={styles.primaryBtnText}>Save website</Text>
       </Pressable>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -282,7 +308,14 @@ function Results({
         <Text style={styles.footerMeta}>
           From {host}{from_cache ? ' · cached' : ''}
         </Text>
-        <Pressable onPress={onRefresh}><Text style={styles.footerRefresh}>Refresh</Text></Pressable>
+        <Pressable
+          onPress={onRefresh}
+          style={({ pressed }) => [styles.refreshBtn, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh vehicle inventory matches"
+        >
+          <Text style={styles.footerRefresh}>Refresh</Text>
+        </Pressable>
       </View>
       <Text style={styles.disclaimer}>Payments are estimates only — not a finance quote.</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -339,7 +372,12 @@ function MatchCard({ scored }: { scored: ScoredVehicle }) {
         {subLine(v) ? <Text style={styles.cardSub}>{subLine(v)}</Text> : null}
         {scored.reasons.slice(0, 3).map((r, i) => <Text key={i} style={styles.reason}>• {r}</Text>)}
         {canLink ? (
-          <Pressable onPress={() => Linking.openURL(v.listing_url!)} style={styles.linkBtn}>
+          <Pressable
+            onPress={() => Linking.openURL(v.listing_url!)}
+            style={({ pressed }) => [styles.linkBtn, pressed && styles.pressed]}
+            accessibilityRole="link"
+            accessibilityLabel={`View listing for ${vehicleTitle(v)}`}
+          >
             <Text style={styles.linkBtnText}>View listing →</Text>
           </Pressable>
         ) : null}
@@ -366,7 +404,12 @@ function AltCard({ alt }: { alt: AlternativePick }) {
         {subLine(v) ? <Text style={styles.cardSub}>{subLine(v)}</Text> : null}
         <Text style={styles.tradeoff}>{alt.tradeoff}</Text>
         {canLink ? (
-          <Pressable onPress={() => Linking.openURL(v.listing_url!)} style={styles.linkBtn}>
+          <Pressable
+            onPress={() => Linking.openURL(v.listing_url!)}
+            style={({ pressed }) => [styles.linkBtn, pressed && styles.pressed]}
+            accessibilityRole="link"
+            accessibilityLabel={`View listing for ${vehicleTitle(v)}`}
+          >
             <Text style={styles.linkBtnText}>View listing →</Text>
           </Pressable>
         ) : null}
@@ -378,7 +421,8 @@ function AltCard({ alt }: { alt: AlternativePick }) {
 const styles = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.72)' },
   sheet: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, top: '8%',
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    top: Platform.OS === 'web' ? ('max(8%, env(safe-area-inset-top))' as any) : '8%',
     backgroundColor: colors.ink2,
     borderTopWidth: 1, borderTopColor: colors.goldBorder,
     borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden',
@@ -390,15 +434,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.ink4,
   },
   headerBtn: {
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16,
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 22,
     backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
-    minWidth: 70, alignItems: 'center',
+    minWidth: 70, alignItems: 'center', justifyContent: 'center',
   },
   headerBtnText: { fontSize: 12, fontWeight: '700', color: colors.grey2 },
   headerKicker: { fontSize: 10, fontWeight: '700', color: colors.gold, letterSpacing: 1.4 },
   headerTitle: { fontSize: 14, fontWeight: '700', color: colors.white, marginTop: 2, letterSpacing: -0.2 },
 
-  body: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24, gap: 12 },
+  body: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'web' ? ('max(28px, env(safe-area-inset-bottom))' as any) : 28,
+    gap: 12,
+  },
   label: { fontSize: 11, fontWeight: '700', color: colors.gold, letterSpacing: 1 },
   notesInput: {
     minHeight: 110, textAlignVertical: 'top' as any,
@@ -409,9 +460,12 @@ const styles = StyleSheet.create({
     height: 48, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.md, paddingHorizontal: 12, color: colors.white, fontSize: 14,
   },
-  primaryBtn: { height: 48, borderRadius: 12, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  primaryBtn: { height: 50, borderRadius: 12, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   primaryBtnText: { color: colors.ink, fontSize: 15, fontWeight: '800' },
+  primaryPressed: { opacity: 0.82, transform: [{ scale: 0.99 }] },
+  disabled: { opacity: 0.4 },
   sourceRow: {
+    minHeight: 44,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 8,
   },
@@ -425,7 +479,11 @@ const styles = StyleSheet.create({
   busyWrap: { padding: 40, alignItems: 'center', justifyContent: 'center' },
   busyText: { fontSize: 14, color: colors.grey2, fontWeight: '600' },
 
-  resultsBody: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 28 },
+  resultsBody: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'web' ? ('max(32px, env(safe-area-inset-bottom))' as any) : 32,
+  },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
   chip: { backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4 },
   chipText: { fontSize: 11, fontWeight: '700', color: colors.gold2 },
@@ -455,7 +513,13 @@ const styles = StyleSheet.create({
   cardSub: { fontSize: 12, color: colors.grey2, marginTop: 3 },
   reason: { fontSize: 12, color: colors.grey3, marginTop: 3, lineHeight: 16 },
   tradeoff: { fontSize: 12, color: colors.gold2, fontStyle: 'italic', marginTop: 5, lineHeight: 16 },
-  linkBtn: { marginTop: 8, alignSelf: 'flex-start' },
+  linkBtn: {
+    minHeight: 44,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    justifyContent: 'center',
+    paddingRight: 8,
+  },
   linkBtnText: { fontSize: 12, fontWeight: '700', color: colors.gold },
 
   emptyWrap: { padding: 20, alignItems: 'center' },
@@ -464,5 +528,7 @@ const styles = StyleSheet.create({
 
   footerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 },
   footerMeta: { fontSize: 11, color: colors.grey },
+  refreshBtn: { minHeight: 44, justifyContent: 'center', paddingLeft: 12 },
   footerRefresh: { fontSize: 12, fontWeight: '700', color: colors.gold },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
 });

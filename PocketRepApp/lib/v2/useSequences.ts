@@ -125,6 +125,20 @@ export async function archiveSequence(sequenceId: string): Promise<void> {
 export async function enrollContactInSequence(contactId: string, sequenceId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not signed in');
+
+  // Fail closed before creating/reactivating an enrollment. The send launcher
+  // also re-checks DNC, but a blocked customer should never enter the work queue.
+  const { data: contact, error: contactError } = await supabase
+    .from('contacts')
+    .select('id,do_not_contact,is_deleted')
+    .eq('id', contactId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (contactError) throw contactError;
+  if (!contact || contact.is_deleted || contact.do_not_contact) {
+    throw new Error('This customer cannot be enrolled because contact is blocked.');
+  }
+
   const now = new Date().toISOString();
   const { error } = await supabase
     .from('contact_sequences')

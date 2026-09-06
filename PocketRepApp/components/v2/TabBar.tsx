@@ -46,9 +46,7 @@ export default function TabBar({
 
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       ensureWebTransitionStyle();
-      const doc = document as Document & {
-        startViewTransition?: (update: () => void | Promise<void>) => unknown;
-      };
+      const doc = document as Document & { startViewTransition?: (update: () => void | Promise<void>) => unknown };
       if (doc.startViewTransition) {
         doc.startViewTransition(() => new Promise<void>(resolve => {
           onChange(id);
@@ -71,11 +69,13 @@ export default function TabBar({
 
   return (
     <View style={styles.root}>
-      <HeyRexOrb state={orbState} onPress={onOrbPress} />
       <View style={styles.row}>
         <TabButton t={TABS[0]} active={active === TABS[0].id} onPress={() => transitionTo(TABS[0].id)} />
         <TabButton t={TABS[1]} active={active === TABS[1].id} onPress={() => transitionTo(TABS[1].id)} />
-        <View style={{ flex: 1 }} />
+        <View style={styles.rexSlot}>
+          <HeyRexOrb state={orbState} onPress={onOrbPress} />
+          <Text style={styles.rexLabel}>REX</Text>
+        </View>
         <TabButton t={TABS[2]} active={active === TABS[2].id} onPress={() => transitionTo(TABS[2].id)} />
         <TabButton t={TABS[3]} active={active === TABS[3].id} onPress={() => transitionTo(TABS[3].id)} />
       </View>
@@ -83,15 +83,7 @@ export default function TabBar({
   );
 }
 
-function TabButton({
-  t,
-  active,
-  onPress,
-}: {
-  t: { id: TabId; label: string };
-  active: boolean;
-  onPress: () => void;
-}) {
+function TabButton({ t, active, onPress }: { t: { id: TabId; label: string }; active: boolean; onPress: () => void }) {
   const color = active ? colors.gold : colors.grey2;
   return (
     <Pressable
@@ -114,18 +106,13 @@ function renderIcon(id: TabId, c: string) {
   switch (id) {
     case 'heat':
       return (
-        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-          <Path
-            d="M12 3c1 3 4 4.5 4 8a4 4 0 11-8 0c0-1.5 1-2.5 2-3.5C11 6 11.5 4.5 12 3z"
-            stroke={c}
-            strokeWidth={sw}
-            strokeLinejoin="round"
-          />
+        <Svg width={21} height={21} viewBox="0 0 24 24" fill="none">
+          <Path d="M12 3c1 3 4 4.5 4 8a4 4 0 11-8 0c0-1.5 1-2.5 2-3.5C11 6 11.5 4.5 12 3z" stroke={c} strokeWidth={sw} strokeLinejoin="round" />
         </Svg>
       );
     case 'contacts':
       return (
-        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+        <Svg width={21} height={21} viewBox="0 0 24 24" fill="none">
           <Circle cx={9} cy={8} r={3.5} stroke={c} strokeWidth={sw} />
           <Path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke={c} strokeWidth={sw} strokeLinecap="round" />
           <Circle cx={17} cy={9} r={2.5} stroke={c} strokeWidth={sw} />
@@ -134,13 +121,13 @@ function renderIcon(id: TabId, c: string) {
       );
     case 'metrics':
       return (
-        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+        <Svg width={21} height={21} viewBox="0 0 24 24" fill="none">
           <Path d="M4 18V10M10 18V5M16 18v-6M22 18H3" stroke={c} strokeWidth={sw} strokeLinecap="round" />
         </Svg>
       );
     case 'profile':
       return (
-        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+        <Svg width={21} height={21} viewBox="0 0 24 24" fill="none">
           <Circle cx={12} cy={8} r={4} stroke={c} strokeWidth={sw} />
           <Path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke={c} strokeWidth={sw} strokeLinecap="round" />
         </Svg>
@@ -153,39 +140,50 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.ink4,
     backgroundColor: colors.ink2,
-    // Respect the iPhone home-indicator inset on installed web (34px), not a
-    // fixed guess; native keeps its numeric fallback.
-    paddingBottom: Platform.OS === 'web' ? ('max(28px, env(safe-area-inset-bottom))' as any) : 28,
+    paddingBottom: Platform.OS === 'web' ? ('max(8px, env(safe-area-inset-bottom))' as any) : 10,
     position: 'relative',
   },
   row: {
     flexDirection: 'row',
-    height: 58,
+    minHeight: 64,
     alignItems: 'stretch',
+    paddingHorizontal: 2,
   },
   tabBtn: {
     flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
     position: 'relative',
   },
-  tabBtnPressed: {
-    opacity: 0.72,
-    transform: [{ scale: 0.96 }],
+  rexSlot: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 1,
   },
+  rexLabel: {
+    marginTop: -3,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+    color: colors.grey2,
+  },
+  tabBtnPressed: { opacity: 0.72, transform: [{ scale: 0.96 }] },
   activeMark: {
     position: 'absolute',
     top: 0,
-    width: 26,
+    width: 24,
     height: 2,
     borderRadius: 1.5,
     backgroundColor: colors.gold,
   },
   tabLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.55,
     textTransform: 'uppercase',
   },
 });

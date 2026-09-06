@@ -4,6 +4,7 @@ import {
   View, Text, TextInput, Pressable, StyleSheet, KeyboardTypeOptions, Platform,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
+import { useWebVisualViewportInset } from '@/lib/v2/useWebVisualViewportInset';
 
 export type SettingEditConfig = {
   title: string;
@@ -27,6 +28,7 @@ export default function SettingEditSheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const savingRef = useRef(false);
+  const keyboardInset = useWebVisualViewportInset(!!config);
 
   useEffect(() => {
     if (config) {
@@ -56,11 +58,27 @@ export default function SettingEditSheet({
 
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
-      <Pressable style={styles.scrim} onPress={() => !saving && onClose()} accessibilityRole="button" accessibilityLabel="Close editor" />
-      <View style={styles.sheet}>
+      <Pressable
+        style={styles.scrim}
+        onPress={() => !saving && onClose()}
+        accessibilityRole="button"
+        accessibilityLabel="Close editor"
+      />
+      <View style={[styles.sheet, keyboardInset > 0 && { bottom: keyboardInset }]}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Pressable onPress={onClose} disabled={saving} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Cancel editing">
+          <Pressable
+            onPress={onClose}
+            disabled={saving}
+            style={({ pressed }) => [
+              styles.headerBtn,
+              pressed && !saving && styles.pressed,
+              saving && styles.disabled,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel editing"
+            accessibilityState={{ disabled: saving }}
+          >
             <Text style={styles.headerBtnText}>Cancel</Text>
           </Pressable>
           <View style={{ flex: 1, alignItems: 'center' }}>
@@ -70,9 +88,15 @@ export default function SettingEditSheet({
           <Pressable
             onPress={handleSave}
             disabled={saving}
-            style={[styles.headerBtn, styles.headerBtnPrimary]}
+            style={({ pressed }) => [
+              styles.headerBtn,
+              styles.headerBtnPrimary,
+              pressed && !saving && styles.pressed,
+              saving && styles.disabled,
+            ]}
             accessibilityRole="button"
             accessibilityLabel={`Save ${config.title}`}
+            accessibilityState={{ disabled: saving, busy: saving }}
           >
             <Text style={[styles.headerBtnText, { color: colors.ink }]}>{saving ? 'Saving…' : 'Save'}</Text>
           </Pressable>
@@ -88,6 +112,7 @@ export default function SettingEditSheet({
             keyboardType={config.keyboardType}
             placeholder={config.placeholder}
             placeholderTextColor={colors.grey}
+            editable={!saving}
             style={[styles.input, config.multiline && { minHeight: 110, textAlignVertical: 'top' as any }]}
           />
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -125,11 +150,14 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.ink4,
   },
   headerBtn: {
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 16,
+    paddingHorizontal: 14,
+    minHeight: 44,
+    borderRadius: 22,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
-    minWidth: 64, alignItems: 'center',
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerBtnPrimary: { backgroundColor: colors.gold, borderColor: colors.gold },
   headerBtnText: { fontSize: 12, fontWeight: '700', color: colors.grey2 },
@@ -143,7 +171,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.md,
     paddingHorizontal: 12, paddingVertical: 12,
-    color: colors.white, fontSize: 14, fontWeight: '600',
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '600',
+    minHeight: 48,
   },
+  pressed: { opacity: 0.78, transform: [{ scale: 0.98 }] },
+  disabled: { opacity: 0.55 },
   error: { color: colors.red, fontSize: 12, lineHeight: 17 },
 });

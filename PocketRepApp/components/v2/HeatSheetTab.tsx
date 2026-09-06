@@ -32,7 +32,7 @@ function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
   return (
     <Pressable
       onPress={onTap}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel={`Open ${c.name}${c.vehicle ? `, ${c.vehicle}` : ''}`}
     >
@@ -52,12 +52,8 @@ function HeatRow({ c, onTap }: { c: V2Contact; onTap: () => void }) {
         ) : null}
       </View>
       <View style={styles.daysWrap}>
-        <Text style={[styles.daysNum, { color: staleC }]}>
-          {c.days === 0 ? '•' : c.days}
-        </Text>
-        <Text style={styles.daysLabel}>
-          {c.days === 0 ? 'TODAY' : c.days === 1 ? '1 DAY' : 'DAYS'}
-        </Text>
+        <Text style={[styles.daysNum, { color: staleC }]}>{c.days === 0 ? '•' : c.days}</Text>
+        <Text style={styles.daysLabel}>{c.days === 0 ? 'TODAY' : c.days === 1 ? '1 DAY' : 'DAYS'}</Text>
       </View>
     </Pressable>
   );
@@ -95,7 +91,7 @@ export default function HeatSheetTab({
         {onRetry ? (
           <Pressable
             onPress={onRetry}
-            style={styles.retryBtn}
+            style={({ pressed }) => [styles.retryBtn, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel="Retry loading contacts"
           >
@@ -113,25 +109,34 @@ export default function HeatSheetTab({
     );
   }
 
-  // Empty book (seed failed, or the rep cleared/imported nothing yet): don't
-  // show empty tier headers + a misleading "You're caught up" — give a real
-  // first-run CTA to add or import.
   if (contacts.length === 0) {
     return (
       <View style={styles.root}>
         <DailyCheckIn contacts={contacts} />
         <FollowUpQueue />
         <View style={styles.emptyCard}>
+          <View style={styles.emptyMark}><Text style={styles.emptyMarkText}>PR</Text></View>
+          <Text style={styles.emptyEyebrow}>BUILD YOUR BOOK</Text>
           <Text style={styles.emptyTitle}>Your book is empty</Text>
           <Text style={styles.emptyBody}>Add your first customer or import your book to start working your day.</Text>
           <View style={styles.emptyBtns}>
             {onAddContact ? (
-              <Pressable onPress={onAddContact} style={styles.emptyPrimary} accessibilityRole="button" accessibilityLabel="Add a customer">
+              <Pressable
+                onPress={onAddContact}
+                style={({ pressed }) => [styles.emptyPrimary, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Add a customer"
+              >
                 <Text style={styles.emptyPrimaryText}>＋ Add a customer</Text>
               </Pressable>
             ) : null}
             {onImportContacts ? (
-              <Pressable onPress={onImportContacts} style={styles.emptySecondary} accessibilityRole="button" accessibilityLabel="Import your book">
+              <Pressable
+                onPress={onImportContacts}
+                style={({ pressed }) => [styles.emptySecondary, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Import your book"
+              >
                 <Text style={styles.emptySecondaryText}>⇪ Import your book</Text>
               </Pressable>
             ) : null}
@@ -146,7 +151,6 @@ export default function HeatSheetTab({
 
   return (
     <View style={styles.root}>
-      {/* Weekly digest pops up only on Mondays (8am+ local time) */}
       {new Date().getDay() === 1 && new Date().getHours() >= 8 ? <WeeklyDigestCard /> : null}
 
       <DailyCheckIn contacts={contacts} onStartList={() => setHotOnly(true)} />
@@ -158,22 +162,37 @@ export default function HeatSheetTab({
       <FollowUpQueue />
 
       {onOpenGamePlan ? (
-        <Pressable onPress={onOpenGamePlan} style={styles.gamePlanBtn} accessibilityRole="button" accessibilityLabel="Open Rex Game Plan">
-          <View style={styles.gamePlanOrb}><Text style={styles.gamePlanOrbText}>R</Text></View>
-          <View style={{ flex: 1 }}>
+        <Pressable
+          onPress={onOpenGamePlan}
+          style={({ pressed }) => [styles.gamePlanBtn, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Open Rex Game Plan"
+        >
+          <View style={styles.gamePlanOrb}><View style={styles.gamePlanCore} /></View>
+          <View style={styles.gamePlanCopy}>
+            <View style={styles.gamePlanTopline}>
+              <Text style={styles.gamePlanKicker}>REX · READY</Text>
+              <Text style={styles.gamePlanBadge}>TODAY</Text>
+            </View>
             <Text style={styles.gamePlanTitle}>Work My Book</Text>
-            <Text style={styles.gamePlanSub}>Rex sorted today’s call and text opportunities</Text>
+            <Text style={styles.gamePlanSub}>Recommended moves, Call Queue, and personalized Text Queue.</Text>
           </View>
           <Text style={styles.gamePlanChev}>›</Text>
         </Pressable>
       ) : null}
 
       {onAnalyzeStalled ? (
-        <Pressable onPress={onAnalyzeStalled} style={styles.stalledBtn} accessibilityRole="button" accessibilityLabel="Review stalled leads with Rex">
-          <Text style={styles.stalledIcon}>🧭</Text>
+        <Pressable
+          onPress={onAnalyzeStalled}
+          style={({ pressed }) => [styles.stalledBtn, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Review stalled leads with Rex"
+        >
+          <View style={styles.stalledIconWrap}><Text style={styles.stalledIcon}>↗</Text></View>
           <View style={{ flex: 1 }}>
+            <Text style={styles.stalledKicker}>REX REVIEW</Text>
             <Text style={styles.stalledTitle}>Review stalled leads</Text>
-            <Text style={styles.stalledSub}>Rex ranks who to kill, push, or fence</Text>
+            <Text style={styles.stalledSub}>Rank who to push, hold, or move on from.</Text>
           </View>
           <Text style={styles.stalledChev}>›</Text>
         </Pressable>
@@ -183,7 +202,12 @@ export default function HeatSheetTab({
       {groups.hot.map(c => <HeatRow key={c.id} c={c} onTap={() => onSelect(c)} />)}
 
       {hotOnly ? (
-        <Pressable onPress={() => setHotOnly(false)} style={styles.showAllBtn} accessibilityRole="button" accessibilityLabel="Show all contacts">
+        <Pressable
+          onPress={() => setHotOnly(false)}
+          style={({ pressed }) => [styles.showAllBtn, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Show all contacts"
+        >
           <Text style={styles.showAllText}>Show all contacts ↓</Text>
         </Pressable>
       ) : (
@@ -204,27 +228,33 @@ const styles = StyleSheet.create({
   center: { padding: spacing.xl, alignItems: 'center' },
   error: { color: colors.red, fontSize: 13, marginBottom: 12, textAlign: 'center' },
   retryBtn: {
+    minHeight: 44,
+    minWidth: 110,
     paddingHorizontal: 18,
-    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.goldBg,
     borderWidth: 1,
-    borderColor: colors.gold,
+    borderColor: colors.goldBorderStrong,
     borderRadius: radius.full,
   },
-  retryText: { color: colors.gold, fontWeight: '700', fontSize: 13 },
+  retryText: { color: colors.gold, fontWeight: '800', fontSize: 13 },
   showAllBtn: {
+    minHeight: 46,
     marginHorizontal: 14,
     marginTop: 10,
-    paddingVertical: 11,
+    paddingHorizontal: 14,
     alignItems: 'center',
-    backgroundColor: colors.surface2,
+    justifyContent: 'center',
+    backgroundColor: colors.ink2,
     borderWidth: 1,
     borderColor: colors.ink4,
     borderRadius: radius.md,
   },
-  showAllText: { color: colors.gold, fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
+  showAllText: { color: colors.gold, fontSize: 12, fontWeight: '800', letterSpacing: 0.2 },
   row: {
     position: 'relative',
+    minHeight: 68,
     backgroundColor: colors.surface2,
     borderWidth: 1,
     borderColor: colors.ink4,
@@ -239,11 +269,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  rowPressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   stripe: { borderTopLeftRadius: radius.md, borderBottomLeftRadius: radius.md },
   rowText: { flex: 1, minWidth: 0 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  name: { fontSize: 15, fontWeight: '600', color: colors.white, letterSpacing: -0.2, flexShrink: 1 },
+  name: { fontSize: 15, fontWeight: '700', color: colors.white, letterSpacing: -0.2, flexShrink: 1 },
   demoPill: {
     fontSize: 8, fontWeight: '800', letterSpacing: 0.8, color: colors.gold,
     backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorder,
@@ -252,69 +281,76 @@ const styles = StyleSheet.create({
   vehicle: { fontSize: 11, fontWeight: '500', color: colors.grey2, marginTop: 2 },
   reasons: { fontSize: 10, fontWeight: '700', color: colors.gold, marginTop: 3, letterSpacing: 0.1 },
   daysWrap: { alignItems: 'flex-end' },
-  daysNum: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5, lineHeight: 18 },
-  daysLabel: { fontSize: 9, fontWeight: '700', color: colors.grey, marginTop: 4, letterSpacing: 0.6 },
+  daysNum: { fontSize: 18, fontWeight: '900', letterSpacing: -0.5, lineHeight: 18 },
+  daysLabel: { fontSize: 9, fontWeight: '800', color: colors.grey, marginTop: 4, letterSpacing: 0.6 },
   gamePlanBtn: {
+    minHeight: 104,
     marginHorizontal: 14,
-    marginTop: 6,
-    marginBottom: 3,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 15,
+    paddingVertical: 14,
     backgroundColor: colors.goldBg,
     borderWidth: 1,
-    borderColor: colors.goldBorder,
-    borderRadius: radius.md,
+    borderColor: colors.goldBorderStrong,
+    borderRadius: radius.xl,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 11,
+    gap: 13,
   },
   gamePlanOrb: {
-    width: 30, height: 30, borderRadius: 15, backgroundColor: colors.gold,
+    width: 42, height: 42, borderRadius: 21, backgroundColor: colors.ink2,
+    borderWidth: 1, borderColor: colors.goldBorderStrong,
     alignItems: 'center', justifyContent: 'center',
   },
-  gamePlanOrbText: { color: colors.ink, fontSize: 12, fontWeight: '900' },
-  gamePlanTitle: { fontSize: 14, fontWeight: '800', color: colors.white, letterSpacing: -0.2 },
-  gamePlanSub: { fontSize: 11, color: colors.grey2, marginTop: 2 },
-  gamePlanChev: { fontSize: 16, color: colors.gold },
+  gamePlanCore: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.gold },
+  gamePlanCopy: { flex: 1, minWidth: 0 },
+  gamePlanTopline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  gamePlanKicker: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  gamePlanBadge: { color: colors.grey2, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  gamePlanTitle: { fontSize: 18, lineHeight: 22, fontWeight: '800', color: colors.white, letterSpacing: -0.35, marginTop: 5 },
+  gamePlanSub: { fontSize: 11, lineHeight: 16, color: colors.grey3, marginTop: 4 },
+  gamePlanChev: { fontSize: 20, color: colors.gold, fontWeight: '800' },
   stalledBtn: {
+    minHeight: 82,
     marginHorizontal: 14,
-    marginTop: 6,
+    marginTop: 7,
     marginBottom: 2,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.ink2,
     borderWidth: 1,
     borderColor: colors.ink4,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  stalledIcon: { fontSize: 18 },
-  stalledTitle: { fontSize: 14, fontWeight: '700', color: colors.white, letterSpacing: -0.2 },
+  stalledIconWrap: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4 },
+  stalledIcon: { fontSize: 17, color: colors.gold, fontWeight: '900' },
+  stalledKicker: { fontSize: 8, color: colors.gold, fontWeight: '900', letterSpacing: 0.9, marginBottom: 3 },
+  stalledTitle: { fontSize: 14, fontWeight: '800', color: colors.white, letterSpacing: -0.2 },
   stalledSub: { fontSize: 11, color: colors.grey2, marginTop: 2 },
-  stalledChev: { fontSize: 16, color: colors.gold },
+  stalledChev: { fontSize: 18, color: colors.gold },
   emptyCard: {
     marginHorizontal: 14,
     marginTop: 12,
-    padding: 20,
-    backgroundColor: colors.surface2,
+    padding: 22,
+    backgroundColor: colors.ink2,
     borderWidth: 1,
-    borderColor: colors.ink4,
-    borderRadius: radius.lg,
+    borderColor: colors.goldBorder,
+    borderRadius: radius.xl,
     alignItems: 'center',
   },
-  emptyTitle: { fontSize: 16, fontWeight: '800', color: colors.white, letterSpacing: -0.2 },
-  emptyBody: { fontSize: 13, color: colors.grey2, textAlign: 'center', marginTop: 6, lineHeight: 19 },
-  emptyBtns: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16 },
-  emptyPrimary: {
-    paddingHorizontal: 18, paddingVertical: 11,
-    backgroundColor: colors.gold, borderRadius: radius.full,
-  },
-  emptyPrimaryText: { color: colors.ink, fontWeight: '800', fontSize: 13 },
-  emptySecondary: {
-    paddingHorizontal: 18, paddingVertical: 11,
-    backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.gold, borderRadius: radius.full,
-  },
-  emptySecondaryText: { color: colors.gold, fontWeight: '800', fontSize: 13 },
+  emptyMark: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorderStrong },
+  emptyMarkText: { color: colors.gold, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
+  emptyEyebrow: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginTop: 14 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: colors.white, letterSpacing: -0.3, marginTop: 6 },
+  emptyBody: { fontSize: 13, color: colors.grey2, textAlign: 'center', marginTop: 7, lineHeight: 19 },
+  emptyBtns: { width: '100%', gap: 9, marginTop: 18 },
+  emptyPrimary: { minHeight: 50, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold, borderRadius: radius.md, borderWidth: 1, borderColor: colors.gold2 },
+  emptyPrimaryText: { color: colors.ink, fontWeight: '900', fontSize: 13 },
+  emptySecondary: { minHeight: 50, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.md },
+  emptySecondaryText: { color: colors.white, fontWeight: '800', fontSize: 13 },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
 });

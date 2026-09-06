@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet,
+  View, Text, Pressable, StyleSheet, Platform,
 } from 'react-native';
 import RadarLoader from './RadarLoader';
 import { colors, radius, spacing } from '@/constants/theme';
@@ -52,7 +52,7 @@ function DealRow({ d, onPress }: { d: V2DealRich; onPress?: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.dealRow, pressed && { backgroundColor: colors.goldBg }]}
+      style={({ pressed }) => [styles.dealRow, pressed && styles.pressed]}
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityLabel={onPress ? `Open deal for ${d.name}, ${formatMoney(d.amount)}` : undefined}
     >
@@ -97,7 +97,13 @@ function MonthAccordion({
   const units = unitsOf(deals);
   return (
     <View style={[styles.month, primary ? styles.monthPrimary : styles.monthSecondary]}>
-      <Pressable onPress={onToggle} style={styles.monthHead} accessibilityRole="button" accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${label} deals`} accessibilityState={{ expanded }}>
+      <Pressable
+        onPress={onToggle}
+        style={({ pressed }) => [styles.monthHead, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${label} deals`}
+        accessibilityState={{ expanded }}
+      >
         <View style={{ flex: 1 }}>
           <Text style={[styles.monthLabel, { color: primary ? colors.gold : colors.grey2 }]}>{label}</Text>
           <Text style={[styles.monthSub, { color: primary ? colors.white : colors.grey3 }]}>
@@ -187,9 +193,6 @@ export default function MetricsTab({
     }));
     const maxC = Math.max(1, ...moTotals.map(m => m.commission));
 
-    // Unit-bonus tiers are a per-MONTH volume bonus, so apply them per month:
-    // this month's earned bonus, the next tier to chase, and the YTD sum of each
-    // month's tier bonus.
     const curUnitBonus = unitBonusFor(curUnits, plan.unitBonuses);
     const nextTier = nextUnitBonusTier(curUnits, plan.unitBonuses);
     const unitsToNext = nextTier ? Math.max(0, Math.ceil(nextTier.units - curUnits)) : 0;
@@ -205,7 +208,7 @@ export default function MetricsTab({
           <Text style={styles.error}>Couldn't load your deals.</Text>
           <Pressable
             onPress={reloadDeals}
-            style={styles.retryBtn}
+            style={({ pressed }) => [styles.retryBtn, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel="Retry loading deals"
           >
@@ -222,6 +225,7 @@ export default function MetricsTab({
   }
 
   const toggle = (k: string) => setExpanded(prev => ({ ...prev, [k]: !prev[k] }));
+  const logDealDisabled = !onLogDeal;
 
   return (
     <View style={styles.root}>
@@ -326,7 +330,18 @@ export default function MetricsTab({
       ) : null}
 
       <View style={{ paddingHorizontal: 14, paddingTop: 12 }}>
-        <Pressable onPress={onLogDeal} disabled={!onLogDeal} style={styles.logDeal} accessibilityRole="button" accessibilityLabel="Log a deal">
+        <Pressable
+          onPress={onLogDeal}
+          disabled={logDealDisabled}
+          style={({ pressed }) => [
+            styles.logDeal,
+            pressed && !logDealDisabled && styles.logDealPressed,
+            logDealDisabled && styles.disabled,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Log a deal"
+          accessibilityState={{ disabled: logDealDisabled }}
+        >
           <Text style={styles.logDealText}>＋ LOG A DEAL</Text>
         </Pressable>
       </View>
@@ -352,18 +367,25 @@ export default function MetricsTab({
 }
 
 const styles = StyleSheet.create({
-  root: { paddingBottom: spacing.xl },
+  root: {
+    paddingBottom: Platform.OS === 'web'
+      ? ('max(32px, env(safe-area-inset-bottom))' as any)
+      : spacing.xl,
+  },
   center: { padding: spacing.xl, alignItems: 'center' },
   error: { color: colors.red, fontSize: 13, marginBottom: 12, textAlign: 'center' },
   retryBtn: {
+    minHeight: 44,
+    minWidth: 110,
     paddingHorizontal: 18,
-    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.goldBg,
     borderWidth: 1,
-    borderColor: colors.gold,
+    borderColor: colors.goldBorderStrong,
     borderRadius: radius.full,
   },
-  retryText: { color: colors.gold, fontWeight: '700', fontSize: 13 },
+  retryText: { color: colors.gold, fontWeight: '800', fontSize: 13 },
 
   ytdCard: {
     marginHorizontal: 14,
@@ -460,12 +482,13 @@ const styles = StyleSheet.create({
   bonusSub: { fontSize: 9, fontWeight: '700', color: colors.grey2, letterSpacing: 0.6, marginTop: 2 },
 
   logDeal: {
-    height: 50,
+    minHeight: 50,
     backgroundColor: colors.gold,
     borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  logDealPressed: { opacity: 0.9, transform: [{ scale: 0.985 }] },
   logDealText: { fontSize: 15, fontWeight: '800', color: colors.ink, letterSpacing: -0.1 },
 
   month: {
@@ -478,11 +501,12 @@ const styles = StyleSheet.create({
   monthPrimary: { backgroundColor: colors.goldBg, borderColor: colors.goldBorder },
   monthSecondary: { backgroundColor: colors.ink2, borderColor: colors.ink4 },
   monthHead: {
+    minHeight: 60,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   monthLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
   monthSub: { fontSize: 13, fontWeight: '500', marginTop: 3 },
@@ -495,6 +519,7 @@ const styles = StyleSheet.create({
   monthDeals: { backgroundColor: colors.ink, borderTopWidth: 1, borderTopColor: colors.ink4 },
 
   dealRow: {
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -518,5 +543,6 @@ const styles = StyleSheet.create({
   dealVehicle: { fontSize: 11, color: colors.grey2 },
   dealAmount: { fontSize: 16, fontWeight: '800', color: colors.green, letterSpacing: -0.4 },
   dealPills: { flexDirection: 'row', gap: 4, marginTop: 3 },
-
+  pressed: { backgroundColor: colors.goldBg, opacity: 0.88 },
+  disabled: { opacity: 0.45 },
 });

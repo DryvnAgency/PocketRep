@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Animated, Easing, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Circle, Path, Defs, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Path, Defs, RadialGradient, Stop } from 'react-native-svg';
 import { colors } from '@/constants/theme';
 
 export type OrbState = 'idle' | 'listening' | 'processing' | 'saved';
@@ -13,14 +13,10 @@ export default function HeyRexOrb({
   state?: OrbState;
   onPress?: () => void;
 }) {
-  // Listening: two concentric rings scale-up + fade-out, offset by 0.5s.
   const wave1 = useRef(new Animated.Value(0)).current;
   const wave2 = useRef(new Animated.Value(0)).current;
-  // Processing: full-rotation indicator.
   const spin = useRef(new Animated.Value(0)).current;
-  // Saved: one-shot bloom (scale + fade).
   const bloom = useRef(new Animated.Value(0)).current;
-  // Resting orb scale (listening boosts to 1.08).
   const scale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -29,44 +25,36 @@ export default function HeyRexOrb({
     spin.stopAnimation();
     bloom.stopAnimation();
     Animated.timing(scale, {
-      toValue: state === 'listening' ? 1.08 : 1,
-      duration: 200,
+      toValue: state === 'listening' ? 1.05 : 1,
+      duration: 180,
       easing: Easing.bezier(0.2, 0.7, 0.2, 1),
       useNativeDriver: Platform.OS !== 'web',
     }).start();
 
     if (state === 'listening') {
-      const loop = (v: Animated.Value, delay: number) =>
-        Animated.loop(
-          Animated.sequence([
-            Animated.delay(delay),
-            Animated.timing(v, {
-              toValue: 1,
-              duration: 1400,
-              easing: Easing.out(Easing.ease),
-              useNativeDriver: Platform.OS !== 'web',
-            }),
-            Animated.timing(v, { toValue: 0, duration: 0, useNativeDriver: Platform.OS !== 'web' }),
-          ]),
-        );
+      const loop = (v: Animated.Value, delay: number) => Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(v, { toValue: 1, duration: 1200, easing: Easing.out(Easing.ease), useNativeDriver: Platform.OS !== 'web' }),
+          Animated.timing(v, { toValue: 0, duration: 0, useNativeDriver: Platform.OS !== 'web' }),
+        ]),
+      );
       loop(wave1, 0).start();
-      loop(wave2, 500).start();
+      loop(wave2, 450).start();
     }
     if (state === 'processing') {
-      Animated.loop(
-        Animated.timing(spin, {
-          toValue: 1,
-          duration: 1100,
-          easing: Easing.linear,
-          useNativeDriver: Platform.OS !== 'web',
-        }),
-      ).start();
+      Animated.loop(Animated.timing(spin, {
+        toValue: 1,
+        duration: 1000,
+        easing: Easing.linear,
+        useNativeDriver: Platform.OS !== 'web',
+      })).start();
     }
     if (state === 'saved') {
       bloom.setValue(0);
       Animated.timing(bloom, {
         toValue: 1,
-        duration: 700,
+        duration: 600,
         easing: Easing.out(Easing.ease),
         useNativeDriver: Platform.OS !== 'web',
       }).start();
@@ -79,8 +67,8 @@ export default function HeyRexOrb({
       style={[
         styles.wave,
         {
-          opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
-          transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.6] }) }],
+          opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] }),
+          transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.35] }) }],
         },
       ]}
     />
@@ -88,39 +76,21 @@ export default function HeyRexOrb({
 
   return (
     <View style={styles.anchor} pointerEvents="box-none">
-      {state === 'listening' ? (
-        <>
-          {renderWave(wave1)}
-          {renderWave(wave2)}
-        </>
-      ) : null}
+      {state === 'listening' ? <>{renderWave(wave1)}{renderWave(wave2)}</> : null}
 
       {state === 'processing' ? (
         <Animated.View
           pointerEvents="none"
-          style={[
-            styles.spinner,
-            {
-              transform: [
-                { rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) },
-              ],
-            },
-          ]}
+          style={[styles.spinner, { transform: [{ rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }] }]}
         >
-          <Svg width={68} height={68} viewBox="0 0 68 68">
+          <Svg width={58} height={58} viewBox="0 0 58 58">
             <Defs>
               <RadialGradient id="ring" cx="50%" cy="50%" r="50%">
                 <Stop offset="60%" stopColor={colors.gold} stopOpacity={0} />
                 <Stop offset="100%" stopColor={colors.gold} stopOpacity={1} />
               </RadialGradient>
             </Defs>
-            <Path
-              d="M34 4 A30 30 0 0 1 64 34"
-              stroke={colors.gold}
-              strokeWidth={3}
-              strokeLinecap="round"
-              fill="none"
-            />
+            <Path d="M29 4 A25 25 0 0 1 54 29" stroke={colors.gold} strokeWidth={2.5} strokeLinecap="round" fill="none" />
           </Svg>
         </Animated.View>
       ) : null}
@@ -131,38 +101,25 @@ export default function HeyRexOrb({
           style={[
             styles.bloom,
             {
-              opacity: bloom.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
-              transform: [{ scale: bloom.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] }) }],
+              opacity: bloom.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] }),
+              transform: [{ scale: bloom.interpolate({ inputRange: [0, 1], outputRange: [1, 1.4] }) }],
             },
           ]}
         />
       ) : null}
 
-      {state === 'idle' ? (
-        <View style={styles.liveBadge} pointerEvents="none">
-          <View style={styles.liveDot} />
-          <Text style={styles.liveText}>REX LIVE</Text>
-        </View>
-      ) : null}
-
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={
-          state === 'listening' ? 'Rex, listening'
-          : state === 'processing' ? 'Rex, thinking'
-          : 'Rex, live and ready'
-        }
+        accessibilityLabel={state === 'listening' ? 'Rex, listening' : state === 'processing' ? 'Rex, thinking' : 'Rex, online and ready'}
+        hitSlop={4}
+        style={({ pressed }) => pressed ? styles.pressed : undefined}
       >
         <Animated.View style={[styles.orbShadow, { transform: [{ scale }] }]}>
-          <LinearGradient
-            colors={[colors.gold2, colors.gold, '#9a7530']}
-            start={{ x: 0.35, y: 0.3 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.orb}
-          >
+          <LinearGradient colors={[colors.gold2, colors.gold, '#9a7530']} start={{ x: 0.35, y: 0.3 }} end={{ x: 1, y: 1 }} style={styles.orb}>
             <View style={styles.highlight} />
             <Text style={styles.r}>R</Text>
+            {state === 'idle' ? <View style={styles.onlineDot} /> : null}
           </LinearGradient>
         </Animated.View>
       </Pressable>
@@ -176,55 +133,48 @@ export default function HeyRexOrb({
   );
 }
 
-const ORB = 56;
+const ORB = 50;
 
 const styles = StyleSheet.create({
   anchor: {
-    position: 'absolute',
-    top: -28,
-    left: '50%',
-    marginLeft: -ORB / 2,
-    width: ORB,
-    height: ORB,
+    width: 64,
+    height: 58,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 30,
+    position: 'relative',
   },
-  liveBadge: {
+  pressed: { opacity: 0.78, transform: [{ scale: 0.97 }] },
+  onlineDot: {
     position: 'absolute',
-    top: -28,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: colors.ink3,
-    borderWidth: 1,
-    borderColor: colors.goldBorder,
+    top: 8,
+    right: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.green,
+    borderWidth: 1.5,
+    borderColor: colors.gold2,
   },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.green },
-  liveText: { color: colors.gold, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
   wave: {
     position: 'absolute',
-    width: ORB + 16,
-    height: ORB + 16,
-    borderRadius: (ORB + 16) / 2,
-    borderWidth: 1.5,
+    width: ORB + 10,
+    height: ORB + 10,
+    borderRadius: (ORB + 10) / 2,
+    borderWidth: 1.2,
     borderColor: colors.gold,
   },
   spinner: {
     position: 'absolute',
-    width: 68,
-    height: 68,
+    width: 58,
+    height: 58,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bloom: {
     position: 'absolute',
-    width: ORB + 20,
-    height: ORB + 20,
-    borderRadius: (ORB + 20) / 2,
+    width: ORB + 12,
+    height: ORB + 12,
+    borderRadius: (ORB + 12) / 2,
     backgroundColor: colors.gold,
   },
   orbShadow: {
@@ -232,10 +182,10 @@ const styles = StyleSheet.create({
     height: ORB,
     borderRadius: ORB / 2,
     shadowColor: colors.gold,
-    shadowOpacity: 0.55,
-    shadowRadius: 12,
+    shadowOpacity: 0.26,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
+    elevation: 5,
   },
   orb: {
     width: ORB,
@@ -248,34 +198,29 @@ const styles = StyleSheet.create({
   },
   highlight: {
     position: 'absolute',
-    top: 10,
-    left: 12,
-    width: 14,
-    height: 10,
-    borderRadius: 7,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-    opacity: 0.7,
+    top: 8,
+    left: 10,
+    width: 12,
+    height: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    opacity: 0.62,
   },
   r: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: 'rgba(20,15,5,0.7)',
-    letterSpacing: -0.5,
+    fontSize: 17,
+    fontWeight: '900',
+    color: 'rgba(20,15,5,0.72)',
+    letterSpacing: -0.4,
   },
   toast: {
     position: 'absolute',
-    top: -34,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    bottom: 56,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     backgroundColor: colors.ink3,
     borderWidth: 1,
-    borderColor: colors.gold,
+    borderColor: colors.goldBorder,
     borderRadius: 999,
   },
-  toastText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.gold,
-    letterSpacing: -0.1,
-  },
+  toastText: { fontSize: 11, fontWeight: '700', color: colors.gold },
 });

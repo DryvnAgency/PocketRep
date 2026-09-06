@@ -46,10 +46,6 @@ async function profileIdForCustomer(admin: any, customerId: string) {
   return null;
 }
 
-// Lifetime cap on stacked "give a month, get a month" rewards per recipient.
-// Without this, a referrer with enough referrals could accumulate unbounded
-// free months — unbounded revenue leakage, not a feature. 24 months (2 years)
-// caps the exposure per account while still rewarding heavy referrers.
 const REFERRAL_REWARD_CAP_MONTHS = 24;
 
 type RewardReservation = {
@@ -150,8 +146,6 @@ Deno.serve(async (req: Request) => {
   try {
     switch (event.type) {
       case "checkout.session.completed": {
-        // Checkout completion provisions the account, but does NOT qualify a referral
-        // or force a trial subscription to active. Stripe's paid invoice is the trigger.
         const s = event.data.object, email = String(s.customer_details?.email || s.customer_email || "").toLowerCase(), customer = s.customer;
         if (email && customer) {
           const { data: profile } = await admin.from("profiles").select("id").eq("email", email).maybeSingle();
@@ -166,7 +160,22 @@ Deno.serve(async (req: Request) => {
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const s = event.data.object, profileId = await profileIdForCustomer(admin, s.customer);
-        if (profileId) { const entitlementStatus = s.status === "trialing" ? "trialing" : s.status === "active" ? "active" : s.status === "past_due" ? "past_due" : s.status === "canceled" ? "canceled" : "locked"; await admin.from("profiles").update({ plan: "pocketrep", subscription_status: s.status, trial_ends_at: s.status === "trialing" && s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null, entitlement_status: entitlementStatus, entitlement_pending_until: null }).eq("id", profileId); }
+        if (profileId) {
+          // PocketRep's published policy is stricter than Stripe's normal
+          // cancel-at-period-end semantics during a free trial: once the rep
+          // cancels a trial, access ends immediately. For paid subscriptions,
+          // cancel-at-period-end stays active until Stripe actually ends it.
+          const trialCancellationScheduled = s.status === "trialing" && (s.cancel_at_period_end === true || Boolean(s.cancel_at));
+          const effectiveStatus = trialCancellationScheduled ? "canceled" : s.status;
+          const entitlementStatus = effectiveStatus === "trialing" ? "trialing" : effectiveStatus === "active" ? "active" : effectiveStatus === "past_due" ? "past_due" : effectiveStatus === "canceled" ? "canceled" : "locked";
+          await admin.from("profiles").update({
+            plan: "pocketrep",
+            subscription_status: effectiveStatus,
+            trial_ends_at: effectiveStatus === "trialing" && s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null,
+            entitlement_status: entitlementStatus,
+            entitlement_pending_until: null,
+          }).eq("id", profileId);
+        }
         break;
       }
       case "customer.subscription.deleted": {
@@ -182,7 +191,6 @@ Deno.serve(async (req: Request) => {
       case "invoice.payment_succeeded": {
         const i = event.data.object, profileId = await profileIdForCustomer(admin, i.customer);
         if (profileId) await admin.from("profiles").update({ subscription_status: "active", entitlement_status: "active", entitlement_pending_until: null }).eq("id", profileId);
-        // Referral qualification is intentionally tied to a successful subscription invoice.
         const subscriptionId = typeof i.subscription === "string" ? i.subscription : i.subscription?.id ?? null;
         const { data: ref } = await admin.from("referrals").select("*").eq("stripe_customer_id", i.customer).maybeSingle();
         if (ref && subscriptionId && ref.status !== "rewarded") {
