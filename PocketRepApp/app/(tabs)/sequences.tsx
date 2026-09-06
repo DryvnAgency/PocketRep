@@ -11,7 +11,7 @@ import type { Sequence, SequenceStep } from '@/lib/types';
 import { INDUSTRY_CONFIG } from '@/lib/industryConfig';
 import {
   generateQueue, loadQueueState, saveQueueState, clearQueueState,
-  markSentAndLog, markSkipped, type QueueItem,
+  markSentAndLog, markSkipped, assertContactActionAllowed, type QueueItem,
 } from '@/lib/messageQueue';
 import { launchSms } from '@/lib/v2/smsLauncher';
 import { enrollContactInSequence } from '@/lib/v2/useSequences';
@@ -410,6 +410,13 @@ export default function SequencesScreen() {
 
   async function handleSendItem(item: QueueItem) {
     pendingSendRef.current = item;
+    try {
+      await assertContactActionAllowed(item.contact_id);
+    } catch (error: any) {
+      pendingSendRef.current = null;
+      Alert.alert('Contact blocked', error?.message ?? 'This customer can no longer be contacted.');
+      return;
+    }
     if (item.channel === 'text' && item.phone) {
       // launchSms owns the composer-return confirmation. Clear the legacy
       // AppState marker first so the listener cannot show a second prompt.
