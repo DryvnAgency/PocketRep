@@ -22,6 +22,7 @@ import {
   actionsBlock, serializePlaybooks, matchPlaybooks, sanitizeIdentity, BOOK_RANKING_RULES,
   type RepIdentity, type CoachContact,
 } from './coachBrain';
+import { chooseRexGear, buildRexVoiceBlock } from './rexVoice';
 
 // Demo-account defaults, matched to coachBrain (the shared web demo is Eddie's book).
 const DEFAULT_REP_NAME = 'Eddie';
@@ -153,7 +154,10 @@ export function buildTriadExecutorMessages(input: {
   userText: string;
 }): BrainMessage[] {
   const { rep, plan, userText } = input;
-  const system = [buildExecutorSystem(rep), REX_COPY_RULES].join('\n\n');
+  // Same voice layer as the single-call path (coachBrain.ts): decides
+  // delivery only, after the planner has already decided the strategy.
+  const voiceBlock = buildRexVoiceBlock(chooseRexGear({ text: userText, matchedPlaybookCount: matchPlaybooks(userText).length }));
+  const system = [buildExecutorSystem(rep), REX_COPY_RULES, voiceBlock].join('\n\n');
   const planJson = JSON.stringify(planForExecutor(plan));
   const user = `GAME PLAN (follow it exactly, do not mention it):\n${planJson}\n\nThe rep said:\n${userText}\n\nWrite the words now.`;
   return [{ role: 'system', content: system }, { role: 'user', content: user }];

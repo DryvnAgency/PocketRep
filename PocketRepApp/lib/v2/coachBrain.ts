@@ -12,6 +12,7 @@
 import { REX_COPY_RULES } from './rexActions';
 import { isRexChatEnabled, isVehicleFinderEnabled } from './rexFeatureFlags';
 import { getRepSetting } from './repSettings';
+import { chooseRexGear, buildRexVoiceBlock } from './rexVoice';
 import type { BrainMessage } from './aiProxy';
 
 export type Playbook = {
@@ -277,13 +278,19 @@ export function buildCoachMessages(input: {
   missionContext?: string;
 }): BrainMessage[] {
   const { history, text, repContext, contacts = [], recentActivity = '', rep, missionContext = '' } = input;
-  const playbookBlock = serializePlaybooks(matchPlaybooks(text));
+  const matchedPlaybooks = matchPlaybooks(text);
+  const playbookBlock = serializePlaybooks(matchedPlaybooks);
+  // Voice layer: decides HOW the already-determined move is delivered (Hunter
+  // /Coach/Hybrid energy + the rep's existing tone preference), never WHAT is
+  // recommended — that stays entirely in REX_COPY_RULES and the blocks above.
+  const voiceBlock = buildRexVoiceBlock(chooseRexGear({ text, matchedPlaybookCount: matchedPlaybooks.length }));
 
   const system = [
     isRexChatEnabled() ? buildRexSystemPrompt(rep) : COACH_SYSTEM_PROMPT,
     REX_COPY_RULES,
     BOOK_RANKING_RULES,
     playbookBlock,
+    voiceBlock,
     missionContext,
     repContext ? `THE REP'S BOOK (use real names/numbers when relevant):\n${repContext}` : '',
     actionsBlock(contacts, recentActivity),
