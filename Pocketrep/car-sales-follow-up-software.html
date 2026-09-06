@@ -189,5 +189,17 @@
     <p class="disclaimer">PocketRep is an independent tool and is not affiliated with, endorsed by, or sponsored by any third-party CRM, DMS, dealership, or software provider.</p>
   </div>
 </footer>
+
+<script id="pocketrep-referral-forward">
+(function () {
+  try {
+    var ref = new URLSearchParams(window.location.search).get('ref');
+    if (!ref || !/^PR-[A-Z0-9]{10}$/.test(ref)) return;
+    document.querySelectorAll('a[href="/#signup"]').forEach(function (link) {
+      link.setAttribute('href', '/?ref=' + encodeURIComponent(ref) + '#signup');
+    });
+  } catch (_) {}
+})();
+</script>
 </body>
 </html>
