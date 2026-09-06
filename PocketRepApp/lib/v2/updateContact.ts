@@ -111,15 +111,15 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
   const normalizedEmail = normalizeEmail(draft.email);
 
   // Single-contact capture is used by both the manual Add Contact flow and Rex.
-  // Keep it idempotent by phone/email just like bulk import: a duplicate is
-  // blocked, never merged, so a quick capture can never overwrite or fork the
-  // customer's existing notes/history. Soft-deleted rows do not block a new add.
+  // Keep it idempotent by phone/email just like bulk import. Active duplicates
+  // are blocked. A soft-deleted row normally may be re-added, but a soft-deleted
+  // DNC row must still block recreation so an opt-out can never be bypassed by
+  // delete + re-add/import.
   if (normalizedPhone || normalizedEmail) {
     const { data: existing, error: existingError } = await supabase
       .from('contacts')
-      .select('id,phone,email')
-      .eq('user_id', user.id)
-      .eq('is_deleted', false);
+      .select('id,phone,email,is_deleted,do_not_contact')
+      .eq('user_id', user.id);
     if (existingError) throw existingError;
 
     const duplicate = (existing ?? []).find(row => {
@@ -127,7 +127,10 @@ export async function createContact(draft: NewContactDraft): Promise<string> {
       const sameEmail = normalizedEmail && normalizeEmail(row.email) === normalizedEmail;
       return !!samePhone || !!sameEmail;
     });
-    if (duplicate) {
+    if (duplicate?.is_deleted && duplicate?.do_not_contact) {
+      throw new Error('This customer was previously marked do not contact. Review the existing record before contacting them again.');
+    }
+    if (duplicate && !duplicate.is_deleted) {
       throw new Error('That customer is already in your book. Open the existing contact instead of creating a duplicate.');
     }
   }
@@ -258,13 +261,15 @@ export async function bulkCreateContacts(rows: ImportContactRow[]): Promise<numb
   // Pull only the fields needed for duplicate detection for this user's book.
   const { data: existing, error: existingError } = await supabase
     .from('contacts')
-    .select('phone,email')
-    .eq('user_id', user.id)
-    .eq('is_deleted', false);
+    .select('phone,email,is_deleted,do_not_contact')
+    .eq('user_id', user.id);
   if (existingError) throw existingError;
 
-  const existingPhones = new Set((existing ?? []).map(r => phoneKey(r.phone)).filter(Boolean));
-  const existingEmails = new Set((existing ?? []).map(r => normalizeEmail(r.email)).filter(Boolean));
+  // Block active duplicates and preserve DNC even if that row was soft-deleted.
+  // Ordinary deleted/non-DNC rows may still be intentionally re-imported.
+  const protectedExisting = (existing ?? []).filter(r => !r.is_deleted || r.do_not_contact);
+  const existingPhones = new Set(protectedExisting.map(r => phoneKey(r.phone)).filter(Boolean));
+  const existingEmails = new Set(protectedExisting.map(r => normalizeEmail(r.email)).filter(Boolean));
 
   const fresh = unique.filter(r => {
     const pk = phoneKey(r.phone);
