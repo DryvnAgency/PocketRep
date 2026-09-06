@@ -25,8 +25,12 @@ ok('V3 remains vision framing', /personal sales operating system/i.test(index) |
 
 console.log('\n--- trust and legal consistency ---');
 ok('legal pages do not advertise retired Rex Lens product', ![privacy, terms, cancel].some(x => /Rex Lens/i.test(x)));
-ok('cancellation page states collected subscription charges are non-refundable', /Subscription charges are non-refundable/i.test(cancel));
-ok('cancellation page preserves trial no-charge-before-first-charge language', /cancel before the first trial charge/i.test(cancel));
+ok('trial cancellation ends access immediately', /access ends when you cancel/i.test(cancel));
+ok('trial cancellation prevents the first paid charge', /no paid subscription fee is charged/i.test(cancel));
+ok('paid cancellation keeps access through the current paid billing period', /remains available through the end of the current paid billing period/i.test(cancel));
+ok('paid cancellation stops the next renewal', /will not renew for the next billing cycle/i.test(cancel));
+ok('already-collected subscription charges are non-refundable', /charges already collected are non-refundable/i.test(cancel));
+ok('cancellation page does not defer policy to Stripe', !/unless Stripe shows otherwise/i.test(cancel));
 ok('Stripe customer portal cancellation remains visible', /Stripe Customer Portal/i.test(cancel));
 ok('privacy keeps AI providers model-agnostic', /third-party AI gateways and model providers/i.test(privacy));
 ok('service and privacy contacts remain visible', terms.includes('service@pocketrep.pro') && cancel.includes('service@pocketrep.pro') && privacy.includes('privacy@pocketrep.pro'));
