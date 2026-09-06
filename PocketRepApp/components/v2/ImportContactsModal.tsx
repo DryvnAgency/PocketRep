@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import type { V2Contact } from '@/lib/v2/useContacts';
+import { useWebVisualViewportInset } from '@/lib/v2/useWebVisualViewportInset';
 import {
   parseContactsText,
   pickFromDevice,
@@ -45,6 +46,7 @@ export default function ImportContactsModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const busyRef = useRef(false);
+  const keyboardInset = useWebVisualViewportInset(open);
 
   useEffect(() => {
     if (open) {
@@ -167,12 +169,12 @@ export default function ImportContactsModal({
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
       <Pressable style={styles.scrim} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close contact import" />
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, keyboardInset > 0 ? { bottom: keyboardInset } : null]}>
         <View style={styles.handle} />
         <View style={styles.header}>
           <Pressable
             onPress={phase === 'review' ? () => setPhase('source') : onClose}
-            style={styles.headerBtn}
+            style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel={phase === 'review' ? 'Back to import source' : 'Cancel contact import'}
           >
@@ -188,9 +190,14 @@ export default function ImportContactsModal({
             <Pressable
               onPress={doImport}
               disabled={busy || selected.size === 0}
-              style={[styles.headerBtn, selected.size > 0 && !busy ? styles.headerBtnPrimary : styles.headerBtnDisabled]}
+              style={({ pressed }) => [
+                styles.headerBtn,
+                selected.size > 0 && !busy ? styles.headerBtnPrimary : styles.headerBtnDisabled,
+                pressed && selected.size > 0 && !busy ? styles.pressed : null,
+              ]}
               accessibilityRole="button"
               accessibilityLabel={`Import ${selected.size} selected contact${selected.size === 1 ? '' : 's'}`}
+              accessibilityState={{ disabled: busy || selected.size === 0, busy }}
             >
               <Text style={[styles.headerBtnText, selected.size > 0 && !busy ? { color: colors.ink } : { color: colors.grey }]}>
                 {busy ? 'Importing…' : 'Import'}
@@ -202,9 +209,20 @@ export default function ImportContactsModal({
         </View>
 
         {phase === 'source' ? (
-          <ScrollView contentContainerStyle={styles.body}>
+          <ScrollView
+            contentContainerStyle={styles.body}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+          >
             {deviceSupported ? (
-              <Pressable onPress={fromDevice} disabled={busy} style={styles.sourceBtn} accessibilityRole="button" accessibilityLabel="Import contacts from this device">
+              <Pressable
+                onPress={fromDevice}
+                disabled={busy}
+                style={({ pressed }) => [styles.sourceBtn, pressed && !busy ? styles.pressed : null, busy ? styles.disabledSoft : null]}
+                accessibilityRole="button"
+                accessibilityLabel="Import contacts from this device"
+                accessibilityState={{ disabled: busy, busy }}
+              >
                 <Text style={styles.sourceIcon}>📇</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sourceTitle}>From this device</Text>
@@ -214,7 +232,14 @@ export default function ImportContactsModal({
               </Pressable>
             ) : null}
 
-            <Pressable onPress={fromFile} disabled={busy} style={styles.sourceBtn} accessibilityRole="button" accessibilityLabel="Upload a contacts file">
+            <Pressable
+              onPress={fromFile}
+              disabled={busy}
+              style={({ pressed }) => [styles.sourceBtn, pressed && !busy ? styles.pressed : null, busy ? styles.disabledSoft : null]}
+              accessibilityRole="button"
+              accessibilityLabel="Upload a contacts file"
+              accessibilityState={{ disabled: busy }}
+            >
               <Text style={styles.sourceIcon}>📄</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.sourceTitle}>Upload a file</Text>
@@ -223,7 +248,14 @@ export default function ImportContactsModal({
               <Text style={styles.sourceChevron}>›</Text>
             </Pressable>
 
-            <Pressable onPress={() => setPasteMode(m => !m)} style={styles.pasteToggle} accessibilityRole="button" accessibilityLabel="Paste vCard or CSV text">
+            <Pressable
+              onPress={() => setPasteMode(m => !m)}
+              disabled={busy}
+              style={({ pressed }) => [styles.pasteToggle, pressed && !busy ? styles.pressed : null, busy ? styles.disabledSoft : null]}
+              accessibilityRole="button"
+              accessibilityLabel="Paste vCard or CSV text"
+              accessibilityState={{ disabled: busy, expanded: pasteMode }}
+            >
               <Text style={styles.pasteToggleText}>{pasteMode ? '▾ Paste vCard or CSV text' : '▸ Paste vCard or CSV text'}</Text>
             </Pressable>
             {pasteMode ? (
@@ -234,10 +266,18 @@ export default function ImportContactsModal({
                   placeholder={'Paste vCard or CSV here…\n\nBEGIN:VCARD\nFN:Jordan Price\nTEL:555-123-4567\nEND:VCARD'}
                   placeholderTextColor={colors.grey}
                   multiline
+                  editable={!busy}
                   style={styles.pasteInput}
                   accessibilityLabel="Pasted contact data"
                 />
-                <Pressable onPress={fromPaste} disabled={!pasteText.trim()} style={[styles.parseBtn, !pasteText.trim() && { opacity: 0.4 }]} accessibilityRole="button" accessibilityLabel="Parse pasted contacts">
+                <Pressable
+                  onPress={fromPaste}
+                  disabled={busy || !pasteText.trim()}
+                  style={({ pressed }) => [styles.parseBtn, pressed && !busy && pasteText.trim() ? styles.pressed : null, busy || !pasteText.trim() ? styles.disabledSoft : null]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Parse pasted contacts"
+                  accessibilityState={{ disabled: busy || !pasteText.trim() }}
+                >
                   <Text style={styles.parseBtnText}>Parse contacts</Text>
                 </Pressable>
               </View>
@@ -253,7 +293,14 @@ export default function ImportContactsModal({
         ) : (
           <>
             <View style={styles.reviewBar}>
-              <Pressable onPress={toggleAll} style={styles.selectAll} accessibilityRole="checkbox" accessibilityState={{ checked: allSelected }} accessibilityLabel="Select all contacts">
+              <Pressable
+                onPress={toggleAll}
+                disabled={busy}
+                style={({ pressed }) => [styles.selectAll, pressed && !busy ? styles.pressed : null, busy ? styles.disabledSoft : null]}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: allSelected, disabled: busy }}
+                accessibilityLabel="Select all contacts"
+              >
                 <View style={[styles.checkbox, allSelected && styles.checkboxOn]}>
                   {allSelected ? <Text style={styles.checkmark}>✓</Text> : null}
                 </View>
@@ -263,12 +310,23 @@ export default function ImportContactsModal({
                 <Text style={styles.dupNote}>{dupCount} possible duplicate{dupCount === 1 ? '' : 's'}</Text>
               ) : null}
             </View>
-            <ScrollView contentContainerStyle={styles.reviewList}>
+            <ScrollView
+              contentContainerStyle={styles.reviewList}
+              keyboardShouldPersistTaps="handled"
+            >
               {rows.map(r => {
                 const on = selected.has(r.id);
                 const sub = [r.phone, r.email].filter(Boolean).join(' · ');
                 return (
-                  <Pressable key={r.id} onPress={() => toggleOne(r.id)} style={styles.reviewRow} accessibilityRole="checkbox" accessibilityState={{ checked: on }} accessibilityLabel={`${on ? 'Selected' : 'Not selected'}: ${[r.firstName, r.lastName].filter(Boolean).join(' ')}`}>
+                  <Pressable
+                    key={r.id}
+                    onPress={() => toggleOne(r.id)}
+                    disabled={busy}
+                    style={({ pressed }) => [styles.reviewRow, pressed && !busy ? styles.reviewRowPressed : null, busy ? styles.disabledSoft : null]}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on, disabled: busy }}
+                    accessibilityLabel={`${on ? 'Selected' : 'Not selected'}: ${[r.firstName, r.lastName].filter(Boolean).join(' ')}`}
+                  >
                     <View style={[styles.checkbox, on && styles.checkboxOn]}>
                       {on ? <Text style={styles.checkmark}>✓</Text> : null}
                     </View>
@@ -305,13 +363,13 @@ const styles = StyleSheet.create({
   handle: { alignSelf: 'center', width: 42, height: 4, borderRadius: 2, backgroundColor: colors.ink4, marginTop: 10, marginBottom: 4 },
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14,
+    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10,
     borderBottomWidth: 1, borderBottomColor: colors.ink4,
   },
   headerBtn: {
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16,
+    paddingHorizontal: 14, minHeight: 44, borderRadius: 16,
     backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
-    minWidth: 70, alignItems: 'center',
+    minWidth: 70, alignItems: 'center', justifyContent: 'center',
   },
   headerBtnPrimary: { backgroundColor: colors.gold, borderColor: colors.gold },
   headerBtnDisabled: { backgroundColor: colors.ink4, borderColor: colors.ink4 },
@@ -323,6 +381,7 @@ const styles = StyleSheet.create({
   sourceBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 14, paddingVertical: 16,
+    minHeight: 64,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4, borderRadius: radius.lg,
   },
@@ -331,14 +390,15 @@ const styles = StyleSheet.create({
   sourceSub: { fontSize: 12, color: colors.grey2, marginTop: 2, lineHeight: 16 },
   sourceChevron: { fontSize: 20, color: colors.gold },
 
-  pasteToggle: { paddingVertical: 6 },
+  pasteToggle: { minHeight: 44, justifyContent: 'center' },
   pasteToggleText: { fontSize: 13, fontWeight: '700', color: colors.gold },
   pasteInput: {
     minHeight: 130, textAlignVertical: 'top' as any,
     backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.ink4,
-    borderRadius: radius.md, padding: 12, color: colors.white, fontSize: 13,
+    borderRadius: radius.md, padding: 12, color: colors.white,
+    fontSize: Platform.OS === 'web' ? 16 : 13,
   } as any,
-  parseBtn: { height: 46, borderRadius: 12, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  parseBtn: { minHeight: 46, borderRadius: 12, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   parseBtnText: { color: colors.ink, fontSize: 14, fontWeight: '800' },
 
   hint: { fontSize: 12, color: colors.grey2, lineHeight: 17, marginTop: 4 },
@@ -346,18 +406,22 @@ const styles = StyleSheet.create({
 
   reviewBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
+    paddingHorizontal: 16, paddingVertical: 8,
+    minHeight: 52,
     borderBottomWidth: 1, borderBottomColor: colors.ink4,
   },
-  selectAll: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  selectAll: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingRight: 8 },
   selectAllText: { fontSize: 13, fontWeight: '700', color: colors.white },
   dupNote: { fontSize: 11, color: colors.grey2 },
-  reviewList: { paddingHorizontal: 16, paddingTop: 8 },
+  reviewList: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: Platform.OS === 'web' ? ('max(24px, env(safe-area-inset-bottom))' as any) : 24 },
   reviewRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 11,
+    minHeight: 52,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     borderBottomWidth: 1, borderBottomColor: colors.ink3,
   },
+  reviewRowPressed: { backgroundColor: colors.surface2 },
   checkbox: {
     width: 22, height: 22, borderRadius: 6,
     borderWidth: 1.5, borderColor: colors.ink4,
@@ -372,4 +436,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.ink4, borderRadius: 6,
     paddingHorizontal: 6, paddingVertical: 3, overflow: 'hidden',
   },
+  pressed: { opacity: 0.74, transform: [{ scale: 0.985 }] },
+  disabledSoft: { opacity: 0.45 },
 });
