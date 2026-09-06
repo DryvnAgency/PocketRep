@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
+  View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform,
 } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { SectionHead } from './atoms';
+import { useWebVisualViewportInset } from '@/lib/v2/useWebVisualViewportInset';
 import {
   type PayPlan, type UnitBonusTier,
   DEFAULT_PAY_PLAN, savePayPlan,
@@ -44,7 +45,7 @@ function NumberInput({
         keyboardType="numeric"
         style={[
           styles.num,
-          { paddingLeft: prefix ? 26 : 14, paddingRight: suffix ? 36 : 14, fontSize: big ? 18 : 14 },
+          { paddingLeft: prefix ? 26 : 14, paddingRight: suffix ? 36 : 14, fontSize: big ? 18 : 16 },
         ]}
       />
       {suffix ? <Text style={styles.suffix}>{suffix}</Text> : null}
@@ -63,6 +64,7 @@ export default function PayPlanEditor({
   const [draft, setDraft] = useState<PayPlan>(plan ?? DEFAULT_PAY_PLAN);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const keyboardInset = useWebVisualViewportInset(open);
 
   useEffect(() => {
     if (open) {
@@ -104,10 +106,15 @@ export default function PayPlanEditor({
   return (
     <View style={StyleSheet.absoluteFillObject as any}>
       <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, keyboardInset > 0 && { bottom: keyboardInset }]}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Pressable onPress={onClose} style={styles.headerBtn}>
+          <Pressable
+            onPress={onClose}
+            style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel pay plan changes"
+          >
             <Text style={styles.headerBtnText}>Cancel</Text>
           </Pressable>
           <View style={{ flex: 1, alignItems: 'center' }}>
@@ -117,7 +124,15 @@ export default function PayPlanEditor({
           <Pressable
             onPress={handleSave}
             disabled={saving}
-            style={[styles.headerBtn, styles.headerBtnPrimary, saving && { opacity: 0.6 }]}
+            style={({ pressed }) => [
+              styles.headerBtn,
+              styles.headerBtnPrimary,
+              pressed && !saving && styles.pressed,
+              saving && styles.disabled,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={saving ? 'Saving pay plan' : 'Save pay plan'}
+            accessibilityState={{ disabled: saving, busy: saving }}
           >
             <Text style={[styles.headerBtnText, { color: colors.ink }]}>
               {saving ? 'Saving…' : 'Save'}
@@ -125,7 +140,10 @@ export default function PayPlanEditor({
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+        >
           <SectionHead label="COMMISSION %" />
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
@@ -190,19 +208,28 @@ export default function PayPlanEditor({
                     style={styles.tierBonus}
                   />
                 </View>
-                <Pressable onPress={() => removeBonus(i)} style={styles.removeBtn}>
+                <Pressable
+                  onPress={() => removeBonus(i)}
+                  style={({ pressed }) => [styles.removeBtn, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${b.units || 0} unit bonus tier`}
+                >
                   <Text style={styles.removeBtnText}>−</Text>
                 </Pressable>
               </View>
             ))}
           </View>
 
-          <Pressable onPress={addBonus} style={styles.addBtn}>
+          <Pressable
+            onPress={addBonus}
+            style={({ pressed }) => [styles.addBtn, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Add unit bonus tier"
+          >
             <Text style={styles.addBtnText}>＋ ADD TIER</Text>
           </Pressable>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          <View style={{ height: 28 }} />
         </ScrollView>
       </View>
     </View>
@@ -213,7 +240,8 @@ const styles = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,8,0.78)' },
   sheet: {
     position: 'absolute',
-    left: 0, right: 0, bottom: 0, top: '6%',
+    left: 0, right: 0, bottom: 0,
+    top: Platform.OS === 'web' ? ('max(6%, env(safe-area-inset-top))' as any) : '6%',
     backgroundColor: colors.ink2,
     borderTopWidth: 1, borderTopColor: colors.goldBorder,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
@@ -234,18 +262,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.ink4,
   },
   headerBtn: {
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 16,
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 22,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
-    minWidth: 64, alignItems: 'center',
+    minWidth: 72, alignItems: 'center', justifyContent: 'center',
   },
   headerBtnPrimary: { backgroundColor: colors.gold, borderColor: colors.gold },
   headerBtnText: { fontSize: 12, fontWeight: '700', color: colors.grey2 },
   headerKicker: { fontSize: 10, fontWeight: '700', color: colors.gold, letterSpacing: 1.4 },
   headerTitle: { fontSize: 14, fontWeight: '700', color: colors.white, marginTop: 2 },
 
-  body: { paddingHorizontal: 14, paddingBottom: 14 },
+  body: {
+    paddingHorizontal: 14,
+    paddingBottom: Platform.OS === 'web' ? ('max(28px, env(safe-area-inset-bottom))' as any) : 28,
+  },
 
   row: { flexDirection: 'row', gap: 12 },
   field: { marginBottom: 14 },
@@ -264,11 +296,12 @@ const styles = StyleSheet.create({
   },
   num: {
     flex: 1,
+    minHeight: 48,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.md,
     paddingVertical: 12,
-    color: colors.white, fontSize: 14, fontWeight: '700',
+    color: colors.white, fontSize: 16, fontWeight: '700',
   },
 
   empty: { color: colors.grey2, fontSize: 12, padding: 14, textAlign: 'center' },
@@ -288,40 +321,45 @@ const styles = StyleSheet.create({
   tierLabel: { fontSize: 11, fontWeight: '700', color: colors.gold, letterSpacing: 0.5 },
   tierUnits: {
     width: 56,
+    minHeight: 44,
     backgroundColor: colors.ink3,
     borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.sm,
     paddingVertical: 8, paddingHorizontal: 10,
-    color: colors.white, fontSize: 14, fontWeight: '700', textAlign: 'center',
+    color: colors.white, fontSize: 16, fontWeight: '700', textAlign: 'center',
   },
   tierBonusWrap: { position: 'relative', flex: 1 },
   tierBonusPrefix: {
-    position: 'absolute', left: 10, top: 10,
+    position: 'absolute', left: 10, top: 12,
     color: colors.grey2, fontSize: 13, fontWeight: '600', zIndex: 1,
   },
   tierBonus: {
+    minHeight: 44,
     backgroundColor: colors.ink3,
     borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.sm,
     paddingVertical: 8, paddingLeft: 22, paddingRight: 10,
-    color: colors.white, fontSize: 14, fontWeight: '700',
+    color: colors.white, fontSize: 16, fontWeight: '700',
   },
   removeBtn: {
-    width: 28, height: 28, borderRadius: 14,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: colors.ink3,
     alignItems: 'center', justifyContent: 'center',
   },
   removeBtnText: { color: colors.grey2, fontSize: 16, fontWeight: '700', lineHeight: 18 },
 
   addBtn: {
+    minHeight: 48,
     marginHorizontal: 2, marginTop: 10, marginBottom: 16,
     paddingVertical: 10,
     borderWidth: 1.5, borderStyle: 'dashed',
     borderColor: colors.goldBorder,
     borderRadius: radius.md,
-    alignItems: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   addBtnText: { color: colors.gold, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
+  disabled: { opacity: 0.6 },
 
   error: { color: colors.red, fontSize: 13, paddingHorizontal: 4 },
 });
