@@ -100,13 +100,20 @@ export function EliteActionButton({ label, onPress, loading = false, disabled = 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={loading ? `${label}, loading` : label}
       accessibilityState={{ disabled: blocked, busy: loading }}
       disabled={blocked}
       onPress={onPress}
       style={({ pressed }) => [styles.action, tone === 'neutral' ? styles.actionNeutral : styles.actionGold, blocked && styles.disabled, pressed && !blocked && styles.pressed]}
     >
-      {loading ? <ActivityIndicator color={tone === 'gold' ? colors.ink : colors.white} /> : <Text style={[styles.actionText, tone === 'gold' ? styles.actionTextGold : styles.actionTextNeutral]}>{label}</Text>}
+      {loading ? (
+        <View style={styles.loadingActionRow}>
+          <ActivityIndicator size="small" color={tone === 'gold' ? colors.ink : colors.white} />
+          <Text style={[styles.actionText, tone === 'gold' ? styles.actionTextGold : styles.actionTextNeutral]}>WORKING…</Text>
+        </View>
+      ) : (
+        <Text style={[styles.actionText, tone === 'gold' ? styles.actionTextGold : styles.actionTextNeutral]}>{label}</Text>
+      )}
     </Pressable>
   );
 }
@@ -148,6 +155,7 @@ const styles = StyleSheet.create({
   action: { minHeight: 54, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18, borderWidth: 1 },
   actionGold: { backgroundColor: colors.gold, borderColor: colors.gold2 },
   actionNeutral: { backgroundColor: colors.ink2, borderColor: colors.ink4 },
+  loadingActionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   actionText: { fontSize: 13, fontWeight: '900', letterSpacing: 0.9 },
   actionTextGold: { color: colors.ink },
   actionTextNeutral: { color: colors.white },
