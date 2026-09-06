@@ -39,24 +39,42 @@ type DemoQueuePanelProps = {
 
 export function DemoQueuePanel({ children, loading = false }: DemoQueuePanelProps) {
   return (
-    <View style={styles.panel}>
-      <View style={styles.panelHeader}>
-        <View style={styles.panelHeaderCopy}>
-          <Text style={styles.kicker}>WORK MY BOOK · DEMO</Text>
-          <Text style={styles.panelTitle}>Different customer. Different reason.</Text>
+    <View style={styles.deviceFrame}>
+      <View style={styles.deviceTopBar}>
+        <View>
+          <Text style={styles.deviceBrand}>POCKETREP</Text>
+          <Text style={styles.deviceScreen}>WORK MY BOOK</Text>
         </View>
-        <View style={styles.readyRow}><View style={styles.readyDot} /><Text style={styles.readyText}>READY</Text></View>
+        <View style={styles.deviceStatus}><View style={styles.readyDot} /><Text style={styles.deviceStatusText}>REX READY</Text></View>
       </View>
-      <View style={styles.queueTabs} accessibilityLabel="Work My Book preview, Text Queue selected">
-        <View style={styles.queueTab}><Text style={styles.queueTabText}>RECOMMENDED</Text></View>
-        <View style={styles.queueTab}><Text style={styles.queueTabText}>CALL QUEUE</Text></View>
-        <View style={[styles.queueTab, styles.queueTabActive]}><Text style={[styles.queueTabText, styles.queueTabTextActive]}>TEXT QUEUE</Text></View>
+
+      <View style={styles.panel}>
+        <View style={styles.panelHeader}>
+          <View style={styles.panelHeaderCopy}>
+            <Text style={styles.kicker}>TEXT QUEUE · DEMO</Text>
+            <Text style={styles.panelTitle}>Different customer. Different reason.</Text>
+          </View>
+          <View style={styles.readyRow}><View style={styles.readyDot} /><Text style={styles.readyText}>READY</Text></View>
+        </View>
+        <View style={styles.queueTabs} accessibilityLabel="Work My Book preview, Text Queue selected">
+          <View style={styles.queueTab}><Text style={styles.queueTabText}>RECOMMENDED</Text></View>
+          <View style={styles.queueTab}><Text style={styles.queueTabText}>CALL QUEUE</Text></View>
+          <View style={[styles.queueTab, styles.queueTabActive]}><Text style={[styles.queueTabText, styles.queueTabTextActive]}>TEXT QUEUE</Text></View>
+        </View>
+        <View style={styles.queueRule}>
+          <Text style={styles.queueRuleStrong}>Reason → draft → review → send</Text>
+          <Text style={styles.queueRuleText}>Nothing is auto-sent.</Text>
+        </View>
+        {loading ? <View style={styles.loading}><ActivityIndicator color={colors.gold} /><Text style={styles.loadingText}>Loading the sample book…</Text></View> : children}
       </View>
-      <View style={styles.queueRule}>
-        <Text style={styles.queueRuleStrong}>Reason → draft → review → send</Text>
-        <Text style={styles.queueRuleText}>Nothing is auto-sent.</Text>
+
+      <View style={styles.previewNav} accessibilityElementsHidden>
+        <View style={styles.previewNavItem}><View style={styles.previewNavDot} /><Text style={styles.previewNavText}>HEAT</Text></View>
+        <View style={styles.previewNavItem}><View style={styles.previewNavDot} /><Text style={styles.previewNavText}>CONTACTS</Text></View>
+        <View style={styles.previewRexSlot}><View style={styles.previewRexOrb}><View style={styles.previewRexCore} /></View><Text style={styles.previewRexText}>REX</Text></View>
+        <View style={styles.previewNavItem}><View style={styles.previewNavDot} /><Text style={styles.previewNavText}>SALES</Text></View>
+        <View style={styles.previewNavItem}><View style={styles.previewNavDot} /><Text style={styles.previewNavText}>ME</Text></View>
       </View>
-      {loading ? <View style={styles.loading}><ActivityIndicator color={colors.gold} /><Text style={styles.loadingText}>Loading the sample book…</Text></View> : children}
     </View>
   );
 }
@@ -104,7 +122,13 @@ function initials(name: string) {
 }
 
 const styles = StyleSheet.create({
-  panel: { marginTop: 18, padding: 14, gap: 10, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.surface },
+  deviceFrame: { marginTop: 18, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.goldBorder, backgroundColor: colors.ink2, overflow: 'hidden' },
+  deviceTopBar: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: colors.ink4 },
+  deviceBrand: { color: colors.white, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
+  deviceScreen: { color: colors.grey2, fontSize: 7, fontWeight: '800', letterSpacing: 0.9, marginTop: 2 },
+  deviceStatus: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  deviceStatusText: { color: colors.grey2, fontSize: 7, fontWeight: '900', letterSpacing: 0.8 },
+  panel: { padding: 14, gap: 10, backgroundColor: colors.surface },
   panelHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: 4, paddingBottom: 6 },
   panelHeaderCopy: { flex: 1, minWidth: 0 },
   kicker: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
@@ -113,7 +137,7 @@ const styles = StyleSheet.create({
   readyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.green },
   readyText: { color: colors.grey2, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
   queueTabs: { flexDirection: 'row', gap: 5, padding: 4, borderRadius: radius.md, borderWidth: 1, borderColor: colors.ink4, backgroundColor: colors.ink2 },
-  queueTab: { flex: 1, minHeight: 34, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  queueTab: { flex: 1, minHeight: 38, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
   queueTabActive: { backgroundColor: colors.goldBg, borderWidth: 1, borderColor: colors.goldBorderStrong },
   queueTabText: { color: colors.grey, fontSize: 7, lineHeight: 10, fontWeight: '900', letterSpacing: 0.5, textAlign: 'center' },
   queueTabTextActive: { color: colors.gold },
@@ -136,6 +160,14 @@ const styles = StyleSheet.create({
   reasonLabel: { color: colors.grey2, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
   score: { color: colors.gold, fontSize: 11, fontWeight: '900' },
   message: { color: colors.grey3, fontSize: 12, lineHeight: 18, marginTop: 6 },
+  previewNav: { minHeight: 62, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.ink4, backgroundColor: colors.ink },
+  previewNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  previewNavDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.grey },
+  previewNavText: { color: colors.grey, fontSize: 6, fontWeight: '900', letterSpacing: 0.4 },
+  previewRexSlot: { flex: 1.05, alignItems: 'center', justifyContent: 'center', gap: 2, marginTop: -16 },
+  previewRexOrb: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.goldBorderStrong, backgroundColor: colors.ink2 },
+  previewRexCore: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.gold },
+  previewRexText: { color: colors.gold, fontSize: 6, fontWeight: '900', letterSpacing: 0.7 },
   quickReplyBlock: { marginTop: 16 },
   quickReplyLabel: { color: colors.grey2, fontSize: 9, fontWeight: '900', letterSpacing: 1, marginBottom: 9 },
   quickReplyRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
