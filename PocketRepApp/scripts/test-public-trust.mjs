@@ -31,6 +31,9 @@ ok('paid cancellation keeps access through the current paid billing period', /re
 ok('paid cancellation stops the next renewal', /will not renew for the next billing cycle/i.test(cancel));
 ok('already-collected subscription charges are non-refundable', /charges already collected are non-refundable/i.test(cancel));
 ok('cancellation page does not defer policy to Stripe', !/unless Stripe shows otherwise/i.test(cancel));
+ok('Terms repeat immediate trial-cancel access loss', /cancel during the free trial[\s\S]*access ends when you cancel/i.test(terms));
+ok('Terms repeat paid-through cancellation access', /cancel after a paid subscription has begun[\s\S]*access remains available through the end of the current paid billing period/i.test(terms));
+ok('Terms repeat no-prorated-refund policy', /do not provide partial or prorated refunds/i.test(terms));
 ok('Stripe customer portal cancellation remains visible', /Stripe Customer Portal/i.test(cancel));
 ok('privacy keeps AI providers model-agnostic', /third-party AI gateways and model providers/i.test(privacy));
 ok('service and privacy contacts remain visible', terms.includes('service@pocketrep.pro') && cancel.includes('service@pocketrep.pro') && privacy.includes('privacy@pocketrep.pro'));
