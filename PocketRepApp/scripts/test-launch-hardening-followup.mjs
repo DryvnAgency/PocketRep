@@ -56,6 +56,21 @@ inc('AppShell (openBlastFromRex)', appShell, [
   'payload.contact_ids.includes(contact.id) && !contact.doNotContact',
 ]);
 
+console.log('\n--- Backing out of the sold-book Rex mission before finishing clears mission state ---');
+inc('AppShell (mission stale-state)', appShell, [
+  // closeTopOverlay's back-gesture path
+  'if (rexCoachOpen) {\n      setRexCoachOpen(false);',
+  // RexCoach's own onClose prop
+  "<RexCoach open={rexCoachOpen} onClose={() => {\n        setRexCoachOpen(false);",
+]);
+// Both close paths must clear mission state -- count occurrences directly so
+// a future edit that removes just one of the two can't slip through.
+{
+  const pattern = /if \(soldBookMission\) \{ setSoldBookMission\(null\); setSoldBookMissionIds\(\[\]\); \}/g;
+  const count = (appShell.match(pattern) ?? []).length;
+  ok('mission-clear-on-close appears at both RexCoach close paths (>= 3: back-gesture, onClose prop, onFinishMission)', count >= 3);
+}
+
 console.log('\n--- weekly digest never overwrites a good digest with a zeroed one on a read error ---');
 inc('weeklyDigest', weeklyDigest, [
   'if (dealsRes.error) throw dealsRes.error;',

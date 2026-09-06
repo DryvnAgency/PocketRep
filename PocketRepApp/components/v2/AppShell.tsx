@@ -329,7 +329,13 @@ export default function AppShell() {
   const closeTopOverlay = () => {
     if (supportChatOpen) { setSupportChatOpen(false); return; }
     if (adminSupportOpen) { setAdminSupportOpen(false); return; }
-    if (rexCoachOpen) { setRexCoachOpen(false); return; }
+    if (rexCoachOpen) {
+      setRexCoachOpen(false);
+      // Closing without finishing must not leave Rex permanently stuck in
+      // capture mode — see the onClose prop below for the full rationale.
+      if (soldBookMission) { setSoldBookMission(null); setSoldBookMissionIds([]); }
+      return;
+    }
     if (soldBookGuideWave) { setSoldBookGuideWave(null); return; }
     if (notifOpen) { setNotifOpen(false); return; }
     if (stalledOpen) { setStalledOpen(false); setStalledReport(null); return; }
@@ -466,7 +472,14 @@ export default function AppShell() {
       <NurtureReviewer open={nurtureReviewerOpen} onClose={() => setNurtureReviewerOpen(false)} onChanged={() => setNurtureRefetchKey(k => k + 1)} />
       <NotificationsCenter open={notifOpen} items={notifItems} onClose={() => setNotifOpen(false)} onOpenContact={(id) => setSelectedId(id)} onOpenNurture={() => setNurtureReviewerOpen(true)} onChanged={() => setNurtureRefetchKey(k => k + 1)} />
 
-      <RexCoach open={rexCoachOpen} onClose={() => setRexCoachOpen(false)} contacts={contacts ?? []} payPlan={payPlan} initialContactId={selected?.id ?? null}
+      <RexCoach open={rexCoachOpen} onClose={() => {
+        setRexCoachOpen(false);
+        // A rep who taps the X mid-mission (before onFinishMission runs) must
+        // not have every future Rex open — for an unrelated question — stuck
+        // showing the sold-book capture mission bar/placeholder/AI context
+        // with no in-UI way out (Done is disabled while missionCount is 0).
+        if (soldBookMission) { setSoldBookMission(null); setSoldBookMissionIds([]); }
+      }} contacts={contacts ?? []} payPlan={payPlan} initialContactId={selected?.id ?? null}
         mission={soldBookMission} missionCount={soldBookMissionIds.length} onFinishMission={finishSoldBookMission} onOpenContact={(id) => setSelectedId(id)}
         onDraftFirstText={draftFirstThankYou} onEnrollFreshUp={enrollFreshUpFromRex} onActed={async (action, result) => {
           const t = action.type;
