@@ -21,6 +21,12 @@ const appShell = read('components/v2/AppShell.tsx');
 const rexCoach = read('components/v2/RexCoach.tsx');
 const contacts = read('components/v2/ContactsTab.tsx');
 const contactDetail = read('components/v2/ContactDetail.tsx');
+const followUpQueue = read('components/v2/FollowUpQueue.tsx');
+const markReply = read('components/v2/MarkReplyButton.tsx');
+const installPage = read('../Pocketrep/install.html');
+const seoSoftware = read('../Pocketrep/car-sales-follow-up-software.html');
+const seoTemplates = read('../Pocketrep/car-sales-follow-up-text-templates.html');
+const seoCrm = read('../Pocketrep/crm-for-car-salespeople.html');
 const blast = read('components/v2/BlastSequenceDrafter.tsx');
 const workbook = read('components/v2/WorkMyBookSheet.tsx');
 const heat = read('components/v2/HeatSheetTab.tsx');
@@ -68,8 +74,12 @@ ok('sold Rex captures are marked past-customer', rexCoach.includes('is_past_cust
 ok('Rex action layer keeps sold customers out of active prospect heat by default',
   read('lib/v2/rexActions.ts').includes("pastCustomer ? 'cold' : 'warm'"));
 ok('Rex action layer tags sold captures', read('lib/v2/rexActions.ts').includes("pastCustomer ? ['Sold'] : []"));
-ok('shared createContact blocks duplicate phone/email before insert',
-  updateContact.includes('That customer is already in your book') && updateContact.includes(".eq('is_deleted', false)"));
+ok('shared createContact blocks active duplicate phone/email before insert',
+  updateContact.includes('That customer is already in your book') && updateContact.includes("select('id,phone,email,is_deleted,do_not_contact')"));
+ok('soft-deleted DNC contacts cannot be resurrected by re-add/import',
+  updateContact.includes('previously marked do not contact') &&
+  updateContact.includes('protectedExisting') &&
+  updateContact.includes('!r.is_deleted || r.do_not_contact'));
 ok('new contact exposes immediate thank-you action', rexCoach.includes('DRAFT FIRST THANK-YOU'));
 ok('new contact exposes Fresh Up enrollment', rexCoach.includes('＋ FRESH UP'));
 ok('new contact exposes customer card', rexCoach.includes('OPEN CUSTOMER'));
@@ -90,6 +100,9 @@ ok('legacy Sequences no longer shows the contact-search-coming-soon dead alert',
 ok('persisted sequences use the authoritative enrollment helper', legacySequences.includes("import { enrollContactInSequence } from '@/lib/v2/useSequences'") && legacySequences.includes('await enrollContactInSequence(contact.id, seq.id)'));
 ok('sequence picker hides DNC contacts', legacySequences.includes('if (c.do_not_contact) return false') && legacySequences.includes('DNC contacts are hidden'));
 ok('static preview templates cannot create fake contact_sequences rows', legacySequences.includes("const persistedSequence = !/^tpl_\\d+$/.test(seq.id)") && legacySequences.includes('This preview is not a database sequence and cannot create a fake enrollment'));
+ok('sequence enrollment fails closed for deleted/DNC contacts',
+  read('lib/v2/useSequences.ts').includes("select('id,do_not_contact,is_deleted')") &&
+  read('lib/v2/useSequences.ts').includes('contact.is_deleted || contact.do_not_contact'));
 
 console.log('\n--- contact card is safer and cleaner ---');
 ok('ContactDetail no longer imports LanguageToggle', !contactDetail.includes("import LanguageToggle"));
@@ -104,6 +117,12 @@ ok('user-facing drafter says TEXT QUEUE', blast.includes('TEXT QUEUE'));
 ok('drafter says one customer at a time', blast.includes('ONE CUSTOMER AT A TIME'));
 ok('drafter states nothing is auto-sent', blast.includes('nothing is auto-sent'));
 ok('AppShell Work My Book creates individualized drafts', appShell.includes('Do not repeat one generic message across the list'));
+ok('authoritative queue excludes DNC/deleted contacts',
+  queue.includes('do_not_contact') && queue.includes('contact.is_deleted || contact.do_not_contact'));
+ok('all queue launchers re-check current DNC state before external outreach',
+  queue.includes('assertContactActionAllowed') &&
+  followUpQueue.includes('await assertContactActionAllowed(item.contact_id)') &&
+  legacySequences.includes('await assertContactActionAllowed(item.contact_id)'));
 
 console.log('\n--- automatic holiday nurture stays truth-safe ---');
 const nurtureEngine = read('lib/v2/nurtureEngine.ts');
@@ -128,6 +147,16 @@ ok('history migration widens game_plan type safely', historyMigration.includes("
 ok('history migration blocks owner UPDATE/DELETE by split RLS', historyMigration.includes('interactions_select_own') && historyMigration.includes('interactions_insert_own') && !historyMigration.includes('create policy interactions_update_own'));
 ok('SMS payload mutation is trigger-guarded', historyMigration.includes('guard_outbound_sms_history_payload'));
 ok('SMS owner has no DELETE policy', !historyMigration.includes('create policy outbound_sms_actions_delete_own'));
+
+console.log('\n--- launch polish findings from independent audit stay closed ---');
+ok('sold-book Rex mission clears when the rep backs out',
+  appShell.includes('if (soldBookMission)') && appShell.includes('setSoldBookMission(null)') && appShell.includes('setSoldBookMissionIds([])'));
+ok('reply tracking failure is visible to the rep',
+  markReply.includes("Alert.alert('Could not save reply'") && markReply.includes('catch (error: any)'));
+ok('install page uses date-free native roadmap wording',
+  installPage.includes('Planned for V2') && installPage.includes('no launch date is promised yet') && !installPage.includes('Coming Soon'));
+ok('SEO signup links preserve valid referral attribution',
+  [seoSoftware, seoTemplates, seoCrm].every(x => x.includes('pocketrep-referral-forward') && x.includes("href', '/?ref=' + encodeURIComponent(ref) + '#signup'")));
 
 console.log('\n--- Fresh Up classification is explicit and durable ---');
 ok('sequence migration flags only a classification step', sequenceMigration.includes('requires_classification'));
