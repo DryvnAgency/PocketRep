@@ -204,9 +204,9 @@ export default function BlastSequenceDrafter({
         <View style={styles.queueNotice}>
           <View style={styles.queueNoticeHead}>
             <View style={styles.rexDot} />
-            <Text style={styles.queueNoticeTitle}>REX · MANUAL SEND</Text>
+            <Text style={styles.queueNoticeTitle}>ONE CUSTOMER AT A TIME</Text>
           </View>
-          <Text style={styles.queueNoticeText}>One customer at a time. Review each message; PocketRep opens Messages for you and nothing is auto-sent.</Text>
+          <Text style={styles.queueNoticeText}>Rex keeps this manual. Review each message; PocketRep opens Messages for you and nothing is auto-sent.</Text>
         </View>
         <ScrollView
           contentContainerStyle={styles.body}
