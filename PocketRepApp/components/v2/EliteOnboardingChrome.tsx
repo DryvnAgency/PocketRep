@@ -3,7 +3,16 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from '
 import { colors, radius } from '@/constants/theme';
 
 export function OnboardingScreen({ children }: { children: ReactNode }) {
-  return <View style={styles.screen}>{children}</View>;
+  return (
+    <View
+      style={[
+        styles.screen,
+        Platform.OS === 'web' ? ({ minHeight: '100dvh', width: '100%' } as any) : null,
+      ]}
+    >
+      {children}
+    </View>
+  );
 }
 
 export function OnboardingProgress({ step, total, onSkip, skipLabel = 'Skip' }: { step: number; total: number; onSkip: () => void; skipLabel?: string }) {
@@ -14,7 +23,13 @@ export function OnboardingProgress({ step, total, onSkip, skipLabel = 'Skip' }: 
       <View style={styles.progressTrack} accessibilityLabel={`Setup step ${step + 1} of ${safeTotal}`}>
         <View style={[styles.progressFill, { width }]} />
       </View>
-      <Pressable accessibilityRole="button" hitSlop={10} onPress={onSkip} style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={skipLabel}
+        hitSlop={10}
+        onPress={onSkip}
+        style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]}
+      >
         <Text style={styles.skipText}>{skipLabel}</Text>
       </Pressable>
     </View>
@@ -53,6 +68,7 @@ export function EliteChoiceButton({ label, detail, selected = false, onPress, di
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ selected, disabled }}
       disabled={disabled}
       onPress={onPress}
@@ -68,6 +84,8 @@ export function QuickReplyChip({ label, onPress, selected = false }: { label: st
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint="Prepares a draft for review. Nothing is sent automatically."
       accessibilityState={{ selected }}
       onPress={onPress}
       style={({ pressed }) => [styles.quickReply, selected && styles.quickReplySelected, pressed && styles.pressed]}
@@ -82,6 +100,7 @@ export function EliteActionButton({ label, onPress, loading = false, disabled = 
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ disabled: blocked, busy: loading }}
       disabled={blocked}
       onPress={onPress}
