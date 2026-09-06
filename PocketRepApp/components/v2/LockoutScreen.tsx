@@ -6,7 +6,7 @@
 // is GATED billing work Eduardo owns (see docs/MASTER_PLAN.md). This component
 // only renders the blocking UI and surfaces the CTA.
 
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import type { LockReason } from '@/lib/v2/accessGate';
 
@@ -52,6 +52,9 @@ export default function LockoutScreen({
   // A deleted/invalid account can't "re-subscribe" — the CTA sends them to the
   // landing page to sign up fresh; lapsed accounts keep the "Re-subscribe" label.
   const primaryLabel = reason === 'invalid_account' ? 'Go to PocketRep' : 'Re-subscribe';
+  const primaryDisabled = !onResubscribe;
+  const signOutDisabled = !onSignOut;
+
   return (
     <View style={styles.root}>
       <View style={styles.card}>
@@ -62,19 +65,31 @@ export default function LockoutScreen({
         <Text style={styles.body}>{copy.body}</Text>
 
         <Pressable
-          style={styles.primaryBtn}
           onPress={onResubscribe}
+          disabled={primaryDisabled}
+          style={({ pressed }) => [
+            styles.primaryBtn,
+            pressed && !primaryDisabled && styles.pressed,
+            primaryDisabled && styles.disabled,
+          ]}
           accessibilityRole="button"
           accessibilityLabel={primaryLabel}
+          accessibilityState={{ disabled: primaryDisabled }}
         >
           <Text style={styles.primaryText}>{primaryLabel}</Text>
         </Pressable>
 
         <Pressable
-          style={styles.secondaryBtn}
           onPress={onSignOut}
+          disabled={signOutDisabled}
+          style={({ pressed }) => [
+            styles.secondaryBtn,
+            pressed && !signOutDisabled && styles.pressed,
+            signOutDisabled && styles.disabled,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Sign out"
+          accessibilityState={{ disabled: signOutDisabled }}
         >
           <Text style={styles.secondaryText}>Sign out</Text>
         </Pressable>
@@ -86,7 +101,15 @@ export default function LockoutScreen({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  root: {
+    flex: 1,
+    backgroundColor: colors.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'web' ? ('max(24px, env(safe-area-inset-top))' as any) : 24,
+    paddingBottom: Platform.OS === 'web' ? ('max(24px, env(safe-area-inset-bottom))' as any) : 24,
+  },
   card: { width: '100%', maxWidth: 380, alignItems: 'center' },
   lockBadge: {
     width: 64, height: 64, borderRadius: 20,
@@ -100,13 +123,26 @@ const styles = StyleSheet.create({
   body: { fontSize: 14, color: colors.grey2, lineHeight: 20, textAlign: 'center', marginTop: 10, marginBottom: 24 },
   primaryBtn: {
     width: '100%',
+    minHeight: 50,
     backgroundColor: colors.gold,
     borderRadius: radius.lg,
-    paddingVertical: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   primaryText: { color: colors.ink, fontWeight: '800', fontSize: 15, letterSpacing: -0.1 },
-  secondaryBtn: { width: '100%', paddingVertical: 13, alignItems: 'center', marginTop: 10 },
+  secondaryBtn: {
+    width: '100%',
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
   secondaryText: { color: colors.grey2, fontWeight: '600', fontSize: 14 },
   email: { color: colors.grey, fontSize: 12, marginTop: 18 },
+  pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
+  disabled: { opacity: 0.45 },
 });
