@@ -82,6 +82,9 @@ export default function HeyRexSheet({
   const needsConfirm = action && actionWritesData(action.type);
   const sayText = action?.say || streamingSay;
   const clarifyCandidates = action?.type === 'clarify' ? (action.payload.candidates ?? []) : [];
+  const wrapBottom = Platform.OS === 'web'
+    ? ('calc(96px + env(safe-area-inset-bottom))' as any)
+    : 96;
 
   const statusLabel =
     state === 'awake' ? 'LISTENING'
@@ -91,14 +94,20 @@ export default function HeyRexSheet({
             : 'READY';
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={[styles.wrap, { bottom: wrapBottom }]} pointerEvents="box-none">
       <View style={styles.card}>
         <View style={styles.head}>
           <OrbWave active={isActive} />
           <Label color={colors.gold}>HEY REX · {statusLabel}</Label>
           <View style={{ flex: 1 }} />
           {!executing ? (
-            <Pressable onPress={onCancel} hitSlop={6}>
+            <Pressable
+              onPress={onCancel}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Close Rex"
+              style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}
+            >
               <Text style={styles.cancel}>✕</Text>
             </Pressable>
           ) : null}
@@ -133,7 +142,12 @@ export default function HeyRexSheet({
         ) : clarifyCandidates.length > 0 ? (
           <View style={styles.candidates}>
             {clarifyCandidates.map(c => (
-              <Pressable key={c.id} style={styles.candidate} onPress={() => onOpenContact?.(c.id)}>
+              <Pressable
+                key={c.id}
+                onPress={() => onOpenContact?.(c.id)}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.candidate, pressed && styles.pressed]}
+              >
                 <Text style={styles.candidateText} numberOfLines={1}>{c.label}</Text>
                 <Text style={styles.candidateChevron}>›</Text>
               </Pressable>
@@ -150,10 +164,19 @@ export default function HeyRexSheet({
 
         {needsConfirm && !executing ? (
           <View style={styles.actions}>
-            <Pressable onPress={onCancel} style={styles.cancelBtn}>
+            <Pressable
+              onPress={onCancel}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.cancelBtn, pressed && styles.pressed]}
+            >
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </Pressable>
-            <Pressable onPress={onConfirm} style={styles.confirmBtn}>
+            <Pressable
+              onPress={onConfirm}
+              accessibilityRole="button"
+              accessibilityState={{ busy: executing }}
+              style={({ pressed }) => [styles.confirmBtn, pressed && styles.confirmPressed]}
+            >
               <Text style={styles.confirmBtnText}>Confirm</Text>
             </Pressable>
           </View>
@@ -173,7 +196,7 @@ export default function HeyRexSheet({
 const styles = StyleSheet.create({
   wrap: {
     position: 'absolute',
-    left: 12, right: 12, bottom: 96,
+    left: 12, right: 12,
   } as any,
   card: {
     backgroundColor: colors.ink2,
@@ -193,7 +216,16 @@ const styles = StyleSheet.create({
     width: 3, height: 16, borderRadius: 2,
     backgroundColor: colors.gold,
   },
-  cancel: { fontSize: 16, color: colors.grey2, paddingHorizontal: 4 },
+  closeBtn: {
+    width: 44,
+    height: 44,
+    marginVertical: -11,
+    marginRight: -8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+  },
+  cancel: { fontSize: 16, color: colors.grey2 },
   partial: {
     fontSize: 14,
     color: colors.white,
@@ -216,23 +248,28 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: 8 },
   cancelBtn: {
     flex: 1,
+    minHeight: 48,
     paddingVertical: 11,
     backgroundColor: colors.surface2,
     borderWidth: 1, borderColor: colors.ink4,
     borderRadius: radius.md,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   cancelBtnText: { fontSize: 13, fontWeight: '700', color: colors.grey2 },
   confirmBtn: {
     flex: 1.2,
+    minHeight: 48,
     paddingVertical: 11,
     backgroundColor: colors.gold,
     borderRadius: radius.md,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   confirmBtnText: { fontSize: 13, fontWeight: '800', color: colors.ink, letterSpacing: 0.2 },
   candidates: { gap: 6 },
   candidate: {
+    minHeight: 48,
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 11, paddingHorizontal: 12,
     backgroundColor: colors.surface2,
@@ -241,4 +278,6 @@ const styles = StyleSheet.create({
   },
   candidateText: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.white },
   candidateChevron: { fontSize: 16, color: colors.gold },
+  pressed: { opacity: 0.72 },
+  confirmPressed: { opacity: 0.82 },
 });
