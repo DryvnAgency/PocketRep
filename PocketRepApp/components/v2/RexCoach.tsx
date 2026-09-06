@@ -342,6 +342,12 @@ export default function RexCoach({
         const contactName = `${action.payload.first_name}${action.payload.last_name ? ` ${action.payload.last_name}` : ''}`;
         pushRex(`✓ Added ${contactName}. Customer card is ready — want to send the first thank-you or put them on Fresh Up?`);
         setNewContactReady({ id: result.openContactId, name: contactName });
+      } else if (action.type === 'log_deal') {
+        // Deterministic Hunter-flavored celebration for a verified win that
+        // just happened -- no model call, so the copy can't drift or invent
+        // anything beyond what the rep just logged.
+        const p = action.payload as any;
+        pushRex(`SALE LOGGED. ${p.customer_name}${p.vehicle ? ` · ${p.vehicle}` : ''}. Good work — who's next?`);
       } else {
         pushRex(`✓ Done — ${summarizeAction(action)}`);
         if (result.openContactId) onOpenContact?.(result.openContactId);
