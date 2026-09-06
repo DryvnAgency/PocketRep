@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, TextInput } from 'react-native';
+import { Alert, View, Text, Pressable, StyleSheet, TextInput } from 'react-native';
 import { colors, radius } from '@/constants/theme';
 import { markNurtureReply, type ReplyKind } from '@/lib/v2/manualReplyTracker';
 
@@ -28,6 +28,8 @@ export default function MarkReplyButton({
       setOpen(false);
       setReplyText('');
       onMarked();
+    } catch (error: any) {
+      Alert.alert('Could not save reply', error?.message ?? 'Try again. Nothing was changed.');
     } finally {
       setWorking(null);
     }
